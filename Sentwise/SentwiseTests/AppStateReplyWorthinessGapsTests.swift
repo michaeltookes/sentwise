@@ -144,9 +144,38 @@ final class AppStateReplyWorthinessGapsTests: XCTestCase {
     // MARK: - LLM relevance gate (item 67)
 
     /// The model's own "automated / nothing to reply to" verdict — a needs-info
-    /// outcome with an empty body.
+    /// outcome with an empty body and, crucially, NO actionable missing-info list.
     private let automatedNeedsInfoResponse =
         "NEEDS_INFO: This is an automated receipt email and it's unclear what reply you'd like to send."
+
+    /// A genuine item-13 "needs your input" verdict — a needs-info outcome whose
+    /// `missing` list names specific things only the user can supply.
+    private let genuineNeedsInfoResponse = """
+    NEEDS_INFO: I can't confirm the meeting without the details only you have.
+    - The meeting time you prefer
+    - Which room to book
+    """
+
+    func testGenuineNeedsInfoWithMissingListStillEnqueuesAsFlaggedDraft() async {
+        // Item 13 preserved: a needs-info draft with a populated `missing` list is
+        // actionable, so it stays in the review queue as a flagged draft rather
+        // than being routed to the skip log by the item 67 gate.
+        let (appState, _, _) = makeAppState(
+            fetch: .success([message(id: 1)]),
+            completion: .success(LLMResponse(text: genuineNeedsInfoResponse))
+        )
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertEqual(appState.pendingDrafts.first?.isFlagged, true)
+        XCTAssertEqual(
+            appState.pendingDrafts.first?.needsInfo?.missing,
+            ["The meeting time you prefer", "Which room to book"]
+        )
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+    }
 
     func testModelNeedsInfoOutcomeRoutesToSkipNotQueue() async {
         let (appState, _, persistence) = makeAppState(
