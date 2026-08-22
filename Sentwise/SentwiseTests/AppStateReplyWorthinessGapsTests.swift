@@ -1,0 +1,200 @@
+import SentwiseMail
+import XCTest
+@testable import Sentwise
+
+/// Tests the reply-worthiness gaps closed for transactional mail (item 66:
+/// both-address evaluation + transactional sender tokens) and the LLM relevance
+/// gate that keeps model-judged automated/reply-less mail out of the review
+/// queue (item 67), wired through the watcher pipeline on `AppState`.
+@MainActor
+final class AppStateReplyWorthinessGapsTests: XCTestCase {
+
+    private func message(
+        id: UInt32,
+        uidValidity: UInt32? = nil,
+        from: String = "alice@x.com",
+        replyTo: String? = nil,
+        messageID: String? = nil
+    ) -> MailMessage {
+        MailMessage(
+            id: id,
+            uidValidity: uidValidity,
+            from: MailAddress(name: "Alice", email: from),
+            replyTo: replyTo.map { MailAddress(name: "Reply", email: $0) },
+            subject: "Subject \(id)",
+            date: "",
+            messageID: messageID ?? "<\(id)@x.com>"
+        )
+    }
+
+    private func baselineProcessed() -> ProcessedMessages {
+        var processed = ProcessedMessages()
+        processed.insertBaseline(account: "me@gmail.com", mailbox: .inbox)
+        return processed
+    }
+
+    private func makeAppState(
+        fetch: Result<[MailMessage], MailError> = .success([]),
+        header: Result<MailHeaderFields, MailError> = .success(MailHeaderFields()),
+        body: Result<Data, MailError> = .success(Data("Please advise.".utf8)),
+        completion: Result<LLMResponse, LLMError> = .success(LLMResponse(text: "On it.")),
+        processed: ProcessedMessages? = nil
+    ) -> (AppState, FakeAppMailProvider, AppStateMemoryPersistence) {
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword: "app-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-live"
+        ])
+        let persistence = AppStateMemoryPersistence(
+            settings: Settings(
+                schemaVersion: Settings.currentSchemaVersion,
+                pollIntervalSeconds: 300,
+                mailEmail: "me@gmail.com",
+                llmProvider: "anthropic",
+                llmVerifiedModel: "claude-sonnet-4-6"
+            ),
+            processedMessages: processed ?? baselineProcessed()
+        )
+        let provider = FakeAppMailProvider(
+            result: .success(()),
+            fetchResult: fetch,
+            bodyResult: body,
+            headerResult: header
+        )
+        let llm = FakeLLMProvider(result: .success(()), completion: completion)
+        let appState = AppState(persistence: persistence, secrets: secrets, mailProvider: provider, llm: llm)
+        return (appState, provider, persistence)
+    }
+
+    // MARK: - Both-address evaluation (item 66)
+
+    func testNoReplyFromAddressIsSkippedDespiteRoutableReplyTo() async {
+        // Evaluating BOTH addresses catches an automated `From` even when the
+        // `Reply-To` looks routable — the exact GitHub case named in item 66
+        // (`notifications@github.com` From, `reply+…@reply.github.com` Reply-To).
+        let (appState, provider, _) = makeAppState(
+            fetch: .success([
+                message(id: 1, from: "notifications@github.com", replyTo: "reply+abc@reply.github.com")
+            ])
+        )
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertTrue(appState.pendingDrafts.isEmpty)
+        XCTAssertEqual(appState.skippedMessages.map(\.reason), [.noReplySender])
+        // Caught on the sender-only pass, so no header fetch is spent.
+        XCTAssertEqual(provider.headerFetchCallCount, 0)
+    }
+
+    func testPersonalFromAndReplyToStillDrafts() async {
+        // A real person on both addresses is still worthy (no over-skip).
+        let (appState, provider, _) = makeAppState(
+            fetch: .success([
+                message(id: 1, from: "alice@example.com", replyTo: "alice.work@example.com")
+            ])
+        )
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertEqual(provider.headerFetchCallCount, 1)
+    }
+
+    // MARK: - Transactional senders (item 66)
+
+    func testTransactionalReceiptSenderIsSkippedAsAutomated() async {
+        // Stripe/Anthropic receipt: `invoice+statements@` From, `support@`
+        // Reply-To. Caught by the From's `invoice` base — and reported as an
+        // automated notification, not a no-reply sender, since the Reply-To is
+        // a staffed inbox.
+        let (appState, provider, persistence) = makeAppState(
+            fetch: .success([
+                message(id: 1, from: "invoice+statements@stripe.com", replyTo: "support@stripe.com")
+            ])
+        )
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertTrue(appState.pendingDrafts.isEmpty)
+        XCTAssertEqual(appState.skippedMessages.map(\.reason), [.automatedNotification])
+        // Caught on the sender-only pass — no body/header cost spent.
+        XCTAssertEqual(provider.bodyFetchCallCount, 0)
+        XCTAssertEqual(provider.headerFetchCallCount, 0)
+        // Sender-heuristic skips stay recoverable after log loss (not processed).
+        XCTAssertFalse(persistence.processedMessages.contains(message(id: 1), account: "me@gmail.com", mailbox: .inbox))
+    }
+
+    func testGenuineSupportSenderStillDrafts() async {
+        // The bare `support@` that receipts point their Reply-To at must NOT be a
+        // skip token on its own, or a real support back-and-forth would be lost.
+        let (appState, _, _) = makeAppState(
+            fetch: .success([message(id: 1, from: "support@vendor.com")])
+        )
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+    }
+
+    // MARK: - LLM relevance gate (item 67)
+
+    /// The model's own "automated / nothing to reply to" verdict — a needs-info
+    /// outcome with an empty body.
+    private let automatedNeedsInfoResponse =
+        "NEEDS_INFO: This is an automated receipt email and it's unclear what reply you'd like to send."
+
+    func testModelNeedsInfoOutcomeRoutesToSkipNotQueue() async {
+        let (appState, _, persistence) = makeAppState(
+            fetch: .success([message(id: 1)]),
+            completion: .success(LLMResponse(text: automatedNeedsInfoResponse))
+        )
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertTrue(appState.pendingDrafts.isEmpty)
+        XCTAssertEqual(appState.skippedMessages.map(\.reason), [.notReplyWorthyPerModel])
+        // A model skip already spent a full draft call, so it IS marked processed
+        // — the watcher must not re-run the LLM on it every poll.
+        XCTAssertTrue(persistence.processedMessages.contains(message(id: 1), account: "me@gmail.com", mailbox: .inbox))
+    }
+
+    func testReadyModelOutcomeStillEnqueues() async {
+        let (appState, _, _) = makeAppState(
+            fetch: .success([message(id: 1)]),
+            completion: .success(LLMResponse(text: "Happy to help — sending it over."))
+        )
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertEqual(appState.pendingDrafts.first?.isFlagged, false)
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+    }
+
+    func testDraftAnywayReDraftsModelSkippedMessage() async throws {
+        let (appState, _, _) = makeAppState(
+            fetch: .success([message(id: 1)]),
+            completion: .success(LLMResponse(text: automatedNeedsInfoResponse))
+        )
+        appState.watchStatus = .watching
+        await appState.pollInboxOnce()
+        let entry = try XCTUnwrap(appState.skippedMessages.first)
+        XCTAssertEqual(entry.reason, .notReplyWorthyPerModel)
+
+        // "Draft anyway" bypasses the gate and enqueues the flagged draft for the
+        // user to complete (item 13).
+        let ok = await appState.forceDraftSkippedMessage(entry)
+
+        XCTAssertTrue(ok)
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertEqual(appState.pendingDrafts.first?.isFlagged, true)
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+    }
+}
