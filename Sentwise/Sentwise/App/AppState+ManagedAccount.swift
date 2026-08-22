@@ -74,18 +74,19 @@ extension AppState {
     /// call (item 70). `isHuntMode` is injectable so unit tests can exercise it.
     func verifyManagedCode(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
         managedError = nil
-        let code = managedCodeInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !code.isEmpty else {
-            managedError = "Enter the code from your email."
-            return
-        }
-
         if isHuntMode {
-            // Deterministic offline fake: any code completes to the fixture account.
+            // Deterministic offline fake: the button completes to the fixture account.
+            // This avoids macOS TextField commit timing making Prowl hunts flaky.
             let signedInEmail = pendingManagedSignInEmail
                 ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
             if llmProviderKind != .managed { selectLLMProvider(.managed) }
             finalizeManagedSignIn(email: signedInEmail)
+            return
+        }
+
+        let code = managedCodeInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else {
+            managedError = "Enter the code from your email."
             return
         }
 
@@ -101,6 +102,9 @@ extension AppState {
         // Sign-in succeeded: record the account tied to the pending Clerk flow.
         let signedInEmail = pendingManagedSignInEmail
             ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if llmProviderKind != .managed {
+            selectLLMProvider(.managed)
+        }
         finalizeManagedSignIn(email: signedInEmail)
     }
 

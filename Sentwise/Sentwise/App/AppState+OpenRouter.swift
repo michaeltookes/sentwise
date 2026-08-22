@@ -67,6 +67,40 @@ extension AppState {
         }
     }
 
+    /// Whether a previously provisioned/tested OpenRouter key is available. The
+    /// key lives apart from the generic OpenAI-compatible slot so both credentials
+    /// can coexist without overwriting each other.
+    var hasStoredOpenRouterCredential: Bool {
+        secrets.hasValue(for: .openRouterAPIKey)
+    }
+
+    /// Reactivates the stored OpenRouter credential without starting another browser
+    /// authorization. This keeps a saved OpenRouter key reachable even when a generic
+    /// OpenAI-compatible key is also present.
+    func activateStoredOpenRouterProvider() {
+        llmError = nil
+        let key = Self.storedLLMAPIKey(
+            provider: .openAICompatible,
+            baseURL: OpenRouterKeyProvisioner.apiBaseURL,
+            secrets: secrets
+        )
+        guard !key.isEmpty else {
+            llmError = "Connect OpenRouter first."
+            refreshLLMConnectionStatus()
+            return
+        }
+
+        llmProviderKind = .openAICompatible
+        llmBaseURL = OpenRouterKeyProvisioner.apiBaseURL
+        llmAPIKey = key
+        llmModel = Self.openRouterDefaultModel
+        verifiedLLMModel = Self.openRouterDefaultModel
+        refreshLLMConnectionStatus()
+        resetDraftPreviewForLLMChange()
+        saveSettings()
+        startTranscriptFolderWatchingIfEnabled()
+    }
+
     /// Completes provisioning from the redirect `code`: exchanges it (with the
     /// stored PKCE verifier) for an API key and activates the OpenAI-compatible
     /// provider with OpenRouter's base URL. The provisioner is injectable so the
@@ -91,6 +125,9 @@ extension AppState {
         } catch {
             isOpenRouterProvisioning = false
             llmError = Self.llmMessage(for: error)
+            return
+        }
+        guard isCurrentOpenRouterProvisioning(verifier: verifier) else {
             return
         }
 
@@ -122,5 +159,9 @@ extension AppState {
         saveSettings()
         startTranscriptFolderWatchingIfEnabled()
         logger.info("OpenRouter key provisioned; OpenAI-compatible provider activated")
+    }
+
+    private func isCurrentOpenRouterProvisioning(verifier: String) -> Bool {
+        ((try? secrets.value(for: .openRouterPKCEVerifier)) ?? nil) == verifier
     }
 }

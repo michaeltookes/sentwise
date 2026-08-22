@@ -48,6 +48,19 @@ final class AppStateProwlHuntAuthTests: XCTestCase {
         XCTAssertNil(appState.managedError)
     }
 
+    func testHuntEmailVerifyDoesNotDependOnCodeTextFieldCommit() async {
+        let appState = makeAppState()
+        appState.managedEmailInput = "hunt.fixture@sentwise.invalid"
+        await appState.startManagedSignIn(isHuntMode: true)
+
+        await appState.verifyManagedCode(isHuntMode: true)
+
+        XCTAssertTrue(appState.isManagedSignedIn)
+        XCTAssertTrue(appState.isManagedProviderActive)
+        XCTAssertTrue(appState.isLLMConnected)
+        XCTAssertNil(appState.managedError)
+    }
+
     func testHuntEmailSignInRejectsBlankEmailWithoutNetwork() async {
         let appState = makeAppState()
         appState.managedEmailInput = ""

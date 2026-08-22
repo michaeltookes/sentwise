@@ -100,6 +100,12 @@ struct OpenRouterProvisionCard: View {
                     }
                     .buttonStyle(.link)
                     .accessibilityIdentifier("openRouterCancelButton")
+                } else if appState.hasStoredOpenRouterCredential {
+                    Button("Use saved OpenRouter key") {
+                        appState.activateStoredOpenRouterProvider()
+                    }
+                    .disabled(appState.isTestingLLM)
+                    .accessibilityIdentifier("openRouterUseSavedButton")
                 } else {
                     Button {
                         // Hunt mode: complete deterministically offline — no browser,

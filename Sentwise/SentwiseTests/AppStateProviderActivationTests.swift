@@ -19,6 +19,9 @@ final class AppStateProviderActivationTests: XCTestCase {
     private let startResponse =
         #"{"response":{"id":"sia_1","first_factor_verification":"#
             + #"{"external_verification_redirect_url":"https://accounts.google.com/o/oauth2/auth?x=1"}}}"#
+    private let emailStartResponse =
+        #"{"response":{"id":"email_1","supported_first_factors":[{"strategy":"email_code","email_address_id":"ema_1"}]}}"#
+    private let emailPrepareResponse = #"{"response":{"id":"email_1"}}"#
 
     private func makeAppState(
         provider: String = "managed",
@@ -120,6 +123,32 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertNil(appState.llmError)
     }
 
+    func testStoredOpenRouterCredentialCanBeReactivatedWithoutOverwritingGenericKey() throws {
+        let secrets = InMemorySecretStore(seed: [
+            .openRouterAPIKey: "sk-or-existing",
+            LLMProviderKind.openAICompatible.apiKeySecret: "sk-openai-existing"
+        ])
+        let appState = makeAppState(provider: "managed", secrets: secrets)
+
+        appState.selectLLMProvider(.openAICompatible)
+
+        XCTAssertEqual(appState.llmBaseURL, "")
+        XCTAssertEqual(appState.llmAPIKey, "sk-openai-existing")
+        XCTAssertFalse(appState.isLLMConnected)
+
+        appState.activateStoredOpenRouterProvider()
+
+        XCTAssertEqual(appState.llmProviderKind, .openAICompatible)
+        XCTAssertEqual(appState.llmBaseURL, OpenRouterKeyProvisioner.apiBaseURL)
+        XCTAssertEqual(appState.llmAPIKey, "sk-or-existing")
+        XCTAssertEqual(appState.llmModel, AppState.openRouterDefaultModel)
+        XCTAssertTrue(appState.isLLMConnected)
+        XCTAssertEqual(appState.currentDraftLLMConfiguration?.apiKey, "sk-or-existing")
+        XCTAssertEqual(try secrets.value(for: .openRouterAPIKey), "sk-or-existing")
+        XCTAssertEqual(try secrets.value(for: LLMProviderKind.openAICompatible.apiKeySecret), "sk-openai-existing")
+        XCTAssertNil(appState.llmError)
+    }
+
     func testHandleOpenRouterCallbackPreservesVerifierWhenAPIKeySaveFails() async throws {
         let secrets = ManagedAccountFailingSecretStore(seed: [
             .openRouterPKCEVerifier: "VER",
@@ -153,6 +182,35 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertNotNil(appState.llmError)
         XCTAssertFalse(appState.isOpenRouterProvisioning)
         XCTAssertEqual(appState.llmProviderKind, .managed, "provider is left unchanged on failure")
+    }
+
+    func testCancelOpenRouterProvisioningDuringExchangeDiscardsReturnedKey() async throws {
+        let secrets = InMemorySecretStore(seed: [.openRouterPKCEVerifier: "VER"])
+        let appState = makeAppState(provider: "managed", secrets: secrets)
+        let transport = ManagedProviderSuspendedLLMTransport()
+
+        let callback = Task {
+            await appState.handleOpenRouterCallback(
+                code: "CODE",
+                provisioner: OpenRouterKeyProvisioner(transport: transport)
+            )
+        }
+        await fulfillment(of: [transport.didStartRequest], timeout: 1)
+
+        appState.cancelOpenRouterProvisioning()
+        transport.complete(with: .success(HTTPResponse(
+            statusCode: 200,
+            body: Data(#"{"key":"sk-or-cancelled"}"#.utf8)
+        )))
+        await callback.value
+
+        XCTAssertEqual(appState.llmProviderKind, .managed)
+        XCTAssertFalse(appState.isOpenRouterProvisioning)
+        XCTAssertFalse(appState.isTestingLLM)
+        XCTAssertFalse(appState.isLLMConnected)
+        XCTAssertNil((try secrets.value(for: .openRouterAPIKey)) ?? nil)
+        XCTAssertNil((try secrets.value(for: .openRouterPKCEVerifier)) ?? nil)
+        XCTAssertNil(appState.llmError)
     }
 
     func testLegacyOpenRouterKeyMigratesToDedicatedSecretOnInit() {
@@ -226,6 +284,36 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertEqual(appState.managedSignInStage, .idle, "a completed sign-in leaves the waiting state")
         XCTAssertTrue(appState.isManagedSignedIn)
         XCTAssertTrue(appState.isManagedProviderActive)
+        XCTAssertEqual(appState.managedAccountEmail, "marcus@example.com")
+        XCTAssertNil(appState.managedError)
+    }
+
+    func testEmailCodeSignInActivatesManagedFromBYOProvider() async throws {
+        let secrets = InMemorySecretStore(seed: [.llmAPIKey(provider: "anthropic"): "sk-anthropic"])
+        let transport = QueueClerkTransport([
+            clerkReply(emailStartResponse, clientToken: "client_A"),
+            clerkReply(emailPrepareResponse, clientToken: "client_B"),
+            clerkReply(#"{"response":{"id":"email_1","status":"complete","created_session_id":"sess_1"}}"#,
+                       clientToken: "client_C"),
+            clerkReply(#"{"jwt":"jwt.value"}"#, clientToken: "client_D")
+        ])
+        let clerk = ClerkClient(
+            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            transport: transport
+        )
+        let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
+        let appState = makeAppState(provider: "anthropic", secrets: secrets, managedAccount: managed)
+
+        appState.managedEmailInput = "marcus@example.com"
+        await appState.startManagedSignIn()
+        appState.managedCodeInput = "123456"
+        await appState.verifyManagedCode()
+
+        XCTAssertEqual(appState.llmProviderKind, .managed)
+        XCTAssertTrue(appState.isManagedSignedIn)
+        XCTAssertTrue(appState.isManagedProviderActive)
+        XCTAssertTrue(appState.isLLMConnected)
+        XCTAssertEqual(appState.verifiedLLMModel, LLMProviderKind.managed.defaultModel)
         XCTAssertEqual(appState.managedAccountEmail, "marcus@example.com")
         XCTAssertNil(appState.managedError)
     }

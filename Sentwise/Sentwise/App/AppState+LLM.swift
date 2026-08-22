@@ -116,13 +116,20 @@ extension AppState {
     /// new provider's requests to the previous provider's endpoint.
     func selectLLMProvider(_ provider: LLMProviderKind) {
         guard provider != llmProviderKind else { return }
+        let selectedBaseURL = restoredBaseURLOnProviderSelection(provider)
         llmProviderKind = provider
-        llmModel = ""
-        llmBaseURL = ""
-        llmAPIKey = Self.storedLLMAPIKey(provider: provider, baseURL: nil, secrets: secrets)
-        // Managed carries no API key; if already signed in, mark it verified so
-        // the connected state is reflected immediately on switch.
-        verifiedLLMModel = (provider == .managed && isManagedSignedIn) ? provider.defaultModel : ""
+        llmBaseURL = selectedBaseURL
+        llmAPIKey = Self.storedLLMAPIKey(
+            provider: provider,
+            baseURL: selectedBaseURL.isEmpty ? nil : selectedBaseURL,
+            secrets: secrets
+        )
+        llmModel = restoredModelOnProviderSelection(provider, baseURL: selectedBaseURL, apiKey: llmAPIKey)
+        verifiedLLMModel = restoredVerifiedModelOnProviderSelection(
+            provider,
+            baseURL: selectedBaseURL,
+            apiKey: llmAPIKey
+        )
         refreshLLMConnectionStatus()
         resetDraftPreviewForLLMChange()
         llmError = nil
@@ -279,6 +286,39 @@ extension AppState {
         } catch {
             llmError = Self.keychainLLMMessage(action: "remove", error: error)
         }
+    }
+
+    private func restoredBaseURLOnProviderSelection(_ provider: LLMProviderKind) -> String {
+        guard provider == .openAICompatible,
+              !secrets.hasValue(for: provider.apiKeySecret),
+              secrets.hasValue(for: .openRouterAPIKey) else {
+            return ""
+        }
+        return OpenRouterKeyProvisioner.apiBaseURL
+    }
+
+    private func restoredModelOnProviderSelection(
+        _ provider: LLMProviderKind,
+        baseURL: String,
+        apiKey: String
+    ) -> String {
+        guard provider == .openAICompatible,
+              !apiKey.isEmpty,
+              Self.isOpenRouterBaseURL(baseURL) else {
+            return ""
+        }
+        return Self.openRouterDefaultModel
+    }
+
+    private func restoredVerifiedModelOnProviderSelection(
+        _ provider: LLMProviderKind,
+        baseURL: String,
+        apiKey: String
+    ) -> String {
+        if provider == .managed && isManagedSignedIn {
+            return provider.defaultModel
+        }
+        return restoredModelOnProviderSelection(provider, baseURL: baseURL, apiKey: apiKey)
     }
 
     private static func isOpenRouterBaseURL(_ baseURL: String?) -> Bool {

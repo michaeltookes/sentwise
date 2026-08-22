@@ -326,6 +326,21 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertTrue(appState.isLLMConnected)
     }
 
+    func testSelectingOpenAICompatibleRestoresStoredOpenRouterCredential() {
+        let secrets = InMemorySecretStore(seed: [.openRouterAPIKey: "sk-openrouter"])
+        let appState = makeAppState(secrets: secrets)
+
+        appState.selectLLMProvider(.openAICompatible)
+
+        XCTAssertEqual(appState.llmProviderKind, .openAICompatible)
+        XCTAssertEqual(appState.llmBaseURL, OpenRouterKeyProvisioner.apiBaseURL)
+        XCTAssertEqual(appState.currentLLMBaseURL, OpenRouterKeyProvisioner.apiBaseURL)
+        XCTAssertEqual(appState.llmAPIKey, "sk-openrouter")
+        XCTAssertEqual(appState.llmModel, AppState.openRouterDefaultModel)
+        XCTAssertEqual(appState.verifiedLLMModel, AppState.openRouterDefaultModel)
+        XCTAssertTrue(appState.isLLMConnected)
+    }
+
     // MARK: - Local (Ollama) key-optional provider (item 16)
 
     func testSelectingLocalProviderUpdatesDefaultsAndIsKeyOptional() {
