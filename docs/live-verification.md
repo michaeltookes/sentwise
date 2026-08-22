@@ -3,7 +3,7 @@
 Some integration tests exercise the **real** IMAP/SMTP path against a live
 mailbox instead of a test double. They are the headless-XCTest equivalent of a
 manual click-through (the standing QA preference) and close the remaining
-"verify against a real account" criteria of backlog items 9 and 44.
+"verify against a real account" criteria of backlog items 9, 44, and 66.
 
 They are **credential-gated**: with no credentials in the environment they throw
 `XCTSkip` and pass as skipped, so CI and any machine without a live account stay
@@ -18,13 +18,14 @@ verification assertion fails.
 | --- | --- | --- |
 | `GmailLiveSendTests` | 9 | Dispatches a reply through the app's real auto-send path (`AppState.performSend` → SMTP submission over implicit TLS on the derived `smtp.` host, port 465), then fetches the delivered copy back from the inbox and asserts recipient addressing, the marker subject, and the `In-Reply-To` threading header. Also confirms Gmail auto-filed a copy in Sent Mail, then trashes every copy. |
 | `AttNetLiveDraftTests` | 44 | Saves a reply to the real Drafts mailbox through the app's save path (IMAP `APPEND` with `\Draft`), fetches it back to assert addressing + threading, then trashes it. |
+| `ReplyWorthinessLiveTests` | 66 | **Read-only.** Runs a fresh reply-worthiness pass (the same `AppState.replyWorthinessSkipReason` the watcher uses, including the live `HEADER.FIELDS` fetch) over recent inbox mail and asserts that known machine-sending senders (GitHub, Stripe/Anthropic receipts, AWS cost alerts, recruiting blasts) produce a skip — zero drafts — while personal mail stays worthy. Never drafts, sends, or mutates the mailbox; reuses the Gmail credentials below. |
 
 ## Credentials
 
 Each test reads its credentials from environment variables. Required vars are
 gated; optional host/port vars default to the provider's standard IMAP endpoint.
 
-**Gmail** (`GmailLiveSendTests`) — requires a Google **app password** (2FA on):
+**Gmail** (`GmailLiveSendTests`, `ReplyWorthinessLiveTests`) — requires a Google **app password** (2FA on):
 
 - `SENTWISE_LIVE_GMAIL_EMAIL` — the Gmail address (required)
 - `SENTWISE_LIVE_GMAIL_APP_PASSWORD` — its 16-character app password (required)
@@ -98,6 +99,11 @@ xcodebuild test \
   TEST_RUNNER_SENTWISE_LIVE_ATTNET_EMAIL="$SENTWISE_LIVE_ATTNET_EMAIL" \
   TEST_RUNNER_SENTWISE_LIVE_ATTNET_APP_PASSWORD="$SENTWISE_LIVE_ATTNET_APP_PASSWORD"
 ```
+
+`ReplyWorthinessLiveTests` reads the **same Gmail vars** — run it by swapping the
+`-only-testing` target to `SentwiseTests/ReplyWorthinessLiveTests` in the Gmail
+invocation above (it forwards `TEST_RUNNER_SENTWISE_LIVE_GMAIL_EMAIL` /
+`_APP_PASSWORD`). It is read-only, so nothing is sent or trashed.
 
 Optional host/port overrides forward the same way (e.g.
 `TEST_RUNNER_SENTWISE_LIVE_GMAIL_HOST="$SENTWISE_LIVE_GMAIL_HOST"`).

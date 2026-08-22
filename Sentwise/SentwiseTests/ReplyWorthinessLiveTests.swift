@@ -12,12 +12,13 @@ import XCTest
 ///
 /// **Credential-gated:** SKIPS cleanly unless real IMAP credentials are supplied
 /// through environment variables, so it never fails in CI or on a machine with no
-/// live account:
+/// live account. It reuses the shared Gmail live-test credentials (see
+/// docs/live-verification.md):
 ///
-///   - `SENTWISE_LIVE_EMAIL`         — the mailbox address (required)
-///   - `SENTWISE_LIVE_APP_PASSWORD`  — its app password / Secure Mail Key (required)
-///   - `SENTWISE_LIVE_HOST`          — IMAP host (optional; default imap.gmail.com)
-///   - `SENTWISE_LIVE_PORT`          — IMAP port (optional; default 993)
+///   - `SENTWISE_LIVE_GMAIL_EMAIL`         — the Gmail address (required)
+///   - `SENTWISE_LIVE_GMAIL_APP_PASSWORD`  — its 16-character app password (required)
+///   - `SENTWISE_LIVE_GMAIL_HOST`          — IMAP host (optional; default imap.gmail.com)
+///   - `SENTWISE_LIVE_GMAIL_PORT`          — IMAP port (optional; default 993)
 ///
 /// Read-only: it fetches and evaluates, and never drafts, sends, or mutates the
 /// mailbox. No credentials are hardcoded.
@@ -26,15 +27,15 @@ final class ReplyWorthinessLiveTests: XCTestCase {
 
     private func liveCredentials() throws -> MailAccountCredentials {
         let env = ProcessInfo.processInfo.environment
-        guard let email = env["SENTWISE_LIVE_EMAIL"], !email.isEmpty,
-              let password = env["SENTWISE_LIVE_APP_PASSWORD"], !password.isEmpty else {
+        guard let email = env["SENTWISE_LIVE_GMAIL_EMAIL"], !email.isEmpty,
+              let password = env["SENTWISE_LIVE_GMAIL_APP_PASSWORD"], !password.isEmpty else {
             throw XCTSkip(
-                "Set SENTWISE_LIVE_EMAIL and SENTWISE_LIVE_APP_PASSWORD "
+                "Set SENTWISE_LIVE_GMAIL_EMAIL and SENTWISE_LIVE_GMAIL_APP_PASSWORD "
                 + "to run the reply-worthiness live test."
             )
         }
-        let host = env["SENTWISE_LIVE_HOST"] ?? "imap.gmail.com"
-        let port = env["SENTWISE_LIVE_PORT"].flatMap(Int.init) ?? 993
+        let host = env["SENTWISE_LIVE_GMAIL_HOST"] ?? "imap.gmail.com"
+        let port = env["SENTWISE_LIVE_GMAIL_PORT"].flatMap(Int.init) ?? 993
         return MailAccountCredentials(email: email, appPassword: password, host: host, port: port)
     }
 
