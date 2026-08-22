@@ -12,20 +12,23 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "ReplyWo
 extension AppState {
 
     /// Judges `message` and returns the skip reason, or `nil` when it is worth a
-    /// draft. Checks decisive reply-target signals before fetching the bounded
-    /// header fields the ENVELOPE lacks; if that fetch fails, evaluation falls
-    /// back to reply-target-only signals.
+    /// draft. Checks the decisive sender signals (both `From` and `Reply-To`)
+    /// before fetching the bounded header fields the ENVELOPE lacks; if that fetch
+    /// fails, evaluation falls back to sender-only signals.
     func replyWorthinessSkipReason(
         _ message: MailMessage,
         credentials: MailAccountCredentials,
         mailbox: Mailbox
     ) async -> ReplyWorthinessReason? {
-        let replyTargetEmail = message.replyTo?.email ?? message.from?.email
-        let replyTargetOnly = ReplyWorthinessSignals(senderEmail: replyTargetEmail)
-        if let skipReason = ReplyWorthiness.evaluate(replyTargetOnly).skipReason { return skipReason }
+        // Judge BOTH the `From` and `Reply-To` addresses (item 66): an automated
+        // `From` (e.g. GitHub's `notifications@github.com`) must be caught even
+        // when the routable `Reply-To` (`reply+…@reply.github.com`) looks human.
+        let senderEmails = [message.from?.email, message.replyTo?.email]
+        let senderOnly = ReplyWorthinessSignals(senderEmails: senderEmails)
+        if let skipReason = ReplyWorthiness.evaluate(senderOnly).skipReason { return skipReason }
 
         let headers = await fetchReplyWorthinessHeaders(message, credentials: credentials, mailbox: mailbox)
-        let signals = ReplyWorthinessSignals(senderEmail: replyTargetEmail, headers: headers)
+        let signals = ReplyWorthinessSignals(senderEmails: senderEmails, headers: headers)
         return ReplyWorthiness.evaluate(signals).skipReason
     }
 

@@ -95,21 +95,6 @@ final class AppStateReplyWorthinessTests: XCTestCase {
         XCTAssertFalse(persistence.processedMessages.contains(message(id: 1), account: "me@gmail.com", mailbox: .inbox))
     }
 
-    func testReplyToOverridesNoReplyFromAddress() async {
-        let (appState, provider, _) = makeAppState(
-            fetch: .success([
-                message(id: 1, from: "notifications@github.com", replyTo: "alice@example.com")
-            ])
-        )
-        appState.watchStatus = .watching
-
-        await appState.pollInboxOnce()
-
-        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
-        XCTAssertTrue(appState.skippedMessages.isEmpty)
-        XCTAssertEqual(provider.headerFetchCallCount, 1)
-    }
-
     func testNoReplyReplyToIsSkippedEvenWhenFromIsPersonal() async {
         let (appState, provider, _) = makeAppState(
             fetch: .success([
