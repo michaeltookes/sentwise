@@ -7,7 +7,7 @@ import XCTest
 final class QueueClerkTransport: ClerkHTTPTransport, @unchecked Sendable {
     private var results: [Result<ClerkHTTPResponse, Error>]
     private(set) var callCount = 0
-    private(set) var requests: [(url: URL, headers: [String: String], form: [String: String])] = []
+    private(set) var requests: [(url: URL, headers: [String: String], form: [String: String], method: String)] = []
 
     init(_ responses: [ClerkHTTPResponse]) {
         self.results = responses.map(Result.success)
@@ -19,7 +19,14 @@ final class QueueClerkTransport: ClerkHTTPTransport, @unchecked Sendable {
 
     func postForm(_ url: URL, headers: [String: String], form: [String: String]) async throws -> ClerkHTTPResponse {
         callCount += 1
-        requests.append((url, headers, form))
+        requests.append((url, headers, form, "POST"))
+        guard !results.isEmpty else { return ClerkHTTPResponse(statusCode: 500, headers: [:], body: Data()) }
+        return try results.removeFirst().get()
+    }
+
+    func get(_ url: URL, headers: [String: String]) async throws -> ClerkHTTPResponse {
+        callCount += 1
+        requests.append((url, headers, [:], "GET"))
         guard !results.isEmpty else { return ClerkHTTPResponse(statusCode: 500, headers: [:], body: Data()) }
         return try results.removeFirst().get()
     }

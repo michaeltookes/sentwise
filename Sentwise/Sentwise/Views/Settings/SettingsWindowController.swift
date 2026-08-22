@@ -84,6 +84,11 @@ final class SettingsPaneControllerCache {
         }
 
         let controller = NSHostingController(rootView: makeRootView(tab))
+        // Panes scroll internally; the window is a fixed size. Stop the hosting
+        // controller from resizing the window to each pane's fitting size, which
+        // made the window jump/collapse when switching tabs.
+        controller.sizingOptions = []
+        controller.preferredContentSize = SettingsWindowController.contentSize
         controllers[tab] = controller
         return controller
     }
@@ -175,7 +180,13 @@ final class SettingsWindowController: NSObject, NSToolbarDelegate, NSWindowDeleg
         }
 
         selectedTab = tab
+        // Swapping the content view controller lets AppKit re-place the window
+        // (each pane is a hosting controller); pin the top-left corner across the
+        // swap so switching tabs never moves the window.
+        let topLeft = window.map { NSPoint(x: $0.frame.minX, y: $0.frame.maxY) }
         window?.contentViewController = paneControllerCache.controller(for: tab)
+        window?.setContentSize(Self.contentSize)
+        if let topLeft { window?.setFrameTopLeftPoint(topLeft) }
         window?.title = tab.rawValue
     }
 

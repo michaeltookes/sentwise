@@ -268,10 +268,6 @@ private struct OnboardingProviderStep: View {
                     .padding(.top, 6)
             }
             .accessibilityIdentifier("useOwnProviderDisclosure")
-
-            if let error = appState.llmError {
-                OnboardingError(message: error)
-            }
         }
     }
 }

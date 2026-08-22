@@ -9,6 +9,9 @@ enum ManagedSignInStage: Equatable {
     case idle
     /// A code was emailed — show the code field.
     case codeSent
+    /// A browser-based sign-in (Google) is underway — show a "finish in your
+    /// browser" panel instead of the form until the callback returns.
+    case awaitingBrowser
 }
 
 /// Managed-inference account actions on `AppState` (backlog item 56a): the
@@ -17,24 +20,42 @@ enum ManagedSignInStage: Equatable {
 /// limits, mirroring `AppState+LLM`.
 extension AppState {
 
+    // MARK: - Busy state
+
+    /// Which managed-account action is currently in flight, so only the pressed
+    /// button shows a spinner while all of them disable. `nil` = idle.
+    enum ManagedBusyAction: Equatable {
+        case emailCode, verifyCode, google, oauthCallback, signOut
+    }
+
+    /// True while any managed action is running (drives button disabling).
+    var isManagedBusy: Bool { managedBusyAction != nil }
+
     // MARK: - Sign-in flow
 
     /// Sends a one-time code to the email in `managedEmailInput` and advances the
-    /// flow to the code-entry stage. Disabled in Prowl hunt mode.
-    func startManagedSignIn() async {
+    /// flow to the code-entry stage. In Prowl hunt mode this is a deterministic,
+    /// fully-offline fake: it advances to the code-entry stage without any network
+    /// or Clerk call, so hunts can drive the sign-in UI end-to-end (item 70).
+    /// `isHuntMode` is injectable so unit tests can exercise the fake path.
+    func startManagedSignIn(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
         managedError = nil
-        guard !ProwlHuntRuntime.current.isEnabled else {
-            managedError = "Sign-in is disabled during Prowl hunts."
-            return
-        }
         let email = managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard email.contains("@"), email.count >= 3 else {
             managedError = "Enter your email address."
             return
         }
 
-        isManagedBusy = true
-        defer { isManagedBusy = false }
+        if isHuntMode {
+            // Deterministic offline fake: advance to code entry, no network.
+            pendingManagedSignInEmail = email
+            managedEmailInput = email
+            managedSignInStage = .codeSent
+            return
+        }
+
+        managedBusyAction = .emailCode
+        defer { managedBusyAction = nil }
         pendingManagedSignInEmail = nil
         do {
             try await managedAccount.startSignIn(email: email)
@@ -48,16 +69,29 @@ extension AppState {
 
     /// Verifies the code in `managedCodeInput`, completing sign-in. On success the
     /// managed provider becomes the connected provider and drafting is enabled.
-    func verifyManagedCode() async {
+    /// In Prowl hunt mode this is a deterministic, fully-offline fake: any non-empty
+    /// code completes to the signed-in fixture account without any network or Clerk
+    /// call (item 70). `isHuntMode` is injectable so unit tests can exercise it.
+    func verifyManagedCode(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
         managedError = nil
+        if isHuntMode {
+            // Deterministic offline fake: the button completes to the fixture account.
+            // This avoids macOS TextField commit timing making Prowl hunts flaky.
+            let signedInEmail = pendingManagedSignInEmail
+                ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            if llmProviderKind != .managed { selectLLMProvider(.managed) }
+            finalizeManagedSignIn(email: signedInEmail)
+            return
+        }
+
         let code = managedCodeInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty else {
             managedError = "Enter the code from your email."
             return
         }
 
-        isManagedBusy = true
-        defer { isManagedBusy = false }
+        managedBusyAction = .verifyCode
+        defer { managedBusyAction = nil }
         do {
             try await managedAccount.completeSignIn(code: code)
         } catch {
@@ -68,23 +102,10 @@ extension AppState {
         // Sign-in succeeded: record the account tied to the pending Clerk flow.
         let signedInEmail = pendingManagedSignInEmail
             ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        managedAccountEmail = signedInEmail
-        managedEmailInput = signedInEmail
-        managedCodeInput = ""
-        pendingManagedSignInEmail = nil
-        managedSignInStage = .idle
-        isManagedSignedIn = true
-
-        // Managed is now the active provider path; mark it verified so drafting
-        // and the connected UI light up. The model is always the managed default.
-        if llmProviderKind == .managed {
-            verifiedLLMModel = llmProviderKind.defaultModel
-            refreshLLMConnectionStatus()
-            resetDraftPreviewForLLMChange()
+        if llmProviderKind != .managed {
+            selectLLMProvider(.managed)
         }
-        saveSettings()
-        resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
-        startTranscriptFolderWatchingIfEnabled()
+        finalizeManagedSignIn(email: signedInEmail)
     }
 
     func resetManagedSignInFlow() {
@@ -94,12 +115,17 @@ extension AppState {
         managedError = nil
     }
 
+    func cancelManagedSignInFlow() async {
+        await managedAccount.cancelSignIn()
+        resetManagedSignInFlow()
+    }
+
     /// Signs out of the managed account: clears stored tokens and connected state.
     /// Local mail data and voice profile are untouched.
     func signOutManaged() async {
         managedError = nil
-        isManagedBusy = true
-        defer { isManagedBusy = false }
+        managedBusyAction = .signOut
+        defer { managedBusyAction = nil }
         do {
             try await managedAccount.signOut()
         } catch {
@@ -172,6 +198,8 @@ extension AppState {
         let restoreVerification: Bool
         let llmModel: String
         let verifiedLLMModel: String
+        /// The stored API key for the resolved provider (empty for managed/none).
+        let apiKey: String
     }
 
     static func managedLaunchState(settings: Settings, secrets: SecretStore) -> ManagedLaunchState {
@@ -181,12 +209,18 @@ extension AppState {
             && secrets.hasValue(for: .managedClientToken)
             && secrets.hasValue(for: .managedSessionID)
         let restore = provider == .managed && hasCredentials
+        let apiKey = storedLLMAPIKey(
+            provider: provider,
+            baseURL: provider.supportsCustomBaseURL ? settings.llmBaseURL : nil,
+            secrets: secrets
+        )
         return ManagedLaunchState(
             provider: provider,
             hasCredentials: hasCredentials,
             restoreVerification: restore,
             llmModel: restore ? "" : settings.llmModel,
-            verifiedLLMModel: restore ? provider.defaultModel : settings.llmVerifiedModel
+            verifiedLLMModel: restore ? provider.defaultModel : settings.llmVerifiedModel,
+            apiKey: apiKey
         )
     }
 
@@ -258,7 +292,12 @@ extension AppState {
 
         let provider = LLMProviderKind(rawValue: settings.llmProvider) ?? .anthropic
         if provider != .managed {
-            let hasKey = secrets.hasValue(for: .llmAPIKey(provider: settings.llmProvider))
+            let apiKeySecret = Self.llmAPIKeySecret(
+                provider: provider,
+                baseURL: provider.supportsCustomBaseURL ? settings.llmBaseURL : nil
+            )
+            let hasKey = secrets.hasValue(for: apiKeySecret)
+                || (apiKeySecret != provider.apiKeySecret && secrets.hasValue(for: provider.apiKeySecret))
             let hasVerifiedModel = !settings.llmVerifiedModel
                 .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             let isConfigured = hasKey || hasVerifiedModel

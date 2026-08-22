@@ -81,6 +81,10 @@ final class AppState: ObservableObject {
     @Published var isLLMConnected: Bool = false
     /// Whether an LLM connection test is in progress.
     @Published var isTestingLLM: Bool = false
+    /// Whether OpenRouter provisioning has opened the browser and is waiting for
+    /// the callback. Backed by the persisted PKCE verifier so relaunches keep the
+    /// button from starting a second flow over the first.
+    @Published var isOpenRouterProvisioning: Bool = false
     /// A user-facing message describing the last LLM error, if any.
     @Published var llmError: String?
 
@@ -96,7 +100,7 @@ final class AppState: ObservableObject {
     /// Stage of the email-code sign-in flow.
     @Published var managedSignInStage: ManagedSignInStage = .idle
     /// Whether a managed sign-in / sign-out request is in flight.
-    @Published var isManagedBusy: Bool = false
+    @Published var managedBusyAction: ManagedBusyAction?
     /// Last managed-account error, if any.
     @Published var managedError: String?
     /// Email and OTP code typed into the managed sign-in form.
@@ -137,7 +141,7 @@ final class AppState: ObservableObject {
     // MARK: - Preferences
 
     /// Whether the app launches at login (mirrors `SMAppService` state).
-    @Published private(set) var launchAtLogin: Bool
+    @Published private(set) var launchAtLogin = LoginItemManager.shared.isEnabled
 
     /// How often (in seconds) the inbox is polled while the Mac is awake.
     @Published var pollIntervalSeconds: Int
@@ -322,23 +326,6 @@ final class AppState: ObservableObject {
 
     // MARK: - Initialization
 
-    /// Loads persisted pending drafts, dropping any already approved (and rewriting
-    /// the store when that filtering changed it). Static so `init` can call it
-    /// before all stored properties are initialized.
-    private static func loadCleanedPendingDrafts(_ persistence: PersistenceProvider) -> [Draft] {
-        let approvedDraftIdentities = persistence.loadApprovedDraftIdentities()
-        let loadedPendingDrafts = persistence.loadPendingDrafts()
-        let pendingDrafts = loadedPendingDrafts.filter { !approvedDraftIdentities.contains($0.identity) }
-        if pendingDrafts.count != loadedPendingDrafts.count {
-            do {
-                try persistence.savePendingDraftsSync(pendingDrafts)
-            } catch {
-                logger.error("Failed to clean approved pending drafts on launch: \(error.localizedDescription)")
-            }
-        }
-        return pendingDrafts
-    }
-
     init(
         persistence: PersistenceProvider = PersistenceService.shared,
         secrets: SecretStore = KeychainStore.shared,
@@ -393,14 +380,14 @@ final class AppState: ObservableObject {
         let activeEmail = settings.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let activePassword = Self.storedMailPassword(forEmail: activeEmail, settings: settings, secrets: secrets) ?? ""
         self.mailAppPassword = activePassword
-        self.launchAtLogin = LoginItemManager.shared.isEnabled
 
         let managedLaunch = Self.managedLaunchState(settings: settings, secrets: secrets)
         self.llmProviderKind = managedLaunch.provider
         self.llmModel = managedLaunch.llmModel
         self.llmBaseURL = settings.llmBaseURL
         self.verifiedLLMModel = managedLaunch.verifiedLLMModel
-        self.llmAPIKey = ((try? secrets.value(for: managedLaunch.provider.apiKeySecret)) ?? nil) ?? ""
+        self.llmAPIKey = managedLaunch.apiKey
+        self.isOpenRouterProvisioning = secrets.hasValue(for: .openRouterPKCEVerifier)
         self.managedAccountEmail = managedLaunch.hasCredentials ? settings.managedAccountEmail : ""
         self.isManagedSignedIn = managedLaunch.hasCredentials
 

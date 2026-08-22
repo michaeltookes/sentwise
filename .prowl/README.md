@@ -34,13 +34,18 @@ From the repo root:
 
 ```bash
 prowl list
-prowl run menu-smoke          # status-item menu opens; all safe actions exist
-prowl run follow-up-composer  # flagship: New Follow-up window opens
-prowl run review-drafts       # approval surface: Review Drafts window opens
-prowl run browse-mailbox      # Browse Mailbox window opens
-prowl run setup-assistant     # onboarding window opens (item 64 surface)
-prowl run settings-window     # Settings window opens (item 65 surface)
-prowl run activity-history    # Activity History window opens
+prowl run menu-smoke            # status-item menu opens; all safe actions exist
+prowl run follow-up-composer    # flagship: New Follow-up window opens
+prowl run review-drafts         # approval surface: Review Drafts window opens
+prowl run browse-mailbox        # Browse Mailbox window opens
+prowl run setup-assistant       # onboarding window opens (item 64 surface)
+prowl run settings-window       # Settings window opens (item 65 surface)
+prowl run settings-window-tabs  # switching Settings tabs keeps the window put (item 65 regression)
+prowl run activity-history      # Activity History window opens
+prowl run ai-provider-controls  # item-59 sign-in/provider controls all render
+prowl run managed-signin-email  # email-code managed sign-in via the offline fake (item 70)
+prowl run managed-signin-google # Google managed sign-in via the offline fake (item 70)
+prowl run openrouter-connect    # OpenRouter provisioning via the offline fake (item 70)
 ```
 
 Each run launches the Sentwise app at
@@ -71,6 +76,31 @@ account-gated menu surfaces exist and hunts can open every product window:
 - **No LLM key and no verified model**, so watching stays unavailable and no
   provider can be called.
 
+### Sign-in / provisioning are a deterministic offline fake in hunt mode (item 70)
+
+The item-59 sign-in surfaces are **functional but fully offline** in hunt mode, so
+hunts can drive them end-to-end without ever reaching the network. This is the
+same intent as the `StubManagedInferenceClient` that answers drafts offline:
+
+- **Managed email-code sign-in** — `startManagedSignIn` advances to the code stage
+  and `verifyManagedCode` completes to the signed-in fixture account, both without
+  any Clerk call (`AppState+ManagedAccount.swift`, gated on `isHuntMode`).
+- **Managed Google sign-in** — `startManagedGoogleSignIn` shows the
+  "finish in your browser" panel WITHOUT opening a real browser (the `openURL`
+  hand-off is skipped in hunt mode), and a hunt-only **"Simulate browser sign-in"**
+  control (`managedSimulateGoogleCallback`, compiled into the UI only in hunt mode)
+  completes it via `completeManagedGoogleSignInForHunt`.
+- **OpenRouter provisioning** — "Connect OpenRouter" completes to a fake
+  OpenAI-compatible provider via `completeOpenRouterProvisioningForHunt` — no
+  browser, no PKCE exchange, no real key.
+
+Everything stays in memory against `.invalid`/fake fixtures; the production sign-in
+paths are unchanged (every fake is strictly guarded on
+`ProwlHuntRuntime.current.isEnabled`, injectable for unit tests — see
+`AppState+ProwlHuntAuth.swift` and `AppStateProwlHuntAuthTests`). The signed-in
+fixture account is `hunt.google@sentwise.invalid` (Google) or whatever email the
+hunt types (email code).
+
 The `.prowl/DerivedData` app path is part of that safety boundary. If you point
 `target.app` somewhere else, do not present the hunts as live-account-safe
 unless that build is launched with `SENTWISE_PROWL_HUNT_MODE=1` or
@@ -78,13 +108,41 @@ unless that build is launched with `SENTWISE_PROWL_HUNT_MODE=1` or
 
 ## Safety rules for authoring hunts
 
-All hunts are **open-and-assert only**: open the menu, open windows, assert
-presence. Even though hunt mode is isolated, do not author steps that activate
-controls inside the opened windows — no Generate, Send, Approve, Deny, Save,
-Delete, Search, Test Connection, Start/Pause Watching, Launch at Login,
-Check for Updates, or Quit. The `forbiddenSelectors` guardrails in
+Hunts are **open-and-assert only for everything that mutates real state**: open
+the menu, open windows, assert presence. Do not author steps that activate
+controls that could send mail, mutate a draft, call a real LLM, search a mailbox,
+or change system settings — no Generate, Send, Approve, Deny, Save, Delete,
+Discard, Disconnect, Search, Test Connection, Start/Pause Watching, Launch at
+Login, Check for Updates, or Quit. The `forbiddenSelectors` guardrails in
 `config.yml` enforce this by substring — keep them in sync with any new
 interactive surfaces.
+
+### Exception: item-59 sign-in / provider controls (relaxed 2026-08-21, item 70)
+
+Because managed sign-in (email + Google) and OpenRouter provisioning run through a
+**deterministic, fully-offline fake in hunt mode** (see the fixture section above),
+activating those specific controls cannot reach a real service or send anything.
+The `forbiddenSelectors` were therefore relaxed so the sign-in/provider hunts can
+click them, while every dangerous action stays forbidden. The relaxations (each
+documented inline in `config.yml`):
+
+- Removed the explicit `managed*` / `openRouter*` / `useThis*` id forbids and the
+  sign-in *label* forbids ("Sign in", "Verify", "Send sign-in code", "Use Sentwise
+  AI", "Continue with Google", "Connect OpenRouter", "Use this provider").
+- Removed the standalone `Provider` substring (it also blocked the safe
+  `byoProviderPicker` / `useThisProviderButton` / `activeProviderBadge`; staging a
+  provider triggers no network).
+- Removed the `Connect`/`connect`, `Verify`, and `Cancel` substrings — no dangerous
+  control is named by them (mail uses "Test Connection", still blocked by `Test`).
+- Replaced bare `Send`/`send` with **quote-anchored** forbids (`"Send"`,
+  `"Send now"`, `"Send anyway"`) that block `label="Send"` /
+  `role=button[name="Send"]` (the real dispatch buttons have no AX id) but not
+  `id=managedSendCodeButton`.
+- Added an explicit `Disconnect` forbid (previously caught by `Connect`).
+
+Still forbidden so a hunt can never sign out, open a real browser, or send/draft:
+`managedSignOutButton`, `getAPIKeyButton` / "Get an API key" (NOT hunt-gated —
+opens a real browser), and `useManagedInference`.
 
 Because the macOS substring selectors can resolve short values like `Q` or
 `Fo` to unsafe menu items, this config forbids `menu=` and `text=` selectors.
@@ -100,24 +158,38 @@ Menu actions must use the explicit safe AX identifiers assigned in
 | `id=openReviewWindow` | Review Drafts (N)… (fixture-gated) |
 | `id=openBrowseMailbox` | Browse Mailbox… (fixture-gated) |
 
-### Managed-inference sign-in controls (item 56a)
+### Managed-inference sign-in / provider controls (items 56a, 59, 70)
 
 The onboarding "Choose your AI" step and Settings → AI tab carry the
 managed-inference sign-in surface. These SwiftUI controls set `accessibilityIdentifier`
-values (resolved by `id=` selectors). Sign-in is **disabled in hunt mode**, and
-every activation of these controls is additionally forbidden in `config.yml` —
-hunts may only assert their presence, never drive account auth:
+values (resolved by `id=` selectors). In hunt mode sign-in and provisioning run
+through a **deterministic offline fake** (see the fixture section above), so the
+sign-in/provider hunts drive these controls end-to-end. The **Clickable in hunts**
+column marks which are allowed by `forbiddenSelectors`:
 
-| Identifier | Control |
-|---|---|
-| `id=useManagedInference` | "Use Sentwise AI" (selects the managed provider) |
-| `id=managedEmailField` | Email field for the sign-in code |
-| `id=managedSendCodeButton` | "Send sign-in code" |
-| `id=managedCodeField` | One-time-code field |
-| `id=managedVerifyButton` | "Verify & connect" |
-| `id=managedSignOutButton` | "Sign out" of the managed account |
-| `id=useOwnProviderDisclosure` | "Use your own AI provider instead" disclosure |
-| `id=byoProviderPicker` | Bring-your-own provider picker |
+| Identifier | Control | Clickable in hunts |
+|---|---|---|
+| `id=useManagedInference` | "Use Sentwise AI" (selects the managed provider) | no (forbidden; not needed) |
+| `id=managedGoogleSignInButton` | "Continue with Google" (offline fake in hunt mode) | yes |
+| `id=managedEmailField` | Email field for the sign-in code | yes (fill) |
+| `id=managedSendCodeButton` | "Send sign-in code" (offline fake) | yes |
+| `id=managedCodeField` | One-time-code field | yes (fill) |
+| `id=managedVerifyButton` | "Verify & connect" (offline fake) | yes |
+| `id=managedCancelBrowserSignIn` | "Cancel" (abort a browser-based Google sign-in) | assert-only |
+| `id=managedSimulateGoogleCallback` | "Simulate browser sign-in" — **hunt-mode-only** control that completes the faked Google flow | yes |
+| `id=managedSignOutButton` | "Sign out" of the managed account | no (forbidden) |
+| `id=useOwnProviderDisclosure` | "Use your own AI provider instead" disclosure | (onboarding only) |
+| `id=byoProviderPicker` | Bring-your-own provider picker | assert / stage |
+| `id=useThisProviderButton` | "Use this provider" (activates the staged BYO provider) | assert |
+| `id=openRouterConnectButton` | "Connect OpenRouter" (offline fake in hunt mode) | yes |
+| `id=openRouterConnectedBadge` | "Connected" badge shown once OpenRouter is the active provider | assert-only |
+| `id=getAPIKeyButton` | "Get an API key" (opens a REAL browser — not hunt-gated) | no (forbidden) |
+| `id=activeProviderBadge` | "Active" badge on the provider currently drafting (non-interactive) | assert-only |
+
+The sign-in/provider hunts target the **Settings → AI tab** (open Settings, click
+the `label="AI"` toolbar tab). In the fixture, managed inference is the active
+provider but not signed in, so all the sign-in controls render immediately; after a
+faked sign-in the AI tab's Status row shows `activeProviderBadge`.
 
 Window presence checks use `waitForSelector` with the exact AX label each
 window sets via `setAccessibilityLabel` (`label=` is a step selector; it is
@@ -137,10 +209,17 @@ when the window never appears):
 
 - `statusItem` — press the app's menu bar status item (leaves the menu open)
 - `id=<axIdentifier>` — accessibility identifier when the app exposes one
-- `label="…"` — exact accessibility label match (steps only, not assertions)
+- `label="…"` — exact accessibility label match (steps only, not assertions).
+  The Settings toolbar tabs are native `NSToolbarItem`s with no id, so
+  `settings-window-tabs` clicks them by label (`label="General"`, `"Account"`,
+  `"AI"`, `"Rules"`, `"About"`) — the visible toolbar title is the AX label.
 - `role=button[name="Save"]` — AX role + accessible name
 - `menu=<title>` — disabled by this repo's guardrails; use safe `id=` selectors
 - `text="…"` — disabled by this repo's guardrails
+
+Step kinds used by these hunts: `click` (selector), `fill` (`{ selector, value }`
+— types text into a field, used for the email/code fields), `assert`
+(`{ visible: <selector> }`), and `waitForSelector` (`{ selector, timeout }`).
 
 ## CI (Prowl QA workflow)
 

@@ -1,0 +1,61 @@
+# Regression guard for the Settings window "jump" fix (item 65): switching
+# toolbar tabs must never move, collapse, or close the window. Opens Settings,
+# then clicks each toolbar tab General → Account → AI → Rules → About → General,
+# asserting after every switch that the window whose accessibility label is
+# "Sentwise Settings" is still present. Switching tabs mutates no real state, so
+# this stays within the open-and-assert rule.
+#
+# Toolbar tabs have no AX identifier (they are native NSToolbarItems), so they
+# are clicked by their exact accessibility label (the visible toolbar title). The
+# window's AX label is fixed to "Sentwise Settings" regardless of the tab, so a
+# successful waitForSelector after each switch proves the window survived.
+#
+# Run it (on the Lucius runner):  prowl run settings-window-tabs
+
+name: settings-window-tabs
+description: Switching Settings toolbar tabs keeps the window present (no jump)
+
+steps:
+  - click:
+      selector: statusItem
+
+  - click:
+      selector: id=openSettings
+
+  - waitForSelector:
+      selector: label="Sentwise Settings"
+      timeout: 10000
+
+  - click:
+      selector: label="Account"
+  - waitForSelector:
+      selector: label="Sentwise Settings"
+      timeout: 10000
+
+  - click:
+      selector: label="AI"
+  - waitForSelector:
+      selector: label="Sentwise Settings"
+      timeout: 10000
+  # The AI pane's own controls confirm the tab actually switched (not just that
+  # some window is present).
+  - assert:
+      visible: id=managedSendCodeButton
+
+  - click:
+      selector: label="Rules"
+  - waitForSelector:
+      selector: label="Sentwise Settings"
+      timeout: 10000
+
+  - click:
+      selector: label="About"
+  - waitForSelector:
+      selector: label="Sentwise Settings"
+      timeout: 10000
+
+  - click:
+      selector: label="General"
+  - waitForSelector:
+      selector: label="Sentwise Settings"
+      timeout: 10000

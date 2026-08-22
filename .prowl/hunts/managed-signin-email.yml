@@ -1,0 +1,50 @@
+# Deterministic managed-inference email-code sign-in, driven end-to-end through
+# the hunt-mode offline fake (item 70). In hunt mode `startManagedSignIn` and
+# `verifyManagedCode` never touch the network or Clerk: entering an email and
+# clicking "Send sign-in code" advances to the code-entry stage, and any code
+# completes to the signed-in fixture account, flipping managed to connected.
+# Nothing leaves the machine (`.invalid` fixtures, no LLM call).
+#
+# Run it (on the Lucius runner):  prowl run managed-signin-email
+
+name: managed-signin-email
+description: Email-code managed sign-in completes via the offline hunt fake
+
+steps:
+  - click:
+      selector: statusItem
+
+  - click:
+      selector: id=openSettings
+
+  - waitForSelector:
+      selector: label="Sentwise Settings"
+      timeout: 10000
+
+  - click:
+      selector: label="AI"
+
+  # Enter an email and request the (faked) code.
+  - fill:
+      selector: id=managedEmailField
+      value: hunt.fixture@sentwise.invalid
+  - click:
+      selector: id=managedSendCodeButton
+
+  # The fake advanced to the code-entry stage.
+  - waitForSelector:
+      selector: id=managedCodeField
+      timeout: 10000
+
+  # Any code completes the offline fake.
+  - fill:
+      selector: id=managedCodeField
+      value: "000000"
+  - click:
+      selector: id=managedVerifyButton
+
+  # Managed is now the connected, active provider — the "Active" badge appears in
+  # the AI tab's Status row only once signed in.
+  - waitForSelector:
+      selector: id=activeProviderBadge
+      timeout: 10000

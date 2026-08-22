@@ -28,6 +28,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Manages application updates (Sparkle is wired in at the distribution milestone).
     private var updateManager: UpdateManager!
 
+    /// `sentwise://` callbacks can arrive before AppKit has called
+    /// `applicationDidFinishLaunching`; hold them until `AppState` can route them.
+    private var pendingIncomingURLs: [URL] = []
+
+    var pendingIncomingURLCount: Int { pendingIncomingURLs.count }
+
     // MARK: - NSApplicationDelegate
 
     override init() {
@@ -52,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         updateManager = UpdateManager()
         menuBarController = MenuBarController(appState: appState, updateManager: updateManager)
+        replayPendingIncomingURLs()
         if runtime.allowsStartupSideEffects {
             updateManager.startUpdater()
         }
@@ -87,6 +94,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         logger.info("Sentwise launched")
+    }
+
+    /// Handles `sentwise://` deep links: the Clerk Google sign-in redirect and the
+    /// OpenRouter key-provisioning redirect (item 59). AppKit installs the
+    /// GetURL Apple Event handler automatically because the scheme is registered in
+    /// `Info.plist` and this delegate method is implemented.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let appState else {
+            pendingIncomingURLs.append(contentsOf: urls)
+            return
+        }
+        routeIncomingURLs(urls, appState: appState)
+    }
+
+    private func replayPendingIncomingURLs() {
+        guard !pendingIncomingURLs.isEmpty else { return }
+        let urls = pendingIncomingURLs
+        pendingIncomingURLs.removeAll()
+        routeIncomingURLs(urls, appState: appState)
+    }
+
+    private func routeIncomingURLs(_ urls: [URL], appState: AppState) {
+        for url in urls {
+            appState.handleIncomingURL(url)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

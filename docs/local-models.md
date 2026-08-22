@@ -29,10 +29,13 @@ works. This guide covers Ollama (the default) and LM Studio.
    what you have.
 
 3. **Select the provider in Sentwise.** Open **Settings → AI** (the AI tab in
-   the Settings window's toolbar; or the onboarding "Choose your AI" step) and
-   set:
+   the Settings window's toolbar; or the onboarding "Choose your AI" step). The
+   managed **Sentwise AI** option leads; expand **"Use your own AI provider
+   instead"** to reach the bring-your-own controls, then set:
 
-   - **Provider:** `Local (Ollama)`
+   - **Provider:** `Local (Ollama)` — a one-line note reminds you that local
+     models are private but draft quality varies by model (an 8B-parameter model
+     or larger is recommended). Click **Use this provider** to make it active.
    - **Model:** leave blank to use `llama3.1`, or type the exact name of a model
      you pulled.
    - **Base URL:** leave blank for Ollama's default
@@ -56,7 +59,8 @@ different port. To use it:
 
 - Start LM Studio's local server (its **Developer / Local Server** tab) and load
   a model.
-- In Sentwise, choose **Local (Ollama)** as the provider, then set the
+- In Sentwise, expand **"Use your own AI provider instead"**, choose
+  **Local (Ollama)** as the provider and click **Use this provider**, then set the
   **Base URL** to LM Studio's endpoint, typically `http://localhost:1234/v1`.
 - Enter the model identifier LM Studio reports for the loaded model, then
   **Test Connection**.

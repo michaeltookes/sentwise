@@ -51,6 +51,19 @@ struct SecretKey: RawRepresentable, Hashable {
     /// Kept apart from the rejected stored session so reauthentication retries can
     /// echo Clerk's latest rotation without reviving the stale credential pair.
     static let managedReauthenticationClientToken = SecretKey(rawValue: "managed.reauthenticationClientToken")
+    /// The transient Clerk OAuth sign-in id for a browser-based managed-account
+    /// sign-in. Stored so a redirect that arrives after an app relaunch can still
+    /// finish the same Clerk flow.
+    static let managedOAuthSignInID = SecretKey(rawValue: "managed.oauthSignInID")
+
+    /// The transient PKCE code verifier for an in-progress OpenRouter one-click
+    /// key provisioning (item 59). Written when the browser hand-off starts and
+    /// read+removed when the `sentwise://openrouter-callback` code comes back.
+    static let openRouterPKCEVerifier = SecretKey(rawValue: "openRouter.pkceVerifier")
+    /// The OpenRouter-provisioned OpenAI-compatible API key. Kept separate from the
+    /// generic OpenAI-compatible slot so one-click setup never overwrites a manual
+    /// OpenAI or gateway credential.
+    static let openRouterAPIKey = SecretKey(rawValue: "llm.openRouter.apiKey")
 }
 
 /// Secure storage for sensitive strings — OAuth tokens, API keys, client secrets.

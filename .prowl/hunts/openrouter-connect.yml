@@ -1,0 +1,34 @@
+# Deterministic OpenRouter one-click provisioning, driven through the hunt-mode
+# offline fake (item 70). In hunt mode "Connect OpenRouter" opens NO real
+# browser and performs NO PKCE key exchange — it completes deterministically to a
+# fake OpenAI-compatible provider pointed at OpenRouter's base URL, marking it
+# connected. No real key, no network.
+#
+# Run it (on the Lucius runner):  prowl run openrouter-connect
+
+name: openrouter-connect
+description: OpenRouter provisioning completes via the offline hunt fake
+
+steps:
+  - click:
+      selector: statusItem
+
+  - click:
+      selector: id=openSettings
+
+  - waitForSelector:
+      selector: label="Sentwise Settings"
+      timeout: 10000
+
+  - click:
+      selector: label="AI"
+
+  # One-click connect — completes offline in hunt mode.
+  - click:
+      selector: id=openRouterConnectButton
+
+  # The card swaps its Connect button for a "Connected" badge once the fake
+  # OpenRouter (OpenAI-compatible) provider is active.
+  - waitForSelector:
+      selector: id=openRouterConnectedBadge
+      timeout: 10000

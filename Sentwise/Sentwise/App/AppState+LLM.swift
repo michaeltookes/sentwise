@@ -4,6 +4,15 @@ import Foundation
 /// stays within the file/type length limits.
 extension AppState {
 
+    /// Whether managed inference (Sentwise AI) is the provider currently drafting.
+    /// The two provider cards key their "Active" badge off this so exactly one is
+    /// ever shown live at a time (item 59).
+    var isManagedProviderActive: Bool { llmProviderKind == .managed }
+
+    /// Whether a bring-your-own provider (anything but managed) is the one
+    /// currently drafting — the exact inverse of `isManagedProviderActive`.
+    var isBYOProviderActive: Bool { llmProviderKind != .managed }
+
     /// The model to use: the user's choice, or the provider default if blank.
     var resolvedLLMModel: String {
         resolvedLLMModel(for: llmModel)
@@ -25,18 +34,53 @@ extension AppState {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    var currentLLMAPIKeySecret: SecretKey {
+        Self.llmAPIKeySecret(provider: llmProviderKind, baseURL: currentLLMBaseURL)
+    }
+
+    static func llmAPIKeySecret(provider: LLMProviderKind, baseURL: String?) -> SecretKey {
+        guard provider == .openAICompatible, isOpenRouterBaseURL(baseURL) else {
+            return provider.apiKeySecret
+        }
+        return .openRouterAPIKey
+    }
+
+    static func storedLLMAPIKey(
+        provider: LLMProviderKind,
+        baseURL: String?,
+        secrets: SecretStore
+    ) -> String {
+        let primarySecret = llmAPIKeySecret(provider: provider, baseURL: baseURL)
+        if let primary = ((try? secrets.value(for: primarySecret)) ?? nil), !primary.isEmpty {
+            return primary
+        }
+        guard primarySecret == .openRouterAPIKey,
+              let legacy = ((try? secrets.value(for: provider.apiKeySecret)) ?? nil),
+              !legacy.isEmpty else {
+            return ""
+        }
+        do {
+            try secrets.set(legacy, for: primarySecret)
+            try? secrets.remove(provider.apiKeySecret)
+        } catch {
+            // Keep using the legacy key as a read fallback if migration fails.
+        }
+        return legacy
+    }
+
     /// Applies a user edit to the custom base URL. Because the endpoint is part
     /// of what a connection test verifies, editing it clears the verified state
     /// so the user must re-test before the provider counts as connected.
     func updateLLMBaseURLFromUser(_ newValue: String) {
         guard newValue != llmBaseURL else { return }
         let previousOrigin = currentLLMEndpointOrigin
+        let previousAPIKeySecret = currentLLMAPIKeySecret
         llmBaseURL = newValue
         let shouldClearKey = llmProviderKind.supportsCustomBaseURL
             && shouldClearLLMAPIKeyForEndpointChange(from: previousOrigin, to: currentLLMEndpointOrigin)
         llmError = nil
         if shouldClearKey {
-            clearLLMAPIKeyForEndpointChange()
+            clearLLMAPIKeyForEndpointChange(secret: previousAPIKeySecret)
         }
         verifiedLLMModel = ""
         refreshLLMConnectionStatus()
@@ -56,7 +100,11 @@ extension AppState {
             return
         }
         let hasCredential = !llmProviderKind.requiresAPIKey
-            || secrets.hasValue(for: llmProviderKind.apiKeySecret)
+            || !Self.storedLLMAPIKey(
+                provider: llmProviderKind,
+                baseURL: currentLLMBaseURL,
+                secrets: secrets
+            ).isEmpty
         isLLMConnected = hasCredential
             && resolvedLLMModel(for: model ?? llmModel) == verifiedLLMModel
     }
@@ -68,13 +116,20 @@ extension AppState {
     /// new provider's requests to the previous provider's endpoint.
     func selectLLMProvider(_ provider: LLMProviderKind) {
         guard provider != llmProviderKind else { return }
+        let selectedBaseURL = restoredBaseURLOnProviderSelection(provider)
         llmProviderKind = provider
-        llmModel = ""
-        llmBaseURL = ""
-        llmAPIKey = ((try? secrets.value(for: provider.apiKeySecret)) ?? nil) ?? ""
-        // Managed carries no API key; if already signed in, mark it verified so
-        // the connected state is reflected immediately on switch.
-        verifiedLLMModel = (provider == .managed && isManagedSignedIn) ? provider.defaultModel : ""
+        llmBaseURL = selectedBaseURL
+        llmAPIKey = Self.storedLLMAPIKey(
+            provider: provider,
+            baseURL: selectedBaseURL.isEmpty ? nil : selectedBaseURL,
+            secrets: secrets
+        )
+        llmModel = restoredModelOnProviderSelection(provider, baseURL: selectedBaseURL, apiKey: llmAPIKey)
+        verifiedLLMModel = restoredVerifiedModelOnProviderSelection(
+            provider,
+            baseURL: selectedBaseURL,
+            apiKey: llmAPIKey
+        )
         refreshLLMConnectionStatus()
         resetDraftPreviewForLLMChange()
         llmError = nil
@@ -99,6 +154,7 @@ extension AppState {
         let testedProvider = llmProviderKind
         let testedModel = resolvedLLMModel
         let testedBaseURL = currentLLMBaseURL
+        let testedAPIKeySecret = currentLLMAPIKeySecret
 
         do {
             try await llm.testConnection(
@@ -124,14 +180,14 @@ extension AppState {
 
         if key.isEmpty {
             do {
-                try secrets.remove(testedProvider.apiKeySecret)
+                try secrets.remove(testedAPIKeySecret)
             } catch {
                 llmError = Self.keychainLLMMessage(action: "remove", error: error)
                 return
             }
         } else {
             do {
-                try secrets.set(key, for: testedProvider.apiKeySecret)
+                try secrets.set(key, for: testedAPIKeySecret)
             } catch {
                 llmError = Self.keychainLLMMessage(action: "save", error: error)
                 return
@@ -156,8 +212,9 @@ extension AppState {
         // Managed inference has no stored API key; disconnecting it means signing
         // out of the account, which is a distinct, explicit action in the UI.
         guard target != .managed else { return }
+        let targetSecret = target == llmProviderKind ? currentLLMAPIKeySecret : target.apiKeySecret
         do {
-            try secrets.remove(target.apiKeySecret)
+            try secrets.remove(targetSecret)
         } catch {
             llmError = Self.keychainLLMMessage(action: "remove", error: error)
             return
@@ -222,12 +279,59 @@ extension AppState {
         oldOrigin != newOrigin || oldOrigin == nil || newOrigin == nil
     }
 
-    private func clearLLMAPIKeyForEndpointChange() {
+    private func clearLLMAPIKeyForEndpointChange(secret: SecretKey) {
         llmAPIKey = ""
         do {
-            try secrets.remove(llmProviderKind.apiKeySecret)
+            try secrets.remove(secret)
         } catch {
             llmError = Self.keychainLLMMessage(action: "remove", error: error)
         }
+    }
+
+    private func restoredBaseURLOnProviderSelection(_ provider: LLMProviderKind) -> String {
+        guard provider == .openAICompatible,
+              !secrets.hasValue(for: provider.apiKeySecret),
+              secrets.hasValue(for: .openRouterAPIKey) else {
+            return ""
+        }
+        return OpenRouterKeyProvisioner.apiBaseURL
+    }
+
+    private func restoredModelOnProviderSelection(
+        _ provider: LLMProviderKind,
+        baseURL: String,
+        apiKey: String
+    ) -> String {
+        guard provider == .openAICompatible,
+              !apiKey.isEmpty,
+              Self.isOpenRouterBaseURL(baseURL) else {
+            return ""
+        }
+        return Self.openRouterDefaultModel
+    }
+
+    private func restoredVerifiedModelOnProviderSelection(
+        _ provider: LLMProviderKind,
+        baseURL: String,
+        apiKey: String
+    ) -> String {
+        if provider == .managed && isManagedSignedIn {
+            return provider.defaultModel
+        }
+        return restoredModelOnProviderSelection(provider, baseURL: baseURL, apiKey: apiKey)
+    }
+
+    private static func isOpenRouterBaseURL(_ baseURL: String?) -> Bool {
+        guard let endpoint = try? OpenAICompatibleClient.resolveEndpoint(
+            baseURL: baseURL,
+            defaultEndpoint: OpenAICompatibleClient.defaultEndpoint
+        ) else {
+            return false
+        }
+        guard endpoint.scheme?.lowercased() == "https",
+              endpoint.host?.lowercased() == "openrouter.ai" else {
+            return false
+        }
+        return endpoint.path == "/api/v1/chat/completions"
     }
 }

@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The "AI Provider" tab of Settings: LLM provider/model/key selection plus voice
-/// learning (which depends on both a connected account and a connected provider).
+/// The "AI Provider" tab of Settings: the managed-inference (Sentwise AI) account,
+/// the guided bring-your-own-provider path (item 59), and voice learning (which
+/// depends on both a connected account and a connected provider).
 struct AIProviderSettingsView: View {
     @EnvironmentObject var appState: AppState
 
@@ -16,11 +17,8 @@ struct AIProviderSettingsView: View {
                     LabeledContent("Account") {
                         Text(appState.managedAccountEmail).foregroundStyle(.secondary)
                     }
-                    if appState.llmProviderKind == .managed {
-                        LabeledContent("Status") {
-                            Text(appState.isLLMConnected ? "Connected" : "Signed in")
-                                .foregroundStyle(.green)
-                        }
+                    if appState.isManagedProviderActive {
+                        LabeledContent("Status") { ActiveProviderBadge() }
                     } else {
                         Button("Use Sentwise AI") { appState.selectLLMProvider(.managed) }
                             .accessibilityIdentifier("useManagedInference")
@@ -33,89 +31,20 @@ struct AIProviderSettingsView: View {
                     .accessibilityIdentifier("managedSignOutButton")
                     .accessibilityLabel("Sign out of Sentwise AI")
                 } else {
-                    if appState.llmProviderKind != .managed {
+                    if !appState.isManagedProviderActive {
                         Button("Use Sentwise AI") { appState.selectLLMProvider(.managed) }
                             .accessibilityIdentifier("useManagedInference")
                             .accessibilityLabel("Use Sentwise AI")
                     }
+                    Text("Sign in or create your account")
+                        .font(.caption).foregroundStyle(.secondary)
                     ManagedSignInControls()
                 }
                 ManagedAccountErrorMessage()
             }
 
-            Section("Use your own AI provider") {
-                Picker("Provider", selection: Binding(
-                    get: {
-                        appState.llmProviderKind == .managed ? nil : appState.llmProviderKind
-                    },
-                    set: { provider in
-                        guard let provider else { return }
-                        appState.selectLLMProvider(provider)
-                    }
-                )) {
-                    ForEach(byoProviders) { kind in
-                        Text(kind.displayName).tag(Optional(kind))
-                    }
-                }
-                .accessibilityLabel("AI provider")
-
-                if appState.llmProviderKind != .managed {
-                    TextField(
-                        "Model",
-                        text: llmModelBinding,
-                        prompt: Text(appState.llmProviderKind.defaultModel)
-                    )
-                    .accessibilityLabel("AI model")
-
-                    if appState.llmProviderKind.supportsCustomBaseURL {
-                        TextField(
-                            "Base URL",
-                            text: llmBaseURLBinding,
-                            prompt: Text(appState.llmProviderKind.baseURLPlaceholder ?? "")
-                        )
-                        .accessibilityLabel("AI provider base URL")
-                        Text(llmBaseURLHelp)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if appState.isLLMConnected {
-                        LabeledContent("Status") {
-                            Text("Connected").foregroundStyle(.green)
-                        }
-                        Button("Disconnect", role: .destructive) {
-                            appState.disconnectLLM(provider: appState.llmProviderKind)
-                        }
-                        .accessibilityLabel("Disconnect AI provider")
-                    } else {
-                        SecureField(llmAPIKeyFieldTitle, text: $appState.llmAPIKey)
-                            .accessibilityLabel("AI provider API key")
-
-                        if !appState.llmProviderKind.requiresAPIKey {
-                            Text("Optional — leave blank for Ollama or unauthenticated local runtimes.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Button {
-                            Task { await appState.testLLMConnection() }
-                        } label: {
-                            if appState.isTestingLLM {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Text("Test Connection")
-                            }
-                        }
-                        .disabled(appState.isTestingLLM)
-                        .accessibilityLabel("Test AI provider connection")
-                    }
-
-                    if let error = appState.llmError {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-                }
+            Section("Use your own AI") {
+                BYOProviderControls()
             }
 
             Section("Voice") {
@@ -170,49 +99,5 @@ struct AIProviderSettingsView: View {
             }
         }
         .formStyle(.grouped)
-    }
-
-    /// The bring-your-own providers (everything except managed inference).
-    private var byoProviders: [LLMProviderKind] {
-        LLMProviderKind.allCases.filter { $0 != .managed }
-    }
-
-    /// Endpoint help text tailored to the selected provider.
-    private var llmBaseURLHelp: String {
-        switch appState.llmProviderKind {
-        case .ollama:
-            return """
-            Leave blank for Ollama (http://localhost:11434/v1). Point this at LM Studio \
-            (http://localhost:1234/v1) or another OpenAI-compatible local/LAN server. \
-            Remote endpoints must use HTTPS; plain HTTP works only on your local network.
-            """
-        default:
-            return """
-            Leave blank for OpenAI. Point this at any OpenAI-compatible endpoint \
-            (OpenRouter, Groq, a local server, …). Remote endpoints must use HTTPS; \
-            plain HTTP works only on your local network.
-            """
-        }
-    }
-
-    private var llmModelBinding: Binding<String> {
-        Binding(
-            get: { appState.llmModel },
-            set: {
-                appState.llmModel = $0
-                appState.refreshLLMConnectionStatus()
-            }
-        )
-    }
-
-    private var llmAPIKeyFieldTitle: String {
-        appState.llmProviderKind.requiresAPIKey ? "API key" : "API key (optional)"
-    }
-
-    private var llmBaseURLBinding: Binding<String> {
-        Binding(
-            get: { appState.llmBaseURL },
-            set: { appState.updateLLMBaseURLFromUser($0) }
-        )
     }
 }

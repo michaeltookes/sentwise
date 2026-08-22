@@ -17,6 +17,27 @@
 	</dict>
 
 	<!--
+	  Custom URL scheme (item 59). `sentwise://` receives two browser hand-backs:
+	  the Clerk Google sign-in and OpenRouter key-provisioning round-trips.
+	  The browser lands on an HTTPS page on the Worker (/auth/callback,
+	  /openrouter/callback) which forwards to sentwise://oauth-callback and
+	  sentwise://openrouter-callback respectively.
+	  AppDelegate.application(_:open:) routes them; the Clerk dashboard must list
+	  https://sentwise-inference.sentwise-service.workers.dev/auth/callback as an allowed redirect URL.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.tookes.Sentwise</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>sentwise</string>
+			</array>
+		</dict>
+	</array>
+
+	<!--
 	  Sparkle auto-update configuration.
 
 	  SUFeedURL: the appcast the updater polls. We publish it as a release

@@ -1,0 +1,43 @@
+# Deterministic managed-inference Google sign-in, driven through the hunt-mode
+# offline fake (item 70). In hunt mode "Continue with Google" opens NO real
+# browser and makes no Clerk call — it advances to the "finish in your browser"
+# waiting panel. A hunt-only "Simulate browser sign-in" control
+# (managedSimulateGoogleCallback, compiled into the UI only in hunt mode)
+# completes the flow deterministically to the signed-in fixture account.
+#
+# Run it (on the Lucius runner):  prowl run managed-signin-google
+
+name: managed-signin-google
+description: Google managed sign-in completes via the offline hunt fake
+
+steps:
+  - click:
+      selector: statusItem
+
+  - click:
+      selector: id=openSettings
+
+  - waitForSelector:
+      selector: label="Sentwise Settings"
+      timeout: 10000
+
+  - click:
+      selector: label="AI"
+
+  # "Continue with Google" — in hunt mode this opens nothing and shows the
+  # browser-wait panel with a Cancel affordance.
+  - click:
+      selector: id=managedGoogleSignInButton
+  - assert:
+      visible: id=managedCancelBrowserSignIn
+  - assert:
+      visible: id=managedSimulateGoogleCallback
+
+  # Complete the (faked) browser round-trip deterministically.
+  - click:
+      selector: id=managedSimulateGoogleCallback
+
+  # Managed is now the connected, active provider.
+  - waitForSelector:
+      selector: id=activeProviderBadge
+      timeout: 10000

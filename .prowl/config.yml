@@ -18,14 +18,45 @@ artifacts:
   screenshots: "on-failure"   # screenshots need Screen Recording permission
 
 # Safety guardrails. forbiddenSelectors is substring-matched against every
-# selector. Hunts are open-and-assert only: they may open windows but never
-# trigger an action that mutates state, dispatches mail, calls an LLM, runs a
-# mailbox search, or touches system settings. The substring selector families
-# (`menu=`, `text=`) stay disabled because short substrings can resolve to
-# unsafe menu items; menu actions must use the explicit AX identifiers the app
-# assigns to safe items (`id=openSettings`, `id=openActivityMenu`,
-# `id=openSetupAssistant`, `id=openFollowUpComposer`, `id=openReviewWindow`,
-# `id=openBrowseMailbox`).
+# selector. Hunts are open-and-assert only for everything that mutates real
+# state — they may open windows but never trigger an action that dispatches mail,
+# mutates a draft, calls an LLM, runs a mailbox search, or touches system
+# settings. The substring selector families (`menu=`, `text=`) stay disabled
+# because short substrings can resolve to unsafe menu items; menu actions must
+# use the explicit AX identifiers the app assigns to safe items
+# (`id=openSettings`, `id=openActivityMenu`, `id=openSetupAssistant`,
+# `id=openFollowUpComposer`, `id=openReviewWindow`, `id=openBrowseMailbox`).
+#
+# EXCEPTION — item-59 sign-in / provider surfaces (relaxed 2026-08-21, item 70).
+# In hunt mode ALL of managed sign-in (email code + Google) and OpenRouter
+# provisioning run through a deterministic, fully-offline fake (see
+# `AppState+ProwlHuntAuth.swift`, `startManagedSignIn`, `verifyManagedCode`,
+# `startManagedGoogleSignIn`, `completeOpenRouterProvisioningForHunt`): no
+# network, no browser, no Clerk/OpenRouter/Anthropic call, all against `.invalid`
+# fixtures. Because activating those specific controls in hunt mode cannot reach
+# a real service or send anything, the sign-in/provider hunts are allowed to
+# click them. The relaxations and why each is safe:
+#   * Removed the explicit `managed*` / `openRouter*` / `useThis*` id forbids and
+#     the sign-in *label* forbids ("Sign in", "Verify", "Send sign-in code",
+#     "Use Sentwise AI", "Continue with Google", "Connect OpenRouter",
+#     "Use this provider") — these only drive the offline fake.
+#   * Removed the standalone "Provider" substring — it also blocked the safe
+#     `byoProviderPicker`, `useThisProviderButton`, and (non-interactive)
+#     `activeProviderBadge`. Picking/staging a provider triggers no network.
+#   * Removed the "Connect"/"connect", "Verify", and "Cancel" substrings — no
+#     DANGEROUS control is named by them (mail uses "Test Connection", still
+#     blocked by "Test"; canceling is harmless), and they collided with
+#     `openRouterConnectButton` / `managedVerifyButton` / `managedCancelBrowserSignIn`.
+#   * Replaced the bare "Send"/"send" substrings (which also matched
+#     `managedSendCodeButton`) with QUOTE-ANCHORED forbids ('"Send"',
+#     '"Send now"', '"Send anyway"') that match `label="Send"` /
+#     `role=button[name="Send"]` — the real mail-dispatch buttons, which have no
+#     AX id — but NOT `id=managedSendCodeButton`.
+#   * Added an explicit "Disconnect" forbid (previously caught by "Connect").
+# STILL FORBIDDEN so hunts can never send mail, call a real LLM, mutate a draft,
+# search a mailbox, or change system settings: everything below. `getAPIKeyButton`
+# and `useManagedInference` stay forbidden — the former opens a real browser (it
+# is NOT hunt-gated) and the latter is not needed by any hunt.
 guardrails:
   maxSteps: 25
   allowedApps:
@@ -35,9 +66,13 @@ guardrails:
     # Substring selector families — too easy to hit an unsafe element.
     - "menu="
     - "text="
-    # Mail dispatch / draft mutation inside the composer and review windows.
-    - "Send"
-    - "send"
+    # Mail dispatch / draft mutation inside the composer and review windows. The
+    # real dispatch/approve buttons have no AX id, so they are matched by their
+    # quote-anchored accessible name (blocks `label="Send"` /
+    # `role=button[name="Send"]`, never `id=managedSendCodeButton`).
+    - '"Send"'
+    - '"Send now"'
+    - '"Send anyway"'
     - "Approve"
     - "approve"
     - "Deny"
@@ -61,13 +96,13 @@ guardrails:
     - "Choose File"
     - "Clear"
     - "Dismiss"
-    - "Cancel"
     - "Regenerate"
-    # Live-connection actions (settings test, mailbox search, watching).
-    - "Connect"
-    - "connect"
+    # Live-connection actions (settings test, mailbox search, watching). "Test"
+    # still covers the mail "Test Connection" button; "Disconnect" is forbidden
+    # explicitly now that the broad "Connect" substring is gone.
     - "Test"
     - "test"
+    - "Disconnect"
     - "Search"
     - "search"
     - "Start"
@@ -129,7 +164,6 @@ guardrails:
     - "AI model"
     - "AI provider base URL"
     - "AI provider API key"
-    - "Provider"
     - "Model"
     - "Base URL"
     - "API key"
@@ -142,17 +176,11 @@ guardrails:
     - "Continue"
     - "Skip for now"
     - "Finish"
-    # Managed-inference sign-in controls (item 56a). Sign-in is disabled in hunt
-    # mode, but forbid activating these so a hunt can never drive account auth.
-    - "Sign in"
+    # Managed-inference account actions that must stay off-limits even though the
+    # fake makes them harmless: sign-out (state change), the browser-opening
+    # "Get an API key" (NOT hunt-gated), and "Use Sentwise AI" (no hunt needs it).
     - "Sign out"
-    - "Sentwise AI"
-    - "Verify"
-    - "Send sign-in code"
-    - "Use Sentwise AI"
-    - "managedEmailField"
-    - "managedCodeField"
-    - "managedSendCodeButton"
-    - "managedVerifyButton"
     - "managedSignOutButton"
     - "useManagedInference"
+    - "getAPIKeyButton"
+    - "Get an API key"

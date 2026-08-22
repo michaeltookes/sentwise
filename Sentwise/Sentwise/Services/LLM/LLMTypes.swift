@@ -92,6 +92,66 @@ enum LLMProviderKind: String, CaseIterable, Codable, Identifiable, Sendable {
     var apiKeySecret: SecretKey {
         .llmAPIKey(provider: rawValue)
     }
+
+    // MARK: - Guided BYO setup (item 59)
+
+    /// The provider's exact API-key-creation page, opened by the guided BYO path's
+    /// "Get an API key" button. `nil` for providers with no key page (managed has
+    /// no key; local runtimes don't issue one).
+    var apiKeyCreationURL: URL? {
+        switch self {
+        case .anthropic: return URL(string: "https://console.anthropic.com/settings/keys")
+        case .openAICompatible: return URL(string: "https://platform.openai.com/api-keys")
+        case .managed, .ollama: return nil
+        }
+    }
+
+    /// A short, screenshot-free numbered checklist for getting a key set up. Empty
+    /// for the managed provider (there's nothing to do).
+    var keySetupSteps: [String] {
+        switch self {
+        case .anthropic:
+            return [
+                "Open the Anthropic Console and sign in (or create an account).",
+                "Add a payment method — Anthropic bills per token of usage.",
+                "Create an API key and copy it.",
+                "Paste it below, then Test Connection."
+            ]
+        case .openAICompatible:
+            return [
+                "Open the OpenAI API keys page and sign in (or create an account).",
+                "Add a payment method — OpenAI bills per token of usage.",
+                "Create a new secret key and copy it.",
+                "Paste it below, then Test Connection."
+            ]
+        case .ollama:
+            return [
+                "Install Ollama from ollama.com and launch it.",
+                "Pull and run a model, e.g. `ollama run llama3.1`.",
+                "Leave the API key blank, then Test Connection."
+            ]
+        case .managed:
+            return []
+        }
+    }
+
+    /// Whether the guided path should warn up-front that the provider asks for
+    /// payment details, so users aren't surprised mid-flow.
+    var mentionsProviderBilling: Bool {
+        switch self {
+        case .anthropic, .openAICompatible: return true
+        case .managed, .ollama: return false
+        }
+    }
+
+    /// A one-line, honest quality-expectation note for local models (item 58's
+    /// harness doesn't exist yet, so this is phrased conservatively). `nil` for
+    /// non-local providers.
+    var localModelQualityNote: String? {
+        guard self == .ollama else { return nil }
+        return "Local models are private — nothing leaves your Mac — but draft "
+            + "quality varies by model. We recommend an 8B-parameter model or larger."
+    }
 }
 
 /// A single turn in a conversation sent to an LLM.
