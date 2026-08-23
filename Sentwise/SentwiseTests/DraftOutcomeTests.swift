@@ -50,6 +50,14 @@ final class DraftOutcomeTests: XCTestCase {
         XCTAssertTrue(info.missing.isEmpty)
     }
 
+    func testNotReplyWorthySentinelIsDedicatedOutcome() throws {
+        let outcome = try DraftGenerator.parseOutcome("\n\nnot_reply_worthy: This is an automated receipt.")
+        guard case .notReplyWorthy(let verdict) = outcome else {
+            return XCTFail("expected notReplyWorthy, got \(outcome)")
+        }
+        XCTAssertEqual(verdict.summary, "This is an automated receipt.")
+    }
+
     func testSentinelAfterLeadingSubjectLineFlagsNeedsInfo() throws {
         let text = """
         Subject: Re: Budget

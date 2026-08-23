@@ -16,6 +16,14 @@ struct DraftNeedsInfo: Codable, Equatable {
     }
 }
 
+/// The assistant explicitly judged that the source message does not call for a
+/// reply. This is distinct from `DraftNeedsInfo`: there is no actionable user
+/// fact to supply, so the watcher may route it to the skip log.
+struct DraftNotReplyWorthy: Codable, Equatable {
+    /// One-line explanation of why a written reply is not useful.
+    var summary: String
+}
+
 /// A user's already-approved dispatch. Stored on the pending draft so offline
 /// approvals survive relaunch with the exact approval mode the user chose.
 struct OfflineQueuedDraftDispatch: Codable, Equatable {
@@ -97,6 +105,9 @@ struct Draft: Codable, Identifiable, Equatable {
     /// information only the user has (item 13). A flagged draft is never sent or
     /// saved until the user resolves it.
     var needsInfo: DraftNeedsInfo?
+    /// Set only when the model used the dedicated not-reply-worthy protocol.
+    /// Watcher code uses this explicit marker to skip automated/reply-less mail.
+    var notReplyWorthy: DraftNotReplyWorthy?
     /// An approved dispatch that could not run because the network was offline.
     /// Once dispatch starts, the intent is marked terminal so relaunch cannot
     /// automatically repeat a send whose post-send persistence failed.
@@ -114,7 +125,7 @@ struct Draft: Codable, Identifiable, Equatable {
 
     /// Whether this draft is flagged as needing the user's input rather than
     /// carrying a ready-to-send reply.
-    var isFlagged: Bool { needsInfo != nil }
+    var isFlagged: Bool { needsInfo != nil || notReplyWorthy != nil }
 
     /// Whether this is an authored follow-up (item 51) rather than a reply to an
     /// incoming message. Authored drafts have no source thread, so freshness and
@@ -163,6 +174,7 @@ struct Draft: Codable, Identifiable, Equatable {
         model: String,
         generatedAt: Date,
         needsInfo: DraftNeedsInfo? = nil,
+        notReplyWorthy: DraftNotReplyWorthy? = nil,
         offlineQueuedDispatch: OfflineQueuedDraftDispatch? = nil,
         authoredRecipients: [MailAddress]? = nil
     ) {
@@ -183,6 +195,7 @@ struct Draft: Codable, Identifiable, Equatable {
         self.model = model
         self.generatedAt = generatedAt
         self.needsInfo = needsInfo
+        self.notReplyWorthy = notReplyWorthy
         self.offlineQueuedDispatch = offlineQueuedDispatch
         self.authoredRecipients = authoredRecipients
     }

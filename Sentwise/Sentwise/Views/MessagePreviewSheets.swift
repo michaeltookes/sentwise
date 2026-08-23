@@ -72,6 +72,11 @@ struct DraftView: View {
                     DraftNeedsInfoView(needsInfo: needsInfo)
                         .padding()
                 }
+            } else if let notReplyWorthy = displayedDraft.notReplyWorthy {
+                ScrollView {
+                    DraftNotReplyWorthyView(notReplyWorthy: notReplyWorthy)
+                        .padding()
+                }
             } else {
                 TextEditor(text: $editedBody)
                     .font(.body)

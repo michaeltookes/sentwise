@@ -143,10 +143,10 @@ final class AppStateReplyWorthinessGapsTests: XCTestCase {
 
     // MARK: - LLM relevance gate (item 67)
 
-    /// The model's own "automated / nothing to reply to" verdict — a needs-info
-    /// outcome with an empty body and, crucially, NO actionable missing-info list.
+    /// The model's own "automated / nothing to reply to" verdict: an explicit
+    /// not-reply-worthy outcome, not an inferred empty missing-info list.
     private let automatedNeedsInfoResponse =
-        "NEEDS_INFO: This is an automated receipt email and it's unclear what reply you'd like to send."
+        "\(DraftGenerator.notReplyWorthySentinel) This is an automated receipt email and no reply is useful."
 
     /// A genuine item-13 "needs your input" verdict — a needs-info outcome whose
     /// `missing` list names specific things only the user can supply.
@@ -155,6 +155,11 @@ final class AppStateReplyWorthinessGapsTests: XCTestCase {
     - The meeting time you prefer
     - Which room to book
     """
+
+    /// A genuine needs-info outcome whose actionable request lives in `summary`,
+    /// with no optional bullet list.
+    private let singleLineNeedsInfoResponse =
+        "NEEDS_INFO: Need the invoice number."
 
     func testGenuineNeedsInfoWithMissingListStillEnqueuesAsFlaggedDraft() async {
         // Item 13 preserved: a needs-info draft with a populated `missing` list is
@@ -177,7 +182,25 @@ final class AppStateReplyWorthinessGapsTests: XCTestCase {
         XCTAssertTrue(appState.skippedMessages.isEmpty)
     }
 
-    func testModelNeedsInfoOutcomeRoutesToSkipNotQueue() async {
+    func testSingleLineNeedsInfoWithoutMissingListStillEnqueuesAsFlaggedDraft() async {
+        // Regression for PR #56: optional bullet formatting is not the model-skip
+        // signal. A one-line NEEDS_INFO response can be actionable via `summary`.
+        let (appState, _, _) = makeAppState(
+            fetch: .success([message(id: 1)]),
+            completion: .success(LLMResponse(text: singleLineNeedsInfoResponse))
+        )
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertEqual(appState.pendingDrafts.first?.isFlagged, true)
+        XCTAssertEqual(appState.pendingDrafts.first?.needsInfo?.summary, "Need the invoice number.")
+        XCTAssertEqual(appState.pendingDrafts.first?.needsInfo?.missing, [])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+    }
+
+    func testExplicitModelNotReplyWorthyOutcomeRoutesToSkipNotQueue() async {
         let (appState, _, persistence) = makeAppState(
             fetch: .success([message(id: 1)]),
             completion: .success(LLMResponse(text: automatedNeedsInfoResponse))
@@ -224,6 +247,10 @@ final class AppStateReplyWorthinessGapsTests: XCTestCase {
         XCTAssertTrue(ok)
         XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
         XCTAssertEqual(appState.pendingDrafts.first?.isFlagged, true)
+        XCTAssertEqual(
+            appState.pendingDrafts.first?.notReplyWorthy?.summary,
+            "This is an automated receipt email and no reply is useful."
+        )
         XCTAssertTrue(appState.skippedMessages.isEmpty)
     }
 }

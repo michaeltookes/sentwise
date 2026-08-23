@@ -287,6 +287,11 @@ private struct PendingDraftCard: View {
                     DraftNeedsInfoView(needsInfo: needsInfo)
                 }
                 .frame(maxHeight: 180)
+            } else if let notReplyWorthy = draft.notReplyWorthy {
+                ScrollView {
+                    DraftNotReplyWorthyView(notReplyWorthy: notReplyWorthy)
+                }
+                .frame(maxHeight: 180)
             } else {
                 if !draft.isAuthored, let recipient = draft.sourceReplyTo?.email ?? draft.sourceFrom?.email {
                     Text("To: \(recipient)").font(.caption).foregroundStyle(.secondary)

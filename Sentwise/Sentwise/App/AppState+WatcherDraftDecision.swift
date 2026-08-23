@@ -52,14 +52,14 @@ extension AppState {
     // MARK: - LLM relevance gate (item 67)
 
     /// Builds a watcher draft under the item 67 gate, retrying transient
-    /// fetch/LLM hiccups within the poll (item 27). A model-flagged draft with no
-    /// sendable body AND no actionable missing-info list (see
-    /// `isModelSkippableDraft`) is routed to the skip log (`.modelSkipped`) instead
-    /// of the review queue, keeping that queue to sendable drafts only. This is a
-    /// *backstop*: the item 17/66 heuristics run first. A genuine item-13
-    /// needs-info draft (non-empty `missing`) still enqueues as a flagged draft,
-    /// and "Draft anyway" from the skip log re-drafts through `draftAndEnqueue`,
-    /// which bypasses this gate.
+    /// fetch/LLM hiccups within the poll (item 27). A draft with the model's
+    /// explicit not-reply-worthy marker (see `isModelSkippableDraft`) is routed
+    /// to the skip log (`.modelSkipped`) instead of the review queue, keeping
+    /// that queue to actionable drafts. This is a *backstop*: the item 17/66
+    /// heuristics run first. A genuine item-13 needs-info draft still enqueues
+    /// as a flagged draft, even when its actionable request is only in the
+    /// summary and it has no parsed bullet list. "Draft anyway" from the skip
+    /// log re-drafts through `draftAndEnqueue`, which bypasses this gate.
     ///
     /// **Token cost:** no extra pre-classification call is made — the gate reuses
     /// the needs-info signal the single drafting call already returns, so it adds
@@ -133,21 +133,14 @@ extension AppState {
         }
     }
 
-    /// Whether a watcher-built draft should be routed to the skip log rather than
-    /// the review queue because the model produced no sendable reply *and* nothing
-    /// for the user to act on (item 67): a needs-info flag, an empty body, AND an
-    /// empty `missing` list.
+    /// Whether a watcher-built draft should be routed to the skip log rather
+    /// than the review queue because the model explicitly produced the item 67
+    /// not-reply-worthy verdict.
     ///
-    /// The `missing` list is what separates automated junk from a genuine item-13
-    /// "needs your input" draft. Automated/reply-less mail (e.g. the Anthropic
-    /// receipt — "it's unclear what reply you'd like to send") flags with an EMPTY
-    /// `missing` and belongs in the skip log. A genuine needs-info draft ("tell me
-    /// the meeting time") flags with a NON-EMPTY `missing` and must stay in the
-    /// review queue as a flagged draft for the user to complete — so it is NOT
-    /// skipped here, leaving item 13 unaffected.
+    /// Do not infer this from an empty needs-info bullet list. `NEEDS_INFO: Need
+    /// the invoice number.` is a legitimate actionable draft whose request lives
+    /// in `summary`; optional bullet formatting is not a skip signal.
     static func isModelSkippableDraft(_ draft: Draft) -> Bool {
-        draft.isFlagged
-            && draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && (draft.needsInfo?.missing.isEmpty ?? true)
+        draft.notReplyWorthy != nil
     }
 }

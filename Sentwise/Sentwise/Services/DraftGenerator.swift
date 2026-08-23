@@ -30,6 +30,7 @@ enum DraftError: Error, Equatable {
 enum DraftOutcome: Equatable {
     case ready(String)
     case needsInfo(DraftNeedsInfo)
+    case notReplyWorthy(DraftNotReplyWorthy)
 }
 
 /// Produces a reply body from an incoming message and the user's voice profile
@@ -49,6 +50,9 @@ struct DraftGenerator {
     /// The sentinel the model emits (as the first line) when it can't draft a
     /// confident reply without information only the user has.
     static let needsInfoSentinel = "NEEDS_INFO:"
+    /// The sentinel the model emits (as the first line) when the latest message
+    /// does not call for a written reply.
+    static let notReplyWorthySentinel = "NOT_REPLY_WORTHY:"
 
     func makeDraft(
         replyingTo context: ReplyContext,
@@ -82,8 +86,12 @@ struct DraftGenerator {
         let firstMeaningful = lines.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         let firstTrimmed = firstMeaningful?.trimmingCharacters(in: .whitespaces) ?? ""
 
-        if firstTrimmed.uppercased().hasPrefix(needsInfoSentinel) {
+        let uppercasedFirstLine = firstTrimmed.uppercased()
+        if uppercasedFirstLine.hasPrefix(needsInfoSentinel) {
             return .needsInfo(parseNeedsInfo(lines: lines, sentinelLine: firstTrimmed))
+        }
+        if uppercasedFirstLine.hasPrefix(notReplyWorthySentinel) {
+            return .notReplyWorthy(parseNotReplyWorthy(sentinelLine: firstTrimmed))
         }
 
         guard !body.isEmpty else { throw DraftError.emptyDraft }
@@ -104,6 +112,16 @@ struct DraftGenerator {
             ? "This reply needs information only you have."
             : summary
         return DraftNeedsInfo(summary: cleanedSummary, missing: missing)
+    }
+
+    /// Extracts the reason after the not-reply-worthy sentinel.
+    private static func parseNotReplyWorthy(sentinelLine: String) -> DraftNotReplyWorthy {
+        let summary = String(sentinelLine.dropFirst(notReplyWorthySentinel.count))
+            .trimmingCharacters(in: .whitespaces)
+        let cleanedSummary = summary.isEmpty
+            ? "This message does not call for a written reply."
+            : summary
+        return DraftNotReplyWorthy(summary: cleanedSummary)
     }
 
     // MARK: - Prompt
@@ -130,6 +148,12 @@ struct DraftGenerator {
         - <another, if applicable>
         Only use this when the reply genuinely depends on missing information; a \
         reply that just needs a normal judgment call should still be written.
+
+        If the latest message is an automated notification, receipt, alert, \
+        system update, or any other message that does not call for a written \
+        reply, do NOT use the needs-info format. Instead, respond with exactly \
+        this format and nothing else:
+        \(notReplyWorthySentinel) <one short sentence on why no reply is useful>
         """
         let voice = voiceProfile?.promptBlock()
             ?? "Write in a natural, concise, and professional tone."
