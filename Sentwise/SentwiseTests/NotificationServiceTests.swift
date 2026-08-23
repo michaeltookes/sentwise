@@ -65,6 +65,24 @@ final class NotificationServiceTests: XCTestCase {
         )
     }
 
+    /// A draft whose subject is an RFC 2047 encoded-word — the shape an inbound
+    /// IMAP subject with non-ASCII characters actually arrives in.
+    private func encodedSubjectDraft() -> Draft {
+        var draft = pendingDraft()
+        // "Café ☕" as a base64 UTF-8 encoded-word.
+        let encoded = Data("Café ☕".utf8).base64EncodedString()
+        draft.sourceSubject = "=?UTF-8?B?\(encoded)?="
+        return draft
+    }
+
+    func testNotificationSubtitleDecodesEncodedWordSubject() {
+        let content = UserNotificationService.notificationContent(
+            for: encodedSubjectDraft(),
+            sendBehavior: .autoSend
+        )
+        XCTAssertEqual(content.subtitle, "Café ☕", "banner subtitle must show the decoded subject")
+    }
+
     func testFlaggedNotificationOffersNoApproveAction() {
         let actions = UserNotificationService.needsInputActions()
         XCTAssertFalse(

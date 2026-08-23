@@ -247,19 +247,22 @@ final class UserNotificationService: NSObject, DraftNotifying {
         sendBehavior: SendBehavior
     ) {
         let sender = draft.sourceFrom?.name ?? draft.sourceFrom?.email ?? "someone"
+        // Decode RFC 2047 encoded-word subjects so the banner reads the subject,
+        // not `=?UTF-8?Q?…`. Display-only; the stored draft is untouched.
+        let subject = MIMEEncodedWord.decode(draft.sourceSubject)
         if let needsInfo = draft.needsInfo {
             content.title = "Reply to \(sender) needs your input"
-            content.subtitle = draft.sourceSubject
+            content.subtitle = subject
             content.body = snippet(needsInfo.summary)
             content.categoryIdentifier = needsInputCategoryIdentifier
         } else if draft.isFlagged, let notReplyWorthy = draft.notReplyWorthy {
             content.title = "No reply needed for \(sender)"
-            content.subtitle = draft.sourceSubject
+            content.subtitle = subject
             content.body = snippet(notReplyWorthy.summary)
             content.categoryIdentifier = needsInputCategoryIdentifier
         } else {
             content.title = "Reply ready for \(sender)"
-            content.subtitle = draft.sourceSubject
+            content.subtitle = subject
             content.body = notificationBody(replyBody: draft.body, sendBehavior: sendBehavior)
             content.categoryIdentifier = categoryIdentifier(for: sendBehavior)
         }
@@ -273,7 +276,9 @@ final class UserNotificationService: NSObject, DraftNotifying {
         draft: Draft,
         sendBehavior: SendBehavior
     ) {
-        let subject = draft.replySubject.isEmpty ? "Post-call follow-up" : draft.replySubject
+        let subject = draft.replySubject.isEmpty
+            ? "Post-call follow-up"
+            : MIMEEncodedWord.decode(draft.replySubject)
         guard draft.hasAuthoredRecipients else {
             content.title = "Follow-up drafted — add recipients"
             content.subtitle = subject
