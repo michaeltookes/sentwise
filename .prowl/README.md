@@ -158,6 +158,23 @@ Menu actions must use the explicit safe AX identifiers assigned in
 | `id=openReviewWindow` | Review Drafts (N)… (fixture-gated) |
 | `id=openBrowseMailbox` | Browse Mailbox… (fixture-gated) |
 
+### Review Drafts window tab switch (item 69)
+
+The Review Drafts window has two tabs — **Drafts** (reviewable pending drafts)
+and **Skipped** (the skip log). The tab switch carries stable AX identifiers so a
+hunt can assert or drive it; switching tab is read-only (it changes only which
+list is shown) and reaches no approve/deny/send/draft/dismiss/clear action, so it
+is intentionally **not** in `forbiddenSelectors`. Neither identifier collides
+with a forbidden substring (bare `Draft` is not forbidden — only `Draft anyway` /
+`Draft reply` / `Draft follow-up` / `Draft a reply…` are — and `Skipped` is not
+forbidden). The per-draft and per-skip actions inside each tab keep their existing
+forbids (`Approve`, `Deny`, `Discard`, `Draft anyway`, `Clear`, `Dismiss`, …).
+
+| Identifier | Control | Clickable in hunts |
+|---|---|---|
+| `id=reviewDraftsTab` | "Drafts (N)" tab of the review window | yes (read-only switch) |
+| `id=reviewSkippedTab` | "Skipped (N)" tab of the review window | yes (read-only switch) |
+
 ### Managed-inference sign-in / provider controls (items 56a, 59, 70)
 
 The onboarding "Choose your AI" step and Settings → AI tab carry the

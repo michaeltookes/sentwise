@@ -57,6 +57,15 @@ artifacts:
 # search a mailbox, or change system settings: everything below. `getAPIKeyButton`
 # and `useManagedInference` stay forbidden — the former opens a real browser (it
 # is NOT hunt-gated) and the latter is not needed by any hunt.
+#
+# NOTE (item 69) — the Review Drafts window's Drafts/Skipped tab switch
+# (`id=reviewDraftsTab`, `id=reviewSkippedTab`) is a READ-ONLY view toggle and is
+# deliberately NOT forbidden: switching tab only changes which list is shown and
+# reaches no approve/deny/send/draft/dismiss/clear action. Neither id collides
+# with a forbidden substring (bare "Draft" is not forbidden — only "Draft anyway"
+# etc. are — and "Skipped" is not forbidden). Do not add a broad "Draft"/"Tab"/
+# "Skipped" substring forbid: it would break these safe switches without blocking
+# any dangerous control (the real actions are already blocked by their own forbids).
 guardrails:
   maxSteps: 25
   allowedApps:
