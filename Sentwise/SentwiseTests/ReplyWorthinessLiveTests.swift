@@ -39,17 +39,28 @@ final class ReplyWorthinessLiveTests: XCTestCase {
         return MailAccountCredentials(email: email, appPassword: password, host: host, port: port)
     }
 
-    /// Machine-sending domains whose mail must never become a draft. These match
-    /// the leaked senders named in item 66 (GitHub, Stripe/Anthropic receipts,
-    /// Amazon order mail, AWS cost alerts, recruiting blasts).
-    private let transactionalDomains = [
-        "github.com",
-        "stripe.com",
-        "anthropic.com",
-        "amazon.com",
-        "costalerts.amazonaws.com",
-        "applytojob.com"
-    ]
+    /// Sender-only production signals whose mail must never become a draft.
+    /// Reusing `ReplyWorthiness.evaluate` keeps this live-test predicate aligned
+    /// with the conservative domain/local-part matching the watcher actually uses.
+    private func isProductionKnownMachineSender(_ addresses: [String]) -> Bool {
+        let verdict = ReplyWorthiness.evaluate(ReplyWorthinessSignals(senderEmails: addresses))
+        switch verdict.skipReason {
+        case .noReplySender, .automatedNotification:
+            return true
+        case .bulkOrListMail, .calendarInvite, .senderBlocklisted, .notReplyWorthyPerModel, nil:
+            return false
+        }
+    }
+
+    func testProductionKnownMachineSenderPredicateStaysConservative() {
+        XCTAssertTrue(isProductionKnownMachineSender(["notifications@github.com"]))
+        XCTAssertTrue(isProductionKnownMachineSender(["invoice+statements@stripe.com"]))
+        XCTAssertTrue(isProductionKnownMachineSender(["anything@costalerts.amazonaws.com"]))
+
+        XCTAssertFalse(isProductionKnownMachineSender(["recruiter@github.com"]))
+        XCTAssertFalse(isProductionKnownMachineSender(["support@stripe.com"]))
+        XCTAssertFalse(isProductionKnownMachineSender(["orders@smallshop.example"]))
+    }
 
     func testKnownTransactionalSendersProduceNoDraftsOverLiveInbox() async throws {
         let credentials = try liveCredentials()
@@ -80,11 +91,7 @@ final class ReplyWorthinessLiveTests: XCTestCase {
             )
             let addresses = [message.from?.email, message.replyTo?.email]
                 .compactMap { $0?.lowercased() }
-            let isKnownTransactional = addresses.contains { address in
-                transactionalDomains.contains { domain in
-                    address.hasSuffix("@\(domain)") || address.hasSuffix(".\(domain)")
-                }
-            }
+            let isKnownTransactional = isProductionKnownMachineSender(addresses)
             if isKnownTransactional {
                 transactionalSeen += 1
                 XCTAssertNotNil(
