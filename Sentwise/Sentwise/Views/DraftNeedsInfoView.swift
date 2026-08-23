@@ -38,3 +38,29 @@ struct DraftNeedsInfoView: View {
         .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 }
+
+/// The distinct state shown when the model explicitly says the source message
+/// does not need a written reply. Normally the watcher routes this to the skip
+/// log; it can still appear if the user chooses "Draft anyway."
+struct DraftNotReplyWorthyView: View {
+    let notReplyWorthy: DraftNotReplyWorthy
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("No reply needed", systemImage: "nosign")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(notReplyWorthy.summary)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Sentwise did not generate a reply here. Write one below before approving.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+    }
+}

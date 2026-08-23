@@ -79,6 +79,7 @@ final class DraftGeneratorTests: XCTestCase {
     func testSystemPromptInstructsTheNeedsInfoProtocol() {
         let prompt = DraftGenerator.systemPrompt(voiceProfile: nil)
         XCTAssertTrue(prompt.contains(DraftGenerator.needsInfoSentinel))
+        XCTAssertTrue(prompt.contains(DraftGenerator.notReplyWorthySentinel))
         XCTAssertTrue(prompt.contains("do NOT"), "must forbid fabricating missing facts")
     }
 

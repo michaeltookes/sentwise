@@ -157,7 +157,8 @@ extension AppState {
             body: Self.body(from: outcome),
             model: llmConfiguration.model,
             generatedAt: Date(),
-            needsInfo: Self.needsInfo(from: outcome)
+            needsInfo: Self.needsInfo(from: outcome),
+            notReplyWorthy: Self.notReplyWorthy(from: outcome)
         )
         return draft
     }
@@ -228,7 +229,8 @@ extension AppState {
             body: body(from: outcome),
             model: llmConfiguration.model,
             generatedAt: Date(),
-            needsInfo: needsInfo(from: outcome)
+            needsInfo: needsInfo(from: outcome),
+            notReplyWorthy: notReplyWorthy(from: outcome)
         )
     }
 
@@ -237,7 +239,7 @@ extension AppState {
     static func body(from outcome: DraftOutcome) -> String {
         switch outcome {
         case .ready(let body): return body
-        case .needsInfo: return ""
+        case .needsInfo, .notReplyWorthy: return ""
         }
     }
 
@@ -246,7 +248,13 @@ extension AppState {
         switch outcome {
         case .ready: return nil
         case .needsInfo(let info): return info
+        case .notReplyWorthy: return nil
         }
+    }
+
+    static func notReplyWorthy(from outcome: DraftOutcome) -> DraftNotReplyWorthy? {
+        if case .notReplyWorthy(let verdict) = outcome { return verdict }
+        return nil
     }
 
     private func isCurrentDraftRequest(

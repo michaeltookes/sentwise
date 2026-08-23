@@ -252,6 +252,11 @@ final class UserNotificationService: NSObject, DraftNotifying {
             content.subtitle = draft.sourceSubject
             content.body = snippet(needsInfo.summary)
             content.categoryIdentifier = needsInputCategoryIdentifier
+        } else if draft.isFlagged, let notReplyWorthy = draft.notReplyWorthy {
+            content.title = "No reply needed for \(sender)"
+            content.subtitle = draft.sourceSubject
+            content.body = snippet(notReplyWorthy.summary)
+            content.categoryIdentifier = needsInputCategoryIdentifier
         } else {
             content.title = "Reply ready for \(sender)"
             content.subtitle = draft.sourceSubject

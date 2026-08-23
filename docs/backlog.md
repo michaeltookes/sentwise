@@ -73,22 +73,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Basic discoverability: SEO fundamentals, OG/social cards, and a home for a demo video.
     - Held in a separate repo with its own deployment; all stack/hosting/analytics decisions deferred to the pre-build discussion.
 
-66. **Close reply-worthiness gaps for transactional mail** — *2026-08-20 walkthrough finding*
-    The item-17 heuristics catch marketing/bulk mail (106 `bulkOrListMail` + 67 `noReplySender` skips on the live account) but transactional mail leaks through to Review Drafts: Stripe/Anthropic receipts (`invoice+statements@`, Reply-To `support@`), Amazon order mail (`auto-confirm@`, `shipment-tracking@`, `order-update@`), AWS budget alerts (`budgets@costalerts.amazonaws.com`), and recruiting blasts — none carry `List-Unsubscribe`/`Auto-Submitted` headers and none match the no-reply local-part token lists. Worse, the check evaluates **only the reply target** (`Reply-To` when present, else `From`), so GitHub notifications from `notifications@github.com` — which the exact token list *would* catch — evade it via their `reply+…@reply.github.com` Reply-To.
-    *As Priya, I want the watcher to recognize receipts, order updates, and system notifications as not needing a reply, so that Review Drafts contains only mail a human should answer.*
-    - Evaluate **both** `From` and `Reply-To` local parts; skip when either is a no-reply/automated pattern.
-    - Broaden the local-part token lists with transactional patterns (e.g. `invoice`, `receipt`, `billing`, `order-update`, `auto-confirm`, `shipment`, `tracking`, `budgets`, `alerts`), keeping the conservative bias — measure each token against real correspondence (e.g. a genuine `support@` conversation must still draft).
-    - Unit tests cover every leaked sender observed in the 2026-08-20 pending-drafts snapshot (Anthropic/Stripe, Amazon ×3 variants, GitHub, AWS budgets, applytojob.com).
-    - Verify against the live account (headless XCTest, per QA preference): a fresh watch pass over the same inbox produces zero drafts for the known-transactional senders and still drafts personal mail.
-
-67. **LLM relevance gate for watcher drafts**
-    Use the model's own judgment as the final "is this truly worth a reply?" filter — the drafting LLM already recognizes junk (the Anthropic receipt draft came back with `needsInfo`: "This is an automated receipt email and it's unclear what reply you'd like to send"), but the draft is enqueued anyway.
-    *As Priya, I want mail that even the AI considers automated or reply-less routed to the skip log instead of Review Drafts, so that the review queue only ever contains sendable drafts.*
-    - When a generation returns a needs-info/automated verdict with an empty body (or a dedicated not-reply-worthy signal added to the drafting prompt), the message is recorded as skipped with a visible reason instead of enqueued as a pending draft.
-    - "Draft anyway" override from the skip log still works for these.
-    - Consider a cheap pre-classification call before full drafting to save tokens; decision documented either way.
-    - Heuristics (item 17/66) remain the first line — the LLM gate is the backstop, not a replacement.
-
 69. **Redesign the Review Drafts window** — *2026-08-20 walkthrough finding*
     The approval surface (`PendingDraftsView.swift`) crams the draft queue and a 100-entry Skipped section into one scroll, and message rendering is hard to read: subjects show raw RFC 2047 encoded-words (`=?UTF-8?Q?…`), bodies are plain `Text` so GitHub/marketing mail displays literal `###`/`**` markdown and stripped-HTML artifacts, and long machine Reply-To addresses wrap across multiple lines in the "Proposed reply" header.
     *As Priya, I want a review window where each draft is legible at a glance and skipped mail lives in its own tab, so that approving a day's drafts takes seconds instead of scrolling through clutter.*

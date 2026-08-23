@@ -1,5 +1,6 @@
 import XCTest
 import UserNotifications
+import SentwiseMail
 @testable import Sentwise
 
 /// Tests for notification action sets (item 13). A flagged "needs input" draft
@@ -45,6 +46,25 @@ final class NotificationServiceTests: XCTestCase {
         )
     }
 
+    private func notReplyWorthyDraft(body: String = "") -> Draft {
+        Draft(
+            id: 9,
+            sourceUIDValidity: 10,
+            sourceAccountEmail: "me@gmail.com",
+            sourceMailbox: "INBOX",
+            sourceSubject: "Receipt",
+            sourceFrom: MailAddress(name: "Billing", email: "billing@example.com"),
+            sourceReplyTo: nil,
+            sourceMessageID: "<receipt@example.com>",
+            incomingBody: "Your receipt is attached.",
+            replySubject: "Re: Receipt",
+            body: body,
+            model: "claude-sonnet-4-6",
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_002),
+            notReplyWorthy: DraftNotReplyWorthy(summary: "This receipt does not need a reply.")
+        )
+    }
+
     func testFlaggedNotificationOffersNoApproveAction() {
         let actions = UserNotificationService.needsInputActions()
         XCTAssertFalse(
@@ -57,6 +77,28 @@ final class NotificationServiceTests: XCTestCase {
     func testReadyDraftNotificationStillOffersApprove() {
         let actions = UserNotificationService.draftActions(for: .autoSend)
         XCTAssertTrue(actions.contains { $0.identifier == UserNotificationService.approveActionIdentifier })
+    }
+
+    func testNotReplyWorthyNotificationOffersNoApproveAction() {
+        let content = UserNotificationService.notificationContent(
+            for: notReplyWorthyDraft(),
+            sendBehavior: .autoSend
+        )
+
+        XCTAssertEqual(content.categoryIdentifier, UserNotificationService.needsInputCategoryIdentifier)
+        XCTAssertEqual(content.title, "No reply needed for Billing")
+        XCTAssertEqual(content.body, "This receipt does not need a reply.")
+    }
+
+    func testEditedNotReplyWorthyNotificationOffersApproveAction() {
+        let content = UserNotificationService.notificationContent(
+            for: notReplyWorthyDraft(body: "Thanks for sending this receipt."),
+            sendBehavior: .autoSend
+        )
+
+        XCTAssertEqual(content.categoryIdentifier, UserNotificationService.categoryIdentifier(for: .autoSend))
+        XCTAssertEqual(content.title, "Reply ready for Billing")
+        XCTAssertEqual(content.body, "Approve sends this reply now. Thanks for sending this receipt.")
     }
 
     func testRecipientlessFollowUpNotificationHasNoDestructiveActions() {

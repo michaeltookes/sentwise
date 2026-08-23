@@ -25,6 +25,9 @@ final class AppStateLowConfidenceDraftTests: XCTestCase {
     - Whether finance has signed off
     """
 
+    private let notReplyWorthyResponse =
+        "\(DraftGenerator.notReplyWorthySentinel) This looks like an automated receipt."
+
     private func makeConnectedAppState(
         completion: Result<LLMResponse, LLMError>
     ) -> (AppState, FakeAppMailProvider) {
@@ -69,6 +72,17 @@ final class AppStateLowConfidenceDraftTests: XCTestCase {
 
         XCTAssertEqual(draft?.isFlagged, false)
         XCTAssertEqual(draft?.body, "Approved — go ahead.")
+    }
+
+    func testGenerateDraftFlagsWhenModelSaysNoReplyNeeded() async {
+        let (appState, _) = makeConnectedAppState(completion: .success(LLMResponse(text: notReplyWorthyResponse)))
+
+        let draft = await appState.generateDraft(for: inboxMessage())
+
+        XCTAssertEqual(draft?.isFlagged, true)
+        XCTAssertEqual(draft?.body, "", "a not-reply-worthy draft carries no fabricated reply")
+        XCTAssertNil(draft?.needsInfo)
+        XCTAssertEqual(draft?.notReplyWorthy?.summary, "This looks like an automated receipt.")
     }
 
     // MARK: - No dispatch on a flagged draft

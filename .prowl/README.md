@@ -173,7 +173,7 @@ column marks which are allowed by `forbiddenSelectors`:
 | `id=managedGoogleSignInButton` | "Continue with Google" (offline fake in hunt mode) | yes |
 | `id=managedEmailField` | Email field for the sign-in code | yes (fill) |
 | `id=managedSendCodeButton` | "Send sign-in code" (offline fake) | yes |
-| `id=managedCodeField` | One-time-code field | yes (fill) |
+| `id=managedCodeField` | One-time-code field | assert-only |
 | `id=managedVerifyButton` | "Verify & connect" (offline fake) | yes |
 | `id=managedCancelBrowserSignIn` | "Cancel" (abort a browser-based Google sign-in) | assert-only |
 | `id=managedSimulateGoogleCallback` | "Simulate browser sign-in" — **hunt-mode-only** control that completes the faked Google flow | yes |
@@ -218,7 +218,7 @@ when the window never appears):
 - `text="…"` — disabled by this repo's guardrails
 
 Step kinds used by these hunts: `click` (selector), `fill` (`{ selector, value }`
-— types text into a field, used for the email/code fields), `assert`
+— types text into a field, used for the managed email field), `assert`
 (`{ visible: <selector> }`), and `waitForSelector` (`{ selector, timeout }`).
 
 ## CI (Prowl QA workflow)

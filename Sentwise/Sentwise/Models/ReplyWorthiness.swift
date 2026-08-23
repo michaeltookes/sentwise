@@ -20,6 +20,11 @@ enum ReplyWorthinessReason: String, Equatable, Codable, CaseIterable {
     /// The sender matches an entry on the user's blocklist (item 18) — the user
     /// asked the watcher never to draft replies to this sender or domain.
     case senderBlocklisted
+    /// The drafting model itself judged there was nothing to reply to — it
+    /// returned the dedicated not-reply-worthy verdict (item 67).
+    /// This is the LLM relevance *backstop*: the item 17/66 heuristics run first,
+    /// and this only catches automated/reply-less mail that slips past them.
+    case notReplyWorthyPerModel
 
     /// A short headline for skip-log / activity UI.
     var headline: String {
@@ -29,6 +34,7 @@ enum ReplyWorthinessReason: String, Equatable, Codable, CaseIterable {
         case .automatedNotification: return "Automated notification"
         case .calendarInvite: return "Calendar invite"
         case .senderBlocklisted: return "Blocked sender"
+        case .notReplyWorthyPerModel: return "Nothing to reply to"
         }
     }
 
@@ -45,6 +51,9 @@ enum ReplyWorthinessReason: String, Equatable, Codable, CaseIterable {
             return "This is a calendar invite — it's handled in your calendar, not with a written reply."
         case .senderBlocklisted:
             return "You added this sender to your blocklist, so the watcher skipped it."
+        case .notReplyWorthyPerModel:
+            return "The assistant read this and couldn't compose a reply worth sending — it looks "
+                + "automated or doesn't call for one. Use \"Draft anyway\" if you'd like to reply."
         }
     }
 }
@@ -64,16 +73,48 @@ enum ReplyWorthinessVerdict: Equatable {
     var isWorthy: Bool { skipReason == nil }
 }
 
-/// The inputs the reply-worthiness check reasons over: the address a reply
-/// would target (`Reply-To` when present, otherwise `From`) plus the bounded
-/// header fields (`MailHeaderFields`). Kept as a plain value so the evaluator
-/// stays pure and exhaustively unit-testable with no IO.
+/// The inputs the reply-worthiness check reasons over: the candidate sender
+/// addresses plus the bounded header fields (`MailHeaderFields`). Kept as a plain
+/// value so the evaluator stays pure and exhaustively unit-testable with no IO.
+///
+/// `senderEmails` carries **both** the `From` and `Reply-To` addresses (item 66),
+/// with `fromEmail` / `replyToEmail` preserving their roles. Evaluating only the
+/// reply target missed GitHub, whose mail is `From: notifications@github.com` but
+/// whose `Reply-To` is `reply+…@reply.github.com`; treating the two roles as
+/// identical, however, can false-skip platform mail that uses a generic `From`
+/// while routing replies to a real person.
 struct ReplyWorthinessSignals: Equatable {
-    var senderEmail: String?
+    /// The addresses to judge (typically `From` and `Reply-To`); `nil` entries
+    /// and duplicates are harmless — matching is any-of.
+    var senderEmails: [String?]
+    /// Envelope `From`, when known.
+    var fromEmail: String?
+    /// Envelope `Reply-To`, when known.
+    var replyToEmail: String?
     var headers: MailHeaderFields
 
+    /// Single-address convenience kept for the many reply-target-only call sites
+    /// and tests; wraps the one address into `senderEmails`.
     init(senderEmail: String?, headers: MailHeaderFields = MailHeaderFields()) {
-        self.senderEmail = senderEmail
+        self.senderEmails = [senderEmail]
+        self.fromEmail = senderEmail
+        self.replyToEmail = nil
+        self.headers = headers
+    }
+
+    /// Multi-address form (item 66): pass both `From` and `Reply-To`.
+    init(senderEmails: [String?], headers: MailHeaderFields = MailHeaderFields()) {
+        self.senderEmails = senderEmails
+        self.fromEmail = senderEmails.first ?? nil
+        self.replyToEmail = senderEmails.dropFirst().first ?? nil
+        self.headers = headers
+    }
+
+    /// Role-aware form for production watcher calls.
+    init(fromEmail: String?, replyToEmail: String?, headers: MailHeaderFields = MailHeaderFields()) {
+        self.senderEmails = [fromEmail, replyToEmail]
+        self.fromEmail = fromEmail
+        self.replyToEmail = replyToEmail
         self.headers = headers
     }
 }
@@ -91,7 +132,7 @@ enum ReplyWorthiness {
     /// Judges whether `signals` describe a message worth drafting a reply to.
     /// Checks run high-precision first; the first match wins and names the reason.
     static func evaluate(_ signals: ReplyWorthinessSignals) -> ReplyWorthinessVerdict {
-        if isNoReplySender(signals.senderEmail) {
+        if isNoReplySender(signals) {
             return .skip(.noReplySender)
         }
         if isCalendarInvite(signals.headers) {
@@ -101,6 +142,13 @@ enum ReplyWorthiness {
             return .skip(.bulkOrListMail)
         }
         if isAutomatedNotification(signals.headers) {
+            return .skip(.automatedNotification)
+        }
+        // Sender-based transactional check runs last, so it only catches mail the
+        // header/no-reply checks left as `.worthy` (item 66). Reported as an
+        // automated notification — a receipt/order/alert is machine-issued even
+        // when its `Reply-To` points at a staffed inbox like `support@`.
+        if signals.senderEmails.contains(where: isTransactionalSender) {
             return .skip(.automatedNotification)
         }
         return .worthy
@@ -136,6 +184,35 @@ enum ReplyWorthiness {
         return noReplyContainedTokens.contains { localPart.contains($0) }
     }
 
+    private static func isNoReplySender(_ signals: ReplyWorthinessSignals) -> Bool {
+        if isRoutableReplyTo(signals.replyToEmail) {
+            if let fromEmail = signals.fromEmail,
+               isNoReplySender(fromEmail),
+               isKnownAutomatedFromWithRoutableReplyTo(fromEmail, replyToEmail: signals.replyToEmail) {
+                return true
+            }
+            return false
+        }
+        return signals.senderEmails.contains(where: isNoReplySender)
+    }
+
+    private static func isRoutableReplyTo(_ email: String?) -> Bool {
+        guard normalizedLocalPart(email) != nil, normalizedDomain(email) != nil else { return false }
+        return !isNoReplySender(email)
+    }
+
+    private static func isKnownAutomatedFromWithRoutableReplyTo(
+        _ fromEmail: String?,
+        replyToEmail: String?
+    ) -> Bool {
+        guard let fromDomain = normalizedDomain(fromEmail),
+              let replyToDomain = normalizedDomain(replyToEmail) else {
+            return false
+        }
+        return matchesDomain(fromDomain, in: ["github.com"])
+            && matchesDomain(replyToDomain, in: ["reply.github.com"])
+    }
+
     private static func normalizedLocalPart(_ email: String?) -> String? {
         guard let email = email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
               !email.isEmpty else {
@@ -144,6 +221,106 @@ enum ReplyWorthiness {
         let localPart = email.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first
             .map(String.init) ?? email
         return localPart.isEmpty ? nil : localPart
+    }
+
+    // MARK: - Transactional senders (item 66)
+
+    /// Local parts (matched **exactly**, after stripping any RFC 5233 `+tag`
+    /// subaddress) that mark machine-issued transactional mail when paired with a
+    /// known transactional domain. These catch receipts and order updates that
+    /// carry no `List-Unsubscribe` / `Auto-Submitted` header and no no-reply token,
+    /// so they slipped past the item 17 heuristics into Review Drafts.
+    ///
+    /// **Exact-match, not contained, on purpose.** A contained `invoice` would
+    /// also skip a human `invoice-questions@`, and — the case the item 66 note
+    /// calls out — a bare contained `billing`/`support` would kill a genuine
+    /// `billing@`/`support@` back-and-forth. So `support` and `billing` are
+    /// deliberately **absent**, and the compound retailer tokens (`order-update`,
+    /// `auto-confirm`, `shipment-tracking`) are listed in full rather than as the
+    /// broad substrings `order`/`confirm`/`tracking`. Stripping the `+tag` first
+    /// is what lets Stripe/Anthropic's `invoice+statements@` match the base
+    /// `invoice`. These tokens are not enough on their own: a human-managed
+    /// `invoice@accounting-firm.example` must remain worthy.
+    private static let transactionalExactLocalParts: Set<String> = [
+        // Receipts / invoices / statements (Stripe, Anthropic, generic billing).
+        "invoice", "invoices",
+        "receipt", "receipts",
+        "statement", "statements",
+        // Order / shipment lifecycle mail from retailers (Amazon and peers).
+        "orders", "order-update", "order-updates",
+        "auto-confirm", "autoconfirm",
+        "shipment", "shipments", "shipment-tracking",
+        // Budget / cost / system alerts (AWS Budgets local part is `budgets`).
+        "budget", "budgets",
+        "alert", "alerts"
+    ]
+
+    /// Domains where an exact transactional local part is enough corroboration to
+    /// treat the sender as automated. Matched on an exact-domain or dot-boundary
+    /// subdomain basis (never substring), mirroring the item 18 `SenderRules`
+    /// discipline so a look-alike domain can't false-match.
+    private static let transactionalLocalPartDomains: Set<String> = [
+        "stripe.com",
+        "anthropic.com",
+        "amazon.com"
+    ]
+
+    /// Sending domains that are automated/transactional by nature — the signal
+    /// when the local part carries no token (item 66).
+    private static let automatedSenderDomains: Set<String> = [
+        // AWS Budgets / Cost Explorer alerts — no human mailbox lives here.
+        "costalerts.amazonaws.com",
+        // JazzHR applicant-tracking recruiting blasts. A candidate reply is
+        // routed by the ATS rather than read as personal mail, so item 66 treats
+        // these as not reply-worthy; documented here as the one borderline call.
+        "applytojob.com"
+    ]
+
+    /// Whether the domain itself, or a transactional local part corroborated by a
+    /// known transactional domain, marks the address as automated (item 66).
+    static func isTransactionalSender(_ email: String?) -> Bool {
+        guard let domain = normalizedDomain(email) else { return false }
+        if matchesAutomatedDomain(domain) {
+            return true
+        }
+        guard matchesTransactionalLocalPartDomain(domain),
+              let base = baseLocalPart(email),
+              transactionalExactLocalParts.contains(base) else { return false }
+        return true
+    }
+
+    /// The local part with any RFC 5233 `+tag` subaddress removed, lowercased, so
+    /// `invoice+statements` and `order-update+abc` match their base token.
+    private static func baseLocalPart(_ email: String?) -> String? {
+        guard let localPart = normalizedLocalPart(email) else { return nil }
+        let base = localPart.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false)
+            .first.map(String.init) ?? localPart
+        return base.isEmpty ? nil : base
+    }
+
+    private static func normalizedDomain(_ email: String?) -> String? {
+        guard let email = email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !email.isEmpty else {
+            return nil
+        }
+        let parts = email.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return nil }
+        let domain = String(parts[1])
+        return domain.isEmpty ? nil : domain
+    }
+
+    private static func matchesAutomatedDomain(_ domain: String) -> Bool {
+        matchesDomain(domain, in: automatedSenderDomains)
+    }
+
+    private static func matchesTransactionalLocalPartDomain(_ domain: String) -> Bool {
+        matchesDomain(domain, in: transactionalLocalPartDomains)
+    }
+
+    private static func matchesDomain(_ domain: String, in candidates: Set<String>) -> Bool {
+        candidates.contains { candidate in
+            domain == candidate || domain.hasSuffix("." + candidate)
+        }
     }
 
     // MARK: - Bulk / list mail

@@ -247,40 +247,16 @@ extension AppState {
             // Retry transient fetch/LLM hiccups within the poll (item 27). On
             // exhaustion the message is left unprocessed, so the next poll retries
             // it — the existing skip/pending-draft guards prevent re-notification.
-            let enqueued = try await withResilientRetry {
-                try self.validateWatcherDraftContext(credentials)
-                return try await self.draftAndEnqueue(
-                    message,
-                    mailbox: mailbox,
-                    credentials: credentials
-                )
-            }
+            let result = try await gatedWatcherDraftResult(
+                message,
+                credentials: credentials,
+                mailbox: mailbox,
+                bypassModelSkip: senderRuleDecision(for: message) == .forceDraft
+            )
             guard watchStatus == .watching, mailCredentials == credentials else { return }
-            if enqueued {
-                markProcessed(message, account: credentials.email, mailbox: mailbox)
-            }
+            handleWatcherDraftResult(result, for: message, credentials: credentials, mailbox: mailbox)
         } catch {
-            watchError = Self.draftMessage(for: error)
-            if ResilienceClassifier.classify(error) == .authentication {
-                recordActivity(ActivityEvent(
-                    kind: .authFailed,
-                    account: normalizedConnectedAccountEmail,
-                    detail: Self.draftMessage(for: error)
-                ))
-                pauseWatching(
-                    resumeAfterManagedReauthentication: shouldResumeAfterManagedReauthentication(
-                        error: error,
-                        provider: draftProvider
-                    )
-                )
-            }
-            logger.error("Watcher draft failed: \(error.localizedDescription)")
-        }
-    }
-
-    private func validateWatcherDraftContext(_ credentials: MailAccountCredentials) throws {
-        guard watchStatus == .watching, mailCredentials == credentials else {
-            throw DraftDispatchError.accountChanged
+            handleWatcherDraftError(error, draftProvider: draftProvider)
         }
     }
 

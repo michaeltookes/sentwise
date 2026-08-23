@@ -15,6 +15,23 @@ final class ReplyWorthinessTests: XCTestCase {
         ReplyWorthiness.evaluate(ReplyWorthinessSignals(senderEmail: sender, headers: headers))
     }
 
+    private func evaluate(
+        senders: [String?],
+        headers: MailHeaderFields = MailHeaderFields()
+    ) -> ReplyWorthinessVerdict {
+        ReplyWorthiness.evaluate(ReplyWorthinessSignals(senderEmails: senders, headers: headers))
+    }
+
+    private func evaluate(
+        from: String?,
+        replyTo: String?,
+        headers: MailHeaderFields = MailHeaderFields()
+    ) -> ReplyWorthinessVerdict {
+        ReplyWorthiness.evaluate(
+            ReplyWorthinessSignals(fromEmail: from, replyToEmail: replyTo, headers: headers)
+        )
+    }
+
     // MARK: - Worthy (conservative default)
 
     func testPlainPersonalMailIsWorthy() {
@@ -176,10 +193,122 @@ final class ReplyWorthinessTests: XCTestCase {
         XCTAssertEqual(evaluate(sender: "alice@example.com", headers: headers), .skip(.calendarInvite))
     }
 
+    // MARK: - Both-address evaluation (item 66)
+
+    func testNoReplyOnReplyToOrKnownProviderFromIsSkipped() {
+        // The GitHub `notifications@github.com` -> `reply.github.com` pattern named
+        // in item 66 is a known provider-routing exception.
+        XCTAssertEqual(
+            evaluate(from: "notifications@github.com", replyTo: "reply+abc@reply.github.com"),
+            .skip(.noReplySender)
+        )
+        // A no-reply `Reply-To` behind a human `From` still skips.
+        XCTAssertEqual(
+            evaluate(from: "alice@example.com", replyTo: "no-reply@example.com"),
+            .skip(.noReplySender)
+        )
+    }
+
+    func testRoutableReplyToPreventsGenericFromNoReplySkip() {
+        XCTAssertEqual(
+            evaluate(from: "notifications@ats.example", replyTo: "recruiter@company.example"),
+            .worthy
+        )
+        XCTAssertEqual(
+            evaluate(from: "no-reply@vendor.example", replyTo: "support@vendor.example"),
+            .worthy
+        )
+    }
+
+    func testBothPersonalAddressesAreWorthy() {
+        XCTAssertEqual(evaluate(senders: ["alice@example.com", "alice.work@example.com"]), .worthy)
+    }
+
+    func testNilAndEmptyAddressesAreIgnored() {
+        XCTAssertEqual(evaluate(senders: [nil, "alice@example.com"]), .worthy)
+        XCTAssertEqual(evaluate(senders: [nil, nil]), .worthy)
+    }
+
+    // MARK: - Transactional senders (item 66)
+
+    func testTransactionalSendersFromSnapshotAreSkipped() {
+        // Every leaked sender from the 2026-08-20 pending-drafts snapshot named in
+        // item 66. All report `.automatedNotification` (machine-issued mail).
+        for address in [
+            "invoice+statements@stripe.com",       // Stripe/Anthropic receipt (From)
+            "invoice+statements@anthropic.com",
+            "receipts@stripe.com",
+            "auto-confirm@amazon.com",             // Amazon order confirmation
+            "shipment-tracking@amazon.com",        // Amazon shipping
+            "order-update@amazon.com",             // Amazon order update
+            "budgets@costalerts.amazonaws.com",    // AWS budget alert (local part)
+            "someteam@applytojob.com"              // recruiting blast (domain)
+        ] {
+            XCTAssertEqual(
+                evaluate(sender: address),
+                .skip(.automatedNotification),
+                "expected \(address) to be a transactional/automated sender"
+            )
+        }
+    }
+
+    func testGitHubReceiptCaughtViaFromNotReplyTo() {
+        // GitHub: automated `From`, routable `Reply-To`. Must be caught by From.
+        XCTAssertEqual(
+            evaluate(from: "notifications@github.com", replyTo: "reply+deadbeef@reply.github.com"),
+            .skip(.noReplySender)
+        )
+    }
+
+    func testAWSCostAlertsDomainIsSkippedEvenWithoutTokenLocalPart() {
+        XCTAssertEqual(evaluate(sender: "anything@costalerts.amazonaws.com"), .skip(.automatedNotification))
+        // Dot-boundary subdomain of an automated domain also matches.
+        XCTAssertEqual(evaluate(sender: "x@notify.applytojob.com"), .skip(.automatedNotification))
+    }
+
+    // MARK: - Transactional negatives (no over-skip)
+
+    func testGenuineHumanTeamInboxesStillDraft() {
+        // The conservative bias: bare `support@`/`billing@`, and human aliases
+        // that merely contain a transactional word, must still be worthy.
+        for address in [
+            "support@vendor.com",
+            "billing@vendor.com",
+            "invoice@accounting-firm.example",
+            "statements@bank.example",
+            "orders@smallshop.example",
+            "invoice-questions@vendor.com",   // contains "invoice" but not exact
+            "orderdesk@vendor.com",           // contains "order" but not a token
+            "alerta@example.com",             // contains "alert" but not exact
+            "confirmation-team@example.com",  // "confirm"-ish human alias
+            "alice@applytojobs.com"           // look-alike domain, not applytojob.com
+        ] {
+            XCTAssertEqual(
+                evaluate(sender: address),
+                .worthy,
+                "expected \(address) to remain worthy (no over-skip)"
+            )
+        }
+    }
+
+    func testLookAlikeAutomatedDomainIsNotMatched() {
+        // Substring/look-alike must not match: only exact domain or dot-boundary
+        // subdomain (mirrors the SenderRules discipline, item 18).
+        XCTAssertEqual(evaluate(sender: "x@notapplytojob.com"), .worthy)
+        XCTAssertEqual(evaluate(sender: "x@applytojob.com.evil.com"), .worthy)
+    }
+
     // MARK: - Precedence of reasons
 
     func testNoReplySenderTakesPrecedenceOverListHeaders() {
         let headers = MailHeaderFields(listUnsubscribe: "<mailto:unsub@example.com>")
         XCTAssertEqual(evaluate(sender: "no-reply@example.com", headers: headers), .skip(.noReplySender))
+    }
+
+    func testHeaderBulkSignalTakesPrecedenceOverTransactionalSender() {
+        // A receipt that also carries List-Unsubscribe reports bulk (header check
+        // runs before the sender-based transactional check).
+        let headers = MailHeaderFields(listUnsubscribe: "<mailto:unsub@stripe.com>")
+        XCTAssertEqual(evaluate(sender: "receipts@stripe.com", headers: headers), .skip(.bulkOrListMail))
     }
 }
