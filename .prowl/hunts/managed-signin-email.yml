@@ -1,8 +1,8 @@
 # Deterministic managed-inference email-code sign-in, driven end-to-end through
 # the hunt-mode offline fake (item 70). In hunt mode `startManagedSignIn` and
 # `verifyManagedCode` never touch the network or Clerk: entering an email and
-# clicking "Send sign-in code" advances to the code-entry stage, and any code
-# completes to the signed-in fixture account, flipping managed to connected.
+# clicking "Send sign-in code" advances to the code-entry stage, and clicking
+# verify completes to the signed-in fixture account, flipping managed to connected.
 # Nothing leaves the machine (`.invalid` fixtures, no LLM call).
 #
 # Run it (on the Lucius runner):  prowl run managed-signin-email
@@ -36,10 +36,7 @@ steps:
       selector: id=managedCodeField
       timeout: 10000
 
-  # Any code completes the offline fake.
-  - fill:
-      selector: id=managedCodeField
-      value: "000000"
+  # The offline fake deliberately does not depend on TextField commit timing.
   - click:
       selector: id=managedVerifyButton
 
