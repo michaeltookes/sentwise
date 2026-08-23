@@ -22,6 +22,16 @@ final class ReplyWorthinessTests: XCTestCase {
         ReplyWorthiness.evaluate(ReplyWorthinessSignals(senderEmails: senders, headers: headers))
     }
 
+    private func evaluate(
+        from: String?,
+        replyTo: String?,
+        headers: MailHeaderFields = MailHeaderFields()
+    ) -> ReplyWorthinessVerdict {
+        ReplyWorthiness.evaluate(
+            ReplyWorthinessSignals(fromEmail: from, replyToEmail: replyTo, headers: headers)
+        )
+    }
+
     // MARK: - Worthy (conservative default)
 
     func testPlainPersonalMailIsWorthy() {
@@ -185,17 +195,28 @@ final class ReplyWorthinessTests: XCTestCase {
 
     // MARK: - Both-address evaluation (item 66)
 
-    func testNoReplyOnEitherAddressIsSkipped() {
-        // A no-reply pattern on the `From` is caught even when `Reply-To` is
-        // routable — the GitHub `notifications@github.com` case named in item 66.
+    func testNoReplyOnReplyToOrKnownProviderFromIsSkipped() {
+        // The GitHub `notifications@github.com` -> `reply.github.com` pattern named
+        // in item 66 is a known provider-routing exception.
         XCTAssertEqual(
-            evaluate(senders: ["notifications@github.com", "reply+abc@reply.github.com"]),
+            evaluate(from: "notifications@github.com", replyTo: "reply+abc@reply.github.com"),
             .skip(.noReplySender)
         )
-        // …and vice versa: a no-reply `Reply-To` behind a human `From`.
+        // A no-reply `Reply-To` behind a human `From` still skips.
         XCTAssertEqual(
-            evaluate(senders: ["alice@example.com", "no-reply@example.com"]),
+            evaluate(from: "alice@example.com", replyTo: "no-reply@example.com"),
             .skip(.noReplySender)
+        )
+    }
+
+    func testRoutableReplyToPreventsGenericFromNoReplySkip() {
+        XCTAssertEqual(
+            evaluate(from: "notifications@ats.example", replyTo: "recruiter@company.example"),
+            .worthy
+        )
+        XCTAssertEqual(
+            evaluate(from: "no-reply@vendor.example", replyTo: "support@vendor.example"),
+            .worthy
         )
     }
 
@@ -234,7 +255,7 @@ final class ReplyWorthinessTests: XCTestCase {
     func testGitHubReceiptCaughtViaFromNotReplyTo() {
         // GitHub: automated `From`, routable `Reply-To`. Must be caught by From.
         XCTAssertEqual(
-            evaluate(senders: ["notifications@github.com", "reply+deadbeef@reply.github.com"]),
+            evaluate(from: "notifications@github.com", replyTo: "reply+deadbeef@reply.github.com"),
             .skip(.noReplySender)
         )
     }

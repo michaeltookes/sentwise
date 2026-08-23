@@ -68,9 +68,8 @@ final class AppStateReplyWorthinessGapsTests: XCTestCase {
     // MARK: - Both-address evaluation (item 66)
 
     func testNoReplyFromAddressIsSkippedDespiteRoutableReplyTo() async {
-        // Evaluating BOTH addresses catches an automated `From` even when the
-        // `Reply-To` looks routable — the exact GitHub case named in item 66
-        // (`notifications@github.com` From, `reply+…@reply.github.com` Reply-To).
+        // Evaluating BOTH addresses catches the known GitHub automated `From` /
+        // `reply.github.com` routing pattern named in item 66.
         let (appState, provider, _) = makeAppState(
             fetch: .success([
                 message(id: 1, from: "notifications@github.com", replyTo: "reply+abc@reply.github.com")
@@ -84,6 +83,22 @@ final class AppStateReplyWorthinessGapsTests: XCTestCase {
         XCTAssertEqual(appState.skippedMessages.map(\.reason), [.noReplySender])
         // Caught on the sender-only pass, so no header fetch is spent.
         XCTAssertEqual(provider.headerFetchCallCount, 0)
+    }
+
+    func testRoutableReplyToPreventsGenericNotificationFromSkip() async {
+        let (appState, provider, _) = makeAppState(
+            fetch: .success([
+                message(id: 1, from: "notifications@ats.example", replyTo: "recruiter@company.example")
+            ])
+        )
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertEqual(provider.headerFetchCallCount, 1)
+        XCTAssertEqual(provider.bodyFetchCallCount, 1)
     }
 
     func testPersonalFromAndReplyToStillDrafts() async {

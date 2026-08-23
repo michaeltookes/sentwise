@@ -77,27 +77,44 @@ enum ReplyWorthinessVerdict: Equatable {
 /// addresses plus the bounded header fields (`MailHeaderFields`). Kept as a plain
 /// value so the evaluator stays pure and exhaustively unit-testable with no IO.
 ///
-/// `senderEmails` carries **both** the `From` and `Reply-To` addresses (item 66):
-/// a no-reply/automated pattern on *either* skips the message. Evaluating only
-/// the reply target missed GitHub, whose mail is `From: notifications@github.com`
-/// — a token the list already catches — but whose `Reply-To` is a routable
-/// `reply+…@reply.github.com` that hides the automated `From`.
+/// `senderEmails` carries **both** the `From` and `Reply-To` addresses (item 66),
+/// with `fromEmail` / `replyToEmail` preserving their roles. Evaluating only the
+/// reply target missed GitHub, whose mail is `From: notifications@github.com` but
+/// whose `Reply-To` is `reply+…@reply.github.com`; treating the two roles as
+/// identical, however, can false-skip platform mail that uses a generic `From`
+/// while routing replies to a real person.
 struct ReplyWorthinessSignals: Equatable {
     /// The addresses to judge (typically `From` and `Reply-To`); `nil` entries
     /// and duplicates are harmless — matching is any-of.
     var senderEmails: [String?]
+    /// Envelope `From`, when known.
+    var fromEmail: String?
+    /// Envelope `Reply-To`, when known.
+    var replyToEmail: String?
     var headers: MailHeaderFields
 
     /// Single-address convenience kept for the many reply-target-only call sites
     /// and tests; wraps the one address into `senderEmails`.
     init(senderEmail: String?, headers: MailHeaderFields = MailHeaderFields()) {
         self.senderEmails = [senderEmail]
+        self.fromEmail = senderEmail
+        self.replyToEmail = nil
         self.headers = headers
     }
 
     /// Multi-address form (item 66): pass both `From` and `Reply-To`.
     init(senderEmails: [String?], headers: MailHeaderFields = MailHeaderFields()) {
         self.senderEmails = senderEmails
+        self.fromEmail = senderEmails.first ?? nil
+        self.replyToEmail = senderEmails.dropFirst().first ?? nil
+        self.headers = headers
+    }
+
+    /// Role-aware form for production watcher calls.
+    init(fromEmail: String?, replyToEmail: String?, headers: MailHeaderFields = MailHeaderFields()) {
+        self.senderEmails = [fromEmail, replyToEmail]
+        self.fromEmail = fromEmail
+        self.replyToEmail = replyToEmail
         self.headers = headers
     }
 }
@@ -115,7 +132,7 @@ enum ReplyWorthiness {
     /// Judges whether `signals` describe a message worth drafting a reply to.
     /// Checks run high-precision first; the first match wins and names the reason.
     static func evaluate(_ signals: ReplyWorthinessSignals) -> ReplyWorthinessVerdict {
-        if signals.senderEmails.contains(where: isNoReplySender) {
+        if isNoReplySender(signals) {
             return .skip(.noReplySender)
         }
         if isCalendarInvite(signals.headers) {
@@ -165,6 +182,35 @@ enum ReplyWorthiness {
         guard let localPart = normalizedLocalPart(email) else { return false }
         if noReplyExactLocalParts.contains(localPart) { return true }
         return noReplyContainedTokens.contains { localPart.contains($0) }
+    }
+
+    private static func isNoReplySender(_ signals: ReplyWorthinessSignals) -> Bool {
+        if isRoutableReplyTo(signals.replyToEmail) {
+            if let fromEmail = signals.fromEmail,
+               isNoReplySender(fromEmail),
+               isKnownAutomatedFromWithRoutableReplyTo(fromEmail, replyToEmail: signals.replyToEmail) {
+                return true
+            }
+            return false
+        }
+        return signals.senderEmails.contains(where: isNoReplySender)
+    }
+
+    private static func isRoutableReplyTo(_ email: String?) -> Bool {
+        guard normalizedLocalPart(email) != nil, normalizedDomain(email) != nil else { return false }
+        return !isNoReplySender(email)
+    }
+
+    private static func isKnownAutomatedFromWithRoutableReplyTo(
+        _ fromEmail: String?,
+        replyToEmail: String?
+    ) -> Bool {
+        guard let fromDomain = normalizedDomain(fromEmail),
+              let replyToDomain = normalizedDomain(replyToEmail) else {
+            return false
+        }
+        return matchesDomain(fromDomain, in: ["github.com"])
+            && matchesDomain(replyToDomain, in: ["reply.github.com"])
     }
 
     private static func normalizedLocalPart(_ email: String?) -> String? {

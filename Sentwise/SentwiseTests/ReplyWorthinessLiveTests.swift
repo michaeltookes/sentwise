@@ -42,8 +42,10 @@ final class ReplyWorthinessLiveTests: XCTestCase {
     /// Sender-only production signals whose mail must never become a draft.
     /// Reusing `ReplyWorthiness.evaluate` keeps this live-test predicate aligned
     /// with the conservative domain/local-part matching the watcher actually uses.
-    private func isProductionKnownMachineSender(_ addresses: [String]) -> Bool {
-        let verdict = ReplyWorthiness.evaluate(ReplyWorthinessSignals(senderEmails: addresses))
+    private func isProductionKnownMachineSender(from: String?, replyTo: String?) -> Bool {
+        let verdict = ReplyWorthiness.evaluate(
+            ReplyWorthinessSignals(fromEmail: from, replyToEmail: replyTo)
+        )
         switch verdict.skipReason {
         case .noReplySender, .automatedNotification:
             return true
@@ -53,13 +55,19 @@ final class ReplyWorthinessLiveTests: XCTestCase {
     }
 
     func testProductionKnownMachineSenderPredicateStaysConservative() {
-        XCTAssertTrue(isProductionKnownMachineSender(["notifications@github.com"]))
-        XCTAssertTrue(isProductionKnownMachineSender(["invoice+statements@stripe.com"]))
-        XCTAssertTrue(isProductionKnownMachineSender(["anything@costalerts.amazonaws.com"]))
+        XCTAssertTrue(isProductionKnownMachineSender(from: "notifications@github.com", replyTo: nil))
+        XCTAssertTrue(isProductionKnownMachineSender(from: "invoice+statements@stripe.com", replyTo: nil))
+        XCTAssertTrue(isProductionKnownMachineSender(from: "anything@costalerts.amazonaws.com", replyTo: nil))
 
-        XCTAssertFalse(isProductionKnownMachineSender(["recruiter@github.com"]))
-        XCTAssertFalse(isProductionKnownMachineSender(["support@stripe.com"]))
-        XCTAssertFalse(isProductionKnownMachineSender(["orders@smallshop.example"]))
+        XCTAssertFalse(isProductionKnownMachineSender(from: "recruiter@github.com", replyTo: nil))
+        XCTAssertFalse(isProductionKnownMachineSender(from: "support@stripe.com", replyTo: nil))
+        XCTAssertFalse(isProductionKnownMachineSender(from: "orders@smallshop.example", replyTo: nil))
+        XCTAssertFalse(
+            isProductionKnownMachineSender(
+                from: "notifications@ats.example",
+                replyTo: "recruiter@company.example"
+            )
+        )
     }
 
     func testKnownTransactionalSendersProduceNoDraftsOverLiveInbox() async throws {
@@ -91,7 +99,10 @@ final class ReplyWorthinessLiveTests: XCTestCase {
             )
             let addresses = [message.from?.email, message.replyTo?.email]
                 .compactMap { $0?.lowercased() }
-            let isKnownTransactional = isProductionKnownMachineSender(addresses)
+            let isKnownTransactional = isProductionKnownMachineSender(
+                from: message.from?.email,
+                replyTo: message.replyTo?.email
+            )
             if isKnownTransactional {
                 transactionalSeen += 1
                 XCTAssertNotNil(

@@ -20,15 +20,20 @@ extension AppState {
         credentials: MailAccountCredentials,
         mailbox: Mailbox
     ) async -> ReplyWorthinessReason? {
-        // Judge BOTH the `From` and `Reply-To` addresses (item 66): an automated
-        // `From` (e.g. GitHub's `notifications@github.com`) must be caught even
-        // when the routable `Reply-To` (`reply+…@reply.github.com`) looks human.
-        let senderEmails = [message.from?.email, message.replyTo?.email]
-        let senderOnly = ReplyWorthinessSignals(senderEmails: senderEmails)
+        // Judge BOTH the `From` and `Reply-To` addresses (item 66), preserving
+        // their roles so a real `Reply-To` can outweigh a generic platform `From`.
+        let senderOnly = ReplyWorthinessSignals(
+            fromEmail: message.from?.email,
+            replyToEmail: message.replyTo?.email
+        )
         if let skipReason = ReplyWorthiness.evaluate(senderOnly).skipReason { return skipReason }
 
         let headers = await fetchReplyWorthinessHeaders(message, credentials: credentials, mailbox: mailbox)
-        let signals = ReplyWorthinessSignals(senderEmails: senderEmails, headers: headers)
+        let signals = ReplyWorthinessSignals(
+            fromEmail: message.from?.email,
+            replyToEmail: message.replyTo?.email,
+            headers: headers
+        )
         return ReplyWorthiness.evaluate(signals).skipReason
     }
 
