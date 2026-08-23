@@ -127,6 +127,25 @@ final class AppStateReplyWorthinessGapsTests: XCTestCase {
         XCTAssertFalse(persistence.processedMessages.contains(message(id: 1), account: "me@gmail.com", mailbox: .inbox))
     }
 
+    func testHumanManagedTransactionalAliasStillDrafts() async {
+        // The local part alone is not enough to skip. Human-managed aliases like
+        // `invoice@accounting-firm.example` still pass through the watcher and get
+        // drafted when headers do not corroborate automation.
+        let (appState, provider, _) = makeAppState(
+            fetch: .success([
+                message(id: 1, from: "invoice@accounting-firm.example")
+            ])
+        )
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertEqual(provider.headerFetchCallCount, 1)
+        XCTAssertEqual(provider.bodyFetchCallCount, 1)
+    }
+
     func testGenuineSupportSenderStillDrafts() async {
         // The bare `support@` that receipts point their Reply-To at must NOT be a
         // skip token on its own, or a real support back-and-forth would be lost.

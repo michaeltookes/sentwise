@@ -180,10 +180,10 @@ enum ReplyWorthiness {
     // MARK: - Transactional senders (item 66)
 
     /// Local parts (matched **exactly**, after stripping any RFC 5233 `+tag`
-    /// subaddress) that mark machine-issued transactional mail — receipts, order
-    /// updates, and budget/cost alerts that carry no `List-Unsubscribe` /
-    /// `Auto-Submitted` header and no no-reply token, so they slipped past the
-    /// item 17 heuristics into Review Drafts.
+    /// subaddress) that mark machine-issued transactional mail when paired with a
+    /// known transactional domain. These catch receipts and order updates that
+    /// carry no `List-Unsubscribe` / `Auto-Submitted` header and no no-reply token,
+    /// so they slipped past the item 17 heuristics into Review Drafts.
     ///
     /// **Exact-match, not contained, on purpose.** A contained `invoice` would
     /// also skip a human `invoice-questions@`, and — the case the item 66 note
@@ -193,8 +193,8 @@ enum ReplyWorthiness {
     /// `auto-confirm`, `shipment-tracking`) are listed in full rather than as the
     /// broad substrings `order`/`confirm`/`tracking`. Stripping the `+tag` first
     /// is what lets Stripe/Anthropic's `invoice+statements@` match the base
-    /// `invoice`. Every entry here is a mailbox a person would not hold and reply
-    /// from, keeping the conservative "a false skip loses a real reply" bias.
+    /// `invoice`. These tokens are not enough on their own: a human-managed
+    /// `invoice@accounting-firm.example` must remain worthy.
     private static let transactionalExactLocalParts: Set<String> = [
         // Receipts / invoices / statements (Stripe, Anthropic, generic billing).
         "invoice", "invoices",
@@ -209,10 +209,18 @@ enum ReplyWorthiness {
         "alert", "alerts"
     ]
 
+    /// Domains where an exact transactional local part is enough corroboration to
+    /// treat the sender as automated. Matched on an exact-domain or dot-boundary
+    /// subdomain basis (never substring), mirroring the item 18 `SenderRules`
+    /// discipline so a look-alike domain can't false-match.
+    private static let transactionalLocalPartDomains: Set<String> = [
+        "stripe.com",
+        "anthropic.com",
+        "amazon.com"
+    ]
+
     /// Sending domains that are automated/transactional by nature — the signal
-    /// when the local part carries no token (item 66). Matched on an exact-domain
-    /// or dot-boundary subdomain basis (never substring), mirroring the item 18
-    /// `SenderRules` discipline so a look-alike domain can't false-match.
+    /// when the local part carries no token (item 66).
     private static let automatedSenderDomains: Set<String> = [
         // AWS Budgets / Cost Explorer alerts — no human mailbox lives here.
         "costalerts.amazonaws.com",
@@ -222,16 +230,17 @@ enum ReplyWorthiness {
         "applytojob.com"
     ]
 
-    /// Whether either the (subaddress-stripped) local part or the domain marks the
-    /// address as automated/transactional (item 66).
+    /// Whether the domain itself, or a transactional local part corroborated by a
+    /// known transactional domain, marks the address as automated (item 66).
     static func isTransactionalSender(_ email: String?) -> Bool {
-        if let base = baseLocalPart(email), transactionalExactLocalParts.contains(base) {
+        guard let domain = normalizedDomain(email) else { return false }
+        if matchesAutomatedDomain(domain) {
             return true
         }
-        if let domain = normalizedDomain(email), matchesAutomatedDomain(domain) {
-            return true
-        }
-        return false
+        guard matchesTransactionalLocalPartDomain(domain),
+              let base = baseLocalPart(email),
+              transactionalExactLocalParts.contains(base) else { return false }
+        return true
     }
 
     /// The local part with any RFC 5233 `+tag` subaddress removed, lowercased, so
@@ -255,7 +264,15 @@ enum ReplyWorthiness {
     }
 
     private static func matchesAutomatedDomain(_ domain: String) -> Bool {
-        automatedSenderDomains.contains { candidate in
+        matchesDomain(domain, in: automatedSenderDomains)
+    }
+
+    private static func matchesTransactionalLocalPartDomain(_ domain: String) -> Bool {
+        matchesDomain(domain, in: transactionalLocalPartDomains)
+    }
+
+    private static func matchesDomain(_ domain: String, in candidates: Set<String>) -> Bool {
+        candidates.contains { candidate in
             domain == candidate || domain.hasSuffix("." + candidate)
         }
     }

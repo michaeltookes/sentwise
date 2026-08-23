@@ -123,9 +123,13 @@ struct Draft: Codable, Identifiable, Equatable {
     /// watched-folder path enqueues drafts this way for the user to complete).
     var authoredRecipients: [MailAddress]?
 
-    /// Whether this draft is flagged as needing the user's input rather than
-    /// carrying a ready-to-send reply.
-    var isFlagged: Bool { needsInfo != nil || notReplyWorthy != nil }
+    /// Whether this draft currently needs user input before approval. A model
+    /// `NOT_REPLY_WORTHY` override becomes dispatchable only after the user writes
+    /// a non-empty reply body.
+    var isFlagged: Bool {
+        needsInfo != nil
+            || (notReplyWorthy != nil && body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
 
     /// Whether this is an authored follow-up (item 51) rather than a reply to an
     /// incoming message. Authored drafts have no source thread, so freshness and

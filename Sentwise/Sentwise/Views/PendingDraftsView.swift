@@ -189,6 +189,14 @@ private struct PendingDraftCard: View {
         appState.isWaitingForNetwork(draft.identity) || queuedDispatchIntent != nil
     }
 
+    private var hasEditedReplyBody: Bool { !editedBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var canOfferApprovalAction: Bool { draft.needsInfo == nil }
+    private var approvalNeedsBody: Bool { draft.notReplyWorthy != nil && !hasEditedReplyBody }
+
+    private var replyColumnTitle: String {
+        draft.needsInfo != nil ? "Can't draft this one" : (draft.notReplyWorthy != nil ? "Write a reply" : "Proposed reply")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if draft.isFlagged {
@@ -215,9 +223,7 @@ private struct PendingDraftCard: View {
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(cardStroke, lineWidth: draft.isFlagged ? 1.5 : 1))
-        .onDisappear {
-            persistEditedBodyImmediately()
-        }
+        .onDisappear { persistEditedBodyImmediately() }
     }
 
     private var cardStroke: Color {
@@ -279,7 +285,7 @@ private struct PendingDraftCard: View {
     @ViewBuilder
     private var replyColumn: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(draft.isFlagged ? "Can't draft this one" : "Proposed reply")
+            Text(replyColumnTitle)
                 .font(.caption).bold()
                 .foregroundStyle(.secondary)
             if let needsInfo = draft.needsInfo {
@@ -287,48 +293,49 @@ private struct PendingDraftCard: View {
                     DraftNeedsInfoView(needsInfo: needsInfo)
                 }
                 .frame(maxHeight: 180)
-            } else if let notReplyWorthy = draft.notReplyWorthy {
-                ScrollView {
-                    DraftNotReplyWorthyView(notReplyWorthy: notReplyWorthy)
-                }
-                .frame(maxHeight: 180)
             } else {
-                if !draft.isAuthored, let recipient = draft.sourceReplyTo?.email ?? draft.sourceFrom?.email {
-                    Text("To: \(recipient)").font(.caption).foregroundStyle(.secondary)
+                if let notReplyWorthy = draft.notReplyWorthy {
+                    ScrollView {
+                        DraftNotReplyWorthyView(notReplyWorthy: notReplyWorthy)
+                    }
+                    .frame(maxHeight: 90)
                 }
-                Text(draft.replySubject)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextEditor(text: $editedBody)
-                    .font(.callout)
-                    .scrollContentBackground(.hidden)
-                    .padding(4)
-                    .frame(maxHeight: 180)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(Color(nsColor: .textBackgroundColor)))
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.2)))
-                    .focused($isBodyFocused)
-                    .disabled(isBusy || isQueuedForNetwork)
-                    .accessibilityLabel("Reply body")
-                    // Keep notification approval from racing focused edits, but
-                    // coalesce disk writes while the user is typing.
-                    .onChange(of: editedBody) { _, newValue in
-                        queueEditedBodyPersist(newValue)
-                    }
-                    // Flush any pending inline edit when the editor loses focus.
-                    .onChange(of: isBodyFocused) { _, focused in
-                        if !focused {
-                            persistEditedBodyImmediately()
-                        }
-                    }
-                    // Resync when the underlying draft body changes externally
-                    // (e.g. a same-identity regenerate). Typing only changes
-                    // `editedBody`, so external draft replacements should win.
-                    .onChange(of: draft.body) { _, newValue in
-                        editedBody = newValue
-                    }
+                editableReplyFields
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var editableReplyFields: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if !draft.isAuthored, let recipient = draft.sourceReplyTo?.email ?? draft.sourceFrom?.email {
+                Text("To: \(recipient)").font(.caption).foregroundStyle(.secondary)
+            }
+            Text(draft.replySubject)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextEditor(text: $editedBody)
+                .font(.callout)
+                .scrollContentBackground(.hidden)
+                .padding(4)
+                .frame(maxHeight: 180)
+                .background(RoundedRectangle(cornerRadius: 4).fill(Color(nsColor: .textBackgroundColor)))
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.2)))
+                .focused($isBodyFocused)
+                .disabled(isBusy || isQueuedForNetwork)
+                .accessibilityLabel("Reply body")
+                .onChange(of: editedBody) { _, newValue in
+                    queueEditedBodyPersist(newValue)
+                }
+                .onChange(of: isBodyFocused) { _, focused in
+                    if !focused {
+                        persistEditedBodyImmediately()
+                    }
+                }
+                .onChange(of: draft.body) { _, newValue in
+                    editedBody = newValue
+                }
+        }
     }
 
     private var actions: some View {
@@ -342,14 +349,13 @@ private struct PendingDraftCard: View {
             }
             .disabled(isBusy)
 
-            // A flagged draft can't be approved — there is nothing safe to send.
-            // An authored follow-up can't be approved until it has recipients.
-            if !draft.isFlagged {
+            // Needs-info drafts cannot approve; model-declined overrides need a user-written body.
+            if canOfferApprovalAction {
                 Button(appState.approveActionLabel) {
                     Task { await approve() }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(isBusy || (draft.isAuthored && !draft.hasAuthoredRecipients))
+                .disabled(isBusy || approvalNeedsBody || (draft.isAuthored && !draft.hasAuthoredRecipients))
             }
         }
     }

@@ -55,7 +55,7 @@ struct DraftNotReplyWorthyView: View {
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Sentwise won't send a reply here — dismiss it or write the reply yourself.")
+            Text("Sentwise did not generate a reply here. Write one below before approving.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

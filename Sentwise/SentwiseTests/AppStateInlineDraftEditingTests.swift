@@ -10,7 +10,12 @@ import XCTest
 @MainActor
 final class AppStateInlineDraftEditingTests: XCTestCase {
 
-    private func pendingDraft(id: UInt32 = 1, body: String = "Thursday works!") -> Draft {
+    private func pendingDraft(
+        id: UInt32 = 1,
+        body: String = "Thursday works!",
+        needsInfo: DraftNeedsInfo? = nil,
+        notReplyWorthy: DraftNotReplyWorthy? = nil
+    ) -> Draft {
         Draft(
             id: id,
             sourceUIDValidity: 10,
@@ -24,7 +29,9 @@ final class AppStateInlineDraftEditingTests: XCTestCase {
             replySubject: "Re: Lunch?",
             body: body,
             model: "claude-sonnet-4-6",
-            generatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            needsInfo: needsInfo,
+            notReplyWorthy: notReplyWorthy
         )
     }
 
@@ -131,6 +138,18 @@ final class AppStateInlineDraftEditingTests: XCTestCase {
         XCTAssertEqual(draft.identity, identity)
     }
 
+    func testNotReplyWorthyDraftStaysFlaggedUntilUserWritesReply() {
+        var draft = pendingDraft(
+            body: "",
+            notReplyWorthy: DraftNotReplyWorthy(summary: "This receipt does not need a reply.")
+        )
+        XCTAssertTrue(draft.isFlagged)
+
+        draft.applyEditedBody("Thanks for sending this over.")
+
+        XCTAssertFalse(draft.isFlagged)
+    }
+
     // MARK: - Edited body is what dispatches
 
     func testEditedBodyIsWhatSends() async {
@@ -141,6 +160,34 @@ final class AppStateInlineDraftEditingTests: XCTestCase {
 
         XCTAssertEqual(decodedBody(from: provider.sentRFC822), "My hand-written reply.")
         XCTAssertTrue(appState.pendingDrafts.isEmpty)
+    }
+
+    func testEditedNotReplyWorthyOverrideIsWhatSends() async {
+        let draft = pendingDraft(
+            body: "",
+            notReplyWorthy: DraftNotReplyWorthy(summary: "This receipt does not need a reply.")
+        )
+        let (appState, provider, _) = makeAppState(sendBehavior: .autoSend, seed: [draft])
+
+        await appState.approvePendingDraft(draft, withEditedBody: "Thanks for the receipt.")
+
+        XCTAssertEqual(decodedBody(from: provider.sentRFC822), "Thanks for the receipt.")
+        XCTAssertNil(appState.approvalError)
+        XCTAssertTrue(appState.pendingDrafts.isEmpty)
+    }
+
+    func testEmptyNotReplyWorthyOverrideStillDoesNotSend() async {
+        let draft = pendingDraft(
+            body: "",
+            notReplyWorthy: DraftNotReplyWorthy(summary: "This receipt does not need a reply.")
+        )
+        let (appState, provider, _) = makeAppState(sendBehavior: .autoSend, seed: [draft])
+
+        await appState.approvePendingDraft(draft, withEditedBody: "  \n")
+
+        XCTAssertNil(provider.sentRFC822)
+        XCTAssertNotNil(appState.approvalError)
+        XCTAssertEqual(appState.pendingDrafts.count, 1)
     }
 
     func testEditedBodyIsWhatSaves() async {

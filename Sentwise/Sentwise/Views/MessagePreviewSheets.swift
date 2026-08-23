@@ -72,19 +72,15 @@ struct DraftView: View {
                     DraftNeedsInfoView(needsInfo: needsInfo)
                         .padding()
                 }
-            } else if let notReplyWorthy = displayedDraft.notReplyWorthy {
-                ScrollView {
-                    DraftNotReplyWorthyView(notReplyWorthy: notReplyWorthy)
-                        .padding()
-                }
             } else {
-                TextEditor(text: $editedBody)
-                    .font(.body)
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                    .disabled(isBusy)
-                    .accessibilityLabel("Reply body")
+                if let notReplyWorthy = displayedDraft.notReplyWorthy {
+                    ScrollView {
+                        DraftNotReplyWorthyView(notReplyWorthy: notReplyWorthy)
+                            .padding()
+                    }
+                    .frame(maxHeight: 150)
+                }
+                editableReplyBody
             }
             Divider()
             HStack {
@@ -98,8 +94,9 @@ struct DraftView: View {
                         .foregroundStyle(.red)
                 }
                 Spacer()
-                // A flagged draft has no reply to send — offer no dispatch action.
-                if !displayedDraft.isFlagged {
+                // Needs-info drafts have no safe reply to send. A model-declined
+                // draft can be dispatched only after the user writes a body.
+                if canOfferDispatchAction {
                     if let remaining = countdownRemaining {
                         countdownControls(remaining)
                     } else {
@@ -112,7 +109,7 @@ struct DraftView: View {
                                 Text(appState.sendBehavior == .autoSend ? "Send now" : "Save to Drafts")
                             }
                         }
-                        .disabled(isBusy || isDone)
+                        .disabled(isBusy || isDone || dispatchNeedsBody)
                     }
                 }
             }
@@ -157,6 +154,28 @@ struct DraftView: View {
 
     private var staleApprovalLabel: String {
         (staleApprovalSendBehavior ?? appState.sendBehavior) == .autoSend ? "Send anyway" : "Save anyway"
+    }
+
+    private var hasEditedReplyBody: Bool {
+        !editedBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var canOfferDispatchAction: Bool {
+        displayedDraft.needsInfo == nil
+    }
+
+    private var dispatchNeedsBody: Bool {
+        displayedDraft.notReplyWorthy != nil && !hasEditedReplyBody
+    }
+
+    private var editableReplyBody: some View {
+        TextEditor(text: $editedBody)
+            .font(.body)
+            .scrollContentBackground(.hidden)
+            .padding(8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .disabled(isBusy)
+            .accessibilityLabel("Reply body")
     }
 
     /// The auto-send safety-net controls (item 23) shown in place of the dispatch

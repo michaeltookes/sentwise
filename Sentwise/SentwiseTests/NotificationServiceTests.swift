@@ -46,7 +46,7 @@ final class NotificationServiceTests: XCTestCase {
         )
     }
 
-    private func notReplyWorthyDraft() -> Draft {
+    private func notReplyWorthyDraft(body: String = "") -> Draft {
         Draft(
             id: 9,
             sourceUIDValidity: 10,
@@ -58,7 +58,7 @@ final class NotificationServiceTests: XCTestCase {
             sourceMessageID: "<receipt@example.com>",
             incomingBody: "Your receipt is attached.",
             replySubject: "Re: Receipt",
-            body: "",
+            body: body,
             model: "claude-sonnet-4-6",
             generatedAt: Date(timeIntervalSince1970: 1_700_000_002),
             notReplyWorthy: DraftNotReplyWorthy(summary: "This receipt does not need a reply.")
@@ -88,6 +88,17 @@ final class NotificationServiceTests: XCTestCase {
         XCTAssertEqual(content.categoryIdentifier, UserNotificationService.needsInputCategoryIdentifier)
         XCTAssertEqual(content.title, "No reply needed for Billing")
         XCTAssertEqual(content.body, "This receipt does not need a reply.")
+    }
+
+    func testEditedNotReplyWorthyNotificationOffersApproveAction() {
+        let content = UserNotificationService.notificationContent(
+            for: notReplyWorthyDraft(body: "Thanks for sending this receipt."),
+            sendBehavior: .autoSend
+        )
+
+        XCTAssertEqual(content.categoryIdentifier, UserNotificationService.categoryIdentifier(for: .autoSend))
+        XCTAssertEqual(content.title, "Reply ready for Billing")
+        XCTAssertEqual(content.body, "Approve sends this reply now. Thanks for sending this receipt.")
     }
 
     func testRecipientlessFollowUpNotificationHasNoDestructiveActions() {

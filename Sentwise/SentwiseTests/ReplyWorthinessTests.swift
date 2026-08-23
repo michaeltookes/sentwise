@@ -216,7 +216,7 @@ final class ReplyWorthinessTests: XCTestCase {
         for address in [
             "invoice+statements@stripe.com",       // Stripe/Anthropic receipt (From)
             "invoice+statements@anthropic.com",
-            "receipts@vendor.com",
+            "receipts@stripe.com",
             "auto-confirm@amazon.com",             // Amazon order confirmation
             "shipment-tracking@amazon.com",        // Amazon shipping
             "order-update@amazon.com",             // Amazon order update
@@ -253,6 +253,9 @@ final class ReplyWorthinessTests: XCTestCase {
         for address in [
             "support@vendor.com",
             "billing@vendor.com",
+            "invoice@accounting-firm.example",
+            "statements@bank.example",
+            "orders@smallshop.example",
             "invoice-questions@vendor.com",   // contains "invoice" but not exact
             "orderdesk@vendor.com",           // contains "order" but not a token
             "alerta@example.com",             // contains "alert" but not exact
