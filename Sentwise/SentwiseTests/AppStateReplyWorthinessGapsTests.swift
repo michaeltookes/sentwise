@@ -230,9 +230,40 @@ final class AppStateReplyWorthinessGapsTests: XCTestCase {
 
         XCTAssertTrue(appState.pendingDrafts.isEmpty)
         XCTAssertEqual(appState.skippedMessages.map(\.reason), [.notReplyWorthyPerModel])
-        // A model skip already spent a full draft call, so it IS marked processed
-        // — the watcher must not re-run the LLM on it every poll.
-        XCTAssertTrue(persistence.processedMessages.contains(message(id: 1), account: "me@gmail.com", mailbox: .inbox))
+        // Keep model skips recoverable after app restart / skip-log loss: the
+        // durable processed set must not permanently hide the "Draft anyway" path.
+        XCTAssertFalse(persistence.processedMessages.contains(message(id: 1), account: "me@gmail.com", mailbox: .inbox))
+    }
+
+    func testModelSkippedMessageIsNotReevaluatedWhileSkipEntryExists() async {
+        let (appState, provider, persistence) = makeAppState(
+            fetch: .success([message(id: 1)]),
+            completion: .success(LLMResponse(text: automatedNeedsInfoResponse))
+        )
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.skippedMessages.map(\.reason), [.notReplyWorthyPerModel])
+        XCTAssertEqual(provider.bodyFetchCallCount, 1)
+        XCTAssertFalse(persistence.processedMessages.contains(message(id: 1), account: "me@gmail.com", mailbox: .inbox))
+    }
+
+    func testModelSkippedMessageCanReappearAfterSkipLogLoss() async {
+        let (appState, provider, persistence) = makeAppState(
+            fetch: .success([message(id: 1)]),
+            completion: .success(LLMResponse(text: automatedNeedsInfoResponse))
+        )
+        appState.watchStatus = .watching
+        await appState.pollInboxOnce()
+
+        appState.clearSkippedMessages()
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.skippedMessages.map(\.reason), [.notReplyWorthyPerModel])
+        XCTAssertEqual(provider.bodyFetchCallCount, 2)
+        XCTAssertFalse(persistence.processedMessages.contains(message(id: 1), account: "me@gmail.com", mailbox: .inbox))
     }
 
     func testReadyModelOutcomeStillEnqueues() async {

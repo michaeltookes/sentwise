@@ -89,9 +89,9 @@ extension AppState {
     }
 
     /// Applies a completed `WatcherDraftResult`: a model-skipped draft is recorded
-    /// on the skip log and marked processed (it already spent a full draft call,
-    /// so the watcher must not re-run the LLM on it); an enqueued draft is marked
-    /// processed; a context change is left for the next poll to retry.
+    /// on the skip log but left unprocessed so the recovery path can reappear after
+    /// restart; an enqueued draft is marked processed; a context change is left for
+    /// the next poll to retry.
     func handleWatcherDraftResult(
         _ result: WatcherDraftResult,
         for message: MailMessage,
@@ -103,7 +103,6 @@ extension AppState {
             break
         case .modelSkipped:
             recordSkip(message, reason: .notReplyWorthyPerModel, account: credentials.email, mailbox: mailbox)
-            markProcessed(message, account: credentials.email, mailbox: mailbox)
         case .enqueued:
             markProcessed(message, account: credentials.email, mailbox: mailbox)
         }

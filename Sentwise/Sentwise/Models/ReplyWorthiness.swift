@@ -21,7 +21,7 @@ enum ReplyWorthinessReason: String, Equatable, Codable, CaseIterable {
     /// asked the watcher never to draft replies to this sender or domain.
     case senderBlocklisted
     /// The drafting model itself judged there was nothing to reply to — it
-    /// returned a needs-info / automated verdict with no sendable body (item 67).
+    /// returned the dedicated not-reply-worthy verdict (item 67).
     /// This is the LLM relevance *backstop*: the item 17/66 heuristics run first,
     /// and this only catches automated/reply-less mail that slips past them.
     case notReplyWorthyPerModel
