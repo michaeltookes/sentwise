@@ -172,6 +172,11 @@ extension AppState {
             openReviewHandler?()
             return nil
         }
+        guard !current.isFlagged else {
+            approvalError = Self.draftMessage(for: DraftError.needsUserInput)
+            openReviewHandler?()
+            return nil
+        }
         return current
     }
 

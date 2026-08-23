@@ -2,12 +2,19 @@ import SentwiseMail
 import XCTest
 @testable import Sentwise
 
+// swiftlint:disable file_length type_body_length
+
 /// Tests for the auto-send safety net / undo window (item 23): the cancellable
 /// countdown between approving an auto-send draft and the actual dispatch.
 @MainActor
 final class AppStateSendCountdownTests: XCTestCase {
 
-    private func pendingDraft(id: UInt32 = 1, subject: String = "Lunch?") -> Draft {
+    private func pendingDraft(
+        id: UInt32 = 1,
+        subject: String = "Lunch?",
+        body: String = "Thursday works!",
+        notReplyWorthy: DraftNotReplyWorthy? = nil
+    ) -> Draft {
         Draft(
             id: id,
             sourceUIDValidity: 10,
@@ -19,9 +26,10 @@ final class AppStateSendCountdownTests: XCTestCase {
             sourceMessageID: "<orig@example.com>",
             incomingBody: "Are you free Thursday?",
             replySubject: "Re: \(subject)",
-            body: "Thursday works!",
+            body: body,
             model: "claude-sonnet-4-6",
-            generatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            notReplyWorthy: notReplyWorthy
         )
     }
 
@@ -322,6 +330,35 @@ final class AppStateSendCountdownTests: XCTestCase {
         XCTAssertNotNil(appState.approvalError)
     }
 
+    func testCountdownBlocksWhenNotReplyWorthyDraftBecomesFlaggedAgain() async {
+        let draft = pendingDraft(
+            body: "Thanks for the receipt.",
+            notReplyWorthy: DraftNotReplyWorthy(summary: "This receipt does not need a reply.")
+        )
+        let provider = FakeAppMailProvider(result: .success(()))
+        let appState = makeAppState(
+            provider: provider,
+            sendDelaySeconds: 2,
+            tickNanoseconds: 2_000_000,
+            seed: [draft]
+        )
+        var openedReview = false
+        appState.openReviewHandler = { openedReview = true }
+
+        await appState.approveDraft(draft)
+        appState.notePendingDraftBodyEdit(draft, editedBody: "  \n")
+        await waitUntil { appState.pendingSendCountdowns.isEmpty }
+
+        XCTAssertEqual(provider.sendCallCount, 0)
+        XCTAssertEqual(appState.pendingDrafts.map(\.identity), [draft.identity])
+        XCTAssertEqual(appState.pendingDrafts.first?.body, "  \n")
+        XCTAssertEqual(appState.pendingDrafts.first?.isFlagged, true)
+        XCTAssertFalse(appState.pendingDraftUncommittedEditIDs.contains(draft.identity))
+        XCTAssertNil(appState.pendingDraftUncommittedEditBodies[draft.identity])
+        XCTAssertTrue(openedReview)
+        XCTAssertNotNil(appState.approvalError)
+    }
+
     // MARK: - Stale verdict at fire time blocks the send and warns
 
     func testStaleVerdictAtFireTimeBlocksSendAndSurfacesWarning() async {
@@ -478,3 +515,5 @@ final class AppStateSendCountdownTests: XCTestCase {
         XCTAssertEqual(appState.pendingDrafts.map(\.identity), [draft.identity])
     }
 }
+
+// swiftlint:enable file_length type_body_length
