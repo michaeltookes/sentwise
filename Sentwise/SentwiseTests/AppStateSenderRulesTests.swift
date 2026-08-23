@@ -29,7 +29,8 @@ final class AppStateSenderRulesTests: XCTestCase {
 
     private func makeAppState(
         fetch: Result<[MailMessage], MailError> = .success([]),
-        header: Result<MailHeaderFields, MailError> = .success(MailHeaderFields())
+        header: Result<MailHeaderFields, MailError> = .success(MailHeaderFields()),
+        completion: Result<LLMResponse, LLMError> = .success(LLMResponse(text: "On it."))
     ) -> (AppState, FakeAppMailProvider, AppStateMemoryPersistence) {
         let secrets = InMemorySecretStore(seed: [
             .mailAppPassword: "app-pw",
@@ -51,7 +52,7 @@ final class AppStateSenderRulesTests: XCTestCase {
             bodyResult: .success(Data("Please advise.".utf8)),
             headerResult: header
         )
-        let llm = FakeLLMProvider(result: .success(()), completion: .success(LLMResponse(text: "On it.")))
+        let llm = FakeLLMProvider(result: .success(()), completion: completion)
         let appState = AppState(persistence: persistence, secrets: secrets, mailProvider: provider, llm: llm)
         return (appState, provider, persistence)
     }
@@ -142,6 +143,24 @@ final class AppStateSenderRulesTests: XCTestCase {
 
         XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
         XCTAssertTrue(appState.skippedMessages.isEmpty)
+    }
+
+    func testAllowlistForceDraftsPastModelNotReplyWorthyGate() async {
+        let skippedByModel = "\(DraftGenerator.notReplyWorthySentinel) This looks automated."
+        let allowlisted = message(id: 1, from: "vip@x.com")
+        let (appState, _, persistence) = makeAppState(
+            fetch: .success([allowlisted]),
+            completion: .success(LLMResponse(text: skippedByModel))
+        )
+        appState.senderAllowlist = [SenderRule(normalized: "vip@x.com")]
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertEqual(appState.pendingDrafts.first?.notReplyWorthy?.summary, "This looks automated.")
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertTrue(persistence.processedMessages.contains(allowlisted, account: "me@gmail.com", mailbox: .inbox))
     }
 
     // MARK: - Precedence

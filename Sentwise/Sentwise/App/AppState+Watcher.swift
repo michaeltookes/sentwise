@@ -247,7 +247,12 @@ extension AppState {
             // Retry transient fetch/LLM hiccups within the poll (item 27). On
             // exhaustion the message is left unprocessed, so the next poll retries
             // it — the existing skip/pending-draft guards prevent re-notification.
-            let result = try await gatedWatcherDraftResult(message, credentials: credentials, mailbox: mailbox)
+            let result = try await gatedWatcherDraftResult(
+                message,
+                credentials: credentials,
+                mailbox: mailbox,
+                bypassModelSkip: senderRuleDecision(for: message) == .forceDraft
+            )
             guard watchStatus == .watching, mailCredentials == credentials else { return }
             handleWatcherDraftResult(result, for: message, credentials: credentials, mailbox: mailbox)
         } catch {

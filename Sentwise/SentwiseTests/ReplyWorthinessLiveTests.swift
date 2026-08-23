@@ -41,10 +41,12 @@ final class ReplyWorthinessLiveTests: XCTestCase {
 
     /// Machine-sending domains whose mail must never become a draft. These match
     /// the leaked senders named in item 66 (GitHub, Stripe/Anthropic receipts,
-    /// AWS cost alerts, recruiting blasts) plus the common receipt providers.
+    /// Amazon order mail, AWS cost alerts, recruiting blasts).
     private let transactionalDomains = [
         "github.com",
         "stripe.com",
+        "anthropic.com",
+        "amazon.com",
         "costalerts.amazonaws.com",
         "applytojob.com"
     ]
@@ -94,6 +96,14 @@ final class ReplyWorthinessLiveTests: XCTestCase {
             }
         }
 
+        guard transactionalSeen > 0 else {
+            throw XCTSkip("No known transactional sender found in the latest \(messages.count) inbox messages.")
+        }
+        XCTAssertGreaterThan(
+            worthyCount,
+            0,
+            "Expected at least one recent message to remain worthy; this live pass did not exercise drafting eligibility."
+        )
         print(
             "Reply-worthiness live pass: \(messages.count) messages — "
             + "\(transactionalSeen) known-transactional (all skipped), "

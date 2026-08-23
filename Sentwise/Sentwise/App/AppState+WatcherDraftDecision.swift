@@ -59,7 +59,8 @@ extension AppState {
     /// heuristics run first. A genuine item-13 needs-info draft still enqueues
     /// as a flagged draft, even when its actionable request is only in the
     /// summary and it has no parsed bullet list. "Draft anyway" from the skip
-    /// log re-drafts through `draftAndEnqueue`, which bypasses this gate.
+    /// log re-drafts through `draftAndEnqueue`, which bypasses this gate. An
+    /// allowlisted sender also bypasses the model skip so "Always draft" stays true.
     ///
     /// **Token cost:** no extra pre-classification call is made — the gate reuses
     /// the needs-info signal the single drafting call already returns, so it adds
@@ -67,7 +68,8 @@ extension AppState {
     func gatedWatcherDraftResult(
         _ message: MailMessage,
         credentials: MailAccountCredentials,
-        mailbox: Mailbox
+        mailbox: Mailbox,
+        bypassModelSkip: Bool = false
     ) async throws -> WatcherDraftResult {
         try await withResilientRetry { () -> WatcherDraftResult in
             try self.validateWatcherDraftContext(credentials)
@@ -78,7 +80,7 @@ extension AppState {
             ) else {
                 return .contextChanged
             }
-            if Self.isModelSkippableDraft(draft) {
+            if !bypassModelSkip, Self.isModelSkippableDraft(draft) {
                 return .modelSkipped
             }
             try self.enqueuePendingDraft(draft)
