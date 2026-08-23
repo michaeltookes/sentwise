@@ -73,15 +73,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Basic discoverability: SEO fundamentals, OG/social cards, and a home for a demo video.
     - Held in a separate repo with its own deployment; all stack/hosting/analytics decisions deferred to the pre-build discussion.
 
-69. **Redesign the Review Drafts window** — *2026-08-20 walkthrough finding*
-    The approval surface (`PendingDraftsView.swift`) crams the draft queue and a 100-entry Skipped section into one scroll, and message rendering is hard to read: subjects show raw RFC 2047 encoded-words (`=?UTF-8?Q?…`), bodies are plain `Text` so GitHub/marketing mail displays literal `###`/`**` markdown and stripped-HTML artifacts, and long machine Reply-To addresses wrap across multiple lines in the "Proposed reply" header.
-    *As Priya, I want a review window where each draft is legible at a glance and skipped mail lives in its own tab, so that approving a day's drafts takes seconds instead of scrolling through clutter.*
-    - **Skipped becomes its own tab** (e.g. "Drafts | Skipped") with a dedicated view; the drafts tab shows only reviewable drafts. Skipped keeps its reason badges, "Draft anyway", dismiss, and Clear actions.
-    - MIME encoded-word subjects are decoded everywhere they're displayed (draft list, skipped list, notifications).
-    - Incoming-message rendering is readable: proper typography/spacing, sensible handling of markdown-ish and HTML-derived plain text; long addresses truncate with full value on hover/expand.
-    - Overall layout decluttered so the primary actions (Approve/Deny) and the proposed reply are the visual focus.
-    - The `review-drafts` Prowl hunt still passes: window keeps its `Review Drafts` AX label; any new tab controls get safe `id=` AX identifiers, added to the README table and kept out of / consistent with `forbiddenSelectors`.
-
 24. **Email signature handling**
     Respect the user's signature so drafts look right.
     *As Priya, I want drafts to use my normal signature correctly, so that replies don't drop it or double it up.*
