@@ -170,6 +170,47 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
     }
 
+    func testPreservesFourSpaceIndentedCodeBlockContents() {
+        let input = """
+        Before
+
+            **literal**
+            [docs](url)
+            a  b
+
+        After
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testPreservesTabIndentedCodeBlockContents() {
+        let input = "Before\n\n\t**literal**\n\tlet  value = 1\nAfter"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testPreservesBlankRunsInsideIndentedCodeBlocks() {
+        let input = "    a\n\n\n    b"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testPreservesBlockquotedIndentedCodeBlockContents() {
+        let input = """
+        >     **literal**
+        >     [docs](url)
+        >     a  b
+        """
+        let expected = """
+            **literal**
+            [docs](url)
+            a  b
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
     func testFenceDelimiterWithContentDoesNotCloseCodeBlock() {
         let input = """
         ```
@@ -226,13 +267,13 @@ final class IncomingBodyNormalizerTests: XCTestCase {
     func testFourSpaceIndentedFenceDelimiterDoesNotOpenCodeBlock() {
         let input = "    ```\n**prose**"
 
-        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "prose")
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "    ```\nprose")
     }
 
     func testFourSpaceIndentedBlockquotedFenceDelimiterDoesNotOpenCodeBlock() {
         let input = ">     ```\n> **prose**"
 
-        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "prose")
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "    ```\nprose")
     }
 
     func testPreservesEscapedEmphasisDelimiters() {

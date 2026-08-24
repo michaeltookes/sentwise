@@ -1,17 +1,6 @@
 import Foundation
 
-/// Cleans the plain-text incoming-message body for readable display (item 69).
-///
-/// The stored `Draft.incomingBody` is the raw text extracted from the source
-/// message: GitHub and marketing mail leave literal markdown (`###`, `**`,
-/// `[text](url)`) and HTML-to-text artifacts (rules made of `---`/`===`, runs of
-/// blank lines, zero-width-space and non-breaking-space artifacts). Rendered verbatim in a
-/// `Text` view that reads as noise. This normaliser strips the noisiest markers
-/// and collapses the whitespace so the message is legible at a glance — it is a
-/// lightweight cleanup, not an HTML/markdown engine.
-///
-/// Pure, deterministic, and value-safe: it never mutates the stored draft
-/// (callers normalise a copy at render time) and always returns a string.
+/// Cleans plain-text incoming-message bodies for readable display.
 enum IncomingBodyNormalizer {
 
     /// Returns a cleaned copy of `input` suitable for display.
@@ -20,15 +9,14 @@ enum IncomingBodyNormalizer {
 
         var text = normalizeWhitespaceCharacters(input)
         var fenceState: FenceState?
+        var indentedCodeDepth: Int?
         let lines = text.components(separatedBy: "\n").map {
-            cleanLine($0, fenceState: &fenceState)
+            cleanLine($0, fenceState: &fenceState, indentedCodeDepth: &indentedCodeDepth)
         }
         let collapsedLines = trimDisplayEdges(collapseBlankRuns(lines))
         text = collapsedLines.map(\.text).joined(separator: "\n")
         return text
     }
-
-    // MARK: - Steps
 
     /// Unifies line endings and neutralises invisible/odd whitespace that
     /// HTML-derived text carries (CRLF, NBSP, zero-width space, BOM).
@@ -45,7 +33,11 @@ enum IncomingBodyNormalizer {
     /// Cleans one line: drops horizontal rules, strips heading/quote/emphasis
     /// markers, simplifies links, and collapses interior space runs. A line that
     /// was only a rule becomes empty (folded away by `collapseBlankRuns`).
-    private static func cleanLine(_ rawLine: String, fenceState: inout FenceState?) -> CleanedLine {
+    private static func cleanLine(
+        _ rawLine: String,
+        fenceState: inout FenceState?,
+        indentedCodeDepth: inout Int?
+    ) -> CleanedLine {
         let trimmedTrailing = String(rawLine.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
         let unquotedTrimmedTrailing = stripBlockquoteMarkers(trimmedTrailing).text
 
@@ -65,6 +57,17 @@ enum IncomingBodyNormalizer {
             return CleanedLine(literalLine, preservesBlankRuns: true)
         }
 
+        if let depth = indentedCodeDepth {
+            let stripped = stripBlockquoteMarkers(rawLine, maxDepth: depth)
+            if stripped.text.trimmingCharacters(in: .whitespaces).isEmpty {
+                return CleanedLine(stripped.text, preservesBlankRuns: true)
+            } else if let literalLine = indentedCodeLine(rawLine, maxBlockquoteDepth: depth) {
+                indentedCodeDepth = literalLine.blockquoteDepth
+                return CleanedLine(literalLine.text, preservesBlankRuns: true)
+            }
+            indentedCodeDepth = nil
+        }
+
         if let candidate = fenceCandidate(trimmedTrailing),
            let fence = FenceState(openingLine: candidate, blockquoteDepth: 0) {
             fenceState = fence
@@ -78,6 +81,11 @@ enum IncomingBodyNormalizer {
            let fence = FenceState(openingLine: candidate, blockquoteDepth: strippedOpening.depth) {
             fenceState = fence
             return CleanedLine("")
+        }
+
+        if let literalLine = indentedCodeLine(rawLine) {
+            indentedCodeDepth = literalLine.blockquoteDepth
+            return CleanedLine(literalLine.text, preservesBlankRuns: true)
         }
 
         if isHorizontalRule(unquotedTrimmed) { return CleanedLine("") }
@@ -131,6 +139,20 @@ enum IncomingBodyNormalizer {
         let leadingSpaces = line.prefix { $0 == " " }.count
         guard leadingSpaces <= 3 else { return nil }
         return String(line.dropFirst(leadingSpaces))
+    }
+
+    private static func indentedCodeLine(
+        _ rawLine: String,
+        maxBlockquoteDepth: Int? = nil
+    ) -> (text: String, blockquoteDepth: Int)? {
+        let stripped = stripBlockquoteMarkers(rawLine, maxDepth: maxBlockquoteDepth)
+        guard hasIndentedCodePrefix(stripped.text),
+              !stripped.text.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return (stripped.text, stripped.depth)
+    }
+
+    private static func hasIndentedCodePrefix(_ line: String) -> Bool {
+        line.hasPrefix("    ") || line.hasPrefix("\t")
     }
 
     /// A markdown/stripped-HTML horizontal rule: three or more of `-`, `*`, `_`,
@@ -251,7 +273,9 @@ enum IncomingBodyNormalizer {
         }
         return nil
     }
+}
 
+fileprivate extension IncomingBodyNormalizer {
     private static func stripProseEmphasis(_ line: String) -> String {
         stripDelimitedEmphasis(
             stripDelimitedEmphasis(line, delimiter: "**"),
