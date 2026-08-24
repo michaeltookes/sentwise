@@ -102,47 +102,74 @@ enum IncomingBodyNormalizer {
     /// Strips paired emphasis markers (`**`, `__`, backticks). Bare or intraword
     /// `*`/`_` markers are left alone to avoid mangling literal identifiers.
     private static func stripEmphasis(_ line: String) -> String {
-        var result = line
-        result = stripDelimitedEmphasis(result, delimiter: "**")
-        result = stripDelimitedEmphasis(result, delimiter: "__")
-        result = result.replacingOccurrences(of: "`", with: "")
+        var result = ""
+        var proseSegment = ""
+        var index = line.startIndex
+
+        while index < line.endIndex {
+            guard line[index] == "`" else {
+                proseSegment.append(line[index])
+                index = line.index(after: index)
+                continue
+            }
+
+            let codeStart = line.index(after: index)
+            guard let codeEnd = line[codeStart...].firstIndex(of: "`") else {
+                // Preserve the old cleanup behavior for stray backticks.
+                index = codeStart
+                continue
+            }
+
+            result += stripProseEmphasis(proseSegment)
+            proseSegment.removeAll(keepingCapacity: true)
+            result.append(contentsOf: line[codeStart..<codeEnd])
+            index = line.index(after: codeEnd)
+        }
+
+        result += stripProseEmphasis(proseSegment)
         return result
+    }
+
+    private static func stripProseEmphasis(_ line: String) -> String {
+        stripDelimitedEmphasis(
+            stripDelimitedEmphasis(line, delimiter: "**"),
+            delimiter: "__"
+        )
     }
 
     private static func stripDelimitedEmphasis(_ line: String, delimiter: String) -> String {
         guard line.contains(delimiter) else { return line }
 
-        var result = ""
+        var openers: [Range<String.Index>] = []
+        var removals: [Range<String.Index>] = []
         var index = line.startIndex
         while index < line.endIndex {
-            if line[index...].hasPrefix(delimiter),
-               canOpenEmphasis(in: line, at: index, delimiter: delimiter),
-               let closingRange = closingEmphasisRange(in: line, delimiter: delimiter, after: index) {
-                let contentStart = line.index(index, offsetBy: delimiter.count)
-                result.append(contentsOf: line[contentStart..<closingRange.lowerBound])
-                index = closingRange.upperBound
+            if line[index...].hasPrefix(delimiter) {
+                let range = index..<line.index(index, offsetBy: delimiter.count)
+                let canOpen = canOpenEmphasis(in: line, at: index, delimiter: delimiter)
+                let canClose = canCloseEmphasis(in: line, at: index, delimiter: delimiter)
+                if canClose, let opener = openers.popLast() {
+                    removals.append(opener)
+                    removals.append(range)
+                } else if canOpen {
+                    openers.append(range)
+                }
+                index = range.upperBound
             } else {
-                result.append(line[index])
                 index = line.index(after: index)
             }
         }
-        return result
-    }
 
-    private static func closingEmphasisRange(
-        in line: String,
-        delimiter: String,
-        after openingStart: String.Index
-    ) -> Range<String.Index>? {
-        var index = line.index(openingStart, offsetBy: delimiter.count)
-        while index < line.endIndex {
-            if line[index...].hasPrefix(delimiter),
-               canCloseEmphasis(in: line, at: index, delimiter: delimiter) {
-                return index..<line.index(index, offsetBy: delimiter.count)
-            }
-            index = line.index(after: index)
+        guard !removals.isEmpty else { return line }
+
+        var result = ""
+        index = line.startIndex
+        for removal in removals.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+            result.append(contentsOf: line[index..<removal.lowerBound])
+            index = removal.upperBound
         }
-        return nil
+        result.append(contentsOf: line[index...])
+        return result
     }
 
     private static func canOpenEmphasis(in line: String, at index: String.Index, delimiter: String) -> Bool {

@@ -38,6 +38,19 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize("Keep this __ marker."), "Keep this __ marker.")
     }
 
+    func testPreservesEmphasisDelimitersInsideCodeSpans() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Call `__init__` before use"),
+            "Call __init__ before use"
+        )
+    }
+
+    func testPreservesRepeatedUnmatchedEmphasisOpeners() {
+        let input = "Start" + String(repeating: " **a", count: 200)
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
     func testSimplifiesMarkdownLinks() {
         let input = "See [the docs](https://example.com/tracking?id=abc123) for more."
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "See the docs for more.")
