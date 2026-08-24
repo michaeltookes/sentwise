@@ -91,6 +91,13 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "a\n\n\nb")
     }
 
+    func testPreservesTrailingWhitespaceInsideMultilineCodeSpans() {
+        let input = "`first  \nsecond\t\nthird` done   "
+        let expected = "first  \nsecond\t\nthird done"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
     func testPreservesEscapedBacktickDelimiters() {
         XCTAssertEqual(
             IncomingBodyNormalizer.normalize(#"Use \`literal\` syntax"#),

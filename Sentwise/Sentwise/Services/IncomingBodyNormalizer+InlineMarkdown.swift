@@ -64,7 +64,7 @@ extension IncomingBodyNormalizer {
             return CleanedLine(result, preservesBlankRuns: true)
         }
 
-        result += cleanInlineProse(proseSegment)
+        result += cleanInlineProse(trimTrailingProseWhitespace(proseSegment))
         return CleanedLine(result, preservesBlankRuns: preservesBlankRuns)
     }
 }
@@ -121,6 +121,10 @@ private extension IncomingBodyNormalizer {
 
     static func cleanInlineProse(_ line: String) -> String {
         collapseSpaces(simplifyLinks(stripProseEmphasis(line)))
+    }
+
+    static func trimTrailingProseWhitespace(_ text: String) -> String {
+        String(text.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
     }
 
     static func stripDelimitedEmphasis(_ line: String, delimiter: String) -> String {

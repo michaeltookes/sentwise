@@ -50,11 +50,11 @@ enum IncomingBodyNormalizer {
         followingLines: ArraySlice<String>
     ) -> CleanedLine {
         let trimmedTrailing = String(rawLine.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
-        let unquotedTrimmedTrailing = stripBlockquoteMarkers(trimmedTrailing).text
+        let unquotedRaw = stripBlockquoteMarkers(rawLine).text
 
         if inlineCodeState != nil {
             return cleanInlineMarkdown(
-                unquotedTrimmedTrailing,
+                unquotedRaw,
                 inlineCodeState: &inlineCodeState,
                 followingLines: followingLines
             )
@@ -109,7 +109,7 @@ enum IncomingBodyNormalizer {
 
         if isHorizontalRule(unquotedTrimmed) { return CleanedLine("") }
 
-        var line = unquotedTrimmedTrailing
+        var line = unquotedRaw
         line = stripHeadingMarker(line)
         line = normalizeListMarker(line)
         return cleanInlineMarkdown(
