@@ -63,6 +63,38 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         )
     }
 
+    func testPreservesWhitespaceInsideCodeSpans() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Use `a  b` as the fixture"),
+            "Use a  b as the fixture"
+        )
+    }
+
+    func testPreservesFencedCodeBlockContents() {
+        let input = """
+        Before
+
+        ```
+        **literal**
+        [docs](url)
+        a  b
+        ```
+
+        After
+        """
+        let expected = """
+        Before
+
+        **literal**
+        [docs](url)
+        a  b
+
+        After
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
     func testPreservesRepeatedUnmatchedEmphasisOpeners() {
         let input = "Start" + String(repeating: " **a", count: 200)
 

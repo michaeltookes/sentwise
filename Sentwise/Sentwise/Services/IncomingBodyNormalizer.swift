@@ -19,7 +19,10 @@ enum IncomingBodyNormalizer {
         guard !input.isEmpty else { return input }
 
         var text = normalizeWhitespaceCharacters(input)
-        let lines = text.components(separatedBy: "\n").map(cleanLine)
+        var fenceState: FenceState?
+        let lines = text.components(separatedBy: "\n").map {
+            cleanLine($0, fenceState: &fenceState)
+        }
         text = collapseBlankRuns(lines).joined(separator: "\n")
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -41,9 +44,22 @@ enum IncomingBodyNormalizer {
     /// Cleans one line: drops horizontal rules, strips heading/quote/emphasis
     /// markers, simplifies links, and collapses interior space runs. A line that
     /// was only a rule becomes empty (folded away by `collapseBlankRuns`).
-    private static func cleanLine(_ rawLine: String) -> String {
+    private static func cleanLine(_ rawLine: String, fenceState: inout FenceState?) -> String {
         let trimmedTrailing = String(rawLine.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
         let trimmed = trimmedTrailing.trimmingCharacters(in: .whitespaces)
+
+        if let fence = fenceState {
+            if fence.closes(trimmed) {
+                fenceState = nil
+                return ""
+            }
+            return rawLine
+        }
+
+        if let fence = FenceState(openingLine: trimmed) {
+            fenceState = fence
+            return ""
+        }
 
         if isHorizontalRule(trimmed) { return "" }
 
@@ -52,8 +68,25 @@ enum IncomingBodyNormalizer {
         line = stripBlockquoteMarker(line)
         line = normalizeListMarker(line)
         line = cleanInlineMarkdown(line)
-        line = collapseSpaces(line)
         return line
+    }
+
+    private struct FenceState {
+        let delimiter: Character
+        let length: Int
+
+        init?(openingLine: String) {
+            guard let first = openingLine.first, first == "`" || first == "~" else { return nil }
+            let count = openingLine.prefix { $0 == first }.count
+            guard count >= 3 else { return nil }
+            delimiter = first
+            length = count
+        }
+
+        func closes(_ line: String) -> Bool {
+            let count = line.prefix { $0 == delimiter }.count
+            return count >= length
+        }
     }
 
     /// A markdown/stripped-HTML horizontal rule: three or more of `-`, `*`, `_`,
@@ -170,7 +203,7 @@ enum IncomingBodyNormalizer {
     }
 
     private static func cleanInlineProse(_ line: String) -> String {
-        simplifyLinks(stripProseEmphasis(line))
+        collapseSpaces(simplifyLinks(stripProseEmphasis(line)))
     }
 
     private static func stripDelimitedEmphasis(_ line: String, delimiter: String) -> String {
