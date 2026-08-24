@@ -32,13 +32,21 @@ extension AppState {
             reportSignatureDetection(succeeded: false, "Connect an email account first to detect your signature.")
             return
         }
+        let startingSignaturePolicy = signaturePolicy
+        let startingSignatureText = signatureText
 
         isDetectingSignature = true
         defer { isDetectingSignature = false }
 
         do {
             let bodies = try await fetchSentSampleBodies(credentials: credentials)
-            guard mailCredentials == credentials else { return }
+            guard mailCredentials == credentials else {
+                reportSignatureDetection(
+                    succeeded: false,
+                    "Email account changed while detection was running. Try again."
+                )
+                return
+            }
             guard !bodies.isEmpty else {
                 reportSignatureDetection(
                     succeeded: false,
@@ -47,6 +55,13 @@ extension AppState {
                 return
             }
             if let detected = SignatureDetector.detect(fromSentBodies: bodies) {
+                guard signaturePolicy == startingSignaturePolicy, signatureText == startingSignatureText else {
+                    reportSignatureDetection(
+                        succeeded: false,
+                        "Signature settings changed while detection was running, so your edits were left unchanged."
+                    )
+                    return
+                }
                 signatureText = detected
                 signaturePolicy = .custom
                 reportSignatureDetection(succeeded: true, "Found this in your recent Sent mail — edit if needed.")
@@ -57,6 +72,13 @@ extension AppState {
                 )
             }
         } catch {
+            guard mailCredentials == credentials else {
+                reportSignatureDetection(
+                    succeeded: false,
+                    "Email account changed while detection was running. Try again."
+                )
+                return
+            }
             reportSignatureDetection(
                 succeeded: false,
                 "Couldn't read your Sent mail. \(AppState.message(for: error))"
