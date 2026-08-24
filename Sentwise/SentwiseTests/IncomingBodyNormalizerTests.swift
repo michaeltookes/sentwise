@@ -30,6 +30,14 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize("__loud__ and `code`"), "loud and code")
     }
 
+    func testPreservesIntrawordDoubleUnderscores() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("The token is FOO__BAR."), "The token is FOO__BAR.")
+    }
+
+    func testPreservesUnpairedDoubleUnderscores() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("Keep this __ marker."), "Keep this __ marker.")
+    }
+
     func testSimplifiesMarkdownLinks() {
         let input = "See [the docs](https://example.com/tracking?id=abc123) for more."
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "See the docs for more.")

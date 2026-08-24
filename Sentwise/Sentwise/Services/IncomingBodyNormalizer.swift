@@ -99,14 +99,68 @@ enum IncomingBodyNormalizer {
         return line
     }
 
-    /// Strips paired emphasis markers (`**`, `__`, backticks). Bare single `*`/`_`
-    /// are left alone to avoid mangling prose that legitimately uses them.
+    /// Strips paired emphasis markers (`**`, `__`, backticks). Bare or intraword
+    /// `*`/`_` markers are left alone to avoid mangling literal identifiers.
     private static func stripEmphasis(_ line: String) -> String {
         var result = line
-        result = result.replacingOccurrences(of: "**", with: "")
-        result = result.replacingOccurrences(of: "__", with: "")
+        result = stripDelimitedEmphasis(result, delimiter: "**")
+        result = stripDelimitedEmphasis(result, delimiter: "__")
         result = result.replacingOccurrences(of: "`", with: "")
         return result
+    }
+
+    private static func stripDelimitedEmphasis(_ line: String, delimiter: String) -> String {
+        guard line.contains(delimiter) else { return line }
+
+        var result = ""
+        var index = line.startIndex
+        while index < line.endIndex {
+            if line[index...].hasPrefix(delimiter),
+               canOpenEmphasis(in: line, at: index, delimiter: delimiter),
+               let closingRange = closingEmphasisRange(in: line, delimiter: delimiter, after: index) {
+                let contentStart = line.index(index, offsetBy: delimiter.count)
+                result.append(contentsOf: line[contentStart..<closingRange.lowerBound])
+                index = closingRange.upperBound
+            } else {
+                result.append(line[index])
+                index = line.index(after: index)
+            }
+        }
+        return result
+    }
+
+    private static func closingEmphasisRange(
+        in line: String,
+        delimiter: String,
+        after openingStart: String.Index
+    ) -> Range<String.Index>? {
+        var index = line.index(openingStart, offsetBy: delimiter.count)
+        while index < line.endIndex {
+            if line[index...].hasPrefix(delimiter),
+               canCloseEmphasis(in: line, at: index, delimiter: delimiter) {
+                return index..<line.index(index, offsetBy: delimiter.count)
+            }
+            index = line.index(after: index)
+        }
+        return nil
+    }
+
+    private static func canOpenEmphasis(in line: String, at index: String.Index, delimiter: String) -> Bool {
+        let contentStart = line.index(index, offsetBy: delimiter.count)
+        guard contentStart < line.endIndex, !line[contentStart].isWhitespace else { return false }
+        guard index > line.startIndex else { return true }
+        return !isIdentifierCharacter(line[line.index(before: index)])
+    }
+
+    private static func canCloseEmphasis(in line: String, at index: String.Index, delimiter: String) -> Bool {
+        guard index > line.startIndex, !line[line.index(before: index)].isWhitespace else { return false }
+        let delimiterEnd = line.index(index, offsetBy: delimiter.count)
+        guard delimiterEnd < line.endIndex else { return true }
+        return !isIdentifierCharacter(line[delimiterEnd])
+    }
+
+    private static func isIdentifierCharacter(_ character: Character) -> Bool {
+        character.isLetter || character.isNumber || character == "_"
     }
 
     /// Converts `[label](url)` to just `label`, dropping the (often tracking-laden)
