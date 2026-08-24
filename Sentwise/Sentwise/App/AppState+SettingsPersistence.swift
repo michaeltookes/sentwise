@@ -68,4 +68,40 @@ extension AppState {
             logger.error("Failed to save settings synchronously: \(error.localizedDescription)")
         }
     }
+
+    /// Applies the persisted draft-production preferences (signature policy/text
+    /// and send behavior/delay) loaded at launch. Called from `init` before
+    /// `setupAutoSave()` wires the change sinks, so seeding these values does not
+    /// trigger a spurious save. Kept here so `AppState.init` stays within the
+    /// function-body length limit.
+    func restoreDraftPreferences(from settings: Settings) {
+        signaturePolicy = SignaturePolicy(rawValue: settings.signaturePolicy) ?? .default
+        signatureText = settings.signatureText
+        sendBehavior = SendBehavior(rawValue: settings.sendBehavior) ?? .default
+        sendDelaySeconds = settings.sendDelaySeconds
+    }
+
+    /// Restores pending drafts at launch, dropping any already-approved ones and
+    /// rebuilding the offline-dispatch bookkeeping. Extracted from `AppState.init`
+    /// to keep that initializer and `AppState.swift` within the lint limits.
+    static func restoredPendingDraftState(
+        persistence: PersistenceProvider
+    ) -> (
+        drafts: [Draft],
+        offlineQueuedDispatch: [String: OfflineQueuedDraftDispatch],
+        waitingForNetwork: Set<String>
+    ) {
+        let approvedDraftIdentities = persistence.loadApprovedDraftIdentities()
+        let loadedPendingDrafts = persistence.loadPendingDrafts()
+        let pendingDrafts = loadedPendingDrafts.filter { !approvedDraftIdentities.contains($0.identity) }
+        if pendingDrafts.count != loadedPendingDrafts.count {
+            do {
+                try persistence.savePendingDraftsSync(pendingDrafts)
+            } catch {
+                logger.error("Failed to clean approved pending drafts on launch: \(error.localizedDescription)")
+            }
+        }
+        let offlineQueuedDispatch = offlineQueuedDispatches(from: pendingDrafts)
+        return (pendingDrafts, offlineQueuedDispatch, Set(offlineQueuedDispatch.keys))
+    }
 }
