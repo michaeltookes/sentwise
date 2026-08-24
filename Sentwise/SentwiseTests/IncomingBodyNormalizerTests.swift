@@ -192,6 +192,37 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
     }
 
+    func testBacktickFenceInfoStringWithBacktickDoesNotOpenFence() {
+        let input = "```lang`x\n**prose**"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "langx\nprose")
+    }
+
+    func testFourSpaceIndentedFenceDelimiterStaysInsideCodeBlock() {
+        let input = """
+        ```
+            ```
+        **literal**
+        ```
+        """
+        let expected = """
+            ```
+        **literal**
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testThreeSpaceIndentedFenceDelimiterClosesCodeBlock() {
+        let input = """
+        ```
+           ```
+        After
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "After")
+    }
+
     func testPreservesEscapedEmphasisDelimiters() {
         XCTAssertEqual(
             IncomingBodyNormalizer.normalize(#"Escaped \**literal** and \__value__"#),

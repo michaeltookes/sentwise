@@ -54,8 +54,7 @@ enum IncomingBodyNormalizer {
             let fenceLine = fence.stripsBlockquote && strippedTrailing.depth == fence.blockquoteDepth
                 ? strippedTrailing.text
                 : trimmedTrailing
-            let trimmed = fenceLine.trimmingCharacters(in: .whitespaces)
-            if fence.closes(trimmed) {
+            if let candidate = closingFenceCandidate(fenceLine), fence.closes(candidate) {
                 fenceState = nil
                 return CleanedLine("")
             }
@@ -111,7 +110,7 @@ enum IncomingBodyNormalizer {
             guard count >= 3 else { return nil }
             let infoStart = openingLine.index(openingLine.startIndex, offsetBy: count)
             let info = openingLine[infoStart...]
-            guard first != "`" || !Self.containsDelimiterRun(in: info, delimiter: first, minimumLength: count) else {
+            guard first != "`" || !info.contains("`") else {
                 return nil
             }
             delimiter = first
@@ -125,23 +124,12 @@ enum IncomingBodyNormalizer {
             let restStart = line.index(line.startIndex, offsetBy: count)
             return line[restStart...].allSatisfy { $0 == " " || $0 == "\t" }
         }
+    }
 
-        private static func containsDelimiterRun(
-            in text: Substring,
-            delimiter: Character,
-            minimumLength: Int
-        ) -> Bool {
-            var runLength = 0
-            for character in text {
-                if character == delimiter {
-                    runLength += 1
-                    if runLength >= minimumLength { return true }
-                } else {
-                    runLength = 0
-                }
-            }
-            return false
-        }
+    private static func closingFenceCandidate(_ line: String) -> String? {
+        let leadingSpaces = line.prefix { $0 == " " }.count
+        guard leadingSpaces <= 3 else { return nil }
+        return String(line.dropFirst(leadingSpaces))
     }
 
     /// A markdown/stripped-HTML horizontal rule: three or more of `-`, `*`, `_`,
