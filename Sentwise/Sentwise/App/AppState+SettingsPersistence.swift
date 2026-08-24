@@ -53,6 +53,18 @@ extension AppState {
         }
     }
 
+    /// `@Published` emits from `willSet`, so defer generic settings snapshots
+    /// until the published storage contains the emitted value.
+    func saveSettingsAfterPublishedSet(rescheduleInboxWatcher: Bool = false) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            saveSettings()
+            if rescheduleInboxWatcher {
+                inboxWatcher.reschedule()
+            }
+        }
+    }
+
     /// Saves a specific settings snapshot immediately, cancelling stale
     /// debounced snapshots first.
     func persistSettingsSync(_ settings: Settings) throws {

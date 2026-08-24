@@ -79,6 +79,12 @@ final class SignatureApplierTests: XCTestCase {
         )
     }
 
+    func testEmbeddedBlockquoteStaysWithFreshReply() {
+        let body = "Intro\n> excerpt\nConclusion"
+        let result = SignatureApplier.apply(policy: .custom, signature: sig, to: body)
+        XCTAssertEqual(result, "Intro\n> excerpt\nConclusion\n\n\(sig)")
+    }
+
     func testQuotedHistoryLeftIntactWhenAlreadySigned() {
         let body = "Sounds good.\n\n\(sig)\n\nOn Mon, Bob wrote:\n> can you make it?"
         let result = SignatureApplier.apply(policy: .custom, signature: sig, to: body)

@@ -26,7 +26,7 @@ enum SignatureApplier {
         let sig = signature.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sig.isEmpty else { return body }
 
-        let thread = EmailThreadParser.split(body)
+        let thread = splitForSignaturePlacement(body)
         let newBody = thread.latest
         guard !newBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return body }
         guard needsSignature(newBody, signature: sig) else { return body }
@@ -64,6 +64,33 @@ enum SignatureApplier {
             .components(separatedBy: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
             .filter { !$0.isEmpty }
+    }
+
+    /// Splits only when the quote marker begins trailing history. A generated
+    /// reply can intentionally include a `>` blockquote and then continue with
+    /// fresh text; that embedded quote must remain above the signature.
+    private static func splitForSignaturePlacement(_ body: String) -> EmailThread {
+        let lines = body.components(separatedBy: "\n")
+        for (index, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard EmailThreadParser.isQuoteMarker(trimmed),
+                  isTrailingHistory(from: index, in: lines) else {
+                continue
+            }
+            let latest = lines[..<index].joined(separator: "\n")
+            let history = lines[index...].joined(separator: "\n")
+            return EmailThread(latest: latest, quotedHistory: history)
+        }
+        return EmailThread(latest: body, quotedHistory: "")
+    }
+
+    private static func isTrailingHistory(from index: Int, in lines: [String]) -> Bool {
+        let marker = lines[index].trimmingCharacters(in: .whitespaces)
+        guard marker.hasPrefix(">") else { return true }
+        return lines[index...].allSatisfy { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return trimmed.isEmpty || trimmed.hasPrefix(">")
+        }
     }
 
     /// Drops trailing whitespace and blank lines so the appended gap is exactly

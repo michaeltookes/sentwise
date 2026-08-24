@@ -449,29 +449,28 @@ final class AppState: ObservableObject {
         $pollIntervalSeconds
             .dropFirst()
             .sink { [weak self] _ in
-                self?.saveSettings()
-                self?.inboxWatcher.reschedule()
+                self?.saveSettingsAfterPublishedSet(rescheduleInboxWatcher: true)
             }
             .store(in: &cancellables)
 
         $sendBehavior
             .dropFirst()
-            .sink { [weak self] _ in self?.saveSettings() }
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
             .store(in: &cancellables)
 
         $sendDelaySeconds
             .dropFirst()
-            .sink { [weak self] _ in self?.saveSettings() }
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
             .store(in: &cancellables)
 
         $signaturePolicy
             .dropFirst()
-            .sink { [weak self] _ in self?.saveSettings() }
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
             .store(in: &cancellables)
 
         $signatureText
             .dropFirst()
-            .sink { [weak self] _ in self?.saveSettings() }
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
             .store(in: &cancellables)
 
         $llmModel
