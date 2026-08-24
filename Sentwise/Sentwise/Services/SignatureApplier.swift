@@ -105,11 +105,21 @@ enum SignatureApplier {
 
     private static func isTrailingHistory(from index: Int, in lines: [String]) -> Bool {
         let marker = lines[index].trimmingCharacters(in: .whitespaces)
-        guard marker.hasPrefix(">") else { return true }
-        return lines[index...].allSatisfy { line in
+        let needsQuotedLine = marker.range(of: #"^On .+wrote:$"#, options: .regularExpression) != nil
+        var sawQuotedLine = false
+
+        for line in lines[index...] {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            return trimmed.isEmpty || trimmed.hasPrefix(">")
+            guard !trimmed.isEmpty else { continue }
+            if trimmed.hasPrefix(">") {
+                sawQuotedLine = true
+                continue
+            }
+            if sawQuotedLine {
+                return false
+            }
         }
+        return !needsQuotedLine || sawQuotedLine
     }
 
     /// Drops trailing whitespace and blank lines so the appended gap is exactly

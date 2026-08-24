@@ -45,6 +45,24 @@ final class AppStateSettingsPersistenceTests: XCTestCase {
         XCTAssertEqual(persistence.loadSettings().signatureText, "Best,\nGmail Me")
     }
 
+    func testRemovingActiveAccountClearsSignaturePreferences() async {
+        let secrets = InMemorySecretStore()
+        let persistence = AppStateMemoryPersistence()
+        let appState = makeAppState(persistence: persistence, secrets: secrets)
+        let account = SavedMailAccount(email: "me@gmail.com", host: "imap.gmail.com", port: 993)
+        await connect(appState, email: account.email, host: account.host, password: "gmail-pw")
+        appState.signaturePolicy = .custom
+        appState.signatureText = "Best,\nGmail Me"
+
+        appState.removeSavedAccount(account)
+
+        XCTAssertFalse(appState.isAccountConnected)
+        XCTAssertEqual(appState.signaturePolicy, .none)
+        XCTAssertEqual(appState.signatureText, "")
+        XCTAssertEqual(persistence.loadSettings().signaturePolicy, SignaturePolicy.none.rawValue)
+        XCTAssertEqual(persistence.loadSettings().signatureText, "")
+    }
+
     private func makeAppState(
         persistence: AppStateMemoryPersistence,
         secrets: SecretStore = InMemorySecretStore()
