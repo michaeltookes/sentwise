@@ -50,13 +50,15 @@ enum IncomingBodyNormalizer {
         followingLines: ArraySlice<String>
     ) -> CleanedLine {
         let trimmedTrailing = String(rawLine.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
-        let unquotedRaw = stripBlockquoteMarkers(rawLine).text
+        let strippedRaw = stripBlockquoteMarkers(rawLine)
 
-        if inlineCodeState != nil {
+        if let state = inlineCodeState {
+            let line = stripBlockquoteMarkers(rawLine, maxDepth: state.blockquoteDepth).text
             return cleanInlineMarkdown(
-                unquotedRaw,
+                line,
                 inlineCodeState: &inlineCodeState,
-                followingLines: followingLines
+                followingLines: followingLines,
+                blockquoteDepth: state.blockquoteDepth
             )
         }
 
@@ -109,13 +111,11 @@ enum IncomingBodyNormalizer {
 
         if isHorizontalRule(unquotedTrimmed) { return CleanedLine("") }
 
-        var line = unquotedRaw
-        line = stripHeadingMarker(line)
-        line = normalizeListMarker(line)
         return cleanInlineMarkdown(
-            line,
+            normalizeListMarker(stripHeadingMarker(strippedRaw.text)),
             inlineCodeState: &inlineCodeState,
-            followingLines: followingLines
+            followingLines: followingLines,
+            blockquoteDepth: strippedRaw.depth
         )
     }
 
@@ -131,6 +131,7 @@ enum IncomingBodyNormalizer {
 
     struct InlineCodeState {
         let delimiterLength: Int
+        let blockquoteDepth: Int
     }
 
     private struct FenceState {
@@ -184,10 +185,10 @@ enum IncomingBodyNormalizer {
     /// A markdown/stripped-HTML horizontal rule: three or more of `-`, `*`, `_`,
     /// or `=`, optionally spaced, with nothing else on the line.
     private static func isHorizontalRule(_ line: String) -> Bool {
-        let stripped = line.replacingOccurrences(of: " ", with: "")
-        guard stripped.count >= 3 else { return false }
+        let stripped = line.filter { $0 != " " && $0 != "\t" }
+        guard stripped.count >= 3, let delimiter = stripped.first else { return false }
         let ruleCharacters: Set<Character> = ["-", "*", "_", "="]
-        return stripped.allSatisfy { ruleCharacters.contains($0) }
+        return ruleCharacters.contains(delimiter) && stripped.allSatisfy { $0 == delimiter }
     }
 
     /// Removes a leading ATX heading marker (`#`, `##`, …) and its space.
@@ -202,10 +203,10 @@ enum IncomingBodyNormalizer {
         return String(line[line.index(after: index)...])
     }
 
-    private struct BlockquoteStripped { let text: String; let depth: Int }
+    struct BlockquoteStripped { let text: String; let depth: Int }
 
     /// Removes leading blockquote markers (`> `), including nested `> > `.
-    private static func stripBlockquoteMarkers(_ line: String, maxDepth: Int? = nil) -> BlockquoteStripped {
+    static func stripBlockquoteMarkers(_ line: String, maxDepth: Int? = nil) -> BlockquoteStripped {
         var result = line
         var depth = 0
         while result.hasPrefix(">"), maxDepth.map({ depth < $0 }) ?? true {

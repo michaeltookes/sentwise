@@ -85,15 +85,37 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
     }
 
-    func testPreservesBlankRunsInsideMultilineCodeSpans() {
+    func testDoesNotSpanCodeSpansAcrossBlankLines() {
         let input = "`a\n\n\nb`"
 
-        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "a\n\n\nb")
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "`a\n\nb`")
     }
 
     func testPreservesTrailingWhitespaceInsideMultilineCodeSpans() {
         let input = "`first  \nsecond\t\nthird` done   "
         let expected = "first  \nsecond\t\nthird done"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testMultilineCodeSpansStopAtParagraphBoundaries() {
+        let input = "Use `literal\n\n**Important** `marker`"
+        let expected = "Use `literal\n\nImportant marker"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testPreservesNestedQuoteMarkersInsideMultilineCodeSpans() {
+        let input = """
+        > `first
+        > > literal
+        > last`
+        """
+        let expected = """
+        first
+        > literal
+        last
+        """
 
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
     }
@@ -363,6 +385,7 @@ final class IncomingBodyNormalizerTests: XCTestCase {
     func testRemovesHorizontalRules() {
         let input = "Above the line\n\n-----\n\nBelow the line"
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "Above the line\n\nBelow the line")
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("A\n*-_\nB"), "A\n*-_\nB")
     }
 
     func testRemovesEqualsAndAsteriskRules() {

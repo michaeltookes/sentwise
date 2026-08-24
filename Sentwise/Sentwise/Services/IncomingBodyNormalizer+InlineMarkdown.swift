@@ -4,7 +4,8 @@ extension IncomingBodyNormalizer {
     static func cleanInlineMarkdown(
         _ line: String,
         inlineCodeState: inout InlineCodeState?,
-        followingLines: ArraySlice<String>
+        followingLines: ArraySlice<String>,
+        blockquoteDepth: Int
     ) -> CleanedLine {
         var result = ""
         var proseSegment = ""
@@ -52,7 +53,11 @@ extension IncomingBodyNormalizer {
                 continue
             }
 
-            guard hasClosingBacktickRun(delimiterLength: delimiterLength, in: followingLines) else {
+            guard hasClosingBacktickRun(
+                delimiterLength: delimiterLength,
+                blockquoteDepth: blockquoteDepth,
+                in: followingLines
+            ) else {
                 proseSegment.append(contentsOf: line[index..<codeStart])
                 index = codeStart
                 continue
@@ -60,7 +65,7 @@ extension IncomingBodyNormalizer {
             result += cleanInlineProse(proseSegment)
             proseSegment.removeAll(keepingCapacity: true)
             result.append(contentsOf: line[codeStart...])
-            inlineCodeState = InlineCodeState(delimiterLength: delimiterLength)
+            inlineCodeState = InlineCodeState(delimiterLength: delimiterLength, blockquoteDepth: blockquoteDepth)
             return CleanedLine(result, preservesBlankRuns: true)
         }
 
@@ -72,11 +77,17 @@ extension IncomingBodyNormalizer {
 private extension IncomingBodyNormalizer {
     static func hasClosingBacktickRun(
         delimiterLength: Int,
+        blockquoteDepth: Int,
         in followingLines: ArraySlice<String>
     ) -> Bool {
-        followingLines.contains {
-            closingBacktickRun(in: $0, delimiterLength: delimiterLength, after: $0.startIndex) != nil
+        for rawLine in followingLines {
+            let line = stripBlockquoteMarkers(rawLine, maxDepth: blockquoteDepth).text
+            if line.trimmingCharacters(in: .whitespaces).isEmpty { return false }
+            if closingBacktickRun(in: line, delimiterLength: delimiterLength, after: line.startIndex) != nil {
+                return true
+            }
         }
+        return false
     }
 
     static func backtickRunEnd(in line: String, startingAt index: String.Index) -> String.Index {
