@@ -73,13 +73,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Basic discoverability: SEO fundamentals, OG/social cards, and a home for a demo video.
     - Held in a separate repo with its own deployment; all stack/hosting/analytics decisions deferred to the pre-build discussion.
 
-24. **Email signature handling**
-    Respect the user's signature so drafts look right.
-    *As Priya, I want drafts to use my normal signature correctly, so that replies don't drop it or double it up.*
-    - Signature policy is configurable (use Gmail's, a custom one, or none).
-    - Generated drafts neither omit an expected signature nor duplicate one already present.
-    - Quoted history below the signature is handled correctly.
-
 61. **Live exercise of the watcher → notification → approve loop**
     The one check split out of item 9 when it closed (2026-08-13): the full autonomous loop — a real fresh inbound message triggers watch → draft → native notification → approve → dispatch — has never been observed end-to-end on a live account with a watcher-produced draft. Both dispatch paths are now individually live-verified (items 9/44); this is about the loop as a whole, and daily dogfooding of the app will likely cover it naturally.
     *As the maintainer, I want the autonomous loop observed working end-to-end at least once on a live account, so that the core product promise is verified as a system, not just as parts.*
