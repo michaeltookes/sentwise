@@ -62,8 +62,7 @@ extension AppState {
                     )
                     return
                 }
-                signatureText = detected
-                signaturePolicy = .custom
+                (signatureText, signaturePolicy) = (detected, .custom)
                 reportSignatureDetection(succeeded: true, "Found this in your recent Sent mail — edit if needed.")
             } else {
                 reportSignatureDetection(
