@@ -85,7 +85,9 @@ enum IncomingBodyNormalizer {
 
         func closes(_ line: String) -> Bool {
             let count = line.prefix { $0 == delimiter }.count
-            return count >= length
+            guard count >= length else { return false }
+            let restStart = line.index(line.startIndex, offsetBy: count)
+            return line[restStart...].allSatisfy { $0 == " " || $0 == "\t" }
         }
     }
 

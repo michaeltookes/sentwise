@@ -95,6 +95,21 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
     }
 
+    func testFenceDelimiterWithContentDoesNotCloseCodeBlock() {
+        let input = """
+        ```
+        ```not-a-close
+        **literal**
+        ```
+        """
+        let expected = """
+        ```not-a-close
+        **literal**
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
     func testPreservesRepeatedUnmatchedEmphasisOpeners() {
         let input = "Start" + String(repeating: " **a", count: 200)
 
