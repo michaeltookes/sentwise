@@ -114,6 +114,38 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
     }
 
+    func testPreservesBlockquotedFencedCodeBlockContents() {
+        let input = """
+        > ```
+        > **literal**
+        > [docs](url)
+        > ```
+        """
+        let expected = """
+        **literal**
+        [docs](url)
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testPreservesGreaterThanInsideUnquotedFencedCodeBlock() {
+        let input = """
+        ```
+        > literal
+        ```
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "> literal")
+    }
+
+    func testPreservesEdgeIndentationInsideFencedCodeBlocks() {
+        let input = "```\n  indented\n" + "trailing  \n```"
+        let expected = "  indented\n" + "trailing  "
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
     func testFenceDelimiterWithContentDoesNotCloseCodeBlock() {
         let input = """
         ```

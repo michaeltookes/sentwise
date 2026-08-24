@@ -23,8 +23,9 @@ enum IncomingBodyNormalizer {
         let lines = text.components(separatedBy: "\n").map {
             cleanLine($0, fenceState: &fenceState)
         }
-        text = collapseBlankRuns(lines).joined(separator: "\n")
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let collapsedLines = trimDisplayEdges(collapseBlankRuns(lines))
+        text = collapsedLines.map(\.text).joined(separator: "\n")
+        return text
     }
 
     // MARK: - Steps
@@ -46,26 +47,37 @@ enum IncomingBodyNormalizer {
     /// was only a rule becomes empty (folded away by `collapseBlankRuns`).
     private static func cleanLine(_ rawLine: String, fenceState: inout FenceState?) -> CleanedLine {
         let trimmedTrailing = String(rawLine.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
-        let trimmed = trimmedTrailing.trimmingCharacters(in: .whitespaces)
+        let unquotedRaw = stripBlockquoteMarker(rawLine)
+        let unquotedTrimmedTrailing = stripBlockquoteMarker(trimmedTrailing)
 
         if let fence = fenceState {
+            let fenceLine = fence.stripsBlockquote ? unquotedTrimmedTrailing : trimmedTrailing
+            let trimmed = fenceLine.trimmingCharacters(in: .whitespaces)
             if fence.closes(trimmed) {
                 fenceState = nil
                 return CleanedLine("")
             }
-            return CleanedLine(rawLine, preservesBlankRuns: true)
+            let literalLine = fence.stripsBlockquote ? unquotedRaw : rawLine
+            return CleanedLine(literalLine, preservesBlankRuns: true)
         }
 
-        if let fence = FenceState(openingLine: trimmed) {
+        let trimmed = trimmedTrailing.trimmingCharacters(in: .whitespaces)
+        if let fence = FenceState(openingLine: trimmed, stripsBlockquote: false) {
             fenceState = fence
             return CleanedLine("")
         }
 
-        if isHorizontalRule(trimmed) { return CleanedLine("") }
+        let unquotedTrimmed = unquotedTrimmedTrailing.trimmingCharacters(in: .whitespaces)
+        if unquotedTrimmedTrailing != trimmedTrailing,
+           let fence = FenceState(openingLine: unquotedTrimmed, stripsBlockquote: true) {
+            fenceState = fence
+            return CleanedLine("")
+        }
 
-        var line = trimmedTrailing
+        if isHorizontalRule(unquotedTrimmed) { return CleanedLine("") }
+
+        var line = unquotedTrimmedTrailing
         line = stripHeadingMarker(line)
-        line = stripBlockquoteMarker(line)
         line = normalizeListMarker(line)
         line = cleanInlineMarkdown(line)
         return CleanedLine(line)
@@ -84,8 +96,9 @@ enum IncomingBodyNormalizer {
     private struct FenceState {
         let delimiter: Character
         let length: Int
+        let stripsBlockquote: Bool
 
-        init?(openingLine: String) {
+        init?(openingLine: String, stripsBlockquote: Bool) {
             guard let first = openingLine.first, first == "`" || first == "~" else { return nil }
             let count = openingLine.prefix { $0 == first }.count
             guard count >= 3 else { return nil }
@@ -96,6 +109,7 @@ enum IncomingBodyNormalizer {
             }
             delimiter = first
             length = count
+            self.stripsBlockquote = stripsBlockquote
         }
 
         func closes(_ line: String) -> Bool {
@@ -400,16 +414,16 @@ enum IncomingBodyNormalizer {
 
     /// Collapses runs of blank lines so at most one blank line separates
     /// paragraphs, and drops leading blank lines.
-    private static func collapseBlankRuns(_ lines: [CleanedLine]) -> [String] {
-        var result: [String] = []
+    private static func collapseBlankRuns(_ lines: [CleanedLine]) -> [CleanedLine] {
+        var result: [CleanedLine] = []
         var pendingBlank = false
         for line in lines {
             if line.preservesBlankRuns {
-                if pendingBlank && !result.isEmpty && result.last?.trimmingCharacters(in: .whitespaces).isEmpty == false {
-                    result.append("")
+                if pendingBlank && !result.isEmpty && result.last?.text.trimmingCharacters(in: .whitespaces).isEmpty == false {
+                    result.append(CleanedLine(""))
                 }
                 pendingBlank = false
-                result.append(line.text)
+                result.append(line)
                 continue
             }
 
@@ -417,12 +431,36 @@ enum IncomingBodyNormalizer {
                 pendingBlank = true
                 continue
             }
-            if pendingBlank && !result.isEmpty && result.last?.trimmingCharacters(in: .whitespaces).isEmpty == false {
-                result.append("")
+            if pendingBlank && !result.isEmpty && result.last?.text.trimmingCharacters(in: .whitespaces).isEmpty == false {
+                result.append(CleanedLine(""))
             }
             pendingBlank = false
-            result.append(line.text)
+            result.append(line)
         }
         return result
+    }
+
+    private static func trimDisplayEdges(_ lines: [CleanedLine]) -> [CleanedLine] {
+        guard !lines.isEmpty else { return [] }
+
+        var result = lines
+        if let first = result.first, !first.preservesBlankRuns {
+            let text = result.count == 1
+                ? trimTrailingWhitespace(trimLeadingWhitespace(first.text))
+                : trimLeadingWhitespace(first.text)
+            result[0] = CleanedLine(text)
+        }
+        if result.count > 1, let last = result.last, !last.preservesBlankRuns {
+            result[result.count - 1] = CleanedLine(trimTrailingWhitespace(last.text))
+        }
+        return result
+    }
+
+    private static func trimLeadingWhitespace(_ text: String) -> String {
+        String(text.drop { $0 == " " || $0 == "\t" })
+    }
+
+    private static func trimTrailingWhitespace(_ text: String) -> String {
+        String(text.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
     }
 }
