@@ -427,7 +427,7 @@ extension AppState {
 
     /// Adopts verified credentials as the active account, remembers it, and
     /// persists the settings snapshot. Called from `testConnection`.
-    func persistVerifiedConnection(_ credentials: MailAccountCredentials) throws {
+    func persistVerifiedConnection(_ credentials: MailAccountCredentials, clearSignature: Bool) throws {
         mailEmail = credentials.email
         mailHost = credentials.host
         mailPort = credentials.port
@@ -436,11 +436,16 @@ extension AppState {
         // Remember this account so it can be switched back to without re-entry.
         upsertSavedAccount(email: credentials.email, host: credentials.host, port: credentials.port)
 
-        try persistSettingsSync(buildSettings(
+        var nextSettings = buildSettings(
             mailEmail: credentials.email,
             mailHost: credentials.host,
             mailPort: credentials.port
-        ))
+        )
+        if clearSignature {
+            nextSettings.signaturePolicy = SignaturePolicy.default.rawValue
+            nextSettings.signatureText = ""
+        }
+        try persistSettingsSync(nextSettings)
     }
 
     /// Restores the connecting account's Keychain slot after a failed persist.

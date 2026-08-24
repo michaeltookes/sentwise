@@ -154,7 +154,7 @@ extension AppState {
         }
 
         do {
-            try persistVerifiedConnection(credentials)
+            try persistVerifiedConnection(credentials, clearSignature: accountChanged)
         } catch {
             connectionError = failedConnectionPersistMessage(
                 error,
@@ -172,6 +172,9 @@ extension AppState {
                 for: accountKey
             ))
             return false
+        }
+        if accountChanged {
+            clearSignatureForAccountChange()
         }
         return true
     }

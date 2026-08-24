@@ -52,6 +52,7 @@ enum SignatureDetector {
         }
         let best = counts.values.max { lhs, rhs in lhs.count < rhs.count }
         guard let best, best.count >= minimumRepeats else { return nil }
+        guard counts.values.filter({ $0.count == best.count }).count == 1 else { return nil }
         return best.display
     }
 

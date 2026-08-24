@@ -89,4 +89,20 @@ extension AppState {
         signatureDetectionSucceeded = succeeded
         signatureDetectionMessage = message
     }
+
+    func clearSignatureForAccountChange() {
+        let hadSignature = signaturePolicy != .default
+            || !signatureText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        signaturePolicy = .default
+        signatureText = ""
+        if hadSignature {
+            reportSignatureDetection(
+                succeeded: false,
+                "Signature cleared because the email account changed. Suggest or enter a signature for this account."
+            )
+        } else {
+            signatureDetectionSucceeded = nil
+            signatureDetectionMessage = nil
+        }
+    }
 }

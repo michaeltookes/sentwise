@@ -77,6 +77,18 @@ final class SignatureDetectorTests: XCTestCase {
         XCTAssertNil(SignatureDetector.detect(fromSentBodies: bodies))
     }
 
+    func testReturnsNilWhenRepeatedSignatureCandidatesTie() {
+        let desktop = "Best,\nJane Doe\nAcme Corp"
+        let mobile = "Thanks,\nJane"
+        let bodies = [
+            "One.\n\n\(desktop)",
+            "Two.\n\n\(desktop)",
+            "Three.\n\n\(mobile)",
+            "Four.\n\n\(mobile)"
+        ]
+        XCTAssertNil(SignatureDetector.detect(fromSentBodies: bodies))
+    }
+
     func testReturnsNilWhenNoSignOffOrDelimiter() {
         let bodies = [
             "Hi Bob, sounds good see you then.",
