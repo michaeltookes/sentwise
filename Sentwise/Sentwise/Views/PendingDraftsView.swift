@@ -10,13 +10,13 @@ import SwiftUI
 /// `SkippedMessagesTab.swift`.
 struct PendingDraftsView: View {
     @EnvironmentObject var appState: AppState
-    @State private var selectedTab: ReviewTab
+    @ObservedObject private var selection: ReviewWindowSelection
 
     /// Which tab of the review window is showing.
     enum ReviewTab { case drafts, skipped }
 
-    init(initialTab: ReviewTab = .drafts) {
-        _selectedTab = State(initialValue: initialTab)
+    init(initialTab: ReviewTab = .drafts, selection: ReviewWindowSelection? = nil) {
+        _selection = ObservedObject(wrappedValue: selection ?? ReviewWindowSelection(selectedTab: initialTab))
     }
 
     var body: some View {
@@ -34,7 +34,7 @@ struct PendingDraftsView: View {
                     .padding(.vertical, 6)
             }
 
-            switch selectedTab {
+            switch selection.selectedTab {
             case .drafts:
                 draftsTab
             case .skipped:
@@ -67,7 +67,7 @@ struct PendingDraftsView: View {
             Text("Review Drafts")
                 .font(.headline)
             Spacer()
-            if selectedTab == .drafts {
+            if selection.selectedTab == .drafts {
                 Label("Approve will \(appState.approveActionLabel.lowercased())", systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -95,9 +95,9 @@ struct PendingDraftsView: View {
     }
 
     private func tabButton(title: String, count: Int, tab: ReviewTab, identifier: String) -> some View {
-        let isSelected = selectedTab == tab
+        let isSelected = selection.selectedTab == tab
         return Button {
-            selectedTab = tab
+            selection.selectedTab = tab
         } label: {
             HStack(spacing: 5) {
                 Text(title)
@@ -137,5 +137,13 @@ struct PendingDraftsView: View {
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+final class ReviewWindowSelection: ObservableObject {
+    @Published var selectedTab: PendingDraftsView.ReviewTab
+
+    init(selectedTab: PendingDraftsView.ReviewTab = .drafts) {
+        self.selectedTab = selectedTab
     }
 }
