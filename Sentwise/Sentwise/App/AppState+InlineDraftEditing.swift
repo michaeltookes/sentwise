@@ -19,13 +19,14 @@ extension AppState {
             clearPendingDraftEdits(identity: draft.identity)
             return nil
         }
-        guard pendingDrafts[index].body != newBody else {
+        let finalizedBody = finalizedBodyForManualDraftEdit(pendingDrafts[index], editedBody: newBody)
+        guard pendingDrafts[index].body != finalizedBody else {
             clearPendingDraftBodyEdit(identity: draft.identity)
             return pendingDrafts[index]
         }
 
         let previous = pendingDrafts[index]
-        pendingDrafts[index].applyEditedBody(newBody)
+        pendingDrafts[index].applyEditedBody(finalizedBody)
         do {
             try persistence.savePendingDraftsSync(pendingDrafts)
         } catch {
@@ -39,6 +40,14 @@ extension AppState {
         clearPendingDraftBodyEdit(identity: draft.identity)
         notifier.refreshNotification(for: pendingDrafts[index], sendBehavior: sendBehavior)
         return pendingDrafts[index]
+    }
+
+    private func finalizedBodyForManualDraftEdit(_ draft: Draft, editedBody: String) -> String {
+        guard draft.notReplyWorthy != nil,
+              draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return editedBody
+        }
+        return finalizedDraftBody(editedBody)
     }
 
     /// Marks whether a pending draft card has editor text that has not yet been
