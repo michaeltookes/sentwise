@@ -51,8 +51,7 @@ enum IncomingBodyNormalizer {
         line = stripHeadingMarker(line)
         line = stripBlockquoteMarker(line)
         line = normalizeListMarker(line)
-        line = stripEmphasis(line)
-        line = simplifyLinks(line)
+        line = cleanInlineMarkdown(line)
         line = collapseSpaces(line)
         return line
     }
@@ -99,9 +98,8 @@ enum IncomingBodyNormalizer {
         return line
     }
 
-    /// Strips paired emphasis markers (`**`, `__`, backtick code spans). Bare or
-    /// intraword `*`/`_` markers are left alone to avoid mangling identifiers.
-    private static func stripEmphasis(_ line: String) -> String {
+    /// Cleans prose Markdown while preserving code-span contents literally.
+    private static func cleanInlineMarkdown(_ line: String) -> String {
         var result = ""
         var proseSegment = ""
         var index = line.startIndex
@@ -125,13 +123,13 @@ enum IncomingBodyNormalizer {
                 continue
             }
 
-            result += stripProseEmphasis(proseSegment)
+            result += cleanInlineProse(proseSegment)
             proseSegment.removeAll(keepingCapacity: true)
             result.append(contentsOf: line[codeStart..<codeEnd])
             index = line.index(codeEnd, offsetBy: delimiterLength)
         }
 
-        result += stripProseEmphasis(proseSegment)
+        result += cleanInlineProse(proseSegment)
         return result
     }
 
@@ -169,6 +167,10 @@ enum IncomingBodyNormalizer {
             stripDelimitedEmphasis(line, delimiter: "**"),
             delimiter: "__"
         )
+    }
+
+    private static func cleanInlineProse(_ line: String) -> String {
+        simplifyLinks(stripProseEmphasis(line))
     }
 
     private static func stripDelimitedEmphasis(_ line: String, delimiter: String) -> String {

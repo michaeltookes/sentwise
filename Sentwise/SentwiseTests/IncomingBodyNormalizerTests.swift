@@ -56,6 +56,13 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         )
     }
 
+    func testPreservesMarkdownLinksInsideCodeSpans() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Use `[docs](url)` as the fixture"),
+            "Use [docs](url) as the fixture"
+        )
+    }
+
     func testPreservesRepeatedUnmatchedEmphasisOpeners() {
         let input = "Start" + String(repeating: " **a", count: 200)
 
