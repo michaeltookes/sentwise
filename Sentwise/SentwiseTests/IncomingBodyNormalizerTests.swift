@@ -70,6 +70,20 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         )
     }
 
+    func testPreservesEscapedBacktickDelimiters() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize(#"Use \`literal\` syntax"#),
+            #"Use \`literal\` syntax"#
+        )
+    }
+
+    func testEscapedBacktickDoesNotCloseCodeSpan() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize(#"Use `a \` b` as the fixture"#),
+            #"Use a \` b as the fixture"#
+        )
+    }
+
     func testPreservesFencedCodeBlockContents() {
         let input = """
         Before
@@ -127,6 +141,16 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         """
 
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testPreservesGreaterThanInsideBlockquotedFencedCodeBlock() {
+        let input = """
+        > ```
+        > > literal
+        > ```
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "> literal")
     }
 
     func testPreservesGreaterThanInsideUnquotedFencedCodeBlock() {

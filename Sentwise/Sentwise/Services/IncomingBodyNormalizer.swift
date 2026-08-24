@@ -47,29 +47,35 @@ enum IncomingBodyNormalizer {
     /// was only a rule becomes empty (folded away by `collapseBlankRuns`).
     private static func cleanLine(_ rawLine: String, fenceState: inout FenceState?) -> CleanedLine {
         let trimmedTrailing = String(rawLine.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
-        let unquotedRaw = stripBlockquoteMarker(rawLine)
-        let unquotedTrimmedTrailing = stripBlockquoteMarker(trimmedTrailing)
+        let unquotedTrimmedTrailing = stripBlockquoteMarkers(trimmedTrailing).text
 
         if let fence = fenceState {
-            let fenceLine = fence.stripsBlockquote ? unquotedTrimmedTrailing : trimmedTrailing
+            let strippedTrailing = stripBlockquoteMarkers(trimmedTrailing, maxDepth: fence.blockquoteDepth)
+            let fenceLine = fence.stripsBlockquote && strippedTrailing.depth == fence.blockquoteDepth
+                ? strippedTrailing.text
+                : trimmedTrailing
             let trimmed = fenceLine.trimmingCharacters(in: .whitespaces)
             if fence.closes(trimmed) {
                 fenceState = nil
                 return CleanedLine("")
             }
-            let literalLine = fence.stripsBlockquote ? unquotedRaw : rawLine
+            let strippedRaw = stripBlockquoteMarkers(rawLine, maxDepth: fence.blockquoteDepth)
+            let literalLine = fence.stripsBlockquote && strippedRaw.depth == fence.blockquoteDepth
+                ? strippedRaw.text
+                : rawLine
             return CleanedLine(literalLine, preservesBlankRuns: true)
         }
 
         let trimmed = trimmedTrailing.trimmingCharacters(in: .whitespaces)
-        if let fence = FenceState(openingLine: trimmed, stripsBlockquote: false) {
+        if let fence = FenceState(openingLine: trimmed, blockquoteDepth: 0) {
             fenceState = fence
             return CleanedLine("")
         }
 
-        let unquotedTrimmed = unquotedTrimmedTrailing.trimmingCharacters(in: .whitespaces)
-        if unquotedTrimmedTrailing != trimmedTrailing,
-           let fence = FenceState(openingLine: unquotedTrimmed, stripsBlockquote: true) {
+        let strippedOpening = stripBlockquoteMarkers(trimmedTrailing)
+        let unquotedTrimmed = strippedOpening.text.trimmingCharacters(in: .whitespaces)
+        if strippedOpening.depth > 0,
+           let fence = FenceState(openingLine: unquotedTrimmed, blockquoteDepth: strippedOpening.depth) {
             fenceState = fence
             return CleanedLine("")
         }
@@ -96,9 +102,10 @@ enum IncomingBodyNormalizer {
     private struct FenceState {
         let delimiter: Character
         let length: Int
-        let stripsBlockquote: Bool
+        let blockquoteDepth: Int
+        var stripsBlockquote: Bool { blockquoteDepth > 0 }
 
-        init?(openingLine: String, stripsBlockquote: Bool) {
+        init?(openingLine: String, blockquoteDepth: Int) {
             guard let first = openingLine.first, first == "`" || first == "~" else { return nil }
             let count = openingLine.prefix { $0 == first }.count
             guard count >= 3 else { return nil }
@@ -109,7 +116,7 @@ enum IncomingBodyNormalizer {
             }
             delimiter = first
             length = count
-            self.stripsBlockquote = stripsBlockquote
+            self.blockquoteDepth = blockquoteDepth
         }
 
         func closes(_ line: String) -> Bool {
@@ -158,14 +165,18 @@ enum IncomingBodyNormalizer {
         return String(line[line.index(after: index)...])
     }
 
-    /// Removes a leading blockquote marker (`> `), including nested `> > `.
-    private static func stripBlockquoteMarker(_ line: String) -> String {
+    private struct BlockquoteStripped { let text: String; let depth: Int }
+
+    /// Removes leading blockquote markers (`> `), including nested `> > `.
+    private static func stripBlockquoteMarkers(_ line: String, maxDepth: Int? = nil) -> BlockquoteStripped {
         var result = line
-        while result.hasPrefix(">") {
+        var depth = 0
+        while result.hasPrefix(">"), maxDepth.map({ depth < $0 }) ?? true {
             result.removeFirst()
             if result.hasPrefix(" ") { result.removeFirst() }
+            depth += 1
         }
-        return result
+        return BlockquoteStripped(text: result, depth: depth)
     }
 
     /// Normalises an unordered-list marker (`* `, `- `, `+ `) to a bullet, so
@@ -187,6 +198,11 @@ enum IncomingBodyNormalizer {
 
         while index < line.endIndex {
             guard line[index] == "`" else {
+                proseSegment.append(line[index])
+                index = line.index(after: index)
+                continue
+            }
+            if isEscaped(in: line, at: index) {
                 proseSegment.append(line[index])
                 index = line.index(after: index)
                 continue
@@ -235,6 +251,10 @@ enum IncomingBodyNormalizer {
             }
 
             let runEnd = backtickRunEnd(in: line, startingAt: current)
+            if isEscaped(in: line, at: current) {
+                current = runEnd
+                continue
+            }
             if line.distance(from: current, to: runEnd) == delimiterLength {
                 return current
             }
