@@ -15,6 +15,8 @@ final class IncomingBodyNormalizerTests: XCTestCase {
     func testStripsHeadingMarkers() {
         XCTAssertEqual(IncomingBodyNormalizer.normalize("### Release notes"), "Release notes")
         XCTAssertEqual(IncomingBodyNormalizer.normalize("# Title"), "Title")
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("  ## Release notes"), "Release notes")
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(">   ## Release notes"), "Release notes")
     }
 
     func testKeepsHashWithoutSpaceUntouched() {

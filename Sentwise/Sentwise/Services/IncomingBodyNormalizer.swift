@@ -194,6 +194,13 @@ enum IncomingBodyNormalizer {
     /// Removes a leading ATX heading marker (`#`, `##`, …) and its space.
     private static func stripHeadingMarker(_ line: String) -> String {
         var index = line.startIndex
+        var leadingSpaces = 0
+        while index < line.endIndex, line[index] == " ", leadingSpaces < 4 {
+            index = line.index(after: index)
+            leadingSpaces += 1
+        }
+        guard leadingSpaces <= 3 else { return line }
+
         var hashes = 0
         while index < line.endIndex, line[index] == "#", hashes < 6 {
             index = line.index(after: index)

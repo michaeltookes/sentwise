@@ -10,6 +10,11 @@ import Foundation
 /// optional `messageUID` + `messageUIDValidity` + source server let the history
 /// link back to the source message when the account/mailbox still match the
 /// connected account.
+enum ActivitySubjectSource: String, Codable, Equatable {
+    case incomingHeader
+    case authored
+}
+
 struct ActivityEvent: Codable, Identifiable, Equatable {
     /// Stable identity for list rendering (not derived from message keys, so two
     /// events about the same message remain distinct history entries).
@@ -30,6 +35,9 @@ struct ActivityEvent: Codable, Identifiable, Equatable {
     var sender: String?
     /// The message subject, for the row.
     var subject: String?
+    /// Where `subject` came from, so authored follow-up subjects are displayed
+    /// exactly as typed while inbound headers can be RFC 2047-decoded for display.
+    var subjectSource: ActivitySubjectSource?
     /// Why a message was skipped (item 17), for `.skipped` events.
     var skipReason: ReplyWorthinessReason?
     /// Why an approval was blocked (item 12), for `.staleWarning` events.
@@ -51,6 +59,7 @@ struct ActivityEvent: Codable, Identifiable, Equatable {
         sourceMailPort: Int? = nil,
         sender: String? = nil,
         subject: String? = nil,
+        subjectSource: ActivitySubjectSource? = nil,
         skipReason: ReplyWorthinessReason? = nil,
         staleReason: StaleThreadReason? = nil,
         detail: String? = nil,
@@ -66,6 +75,7 @@ struct ActivityEvent: Codable, Identifiable, Equatable {
         self.sourceMailPort = sourceMailPort
         self.sender = sender
         self.subject = subject
+        self.subjectSource = subjectSource
         self.skipReason = skipReason
         self.staleReason = staleReason
         self.detail = detail
@@ -90,7 +100,9 @@ struct ActivityEvent: Codable, Identifiable, Equatable {
 
     /// The subject for the row, with an empty-subject fallback.
     var subjectDisplay: String {
-        MIMEEncodedWord.displaySubject(subject ?? "")
+        let rawSubject = subject ?? ""
+        guard !rawSubject.isEmpty else { return "(no subject)" }
+        return subjectSource == .authored ? rawSubject : MIMEEncodedWord.displaySubject(rawSubject)
     }
 
     /// The free-form detail currently rendered in the activity-history row.

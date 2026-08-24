@@ -44,6 +44,7 @@ extension AppState {
             sourceMailPort: Self.normalizedActivitySourceMailPort(draft.sourceMailPort),
             sender: draft.sourceFrom?.name ?? draft.sourceFrom?.email,
             subject: draft.sourceSubject,
+            subjectSource: draft.isAuthored ? .authored : .incomingHeader,
             staleReason: staleReason,
             detail: detail,
             messageUID: draft.id,
