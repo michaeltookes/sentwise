@@ -42,7 +42,7 @@ struct SignatureSettingsView: View {
                     Text("Suggest from my Sent mail")
                 }
             }
-            .disabled(appState.isDetectingSignature || !appState.mailCredentials.isComplete)
+            .disabled(appState.isDetectingSignature)
             .accessibilityIdentifier("suggestSignatureButton")
             .accessibilityLabel("Suggest signature from my Sent mail")
 

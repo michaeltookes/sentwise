@@ -34,12 +34,14 @@ enum SignatureDetector {
     /// single usable sample, a delimiter- or sign-off-anchored candidate is
     /// accepted on its own (there's nothing to corroborate against).
     static func detect(fromSentBodies bodies: [String], minimumRepeats: Int = 2) -> String? {
-        let candidates = bodies
+        let freshBodies = bodies
             .map(freshText)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let candidates = freshBodies
             .compactMap(signatureCandidate)
         guard !candidates.isEmpty else { return nil }
 
-        if candidates.count == 1 {
+        if freshBodies.count == 1, candidates.count == 1 {
             return candidates[0].display
         }
 

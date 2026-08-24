@@ -45,6 +45,15 @@ final class SignatureDetectorTests: XCTestCase {
         XCTAssertEqual(detected, "Talk soon,\nJane Doe")
     }
 
+    func testSingleCandidateAcrossMultipleUsableBodiesRequiresCorroboration() {
+        let bodies = [
+            "Sure, let's meet Tuesday.\n\nBest,\nJane Doe",
+            "I'll send the deck after lunch.",
+            "Looping in Sam now."
+        ]
+        XCTAssertNil(SignatureDetector.detect(fromSentBodies: bodies))
+    }
+
     func testDetectionIgnoresQuotedReplyHistory() {
         // The recurring signature is in the fresh text; the quoted history below it
         // (different in each message) must not defeat the match.
