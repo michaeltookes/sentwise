@@ -1,0 +1,475 @@
+import XCTest
+@testable import Sentwise
+
+final class IncomingBodyNormalizerTests: XCTestCase {
+
+    func testEmptyStringIsUnchanged() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(""), "")
+    }
+
+    func testPlainProseIsPreserved() {
+        let input = "Hi Priya,\n\nThanks for the note. Talk soon.\n\nMarcus"
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testStripsHeadingMarkers() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("### Release notes"), "Release notes")
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("# Title"), "Title")
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("  ## Release notes"), "Release notes")
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(">   ## Release notes"), "Release notes")
+    }
+
+    func testKeepsHashWithoutSpaceUntouched() {
+        // "#1" is not a heading — no space after the hashes.
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("#1 priority"), "#1 priority")
+    }
+
+    func testStripsBoldMarkers() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("This is **important** news"), "This is important news")
+    }
+
+    func testStripsUnderscoreBoldAndBackticks() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("__loud__ and `code`"), "loud and code")
+    }
+
+    func testPreservesIntrawordDoubleUnderscores() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("The token is FOO__BAR."), "The token is FOO__BAR.")
+    }
+
+    func testPreservesUnpairedDoubleUnderscores() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("Keep this __ marker."), "Keep this __ marker.")
+    }
+
+    func testPreservesEmphasisDelimitersInsideCodeSpans() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Call `__init__` before use"),
+            "Call __init__ before use"
+        )
+    }
+
+    func testPreservesEmphasisDelimitersInsideMultiBacktickCodeSpans() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Call ``__init__`` before use"),
+            "Call __init__ before use"
+        )
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Use ``a`b`` in examples"),
+            "Use a`b in examples"
+        )
+    }
+
+    func testPreservesMarkdownLinksInsideCodeSpans() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Use `[docs](url)` as the fixture"),
+            "Use [docs](url) as the fixture"
+        )
+    }
+
+    func testPreservesWhitespaceInsideCodeSpans() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Use `a  b` as the fixture"),
+            "Use a  b as the fixture"
+        )
+    }
+
+    func testPreservesMultilineCodeSpanContents() {
+        let input = """
+        Use `first  column
+        **literal  code**
+        last` here
+        """
+        let expected = """
+        Use first  column
+        **literal  code**
+        last here
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testDoesNotSpanCodeSpansAcrossBlankLines() {
+        let input = "`a\n\n\nb`"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "`a\n\nb`")
+    }
+
+    func testPreservesTrailingWhitespaceInsideMultilineCodeSpans() {
+        let input = "`first  \nsecond\t\nthird` done   "
+        let expected = "first  \nsecond\t\nthird done"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testMultilineCodeSpansStopAtParagraphBoundaries() {
+        let input = "Use `literal\n\n**Important** `marker`"
+        let expected = "Use `literal\n\nImportant marker"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testPreservesNestedQuoteMarkersInsideMultilineCodeSpans() {
+        let input = """
+        > `first
+        > > literal
+        > last`
+        """
+        let expected = """
+        first
+        > literal
+        last
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testPreservesEscapedBacktickDelimiters() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize(#"Use \`literal\` syntax"#),
+            #"Use \`literal\` syntax"#
+        )
+    }
+
+    func testEscapedBacktickDoesNotCloseCodeSpan() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize(#"Use `a \` b` as the fixture"#),
+            #"Use a \` b as the fixture"#
+        )
+    }
+
+    func testPreservesUnmatchedBacktickRuns() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Run `npm install after the checkout"),
+            "Run `npm install after the checkout"
+        )
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Use ``` as a literal delimiter"),
+            "Use ``` as a literal delimiter"
+        )
+    }
+
+    func testUnmatchedBacktickRunsDoNotRescanLineSuffixes() {
+        let input = (1...800)
+            .map { String(repeating: "`", count: $0) + "x" }
+            .joined(separator: " ")
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testPreservesFencedCodeBlockContents() {
+        let input = """
+        Before
+
+        ```
+        **literal**
+        [docs](url)
+        a  b
+        ```
+
+        After
+        """
+        let expected = """
+        Before
+
+        **literal**
+        [docs](url)
+        a  b
+
+        After
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testPreservesBlankRunsInsideFencedCodeBlocks() {
+        let input = """
+        ```
+        a
+
+
+        b
+        ```
+        """
+        let expected = """
+        a
+
+
+        b
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testPreservesBlockquotedFencedCodeBlockContents() {
+        let input = """
+        > ```
+        > **literal**
+        > [docs](url)
+        > ```
+        """
+        let expected = """
+        **literal**
+        [docs](url)
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testPreservesIndentedBlockquotedFencedCodeBlockContents() {
+        let input = " > ```\n > **literal**\n > ```"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "**literal**")
+    }
+
+    func testPreservesGreaterThanInsideBlockquotedFencedCodeBlock() {
+        let input = """
+        > ```
+        > > literal
+        > ```
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "> literal")
+    }
+
+    func testPreservesGreaterThanInsideUnquotedFencedCodeBlock() {
+        let input = """
+        ```
+        > literal
+        ```
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "> literal")
+    }
+
+    func testPreservesEdgeIndentationInsideFencedCodeBlocks() {
+        let input = "```\n  indented\n" + "trailing  \n```"
+        let expected = "  indented\n" + "trailing  "
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testPreservesFourSpaceIndentedCodeBlockContents() {
+        let input = """
+        Before
+
+            **literal**
+            [docs](url)
+            a  b
+
+        After
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testPreservesTabIndentedCodeBlockContents() {
+        let input = "Before\n\n\t**literal**\n\tlet  value = 1\nAfter"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testPreservesBlankRunsInsideIndentedCodeBlocks() {
+        let input = "    a\n\n\n    b"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testPreservesBlockquotedIndentedCodeBlockContents() {
+        let input = """
+        >     **literal**
+        >     [docs](url)
+        >     a  b
+        """
+        let expected = """
+            **literal**
+            [docs](url)
+            a  b
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testFenceDelimiterWithContentDoesNotCloseCodeBlock() {
+        let input = """
+        ```
+        ```not-a-close
+        **literal**
+        ```
+        """
+        let expected = """
+        ```not-a-close
+        **literal**
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testSameLineBacktickSpanDoesNotOpenFenceState() {
+        let input = "`````foo`````\nNormal prose"
+        let expected = "foo\nNormal prose"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testBacktickFenceInfoStringWithBacktickDoesNotOpenFence() {
+        let input = "```lang`x\n**prose**"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "```lang`x\nprose")
+    }
+
+    func testFourSpaceIndentedFenceDelimiterStaysInsideCodeBlock() {
+        let input = """
+        ```
+            ```
+        **literal**
+        ```
+        """
+        let expected = """
+            ```
+        **literal**
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testThreeSpaceIndentedFenceDelimiterClosesCodeBlock() {
+        let input = """
+        ```
+           ```
+        After
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "After")
+    }
+
+    func testFourSpaceIndentedFenceDelimiterDoesNotOpenCodeBlock() {
+        let input = "    ```\n**prose**"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "    ```\nprose")
+    }
+
+    func testFourSpaceIndentedBlockquotedFenceDelimiterDoesNotOpenCodeBlock() {
+        let input = ">     ```\n> **prose**"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "    ```\nprose")
+    }
+
+    func testPreservesEscapedEmphasisDelimiters() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize(#"Escaped \**literal** and \__value__"#),
+            #"Escaped \**literal** and \__value__"#
+        )
+    }
+
+    func testPreservesRepeatedUnmatchedEmphasisOpeners() {
+        let input = "Start" + String(repeating: " **a", count: 200)
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testSimplifiesMarkdownLinks() {
+        let input = "See [the docs](https://example.com/tracking?id=abc123) for more."
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "See the docs for more.")
+    }
+
+    func testSimplifiesMarkdownLinksWithBalancedDestinationParentheses() {
+        let input = "See [docs](https://example.com/a_(b)) for details."
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "See docs for details.")
+    }
+
+    func testSimplifiesMarkdownLinksWithEscapedDestinationParentheses() {
+        let input = "See [docs](https://example.com/a\\)b) for details."
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "See docs for details.")
+    }
+
+    func testPreservesEscapedMarkdownLinkOpener() {
+        let input = #"Escaped \[docs](https://example.com) stays literal"#
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testMalformedMarkdownLinksDoNotRescanQuadratically() {
+        let input = String(repeating: "[", count: 1_000) + "label](https://example.com"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testCollapsesExcessiveBlankLines() {
+        let input = "First paragraph.\n\n\n\n\nSecond paragraph."
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "First paragraph.\n\nSecond paragraph.")
+    }
+
+    func testRemovesHorizontalRules() {
+        let input = "Above the line\n\n-----\n\nBelow the line"
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "Above the line\n\nBelow the line")
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("A\n*-_\nB"), "A\n*-_\nB")
+    }
+
+    func testRemovesEqualsAndAsteriskRules() {
+        // The rule line is dropped and reads as a paragraph break between the
+        // lines it separated.
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Header\n=====\nBody"),
+            "Header\n\nBody"
+        )
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Header\n***\nBody"),
+            "Header\n\nBody"
+        )
+    }
+
+    func testNormalizesCRLFLineEndings() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("a\r\nb\r\nc"), "a\nb\nc")
+    }
+
+    func testConvertsListMarkersToBullets() {
+        let input = "* first\n* second\n- third"
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "• first\n• second\n• third")
+    }
+
+    func testStripsBlockquoteMarkers() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("> quoted reply"), "quoted reply")
+    }
+
+    func testCollapsesInteriorSpaceRuns() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("too      many     spaces"), "too many spaces")
+    }
+
+    func testNeutralisesNonBreakingAndZeroWidthSpaces() {
+        // NBSP becomes a real space; the artifact characters are removed
+        // outright, so the tokens they sat between join up.
+        let input = "\u{FEFF}Hello\u{00A0}there\u{200B}friend"
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "Hello therefriend")
+    }
+
+    func testPreservesSemanticZeroWidthJoiners() {
+        let emojiSequence = "Family: 👨\u{200D}👩\u{200D}👧\u{200D}👦"
+        let persianWithZWNJ = "Persian: می\u{200C}روم"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(emojiSequence), emojiSequence)
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(persianWithZWNJ), persianWithZWNJ)
+    }
+
+    func testTrimsLeadingAndTrailingWhitespace() {
+        XCTAssertEqual(IncomingBodyNormalizer.normalize("\n\n  Hello  \n\n"), "Hello")
+    }
+
+    func testCombinedGitHubStyleNotification() {
+        let input = """
+        ## New pull request
+
+        **alice** opened [#42](https://github.com/x/y/pull/42)
+
+        ---
+
+        Please review when you get a chance.
+        """
+        let expected = """
+        New pull request
+
+        alice opened #42
+
+        Please review when you get a chance.
+        """
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+}

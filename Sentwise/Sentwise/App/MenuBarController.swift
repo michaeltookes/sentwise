@@ -21,6 +21,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// The draft-review window, created lazily.
     private var reviewWindow: NSWindow?
     private var reviewCloseObserver: NSObjectProtocol?
+    private let reviewSelection = ReviewWindowSelection()
 
     /// The first-run onboarding window, created lazily.
     private var onboardingWindow: NSWindow?
@@ -325,12 +326,16 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     func openReview() {
+        reviewSelection.selectedTab = appState.opensReviewWindowOnSkippedTab
+            ? .skipped
+            : .drafts
+
         if reviewWindow == nil {
-            let view = PendingDraftsView()
+            let view = PendingDraftsView(selection: reviewSelection)
                 .environmentObject(appState)
 
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
+                contentRect: NSRect(x: 0, y: 0, width: 720, height: 540),
                 styleMask: [.titled, .closable, .resizable],
                 backing: .buffered,
                 defer: false

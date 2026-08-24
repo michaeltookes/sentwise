@@ -9,7 +9,7 @@ struct MessageBodyView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(preview.subject.isEmpty ? "(no subject)" : preview.subject)
+                Text(MIMEEncodedWord.displaySubject(preview.subject))
                     .font(.headline)
                     .lineLimit(2)
                 Spacer()
@@ -53,7 +53,7 @@ struct DraftView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(displayedDraft.replySubject)
+                    Text(MIMEEncodedWord.displaySubject(displayedDraft.replySubject))
                         .font(.headline)
                         .lineLimit(2)
                     if let recipient = displayedDraft.sourceReplyTo?.email ?? displayedDraft.sourceFrom?.email {

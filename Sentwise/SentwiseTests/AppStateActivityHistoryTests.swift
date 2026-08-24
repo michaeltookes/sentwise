@@ -123,6 +123,15 @@ final class AppStateActivityHistoryTests: XCTestCase {
         XCTAssertFalse(ActivityEventKind.saveFailed.showsSuccessDetail)
     }
 
+    func testActivitySubjectDisplayDecodesEncodedWords() {
+        let encoded = Data("Café".utf8).base64EncodedString()
+        let event = ActivityEvent(kind: .draftCreated, subject: "=?UTF-8?B?\(encoded)?=")
+
+        XCTAssertEqual(event.subjectDisplay, "Café")
+        let authored = ActivityEvent(kind: .draftCreated, subject: "☕ =?UTF-8?Q?failed?=", subjectSource: .authored)
+        XCTAssertEqual(authored.subjectDisplay, "☕ =?UTF-8?Q?failed?=")
+    }
+
     func testActivityAccessibilityLabelIncludesVisibleDetail() {
         let event = ActivityEvent(
             timestamp: Date(timeIntervalSince1970: 1_700_000_000),
@@ -309,6 +318,17 @@ final class AppStateActivityHistoryTests: XCTestCase {
         XCTAssertEqual(appState.activityEvents.map(\.kind), [.staleWarning])
         XCTAssertEqual(appState.activityEvents.first?.staleReason, .sourceMissing)
         XCTAssertEqual(appState.activityEvents.first?.reasonHeadline, StaleThreadReason.sourceMissing.headline)
+    }
+
+    func testAuthoredDraftActivityPreservesSubjectProvenance() {
+        let (appState, _, _) = makeAppState()
+        var draft = pendingDraft()
+        draft.sourceSubject = "☕ =?UTF-8?Q?failed?="
+        draft.replySubject = draft.sourceSubject
+        draft.authoredRecipients = [MailAddress(name: nil, email: "bob@example.com")]
+        appState.recordDraftActivity(.draftCreated, for: draft)
+        XCTAssertEqual(appState.activityEvents.first?.subjectSource, .authored)
+        XCTAssertEqual(appState.activityEvents.first?.subjectDisplay, "☕ =?UTF-8?Q?failed?=")
     }
 
     // MARK: - Privacy

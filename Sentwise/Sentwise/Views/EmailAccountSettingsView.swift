@@ -247,7 +247,7 @@ struct EmailAccountSettingsView: View {
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(message.subject.isEmpty ? "(no subject)" : message.subject)
+                    Text(MIMEEncodedWord.displaySubject(message.subject))
                         .font(.callout)
                         .lineLimit(1)
                     Text(message.from?.email ?? "unknown sender")

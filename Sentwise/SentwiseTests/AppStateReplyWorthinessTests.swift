@@ -235,6 +235,7 @@ final class AppStateReplyWorthinessTests: XCTestCase {
 
         XCTAssertTrue(appState.hasReviewWindowContent)
         XCTAssertEqual(appState.reviewWindowMenuTitle, "Review Skipped Messages (1)…")
+        XCTAssertTrue(appState.opensReviewWindowOnSkippedTab)
     }
 
     func testReviewWindowMenuStatePrefersPendingDraftCount() {
@@ -250,6 +251,7 @@ final class AppStateReplyWorthinessTests: XCTestCase {
 
         XCTAssertTrue(appState.hasReviewWindowContent)
         XCTAssertEqual(appState.reviewWindowMenuTitle, "Review Drafts (2)…")
+        XCTAssertFalse(appState.opensReviewWindowOnSkippedTab)
     }
 
     // MARK: - Override
