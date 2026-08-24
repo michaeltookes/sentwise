@@ -84,6 +84,17 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         )
     }
 
+    func testPreservesUnmatchedBacktickRuns() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Run `npm install after the checkout"),
+            "Run `npm install after the checkout"
+        )
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Use ``` as a literal delimiter"),
+            "Use ``` as a literal delimiter"
+        )
+    }
+
     func testPreservesFencedCodeBlockContents() {
         let input = """
         Before
@@ -236,7 +247,7 @@ final class IncomingBodyNormalizerTests: XCTestCase {
     func testBacktickFenceInfoStringWithBacktickDoesNotOpenFence() {
         let input = "```lang`x\n**prose**"
 
-        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "langx\nprose")
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "```lang`x\nprose")
     }
 
     func testFourSpaceIndentedFenceDelimiterStaysInsideCodeBlock() {

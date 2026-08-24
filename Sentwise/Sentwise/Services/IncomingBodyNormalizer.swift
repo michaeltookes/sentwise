@@ -226,7 +226,7 @@ enum IncomingBodyNormalizer {
                 delimiterLength: delimiterLength,
                 after: codeStart
             ) else {
-                // Preserve the old cleanup behavior for stray backtick runs.
+                proseSegment.append(contentsOf: line[index..<codeStart])
                 index = codeStart
                 continue
             }
