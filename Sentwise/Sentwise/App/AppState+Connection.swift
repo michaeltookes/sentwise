@@ -67,8 +67,7 @@ extension AppState {
 
         let previousSettings = persistence.loadSettings()
         let previousEmail = previousSettings.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
-        let accountIdentityChanged = !previousEmail.isEmpty
-            && previousEmail.caseInsensitiveCompare(credentials.email) != .orderedSame
+        let accountIdentityChanged = hasAccountIdentityChanged(from: previousEmail, to: credentials.email)
         let requiresTransitionCleanup = !isAccountConnected || accountIdentityChanged
         guard persistVerifiedConnectionTransition(
             credentials,
@@ -91,6 +90,11 @@ extension AppState {
         // the account was disconnected but the folder watcher was already active.
         startTranscriptFolderWatchingIfEnabled()
         logger.info("Mailbox connected")
+    }
+
+    private func hasAccountIdentityChanged(from previousEmail: String, to nextEmail: String) -> Bool {
+        guard !previousEmail.isEmpty else { return false }
+        return previousEmail.caseInsensitiveCompare(nextEmail) != .orderedSame
     }
 
     /// Disconnects the mailbox by clearing the stored app password.
