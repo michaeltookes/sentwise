@@ -59,8 +59,14 @@ enum SignatureDetector {
     /// A signature candidate: `display` is the cleaned text to show/return;
     /// `key` is a normalized form used only to group repeats.
     struct Candidate: Equatable {
+        enum Anchor: Equatable {
+            case delimiter
+            case signOff
+        }
+
         var display: String
         var key: String
+        var anchor: Anchor
     }
 
     private static func uniqueBestCandidate(
@@ -85,8 +91,16 @@ enum SignatureDetector {
         let lines = trimmedTrailingBlankLines(text.components(separatedBy: "\n"))
         guard !lines.isEmpty else { return nil }
 
-        guard let block = delimitedBlock(lines) ?? signOffBlock(lines) else { return nil }
-        let cleaned = trimmedTrailingBlankLines(trimmedLeadingBlankLines(block))
+        let anchoredBlock: (lines: [String], anchor: Candidate.Anchor)?
+        if let block = delimitedBlock(lines) {
+            anchoredBlock = (block, .delimiter)
+        } else if let block = signOffBlock(lines) {
+            anchoredBlock = (block, .signOff)
+        } else {
+            anchoredBlock = nil
+        }
+        guard let anchoredBlock else { return nil }
+        let cleaned = trimmedTrailingBlankLines(trimmedLeadingBlankLines(anchoredBlock.lines))
             .map { $0.replacingOccurrences(of: "\t", with: " ").trimmingTrailingWhitespace() }
         guard !cleaned.isEmpty, cleaned.count <= maxSignatureLines else { return nil }
 
@@ -95,7 +109,7 @@ enum SignatureDetector {
         let key = cleaned
             .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
             .joined(separator: "\n")
-        return Candidate(display: display, key: key)
+        return Candidate(display: display, key: key, anchor: anchoredBlock.anchor)
     }
 
     /// The block after the last standard signature delimiter line (`--` or

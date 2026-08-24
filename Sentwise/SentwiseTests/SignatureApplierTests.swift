@@ -49,6 +49,12 @@ final class SignatureApplierTests: XCTestCase {
         XCTAssertEqual(result, body)
     }
 
+    func testCustomAppendsAfterBareModelSignOff() {
+        let body = "Sounds good, let's do Tuesday.\n\nThanks!"
+        let result = SignatureApplier.apply(policy: .custom, signature: sig, to: body)
+        XCTAssertEqual(result, "Sounds good, let's do Tuesday.\n\nThanks!\n\n\(sig)")
+    }
+
     func testCustomDedupIgnoresTrailingWhitespaceDifferences() {
         let body = "Sounds good.\n\nBest,\nJane Doe\nAcme Corp   \n\n"
         let result = SignatureApplier.apply(policy: .custom, signature: sig, to: body)

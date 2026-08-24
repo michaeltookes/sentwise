@@ -41,7 +41,7 @@ enum SignatureApplier {
     /// recognizable signature block the model produced.
     static func needsSignature(_ newBody: String, signature: String) -> Bool {
         !endsWithConfiguredSignature(newBody, signature: signature)
-            && SignatureDetector.signatureCandidate(newBody) == nil
+            && !endsWithModelWrittenSignature(newBody)
     }
 
     /// Whether `newBody`'s trailing non-blank lines exactly match the configured
@@ -64,6 +64,25 @@ enum SignatureApplier {
             .components(separatedBy: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
             .filter { !$0.isEmpty }
+    }
+
+    private static func endsWithModelWrittenSignature(_ newBody: String) -> Bool {
+        guard let candidate = SignatureDetector.signatureCandidate(newBody) else { return false }
+        switch candidate.anchor {
+        case .delimiter:
+            return true
+        case .signOff:
+            return signOffCandidateHasDetail(candidate.display)
+        }
+    }
+
+    private static func signOffCandidateHasDetail(_ candidate: String) -> Bool {
+        let lines = candidate
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard let first = lines.first, SignatureDetector.isSignOff(first) else { return true }
+        return lines.dropFirst().contains { !$0.isEmpty }
     }
 
     /// Splits only when the quote marker begins trailing history. A generated
