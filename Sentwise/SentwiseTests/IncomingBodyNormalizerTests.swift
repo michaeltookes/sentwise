@@ -70,6 +70,27 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         )
     }
 
+    func testPreservesMultilineCodeSpanContents() {
+        let input = """
+        Use `first  column
+        **literal  code**
+        last` here
+        """
+        let expected = """
+        Use first  column
+        **literal  code**
+        last here
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testPreservesBlankRunsInsideMultilineCodeSpans() {
+        let input = "`a\n\n\nb`"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "a\n\n\nb")
+    }
+
     func testPreservesEscapedBacktickDelimiters() {
         XCTAssertEqual(
             IncomingBodyNormalizer.normalize(#"Use \`literal\` syntax"#),

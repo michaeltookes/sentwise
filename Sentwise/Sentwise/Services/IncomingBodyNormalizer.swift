@@ -10,8 +10,17 @@ enum IncomingBodyNormalizer {
         var text = normalizeWhitespaceCharacters(input)
         var fenceState: FenceState?
         var indentedCodeDepth: Int?
-        let lines = text.components(separatedBy: "\n").map {
-            cleanLine($0, fenceState: &fenceState, indentedCodeDepth: &indentedCodeDepth)
+        var inlineCodeState: InlineCodeState?
+        let rawLines = text.components(separatedBy: "\n")
+        let lines = rawLines.indices.map { index in
+            let nextIndex = rawLines.index(after: index)
+            return cleanLine(
+                rawLines[index],
+                fenceState: &fenceState,
+                indentedCodeDepth: &indentedCodeDepth,
+                inlineCodeState: &inlineCodeState,
+                followingLines: rawLines[nextIndex...]
+            )
         }
         let collapsedLines = trimDisplayEdges(collapseBlankRuns(lines))
         text = collapsedLines.map(\.text).joined(separator: "\n")
@@ -36,10 +45,20 @@ enum IncomingBodyNormalizer {
     private static func cleanLine(
         _ rawLine: String,
         fenceState: inout FenceState?,
-        indentedCodeDepth: inout Int?
+        indentedCodeDepth: inout Int?,
+        inlineCodeState: inout InlineCodeState?,
+        followingLines: ArraySlice<String>
     ) -> CleanedLine {
         let trimmedTrailing = String(rawLine.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
         let unquotedTrimmedTrailing = stripBlockquoteMarkers(trimmedTrailing).text
+
+        if inlineCodeState != nil {
+            return cleanInlineMarkdown(
+                unquotedTrimmedTrailing,
+                inlineCodeState: &inlineCodeState,
+                followingLines: followingLines
+            )
+        }
 
         if let fence = fenceState {
             let strippedTrailing = stripBlockquoteMarkers(trimmedTrailing, maxDepth: fence.blockquoteDepth)
@@ -93,11 +112,14 @@ enum IncomingBodyNormalizer {
         var line = unquotedTrimmedTrailing
         line = stripHeadingMarker(line)
         line = normalizeListMarker(line)
-        line = cleanInlineMarkdown(line)
-        return CleanedLine(line)
+        return cleanInlineMarkdown(
+            line,
+            inlineCodeState: &inlineCodeState,
+            followingLines: followingLines
+        )
     }
 
-    private struct CleanedLine {
+    struct CleanedLine {
         let text: String
         let preservesBlankRuns: Bool
 
@@ -105,6 +127,10 @@ enum IncomingBodyNormalizer {
             self.text = text
             self.preservesBlankRuns = preservesBlankRuns
         }
+    }
+
+    struct InlineCodeState {
+        let delimiterLength: Int
     }
 
     private struct FenceState {
@@ -200,251 +226,9 @@ enum IncomingBodyNormalizer {
         }
         return line
     }
-
-    /// Cleans prose Markdown while preserving code-span contents literally.
-    private static func cleanInlineMarkdown(_ line: String) -> String {
-        var result = ""
-        var proseSegment = ""
-        var index = line.startIndex
-
-        while index < line.endIndex {
-            guard line[index] == "`" else {
-                proseSegment.append(line[index])
-                index = line.index(after: index)
-                continue
-            }
-            if isEscaped(in: line, at: index) {
-                proseSegment.append(line[index])
-                index = line.index(after: index)
-                continue
-            }
-
-            let codeStart = backtickRunEnd(in: line, startingAt: index)
-            let delimiterLength = line.distance(from: index, to: codeStart)
-            guard let codeEnd = closingBacktickRun(
-                in: line,
-                delimiterLength: delimiterLength,
-                after: codeStart
-            ) else {
-                proseSegment.append(contentsOf: line[index..<codeStart])
-                index = codeStart
-                continue
-            }
-
-            result += cleanInlineProse(proseSegment)
-            proseSegment.removeAll(keepingCapacity: true)
-            result.append(contentsOf: line[codeStart..<codeEnd])
-            index = line.index(codeEnd, offsetBy: delimiterLength)
-        }
-
-        result += cleanInlineProse(proseSegment)
-        return result
-    }
-
-    private static func backtickRunEnd(in line: String, startingAt index: String.Index) -> String.Index {
-        var runEnd = index
-        while runEnd < line.endIndex, line[runEnd] == "`" {
-            runEnd = line.index(after: runEnd)
-        }
-        return runEnd
-    }
-
-    private static func closingBacktickRun(
-        in line: String,
-        delimiterLength: Int,
-        after index: String.Index
-    ) -> String.Index? {
-        var current = index
-        while current < line.endIndex {
-            guard line[current] == "`" else {
-                current = line.index(after: current)
-                continue
-            }
-
-            let runEnd = backtickRunEnd(in: line, startingAt: current)
-            if isEscaped(in: line, at: current) {
-                current = runEnd
-                continue
-            }
-            if line.distance(from: current, to: runEnd) == delimiterLength {
-                return current
-            }
-            current = runEnd
-        }
-        return nil
-    }
 }
 
 fileprivate extension IncomingBodyNormalizer {
-    private static func stripProseEmphasis(_ line: String) -> String {
-        stripDelimitedEmphasis(
-            stripDelimitedEmphasis(line, delimiter: "**"),
-            delimiter: "__"
-        )
-    }
-
-    private static func cleanInlineProse(_ line: String) -> String {
-        collapseSpaces(simplifyLinks(stripProseEmphasis(line)))
-    }
-
-    private static func stripDelimitedEmphasis(_ line: String, delimiter: String) -> String {
-        guard line.contains(delimiter) else { return line }
-
-        var openers: [Range<String.Index>] = []
-        var removals: [Range<String.Index>] = []
-        var index = line.startIndex
-        while index < line.endIndex {
-            if line[index...].hasPrefix(delimiter) {
-                let range = index..<line.index(index, offsetBy: delimiter.count)
-                if isEscaped(in: line, at: index) {
-                    index = range.upperBound
-                    continue
-                }
-                let canOpen = canOpenEmphasis(in: line, at: index, delimiter: delimiter)
-                let canClose = canCloseEmphasis(in: line, at: index, delimiter: delimiter)
-                if canClose, let opener = openers.popLast() {
-                    removals.append(opener)
-                    removals.append(range)
-                } else if canOpen {
-                    openers.append(range)
-                }
-                index = range.upperBound
-            } else {
-                index = line.index(after: index)
-            }
-        }
-
-        guard !removals.isEmpty else { return line }
-
-        var result = ""
-        index = line.startIndex
-        for removal in removals.sorted(by: { $0.lowerBound < $1.lowerBound }) {
-            result.append(contentsOf: line[index..<removal.lowerBound])
-            index = removal.upperBound
-        }
-        result.append(contentsOf: line[index...])
-        return result
-    }
-
-    private static func isEscaped(in line: String, at index: String.Index) -> Bool {
-        var slashCount = 0
-        var current = index
-        while current > line.startIndex {
-            let previous = line.index(before: current)
-            guard line[previous] == "\\" else { break }
-            slashCount += 1
-            current = previous
-        }
-        return !slashCount.isMultiple(of: 2)
-    }
-
-    private static func canOpenEmphasis(in line: String, at index: String.Index, delimiter: String) -> Bool {
-        let contentStart = line.index(index, offsetBy: delimiter.count)
-        guard contentStart < line.endIndex, !line[contentStart].isWhitespace else { return false }
-        guard index > line.startIndex else { return true }
-        return !isIdentifierCharacter(line[line.index(before: index)])
-    }
-
-    private static func canCloseEmphasis(in line: String, at index: String.Index, delimiter: String) -> Bool {
-        guard index > line.startIndex, !line[line.index(before: index)].isWhitespace else { return false }
-        let delimiterEnd = line.index(index, offsetBy: delimiter.count)
-        guard delimiterEnd < line.endIndex else { return true }
-        return !isIdentifierCharacter(line[delimiterEnd])
-    }
-
-    private static func isIdentifierCharacter(_ character: Character) -> Bool {
-        character.isLetter || character.isNumber || character == "_"
-    }
-
-    /// Converts `[label](url)` to just `label`, dropping the (often tracking-laden)
-    /// URL. Link destinations can contain escaped or balanced parentheses.
-    private static func simplifyLinks(_ line: String) -> String {
-        guard line.contains("](") else { return line }
-
-        var result = ""
-        var index = line.startIndex
-        while index < line.endIndex {
-            if line[index] == "[", !isEscaped(in: line, at: index),
-               let labelEnd = closingLabelBracket(in: line, after: line.index(after: index)) {
-                let destinationStart = line.index(after: labelEnd)
-                if destinationStart < line.endIndex, line[destinationStart] == "(" {
-                    let urlStart = line.index(after: destinationStart)
-                    if let destinationEnd = closingDestinationParen(in: line, after: urlStart) {
-                        result.append(contentsOf: line[line.index(after: index)..<labelEnd])
-                        index = line.index(after: destinationEnd)
-                        continue
-                    }
-                    result.append(contentsOf: line[index...])
-                    break
-                }
-                result.append(contentsOf: line[index...labelEnd])
-                index = line.index(after: labelEnd)
-                continue
-            } else if line[index] == "[" {
-                guard closingLabelBracket(in: line, after: line.index(after: index)) != nil else {
-                    result.append(contentsOf: line[index...])
-                    break
-                }
-            }
-
-            result.append(line[index])
-            index = line.index(after: index)
-        }
-
-        return result
-    }
-
-    private static func closingLabelBracket(in line: String, after index: String.Index) -> String.Index? {
-        var current = index
-        while current < line.endIndex {
-            if line[current] == "\\" {
-                current = line.index(after: current)
-                if current < line.endIndex { current = line.index(after: current) }
-                continue
-            }
-            if line[current] == "]" { return current }
-            current = line.index(after: current)
-        }
-        return nil
-    }
-
-    private static func closingDestinationParen(in line: String, after index: String.Index) -> String.Index? {
-        var depth = 0
-        var current = index
-        while current < line.endIndex {
-            if line[current] == "\\" {
-                current = line.index(after: current)
-                if current < line.endIndex { current = line.index(after: current) }
-                continue
-            }
-            if line[current] == "(" {
-                depth += 1
-            } else if line[current] == ")" {
-                guard depth > 0 else { return current }
-                depth -= 1
-            }
-            current = line.index(after: current)
-        }
-        return nil
-    }
-
-    /// Collapses runs of two or more interior spaces/tabs into a single space.
-    private static func collapseSpaces(_ line: String) -> String {
-        guard line.contains("  ") || line.contains("\t") else { return line }
-        var result = ""
-        var lastWasSpace = false
-        for char in line {
-            if char == " " || char == "\t" {
-                if !lastWasSpace { result.append(" ") }
-                lastWasSpace = true
-            } else {
-                result.append(char)
-                lastWasSpace = false
-            }
-        }
-        return result
-    }
-
     /// Collapses runs of blank lines so at most one blank line separates
     /// paragraphs, and drops leading blank lines.
     private static func collapseBlankRuns(_ lines: [CleanedLine]) -> [CleanedLine] {
