@@ -10,10 +10,14 @@ import SwiftUI
 /// `SkippedMessagesTab.swift`.
 struct PendingDraftsView: View {
     @EnvironmentObject var appState: AppState
-    @State private var selectedTab: ReviewTab = .drafts
+    @State private var selectedTab: ReviewTab
 
     /// Which tab of the review window is showing.
     enum ReviewTab { case drafts, skipped }
+
+    init(initialTab: ReviewTab = .drafts) {
+        _selectedTab = State(initialValue: initialTab)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

@@ -76,10 +76,18 @@ final class IncomingBodyNormalizerTests: XCTestCase {
     }
 
     func testNeutralisesNonBreakingAndZeroWidthSpaces() {
-        // NBSP becomes a real space; the zero-width space is removed outright, so
-        // the tokens it sat between join up.
-        let input = "Hello\u{00A0}there\u{200B}friend"
+        // NBSP becomes a real space; the artifact characters are removed
+        // outright, so the tokens they sat between join up.
+        let input = "\u{FEFF}Hello\u{00A0}there\u{200B}friend"
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "Hello therefriend")
+    }
+
+    func testPreservesSemanticZeroWidthJoiners() {
+        let emojiSequence = "Family: 👨\u{200D}👩\u{200D}👧\u{200D}👦"
+        let persianWithZWNJ = "Persian: می\u{200C}روم"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(emojiSequence), emojiSequence)
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(persianWithZWNJ), persianWithZWNJ)
     }
 
     func testTrimsLeadingAndTrailingWhitespace() {

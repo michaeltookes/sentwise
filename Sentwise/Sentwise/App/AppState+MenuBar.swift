@@ -19,6 +19,12 @@ extension AppState {
         return "Review Skipped Messages (\(skippedMessages.count))…"
     }
 
+    /// The menu points directly at skipped messages when no draft cards are
+    /// waiting, so a newly opened review window should land on that tab.
+    var opensReviewWindowOnSkippedTab: Bool {
+        pendingDraftCount == 0 && !skippedMessages.isEmpty
+    }
+
     /// Human-readable status for the menu bar.
     var statusText: String {
         guard isAccountConnected else { return "No account connected" }

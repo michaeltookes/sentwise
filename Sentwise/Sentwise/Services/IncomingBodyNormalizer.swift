@@ -5,7 +5,7 @@ import Foundation
 /// The stored `Draft.incomingBody` is the raw text extracted from the source
 /// message: GitHub and marketing mail leave literal markdown (`###`, `**`,
 /// `[text](url)`) and HTML-to-text artifacts (rules made of `---`/`===`, runs of
-/// blank lines, zero-width and non-breaking spaces). Rendered verbatim in a
+/// blank lines, zero-width-space and non-breaking-space artifacts). Rendered verbatim in a
 /// `Text` view that reads as noise. This normaliser strips the noisiest markers
 /// and collapses the whitespace so the message is legible at a glance — it is a
 /// lightweight cleanup, not an HTML/markdown engine.
@@ -27,15 +27,13 @@ enum IncomingBodyNormalizer {
     // MARK: - Steps
 
     /// Unifies line endings and neutralises invisible/odd whitespace that
-    /// HTML-derived text carries (CRLF, NBSP, zero-width spaces, BOM).
+    /// HTML-derived text carries (CRLF, NBSP, zero-width space, BOM).
     private static func normalizeWhitespaceCharacters(_ input: String) -> String {
         var text = input
         text = text.replacingOccurrences(of: "\r\n", with: "\n")
         text = text.replacingOccurrences(of: "\r", with: "\n")
         text = text.replacingOccurrences(of: "\u{00A0}", with: " ")   // non-breaking space
         text = text.replacingOccurrences(of: "\u{200B}", with: "")    // zero-width space
-        text = text.replacingOccurrences(of: "\u{200C}", with: "")    // zero-width non-joiner
-        text = text.replacingOccurrences(of: "\u{200D}", with: "")    // zero-width joiner
         text = text.replacingOccurrences(of: "\u{FEFF}", with: "")    // BOM / zero-width no-break
         return text
     }

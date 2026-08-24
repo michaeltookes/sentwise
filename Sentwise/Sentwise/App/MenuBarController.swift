@@ -326,7 +326,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     func openReview() {
         if reviewWindow == nil {
-            let view = PendingDraftsView()
+            let initialTab: PendingDraftsView.ReviewTab = appState.opensReviewWindowOnSkippedTab
+                ? .skipped
+                : .drafts
+            let view = PendingDraftsView(initialTab: initialTab)
                 .environmentObject(appState)
 
             let window = NSWindow(
