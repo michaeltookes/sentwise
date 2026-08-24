@@ -436,15 +436,13 @@ extension AppState {
         // Remember this account so it can be switched back to without re-entry.
         upsertSavedAccount(email: credentials.email, host: credentials.host, port: credentials.port)
 
-        var nextSettings = buildSettings(
+        let nextSettings = buildSettings(
             mailEmail: credentials.email,
             mailHost: credentials.host,
-            mailPort: credentials.port
+            mailPort: credentials.port,
+            signaturePolicyOverride: clearSignature ? SignaturePolicy.default.rawValue : nil,
+            signatureTextOverride: clearSignature ? "" : nil
         )
-        if clearSignature {
-            nextSettings.signaturePolicy = SignaturePolicy.default.rawValue
-            nextSettings.signatureText = ""
-        }
         try persistSettingsSync(nextSettings)
     }
 

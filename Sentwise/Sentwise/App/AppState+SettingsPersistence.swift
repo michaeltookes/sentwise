@@ -14,7 +14,9 @@ extension AppState {
         mailEmail: String? = nil,
         mailHost: String? = nil,
         mailPort: Int? = nil,
-        llmModelOverride: String? = nil
+        llmModelOverride: String? = nil,
+        signaturePolicyOverride: String? = nil,
+        signatureTextOverride: String? = nil
     ) -> Settings {
         Settings(
             schemaVersion: Settings.currentSchemaVersion,
@@ -30,8 +32,8 @@ extension AppState {
             llmBaseURL: llmBaseURL.trimmingCharacters(in: .whitespacesAndNewlines),
             llmVerifiedModel: verifiedLLMModel,
             managedAccountEmail: managedAccountEmail,
-            signaturePolicy: signaturePolicy.rawValue,
-            signatureText: signatureText,
+            signaturePolicy: signaturePolicyOverride ?? signaturePolicy.rawValue,
+            signatureText: signatureTextOverride ?? signatureText,
             sendBehavior: sendBehavior.rawValue,
             sendDelaySeconds: sendDelaySeconds,
             onboardingCompleted: onboardingCompleted,

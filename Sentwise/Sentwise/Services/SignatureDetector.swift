@@ -50,9 +50,7 @@ enum SignatureDetector {
             let existing = counts[candidate.key]
             counts[candidate.key] = (existing?.display ?? candidate.display, (existing?.count ?? 0) + 1)
         }
-        let best = counts.values.max { lhs, rhs in lhs.count < rhs.count }
-        guard let best, best.count >= minimumRepeats else { return nil }
-        guard counts.values.filter({ $0.count == best.count }).count == 1 else { return nil }
+        guard let best = uniqueBestCandidate(in: counts, minimumRepeats: minimumRepeats) else { return nil }
         return best.display
     }
 
@@ -63,6 +61,16 @@ enum SignatureDetector {
     struct Candidate: Equatable {
         var display: String
         var key: String
+    }
+
+    private static func uniqueBestCandidate(
+        in counts: [String: (display: String, count: Int)],
+        minimumRepeats: Int
+    ) -> (display: String, count: Int)? {
+        let ranked = counts.values.sorted { lhs, rhs in lhs.count > rhs.count }
+        guard let best = ranked.first, best.count >= minimumRepeats else { return nil }
+        guard !ranked.dropFirst().contains(where: { $0.count == best.count }) else { return nil }
+        return best
     }
 
     /// Strips any quoted reply history so only what the user actually wrote is
