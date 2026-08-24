@@ -248,6 +248,6 @@ struct BulkCleanupPanel: View {
     }
 
     private func displaySubject(_ message: MailMessage) -> String {
-        message.subject.isEmpty ? "(no subject)" : message.subject
+        MIMEEncodedWord.displaySubject(message.subject)
     }
 }

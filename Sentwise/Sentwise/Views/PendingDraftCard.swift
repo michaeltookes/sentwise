@@ -111,7 +111,7 @@ struct PendingDraftCard: View {
                     Text(sender.email).font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Text(MIMEEncodedWord.decode(draft.sourceSubject))
+            Text(MIMEEncodedWord.displaySubject(draft.sourceSubject))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
@@ -178,7 +178,7 @@ struct PendingDraftCard: View {
                         .help(recipient)
                 }
             }
-            Text(MIMEEncodedWord.decode(draft.replySubject))
+            Text(MIMEEncodedWord.displaySubject(draft.replySubject))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

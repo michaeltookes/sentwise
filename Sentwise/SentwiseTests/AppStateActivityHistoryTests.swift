@@ -123,6 +123,13 @@ final class AppStateActivityHistoryTests: XCTestCase {
         XCTAssertFalse(ActivityEventKind.saveFailed.showsSuccessDetail)
     }
 
+    func testActivitySubjectDisplayDecodesEncodedWords() {
+        let encoded = Data("Café".utf8).base64EncodedString()
+        let event = ActivityEvent(kind: .draftCreated, subject: "=?UTF-8?B?\(encoded)?=")
+
+        XCTAssertEqual(event.subjectDisplay, "Café")
+    }
+
     func testActivityAccessibilityLabelIncludesVisibleDetail() {
         let event = ActivityEvent(
             timestamp: Date(timeIntervalSince1970: 1_700_000_000),

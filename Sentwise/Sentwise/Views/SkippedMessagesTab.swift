@@ -108,6 +108,6 @@ struct SkippedMessageRow: View {
     }
 
     private var subjectText: String {
-        entry.subject.isEmpty ? "(no subject)" : MIMEEncodedWord.decode(entry.subject)
+        MIMEEncodedWord.displaySubject(entry.subject)
     }
 }

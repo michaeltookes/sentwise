@@ -11,6 +11,13 @@ final class MIMEEncodedWordTests: XCTestCase {
         XCTAssertEqual(MIMEEncodedWord.decode(""), "")
     }
 
+    func testDisplaySubjectDecodesAndFallsBackForEmpty() {
+        let encoded = Data("Café".utf8).base64EncodedString()
+
+        XCTAssertEqual(MIMEEncodedWord.displaySubject("=?UTF-8?B?\(encoded)?="), "Café")
+        XCTAssertEqual(MIMEEncodedWord.displaySubject(""), "(no subject)")
+    }
+
     func testBase64UTF8EncodedWord() {
         // "Café ☕" base64-encoded as UTF-8.
         let encoded = Data("Café ☕".utf8).base64EncodedString()

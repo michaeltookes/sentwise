@@ -90,8 +90,7 @@ struct ActivityEvent: Codable, Identifiable, Equatable {
 
     /// The subject for the row, with an empty-subject fallback.
     var subjectDisplay: String {
-        guard let subject, !subject.isEmpty else { return "(no subject)" }
-        return subject
+        MIMEEncodedWord.displaySubject(subject ?? "")
     }
 
     /// The free-form detail currently rendered in the activity-history row.

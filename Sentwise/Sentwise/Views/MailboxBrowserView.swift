@@ -308,7 +308,7 @@ private struct MailboxBrowserRow: View {
                 .accessibilityLabel("Select message from \(message.from?.email ?? "unknown sender")")
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(message.subject.isEmpty ? "(no subject)" : message.subject)
+                Text(MIMEEncodedWord.displaySubject(message.subject))
                     .font(.callout)
                     .lineLimit(1)
                 Text(message.from?.email ?? "unknown sender")

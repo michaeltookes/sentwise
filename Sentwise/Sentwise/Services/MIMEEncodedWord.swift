@@ -73,6 +73,12 @@ enum MIMEEncodedWord {
         return result
     }
 
+    /// Returns a subject suitable for UI labels: decoded when RFC 2047 encoded,
+    /// with a readable fallback for empty subjects.
+    static func displaySubject(_ subject: String) -> String {
+        subject.isEmpty ? "(no subject)" : decode(subject)
+    }
+
     // MARK: - One encoded-word
 
     /// Decodes a single encoded-word's payload, or `nil` when the charset is
