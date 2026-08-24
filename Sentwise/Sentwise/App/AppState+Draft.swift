@@ -141,6 +141,7 @@ extension AppState {
             llmConfiguration: llmConfiguration,
             requireWatching: requireWatching
         ) else { return nil }
+        let initialBody = finalizedDraftBody(Self.body(from: outcome))
         let draft = Draft(
             id: message.id,
             sourceUIDValidity: message.uidValidity,
@@ -154,7 +155,7 @@ extension AppState {
             sourceMessageID: message.messageID,
             incomingBody: Self.truncatedIncomingBody(incomingText),
             replySubject: Self.replySubject(for: message.subject),
-            body: finalizedDraftBody(Self.body(from: outcome)),
+            body: initialBody,
             model: llmConfiguration.model,
             generatedAt: Date(),
             needsInfo: Self.needsInfo(from: outcome),
