@@ -209,8 +209,10 @@ enum IncomingBodyNormalizer {
     static func stripBlockquoteMarkers(_ line: String, maxDepth: Int? = nil) -> BlockquoteStripped {
         var result = line
         var depth = 0
-        while result.hasPrefix(">"), maxDepth.map({ depth < $0 }) ?? true {
-            result.removeFirst()
+        while maxDepth.map({ depth < $0 }) ?? true {
+            let spaces = result.prefix { $0 == " " }.count
+            guard spaces <= 3, result.dropFirst(spaces).hasPrefix(">") else { break }
+            result.removeFirst(spaces + 1)
             if result.hasPrefix(" ") { result.removeFirst() }
             depth += 1
         }

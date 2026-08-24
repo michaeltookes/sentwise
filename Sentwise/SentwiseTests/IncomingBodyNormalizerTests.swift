@@ -204,6 +204,12 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
     }
 
+    func testPreservesIndentedBlockquotedFencedCodeBlockContents() {
+        let input = " > ```\n > **literal**\n > ```"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "**literal**")
+    }
+
     func testPreservesGreaterThanInsideBlockquotedFencedCodeBlock() {
         let input = """
         > ```
