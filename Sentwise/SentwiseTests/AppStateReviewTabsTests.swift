@@ -130,4 +130,25 @@ final class AppStateReviewTabsTests: XCTestCase {
         XCTAssertFalse(appState.skippedMessages.contains { $0.id == entry.id })
         XCTAssertTrue(appState.pendingDrafts.contains { $0.id == entry.message.id })
     }
+
+    func testSuccessfulDraftAnywaySwitchesReviewSelectionToDrafts() async throws {
+        let appState = makeAppState(seed: [])
+        let selection = ReviewWindowSelection(selectedTab: .skipped)
+        appState.watchStatus = .watching
+        await appState.pollInboxOnce()
+        let entry = try XCTUnwrap(appState.skippedMessages.first)
+
+        let didCreateDraft = await appState.forceDraftSkippedMessage(entry)
+        selection.selectDraftsAfterSuccessfulOverride(didCreateDraft)
+
+        XCTAssertEqual(selection.selectedTab, .drafts)
+    }
+
+    func testFailedDraftAnywayLeavesReviewSelectionOnSkipped() {
+        let selection = ReviewWindowSelection(selectedTab: .skipped)
+
+        selection.selectDraftsAfterSuccessfulOverride(false)
+
+        XCTAssertEqual(selection.selectedTab, .skipped)
+    }
 }

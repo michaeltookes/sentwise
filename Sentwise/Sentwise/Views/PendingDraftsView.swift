@@ -38,7 +38,7 @@ struct PendingDraftsView: View {
             case .drafts:
                 draftsTab
             case .skipped:
-                SkippedMessagesTab()
+                SkippedMessagesTab(selection: selection)
                     .environmentObject(appState)
             }
         }
@@ -145,5 +145,10 @@ final class ReviewWindowSelection: ObservableObject {
 
     init(selectedTab: PendingDraftsView.ReviewTab = .drafts) {
         self.selectedTab = selectedTab
+    }
+
+    func selectDraftsAfterSuccessfulOverride(_ didCreateDraft: Bool) {
+        guard didCreateDraft else { return }
+        selectedTab = .drafts
     }
 }

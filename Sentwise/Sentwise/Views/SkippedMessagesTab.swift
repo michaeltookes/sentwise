@@ -7,6 +7,7 @@ import SwiftUI
 /// The full activity history (item 21) will eventually replace this surface.
 struct SkippedMessagesTab: View {
     @EnvironmentObject var appState: AppState
+    @ObservedObject var selection: ReviewWindowSelection
 
     var body: some View {
         if appState.skippedMessages.isEmpty {
@@ -25,7 +26,7 @@ struct SkippedMessagesTab: View {
                 ScrollView {
                     LazyVStack(spacing: 6) {
                         ForEach(appState.skippedMessages) { entry in
-                            SkippedMessageRow(entry: entry)
+                            SkippedMessageRow(entry: entry, selection: selection)
                                 .environmentObject(appState)
                         }
                     }
@@ -58,6 +59,7 @@ struct SkippedMessagesTab: View {
 /// decoded from RFC 2047 encoded-words for display (item 69).
 struct SkippedMessageRow: View {
     let entry: SkippedMessage
+    @ObservedObject var selection: ReviewWindowSelection
     @EnvironmentObject var appState: AppState
     @State private var isDrafting = false
 
@@ -86,8 +88,9 @@ struct SkippedMessageRow: View {
             } else {
                 Button("Draft anyway") {
                     isDrafting = true
-                    Task {
-                        await appState.forceDraftSkippedMessage(entry)
+                    Task { @MainActor in
+                        let didCreateDraft = await appState.forceDraftSkippedMessage(entry)
+                        selection.selectDraftsAfterSuccessfulOverride(didCreateDraft)
                         isDrafting = false
                     }
                 }
