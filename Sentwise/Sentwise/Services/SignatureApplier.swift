@@ -26,7 +26,7 @@ enum SignatureApplier {
         let sig = signature.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sig.isEmpty else { return body }
 
-        let thread = splitForSignaturePlacement(body)
+        let thread = EmailThreadParser.splitAtTrailingHistory(body)
         let newBody = thread.latest
         guard !newBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return body }
         guard needsSignature(newBody, signature: sig) else { return body }
@@ -83,43 +83,6 @@ enum SignatureApplier {
             .filter { !$0.isEmpty }
         guard let first = lines.first, SignatureDetector.isSignOff(first) else { return true }
         return lines.dropFirst().contains { !$0.isEmpty }
-    }
-
-    /// Splits only when the quote marker begins trailing history. A generated
-    /// reply can intentionally include a `>` blockquote and then continue with
-    /// fresh text; that embedded quote must remain above the signature.
-    private static func splitForSignaturePlacement(_ body: String) -> EmailThread {
-        let lines = body.components(separatedBy: "\n")
-        for (index, line) in lines.enumerated() {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard EmailThreadParser.isQuoteMarker(trimmed),
-                  isTrailingHistory(from: index, in: lines) else {
-                continue
-            }
-            let latest = lines[..<index].joined(separator: "\n")
-            let history = lines[index...].joined(separator: "\n")
-            return EmailThread(latest: latest, quotedHistory: history)
-        }
-        return EmailThread(latest: body, quotedHistory: "")
-    }
-
-    private static func isTrailingHistory(from index: Int, in lines: [String]) -> Bool {
-        let marker = lines[index].trimmingCharacters(in: .whitespaces)
-        let needsQuotedLine = marker.range(of: #"^On .+wrote:$"#, options: .regularExpression) != nil
-        var sawQuotedLine = false
-
-        for line in lines[index...] {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
-            if trimmed.hasPrefix(">") {
-                sawQuotedLine = true
-                continue
-            }
-            if sawQuotedLine {
-                return false
-            }
-        }
-        return !needsQuotedLine || sawQuotedLine
     }
 
     /// Drops trailing whitespace and blank lines so the appended gap is exactly

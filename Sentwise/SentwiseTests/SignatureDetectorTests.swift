@@ -66,6 +66,16 @@ final class SignatureDetectorTests: XCTestCase {
         XCTAssertEqual(detected, sig)
     }
 
+    func testDetectionPreservesEmbeddedQuotedExcerptBeforeSignature() {
+        let sig = "Best,\nJane"
+        let bodies = [
+            "Intro\n> excerpt\nConclusion\n\n\(sig)",
+            "Hello\nOn Mon, Bob wrote:\n> snippet\nWrap up\n\n\(sig)"
+        ]
+        let detected = SignatureDetector.detect(fromSentBodies: bodies)
+        XCTAssertEqual(detected, sig)
+    }
+
     // MARK: - Negative detection
 
     func testReturnsNilWhenNoConsistentSignatureExists() {

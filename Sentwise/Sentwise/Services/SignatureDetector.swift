@@ -82,7 +82,7 @@ enum SignatureDetector {
     /// Strips any quoted reply history so only what the user actually wrote is
     /// considered.
     static func freshText(_ body: String) -> String {
-        EmailThreadParser.split(body).latest
+        EmailThreadParser.splitAtTrailingHistory(body).latest
     }
 
     /// Extracts the trailing signature block from one message's fresh text, or
