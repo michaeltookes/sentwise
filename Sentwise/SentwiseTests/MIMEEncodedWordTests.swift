@@ -24,6 +24,14 @@ final class MIMEEncodedWordTests: XCTestCase {
         XCTAssertEqual(MIMEEncodedWord.decode("=?UTF-8?B?\(encoded)?="), "Café ☕")
     }
 
+    func testCharsetWithLanguageTagEncodedWord() {
+        XCTAssertEqual(MIMEEncodedWord.decode("=?UTF-8*en?Q?Caf=C3=A9?="), "Café")
+    }
+
+    func testCharsetWithLanguageTagUsesFoundationLookup() {
+        XCTAssertEqual(MIMEEncodedWord.decode("=?ISO-8859-2*pl?Q?Hello?="), "Hello")
+    }
+
     func testQuotedPrintableEncodedWord() {
         // =C3=A9 is é in UTF-8; underscore decodes to a space.
         XCTAssertEqual(MIMEEncodedWord.decode("=?UTF-8?Q?Caf=C3=A9_time?="), "Café time")

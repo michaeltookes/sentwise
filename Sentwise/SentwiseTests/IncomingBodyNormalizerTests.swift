@@ -95,6 +95,25 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
     }
 
+    func testPreservesBlankRunsInsideFencedCodeBlocks() {
+        let input = """
+        ```
+        a
+
+
+        b
+        ```
+        """
+        let expected = """
+        a
+
+
+        b
+        """
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
     func testFenceDelimiterWithContentDoesNotCloseCodeBlock() {
         let input = """
         ```
@@ -108,6 +127,13 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         """
 
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
+    func testPreservesEscapedEmphasisDelimiters() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize(#"Escaped \**literal** and \__value__"#),
+            #"Escaped \**literal** and \__value__"#
+        )
     }
 
     func testPreservesRepeatedUnmatchedEmphasisOpeners() {

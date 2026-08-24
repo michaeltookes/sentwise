@@ -138,7 +138,8 @@ enum MIMEEncodedWord {
     /// Maps a charset label to a `String.Encoding`. The common cases are spelled
     /// out; anything else defers to Foundation's IANA charset table.
     private static func stringEncoding(for charset: String) -> String.Encoding? {
-        switch charset.lowercased() {
+        let baseCharset = charset.split(separator: "*", maxSplits: 1).first.map(String.init) ?? charset
+        switch baseCharset.lowercased() {
         case "utf-8", "utf8":
             return .utf8
         case "us-ascii", "ascii":
@@ -148,7 +149,7 @@ enum MIMEEncodedWord {
         case "windows-1252", "cp1252":
             return .windowsCP1252
         default:
-            let cfEncoding = CFStringConvertIANACharSetNameToEncoding(charset as CFString)
+            let cfEncoding = CFStringConvertIANACharSetNameToEncoding(baseCharset as CFString)
             guard cfEncoding != kCFStringEncodingInvalidId else { return nil }
             return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(cfEncoding))
         }

@@ -44,31 +44,41 @@ enum IncomingBodyNormalizer {
     /// Cleans one line: drops horizontal rules, strips heading/quote/emphasis
     /// markers, simplifies links, and collapses interior space runs. A line that
     /// was only a rule becomes empty (folded away by `collapseBlankRuns`).
-    private static func cleanLine(_ rawLine: String, fenceState: inout FenceState?) -> String {
+    private static func cleanLine(_ rawLine: String, fenceState: inout FenceState?) -> CleanedLine {
         let trimmedTrailing = String(rawLine.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
         let trimmed = trimmedTrailing.trimmingCharacters(in: .whitespaces)
 
         if let fence = fenceState {
             if fence.closes(trimmed) {
                 fenceState = nil
-                return ""
+                return CleanedLine("")
             }
-            return rawLine
+            return CleanedLine(rawLine, preservesBlankRuns: true)
         }
 
         if let fence = FenceState(openingLine: trimmed) {
             fenceState = fence
-            return ""
+            return CleanedLine("")
         }
 
-        if isHorizontalRule(trimmed) { return "" }
+        if isHorizontalRule(trimmed) { return CleanedLine("") }
 
         var line = trimmedTrailing
         line = stripHeadingMarker(line)
         line = stripBlockquoteMarker(line)
         line = normalizeListMarker(line)
         line = cleanInlineMarkdown(line)
-        return line
+        return CleanedLine(line)
+    }
+
+    private struct CleanedLine {
+        let text: String
+        let preservesBlankRuns: Bool
+
+        init(_ text: String, preservesBlankRuns: Bool = false) {
+            self.text = text
+            self.preservesBlankRuns = preservesBlankRuns
+        }
     }
 
     private struct FenceState {
@@ -217,6 +227,10 @@ enum IncomingBodyNormalizer {
         while index < line.endIndex {
             if line[index...].hasPrefix(delimiter) {
                 let range = index..<line.index(index, offsetBy: delimiter.count)
+                if isEscaped(in: line, at: index) {
+                    index = range.upperBound
+                    continue
+                }
                 let canOpen = canOpenEmphasis(in: line, at: index, delimiter: delimiter)
                 let canClose = canCloseEmphasis(in: line, at: index, delimiter: delimiter)
                 if canClose, let opener = openers.popLast() {
@@ -241,6 +255,18 @@ enum IncomingBodyNormalizer {
         }
         result.append(contentsOf: line[index...])
         return result
+    }
+
+    private static func isEscaped(in line: String, at index: String.Index) -> Bool {
+        var slashCount = 0
+        var current = index
+        while current > line.startIndex {
+            let previous = line.index(before: current)
+            guard line[previous] == "\\" else { break }
+            slashCount += 1
+            current = previous
+        }
+        return !slashCount.isMultiple(of: 2)
     }
 
     private static func canOpenEmphasis(in line: String, at index: String.Index, delimiter: String) -> Bool {
@@ -342,19 +368,28 @@ enum IncomingBodyNormalizer {
 
     /// Collapses runs of blank lines so at most one blank line separates
     /// paragraphs, and drops leading blank lines.
-    private static func collapseBlankRuns(_ lines: [String]) -> [String] {
+    private static func collapseBlankRuns(_ lines: [CleanedLine]) -> [String] {
         var result: [String] = []
         var pendingBlank = false
         for line in lines {
-            if line.trimmingCharacters(in: .whitespaces).isEmpty {
+            if line.preservesBlankRuns {
+                if pendingBlank && !result.isEmpty && result.last?.trimmingCharacters(in: .whitespaces).isEmpty == false {
+                    result.append("")
+                }
+                pendingBlank = false
+                result.append(line.text)
+                continue
+            }
+
+            if line.text.trimmingCharacters(in: .whitespaces).isEmpty {
                 pendingBlank = true
                 continue
             }
-            if pendingBlank && !result.isEmpty {
+            if pendingBlank && !result.isEmpty && result.last?.trimmingCharacters(in: .whitespaces).isEmpty == false {
                 result.append("")
             }
             pendingBlank = false
-            result.append(line)
+            result.append(line.text)
         }
         return result
     }
