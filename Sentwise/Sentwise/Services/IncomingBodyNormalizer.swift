@@ -89,6 +89,11 @@ enum IncomingBodyNormalizer {
             guard let first = openingLine.first, first == "`" || first == "~" else { return nil }
             let count = openingLine.prefix { $0 == first }.count
             guard count >= 3 else { return nil }
+            let infoStart = openingLine.index(openingLine.startIndex, offsetBy: count)
+            let info = openingLine[infoStart...]
+            guard first != "`" || !Self.containsDelimiterRun(in: info, delimiter: first, minimumLength: count) else {
+                return nil
+            }
             delimiter = first
             length = count
         }
@@ -98,6 +103,23 @@ enum IncomingBodyNormalizer {
             guard count >= length else { return false }
             let restStart = line.index(line.startIndex, offsetBy: count)
             return line[restStart...].allSatisfy { $0 == " " || $0 == "\t" }
+        }
+
+        private static func containsDelimiterRun(
+            in text: Substring,
+            delimiter: Character,
+            minimumLength: Int
+        ) -> Bool {
+            var runLength = 0
+            for character in text {
+                if character == delimiter {
+                    runLength += 1
+                    if runLength >= minimumLength { return true }
+                } else {
+                    runLength = 0
+                }
+            }
+            return false
         }
     }
 
@@ -295,7 +317,7 @@ enum IncomingBodyNormalizer {
         var result = ""
         var index = line.startIndex
         while index < line.endIndex {
-            if line[index] == "[",
+            if line[index] == "[", !isEscaped(in: line, at: index),
                let labelEnd = closingLabelBracket(in: line, after: line.index(after: index)) {
                 let destinationStart = line.index(after: labelEnd)
                 if destinationStart < line.endIndex, line[destinationStart] == "(" {
@@ -305,6 +327,16 @@ enum IncomingBodyNormalizer {
                         index = line.index(after: destinationEnd)
                         continue
                     }
+                    result.append(contentsOf: line[index...])
+                    break
+                }
+                result.append(contentsOf: line[index...labelEnd])
+                index = line.index(after: labelEnd)
+                continue
+            } else if line[index] == "[" {
+                guard closingLabelBracket(in: line, after: line.index(after: index)) != nil else {
+                    result.append(contentsOf: line[index...])
+                    break
                 }
             }
 

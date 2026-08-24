@@ -129,6 +129,13 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
     }
 
+    func testSameLineBacktickSpanDoesNotOpenFenceState() {
+        let input = "`````foo`````\nNormal prose"
+        let expected = "foo\nNormal prose"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), expected)
+    }
+
     func testPreservesEscapedEmphasisDelimiters() {
         XCTAssertEqual(
             IncomingBodyNormalizer.normalize(#"Escaped \**literal** and \__value__"#),
@@ -155,6 +162,18 @@ final class IncomingBodyNormalizerTests: XCTestCase {
     func testSimplifiesMarkdownLinksWithEscapedDestinationParentheses() {
         let input = "See [docs](https://example.com/a\\)b) for details."
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "See docs for details.")
+    }
+
+    func testPreservesEscapedMarkdownLinkOpener() {
+        let input = #"Escaped \[docs](https://example.com) stays literal"#
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
+    func testMalformedMarkdownLinksDoNotRescanQuadratically() {
+        let input = String(repeating: "[", count: 1_000) + "label](https://example.com"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
     }
 
     func testCollapsesExcessiveBlankLines() {
