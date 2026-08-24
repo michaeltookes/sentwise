@@ -179,6 +179,18 @@ guardrails:
     - "Learn my voice"
     - "Re-learn my voice"
     - "Forget voice profile"
+    # Signature controls (item 24). The picker and text editor mutate persisted
+    # settings; "Suggest from my Sent mail" triggers a LIVE IMAP Sent-mail fetch.
+    # All are open-and-assert forbidden. Forbidden by their unique AX ids and by
+    # the visible labels/accessibility labels a hunt might resolve.
+    - "signaturePolicyPicker"
+    - "signatureTextEditor"
+    - "suggestSignatureButton"
+    - "Email signature policy"
+    - "Custom email signature"
+    - "Suggest signature from my Sent mail"
+    - "Suggest from my Sent mail"
+    - "Signature"
     - "Filter"
     - "Clear History"
     - "Back"

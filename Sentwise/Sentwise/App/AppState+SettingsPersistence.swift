@@ -14,7 +14,9 @@ extension AppState {
         mailEmail: String? = nil,
         mailHost: String? = nil,
         mailPort: Int? = nil,
-        llmModelOverride: String? = nil
+        llmModelOverride: String? = nil,
+        signaturePolicyOverride: String? = nil,
+        signatureTextOverride: String? = nil
     ) -> Settings {
         Settings(
             schemaVersion: Settings.currentSchemaVersion,
@@ -30,6 +32,8 @@ extension AppState {
             llmBaseURL: llmBaseURL.trimmingCharacters(in: .whitespacesAndNewlines),
             llmVerifiedModel: verifiedLLMModel,
             managedAccountEmail: managedAccountEmail,
+            signaturePolicy: signaturePolicyOverride ?? signaturePolicy.rawValue,
+            signatureText: signatureTextOverride ?? signatureText,
             sendBehavior: sendBehavior.rawValue,
             sendDelaySeconds: sendDelaySeconds,
             onboardingCompleted: onboardingCompleted,
@@ -49,6 +53,18 @@ extension AppState {
         }
     }
 
+    /// `@Published` emits from `willSet`, so defer generic settings snapshots
+    /// until the published storage contains the emitted value.
+    func saveSettingsAfterPublishedSet(rescheduleInboxWatcher: Bool = false) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            saveSettings()
+            if rescheduleInboxWatcher {
+                inboxWatcher.reschedule()
+            }
+        }
+    }
+
     /// Saves a specific settings snapshot immediately, cancelling stale
     /// debounced snapshots first.
     func persistSettingsSync(_ settings: Settings) throws {
@@ -65,5 +81,41 @@ extension AppState {
             connectionError = Self.settingsMessage(action: "save", error: error)
             logger.error("Failed to save settings synchronously: \(error.localizedDescription)")
         }
+    }
+
+    /// Applies the persisted draft-production preferences (signature policy/text
+    /// and send behavior/delay) loaded at launch. Called from `init` before
+    /// `setupAutoSave()` wires the change sinks, so seeding these values does not
+    /// trigger a spurious save. Kept here so `AppState.init` stays within the
+    /// function-body length limit.
+    func restoreDraftPreferences(from settings: Settings) {
+        signaturePolicy = SignaturePolicy(rawValue: settings.signaturePolicy) ?? .default
+        signatureText = settings.signatureText
+        sendBehavior = SendBehavior(rawValue: settings.sendBehavior) ?? .default
+        sendDelaySeconds = settings.sendDelaySeconds
+    }
+
+    /// Restores pending drafts at launch, dropping any already-approved ones and
+    /// rebuilding the offline-dispatch bookkeeping. Extracted from `AppState.init`
+    /// to keep that initializer and `AppState.swift` within the lint limits.
+    static func restoredPendingDraftState(
+        persistence: PersistenceProvider
+    ) -> (
+        drafts: [Draft],
+        offlineQueuedDispatch: [String: OfflineQueuedDraftDispatch],
+        waitingForNetwork: Set<String>
+    ) {
+        let approvedDraftIdentities = persistence.loadApprovedDraftIdentities()
+        let loadedPendingDrafts = persistence.loadPendingDrafts()
+        let pendingDrafts = loadedPendingDrafts.filter { !approvedDraftIdentities.contains($0.identity) }
+        if pendingDrafts.count != loadedPendingDrafts.count {
+            do {
+                try persistence.savePendingDraftsSync(pendingDrafts)
+            } catch {
+                logger.error("Failed to clean approved pending drafts on launch: \(error.localizedDescription)")
+            }
+        }
+        let offlineQueuedDispatch = offlineQueuedDispatches(from: pendingDrafts)
+        return (pendingDrafts, offlineQueuedDispatch, Set(offlineQueuedDispatch.keys))
     }
 }

@@ -62,7 +62,7 @@ extension AppState {
             throw FollowUpCommitError.sourceChanged
         }
         let draft = makeAuthoredDraft(
-            body: body,
+            body: finalizedDraftBody(body),
             recipients: Self.dedupedRecipients(recipients),
             subject: Self.followUpSubject(subject, suggestedTitle: ingested.suggestedTitle),
             model: llmConfiguration.model,

@@ -57,7 +57,7 @@ extension AppState {
             guard isCurrentDraftRequest(requestGeneration, credentials: credentials, llmConfiguration: llmConfiguration) else {
                 return nil
             }
-            let draft = Self.draftPreview(
+            let draft = draftPreview(
                 for: message,
                 outcome: outcome,
                 llmConfiguration: llmConfiguration,
@@ -141,6 +141,7 @@ extension AppState {
             llmConfiguration: llmConfiguration,
             requireWatching: requireWatching
         ) else { return nil }
+        let initialBody = finalizedDraftBody(Self.body(from: outcome))
         let draft = Draft(
             id: message.id,
             sourceUIDValidity: message.uidValidity,
@@ -154,7 +155,7 @@ extension AppState {
             sourceMessageID: message.messageID,
             incomingBody: Self.truncatedIncomingBody(incomingText),
             replySubject: Self.replySubject(for: message.subject),
-            body: Self.body(from: outcome),
+            body: initialBody,
             model: llmConfiguration.model,
             generatedAt: Date(),
             needsInfo: Self.needsInfo(from: outcome),
@@ -207,7 +208,7 @@ extension AppState {
         )
     }
 
-    private static func draftPreview(
+    private func draftPreview(
         for message: MailMessage,
         outcome: DraftOutcome,
         llmConfiguration: DraftLLMConfiguration,
@@ -225,12 +226,12 @@ extension AppState {
             sourceFrom: message.from,
             sourceReplyTo: message.replyTo,
             sourceMessageID: message.messageID,
-            replySubject: replySubject(for: message.subject),
-            body: body(from: outcome),
+            replySubject: Self.replySubject(for: message.subject),
+            body: finalizedDraftBody(Self.body(from: outcome)),
             model: llmConfiguration.model,
             generatedAt: Date(),
-            needsInfo: needsInfo(from: outcome),
-            notReplyWorthy: notReplyWorthy(from: outcome)
+            needsInfo: Self.needsInfo(from: outcome),
+            notReplyWorthy: Self.notReplyWorthy(from: outcome)
         )
     }
 

@@ -256,8 +256,10 @@ extension AppState {
     // MARK: - Migration (item 56a)
 
     /// Runs all launch-time settings migrations in order: the saved-accounts move
-    /// (item 48) then the managed-inference default (item 56a). Keeps `AppState.init`
-    /// short by chaining both here.
+    /// (item 48), the managed-inference default (item 56a), then the additive
+    /// signature schema (item 24). Only the terminal step persists, so a launch
+    /// that migrates writes the fully-migrated settings exactly once, at the
+    /// current schema version. Keeps `AppState.init` short by chaining here.
     static func fullyMigratedSettings(
         loaded: Settings,
         secrets: SecretStore,
@@ -270,10 +272,17 @@ extension AppState {
             targetSchemaVersion: Settings.managedInferenceSchemaVersion - 1,
             shouldPersist: false
         )
-        return migratedManagedInferenceSettings(
+        let managedMigrated = migratedManagedInferenceSettings(
             accountsMigrated,
             originalSchemaVersion: loaded.schemaVersion,
             secrets: secrets,
+            persistence: persistence,
+            targetSchemaVersion: Settings.signatureSchemaVersion - 1,
+            shouldPersist: false
+        )
+        return migratedSignatureSettings(
+            managedMigrated,
+            originalSchemaVersion: loaded.schemaVersion,
             persistence: persistence
         )
     }
@@ -281,11 +290,18 @@ extension AppState {
     /// Moves an existing install with no configured BYO provider onto managed
     /// inference. A configured BYO user (a stored key or a verified model) keeps
     /// their provider. Runs once, gated on the original schema version.
+    ///
+    /// `targetSchemaVersion` defaults to the managed-inference version this step
+    /// introduces (15); the full launch chain passes the version just below the
+    /// next step so only the terminal migration advances to the current version.
+    /// `shouldPersist` lets the chain defer the single write to that terminal step.
     static func migratedManagedInferenceSettings(
         _ settings: Settings,
         originalSchemaVersion: Int,
         secrets: SecretStore,
-        persistence: PersistenceProvider
+        persistence: PersistenceProvider,
+        targetSchemaVersion: Int = Settings.managedInferenceSchemaVersion,
+        shouldPersist: Bool = true
     ) -> Settings {
         guard originalSchemaVersion < Settings.managedInferenceSchemaVersion else { return settings }
         var migrated = settings
@@ -307,12 +323,35 @@ extension AppState {
             }
         }
 
+        migrated.schemaVersion = targetSchemaVersion
+        if shouldPersist, migrated != settings {
+            do {
+                try persistence.saveSettingsSync(migrated)
+            } catch {
+                logger.error("Failed to persist managed-inference migration: \(error.localizedDescription)")
+            }
+        }
+        return migrated
+    }
+
+    /// Terminal launch migration (item 24). The signature fields are purely
+    /// additive — older files decode them to defaults — so this step carries no
+    /// field logic; it only advances the schema version to the current one and
+    /// persists the fully-migrated settings exactly once. Runs last so a single
+    /// write records the final version regardless of which earlier steps changed.
+    static func migratedSignatureSettings(
+        _ settings: Settings,
+        originalSchemaVersion: Int,
+        persistence: PersistenceProvider
+    ) -> Settings {
+        guard originalSchemaVersion < Settings.currentSchemaVersion else { return settings }
+        var migrated = settings
         migrated.schemaVersion = Settings.currentSchemaVersion
         if migrated != settings {
             do {
                 try persistence.saveSettingsSync(migrated)
             } catch {
-                logger.error("Failed to persist managed-inference migration: \(error.localizedDescription)")
+                logger.error("Failed to persist signature migration: \(error.localizedDescription)")
             }
         }
         return migrated

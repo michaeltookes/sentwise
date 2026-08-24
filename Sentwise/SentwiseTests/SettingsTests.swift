@@ -156,8 +156,49 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(decoded.llmVerifiedModel, "")
     }
 
-    func testCurrentSchemaVersionIsFifteen() {
-        XCTAssertEqual(Settings.currentSchemaVersion, 15)
+    func testCurrentSchemaVersionIsSixteen() {
+        XCTAssertEqual(Settings.currentSchemaVersion, 16)
+    }
+
+    func testSignatureSchemaVersionIsSixteen() {
+        XCTAssertEqual(Settings.signatureSchemaVersion, 16)
+    }
+
+    func testLegacyFileWithoutSignatureKeysDecodesToDefaults() throws {
+        // A pre-v16 file has no signature keys; the policy must decode to none
+        // (append nothing) with an empty custom signature — the safe default.
+        let legacy = #"{"schemaVersion":15,"pollIntervalSeconds":300,"mailEmail":"me@x.com"}"#
+        let decoded = try JSONDecoder().decode(Settings.self, from: Data(legacy.utf8))
+        XCTAssertEqual(decoded.signaturePolicy, SignaturePolicy.none.rawValue)
+        XCTAssertEqual(decoded.signatureText, "")
+    }
+
+    func testSignatureSettingsRoundTripThroughCodable() throws {
+        let original = Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            signaturePolicy: SignaturePolicy.custom.rawValue,
+            signatureText: "Best,\nJane Doe"
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Settings.self, from: data)
+        XCTAssertEqual(decoded.signaturePolicy, SignaturePolicy.custom.rawValue)
+        XCTAssertEqual(decoded.signatureText, "Best,\nJane Doe")
+    }
+
+    func testValidatedTrimsSignatureText() {
+        let settings = Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            signatureText: "\n\n  Best,\nJane Doe  \n\n"
+        ).validated()
+        XCTAssertEqual(settings.signatureText, "Best,\nJane Doe")
+    }
+
+    func testUnknownSignaturePolicyResolvesToDefault() {
+        // An unknown/future raw value must resolve to the default policy.
+        XCTAssertNil(SignaturePolicy(rawValue: "future-policy"))
+        XCTAssertEqual(SignaturePolicy.default, .none)
     }
 
     func testTranscriptWatchedFolderSchemaVersionIsThirteen() {

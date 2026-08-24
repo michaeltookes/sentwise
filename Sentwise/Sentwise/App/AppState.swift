@@ -146,13 +146,33 @@ final class AppState: ObservableObject {
     /// How often (in seconds) the inbox is polled while the Mac is awake.
     @Published var pollIntervalSeconds: Int
 
+    /// How a signature is applied to generated drafts (item 24). Restored from
+    /// persisted settings at launch by `restoreDraftPreferences(from:)`.
+    @Published var signaturePolicy: SignaturePolicy = .default
+
+    /// The user's custom signature text, appended to drafts under the `.custom`
+    /// policy unless the draft already ends with a signature.
+    @Published var signatureText: String = ""
+
+    /// Whether a "Suggest from my Sent mail" signature detection is in flight.
+    @Published var isDetectingSignature: Bool = false
+
+    /// User-facing result of the last signature detection (success or failure).
+    /// Non-nil after a detection attempt so feedback is never silent (item 24).
+    @Published var signatureDetectionMessage: String?
+
+    /// Whether the last detection succeeded, for styling the feedback message.
+    /// `nil` when no detection has run.
+    @Published var signatureDetectionSucceeded: Bool?
+
     /// What approving a draft does: save a Gmail draft or send immediately.
-    @Published var sendBehavior: SendBehavior
+    /// Restored from persisted settings at launch by `restoreDraftPreferences`.
+    @Published var sendBehavior: SendBehavior = .default
 
     /// The auto-send safety-net window in seconds (item 23). After approving an
     /// auto-send draft the app waits this long — with a Cancel affordance —
     /// before sending. Zero disables the window (instant send).
-    @Published var sendDelaySeconds: Int
+    @Published var sendDelaySeconds: Int = Settings.defaultSendDelaySeconds
 
     /// Whether first-run onboarding has been completed or dismissed.
     @Published var onboardingCompleted: Bool
@@ -354,8 +374,6 @@ final class AppState: ObservableObject {
         let loadedSettings = persistence.loadSettings()
         let settings = Self.fullyMigratedSettings(loaded: loadedSettings, secrets: secrets, persistence: persistence)
         self.pollIntervalSeconds = settings.pollIntervalSeconds
-        self.sendBehavior = SendBehavior(rawValue: settings.sendBehavior) ?? .default
-        self.sendDelaySeconds = settings.sendDelaySeconds
         self.onboardingCompleted = settings.onboardingCompleted
         self.senderAllowlist = settings.senderAllowlist
         self.senderBlocklist = settings.senderBlocklist
@@ -398,6 +416,9 @@ final class AppState: ObservableObject {
         restoreMailHostGuidanceFromSettings(loadedSettings)
         refreshLLMConnectionStatus()
 
+        // Seed the persisted draft-production preferences before the autosave
+        // sinks are wired, so restoring them does not trigger a spurious save.
+        restoreDraftPreferences(from: settings)
         setupAutoSave()
 
         persistRestoredManagedVerificationIfNeeded(managedLaunch, loadedFrom: settings)
@@ -408,27 +429,6 @@ final class AppState: ObservableObject {
         )
 
         installExternalActionHandlers()
-    }
-
-    private static func restoredPendingDraftState(
-        persistence: PersistenceProvider
-    ) -> (
-        drafts: [Draft],
-        offlineQueuedDispatch: [String: OfflineQueuedDraftDispatch],
-        waitingForNetwork: Set<String>
-    ) {
-        let approvedDraftIdentities = persistence.loadApprovedDraftIdentities()
-        let loadedPendingDrafts = persistence.loadPendingDrafts()
-        let pendingDrafts = loadedPendingDrafts.filter { !approvedDraftIdentities.contains($0.identity) }
-        if pendingDrafts.count != loadedPendingDrafts.count {
-            do {
-                try persistence.savePendingDraftsSync(pendingDrafts)
-            } catch {
-                logger.error("Failed to clean approved pending drafts on launch: \(error.localizedDescription)")
-            }
-        }
-        let offlineQueuedDispatch = offlineQueuedDispatches(from: pendingDrafts)
-        return (pendingDrafts, offlineQueuedDispatch, Set(offlineQueuedDispatch.keys))
     }
 
     /// Wires the notification-action and reachability-change callbacks. Called
@@ -449,19 +449,28 @@ final class AppState: ObservableObject {
         $pollIntervalSeconds
             .dropFirst()
             .sink { [weak self] _ in
-                self?.saveSettings()
-                self?.inboxWatcher.reschedule()
+                self?.saveSettingsAfterPublishedSet(rescheduleInboxWatcher: true)
             }
             .store(in: &cancellables)
 
         $sendBehavior
             .dropFirst()
-            .sink { [weak self] _ in self?.saveSettings() }
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
             .store(in: &cancellables)
 
         $sendDelaySeconds
             .dropFirst()
-            .sink { [weak self] _ in self?.saveSettings() }
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
+            .store(in: &cancellables)
+
+        $signaturePolicy
+            .dropFirst()
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
+            .store(in: &cancellables)
+
+        $signatureText
+            .dropFirst()
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
             .store(in: &cancellables)
 
         $llmModel

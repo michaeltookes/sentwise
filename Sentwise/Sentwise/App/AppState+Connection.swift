@@ -66,29 +66,35 @@ extension AppState {
         }
 
         let previousSettings = persistence.loadSettings()
-        let accountChanged = !isAccountConnected
-            || previousSettings.mailEmail.caseInsensitiveCompare(credentials.email) != .orderedSame
+        let previousEmail = previousSettings.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let accountIdentityChanged = hasAccountIdentityChanged(from: previousEmail, to: credentials.email)
+        let requiresTransitionCleanup = !isAccountConnected || accountIdentityChanged
         guard persistVerifiedConnectionTransition(
             credentials,
             previousSettings: previousSettings,
-            accountChanged: accountChanged
+            accountIdentityChanged: accountIdentityChanged,
+            requiresTransitionCleanup: requiresTransitionCleanup
         ) else { return }
         isAccountConnected = true
-        if accountChanged {
-            // A different account invalidates any in-flight auto-send countdowns
-            // (item 23) and offline-queued dispatches (item 27); neither must fire
-            // against the newly connected account.
+        if requiresTransitionCleanup {
+            // A different or newly reconnected account invalidates any in-flight
+            // auto-send countdowns (item 23) and offline-queued dispatches (item 27).
             cancelAllSendCountdowns()
             if wasWatching {
                 stopWatching()
                 startWatchingIfReady()
             }
         }
-        resetMessagePreviewForAccountChange(clearSkippedMessages: accountChanged)
+        resetMessagePreviewForAccountChange(clearSkippedMessages: requiresTransitionCleanup)
         // Now that mail is connected, catch up any transcript that arrived while
         // the account was disconnected but the folder watcher was already active.
         startTranscriptFolderWatchingIfEnabled()
         logger.info("Mailbox connected")
+    }
+
+    private func hasAccountIdentityChanged(from previousEmail: String, to nextEmail: String) -> Bool {
+        guard !previousEmail.isEmpty else { return false }
+        return previousEmail.caseInsensitiveCompare(nextEmail) != .orderedSame
     }
 
     /// Disconnects the mailbox by clearing the stored app password.
@@ -133,7 +139,8 @@ extension AppState {
     private func persistVerifiedConnectionTransition(
         _ credentials: MailAccountCredentials,
         previousSettings: Settings,
-        accountChanged: Bool
+        accountIdentityChanged: Bool,
+        requiresTransitionCleanup: Bool
     ) -> Bool {
         // Per-account key (item 48): writing a second account never overwrites the
         // first account's secret, so switching back to it later needs no re-entry.
@@ -154,7 +161,7 @@ extension AppState {
         }
 
         do {
-            try persistVerifiedConnection(credentials)
+            try persistVerifiedConnection(credentials, clearSignature: accountIdentityChanged)
         } catch {
             connectionError = failedConnectionPersistMessage(
                 error,
@@ -165,13 +172,17 @@ extension AppState {
             return false
         }
 
-        guard !accountChanged || clearQueuedDispatchesBeforeAccountTransition("changing accounts") else {
+        let cleanupAction = accountIdentityChanged ? "changing accounts" : "reconnecting"
+        guard !requiresTransitionCleanup || clearQueuedDispatchesBeforeAccountTransition(cleanupAction) else {
             appendConnectionRollbackMessage(rollbackVerifiedConnectionTransition(
                 to: previousSettings,
                 previousAppPassword: previousAppPassword,
                 for: accountKey
             ))
             return false
+        }
+        if accountIdentityChanged {
+            clearSignatureForAccountChange()
         }
         return true
     }

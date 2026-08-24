@@ -121,6 +121,27 @@ final class AppStateSavedAccountsTests: XCTestCase {
         XCTAssertFalse(app.isActiveAccount(app.savedAccounts[0]))
     }
 
+    func testChangingConnectedAccountClearsSignaturePreferences() async {
+        let secrets = InMemorySecretStore()
+        let (app, store, _) = makeAppState(secrets: secrets)
+        await connect(app, email: "me@gmail.com", host: "imap.gmail.com", password: "gmail-pw")
+        app.signaturePolicy = .custom
+        app.signatureText = "Best,\nGmail Me"
+
+        await connect(app, email: "me@att.net", host: "imap.mail.att.net", password: "att-pw")
+
+        XCTAssertTrue(app.isActiveAccount(SavedMailAccount(email: "me@att.net", host: "imap.mail.att.net", port: 993)))
+        XCTAssertEqual(app.signaturePolicy, .none)
+        XCTAssertEqual(app.signatureText, "")
+        XCTAssertEqual(store.loadSettings().signaturePolicy, SignaturePolicy.none.rawValue)
+        XCTAssertEqual(store.loadSettings().signatureText, "")
+        XCTAssertEqual(
+            app.signatureDetectionMessage,
+            "Signature cleared because the email account changed. Suggest or enter a signature for this account."
+        )
+        XCTAssertEqual(app.signatureDetectionSucceeded, false)
+    }
+
     // MARK: - Switching
 
     func testSwitchToSavedAccountRetainsBothCredentials() async {

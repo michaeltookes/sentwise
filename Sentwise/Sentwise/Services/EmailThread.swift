@@ -45,6 +45,43 @@ enum EmailThreadParser {
         return EmailThread(latest: latest.joined(separator: "\n"), quotedHistory: history)
     }
 
+    /// Splits only when a quote marker begins trailing history. This keeps an
+    /// embedded quoted excerpt plus later authored text in `latest`.
+    static func splitAtTrailingHistory(_ body: String) -> EmailThread {
+        let lines = body.components(separatedBy: "\n")
+        for (index, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard isQuoteMarker(trimmed),
+                  isTrailingHistorySuffix(from: index, in: lines) else {
+                continue
+            }
+            return EmailThread(
+                latest: lines[..<index].joined(separator: "\n"),
+                quotedHistory: lines[index...].joined(separator: "\n")
+            )
+        }
+        return EmailThread(latest: body, quotedHistory: "")
+    }
+
+    private static func isTrailingHistorySuffix(from index: Int, in lines: [String]) -> Bool {
+        let marker = lines[index].trimmingCharacters(in: .whitespaces)
+        let needsQuotedLine = marker.range(of: #"^On .+wrote:$"#, options: .regularExpression) != nil
+        var sawQuotedLine = false
+
+        for line in lines[index...] {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            if trimmed.hasPrefix(">") {
+                sawQuotedLine = true
+                continue
+            }
+            if sawQuotedLine {
+                return false
+            }
+        }
+        return !needsQuotedLine || sawQuotedLine
+    }
+
     /// A readable, bounded form of already-split quoted history for prompt
     /// context: leading `>` markers stripped so it reads as prose, surrounding
     /// whitespace trimmed, and capped at `maxChars`. Empty in, empty out.

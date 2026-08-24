@@ -327,14 +327,10 @@ extension AppState {
             return
         }
 
-        var nextSettings = buildSettings(mailEmail: shouldClearCurrentAccount ? "" : nil)
-        if shouldClearCurrentAccount {
-            nextSettings.mailHost = Settings.default.mailHost
-            nextSettings.mailPort = Settings.default.mailPort
-            nextSettings.mailHostGuidanceEmail = nil
-            nextSettings.mailHostGuidancePendingEmail = false
-        }
-        nextSettings.savedAccounts.removeAll { $0.id == account.id }
+        let nextSettings = settingsAfterRemovingSavedAccount(
+            account,
+            clearCurrentAccount: shouldClearCurrentAccount
+        )
 
         do {
             try secrets.remove(accountKey)
@@ -370,6 +366,25 @@ extension AppState {
             goOfflineAfterRemovingActiveAccount()
         }
         logger.info("Saved account removed")
+    }
+
+    private func settingsAfterRemovingSavedAccount(
+        _ account: SavedMailAccount,
+        clearCurrentAccount: Bool
+    ) -> Settings {
+        var settings = buildSettings(
+            mailEmail: clearCurrentAccount ? "" : nil,
+            signaturePolicyOverride: clearCurrentAccount ? SignaturePolicy.default.rawValue : nil,
+            signatureTextOverride: clearCurrentAccount ? "" : nil
+        )
+        if clearCurrentAccount {
+            settings.mailHost = Settings.default.mailHost
+            settings.mailPort = Settings.default.mailPort
+            settings.mailHostGuidanceEmail = nil
+            settings.mailHostGuidancePendingEmail = false
+        }
+        settings.savedAccounts.removeAll { $0.id == account.id }
+        return settings
     }
 
     private func removedAccountRollbackMessage(
@@ -418,6 +433,7 @@ extension AppState {
         mailHostExplicitlyEditedBeforeEmail = false
         mailAppPassword = ""
         isAccountConnected = false
+        clearSignatureForAccountRemoval()
         cancelAllSendCountdowns()
         stopWatching()
         resetMessagePreviewForAccountChange()
@@ -427,7 +443,7 @@ extension AppState {
 
     /// Adopts verified credentials as the active account, remembers it, and
     /// persists the settings snapshot. Called from `testConnection`.
-    func persistVerifiedConnection(_ credentials: MailAccountCredentials) throws {
+    func persistVerifiedConnection(_ credentials: MailAccountCredentials, clearSignature: Bool) throws {
         mailEmail = credentials.email
         mailHost = credentials.host
         mailPort = credentials.port
@@ -436,11 +452,14 @@ extension AppState {
         // Remember this account so it can be switched back to without re-entry.
         upsertSavedAccount(email: credentials.email, host: credentials.host, port: credentials.port)
 
-        try persistSettingsSync(buildSettings(
+        let nextSettings = buildSettings(
             mailEmail: credentials.email,
             mailHost: credentials.host,
-            mailPort: credentials.port
-        ))
+            mailPort: credentials.port,
+            signaturePolicyOverride: clearSignature ? SignaturePolicy.default.rawValue : nil,
+            signatureTextOverride: clearSignature ? "" : nil
+        )
+        try persistSettingsSync(nextSettings)
     }
 
     /// Restores the connecting account's Keychain slot after a failed persist.

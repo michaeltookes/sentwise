@@ -123,6 +123,46 @@ final class ManagedProviderTests: XCTestCase {
         XCTAssertEqual(persistence.loadSettings(), migrated)
     }
 
+    func testFullLaunchMigrationAdvancesPriorManagedInstallToSignatureSchemaOnce() {
+        // A user already on managed inference (v15) launching the signature build
+        // (v16): the additive signature step advances the schema and writes once,
+        // without disturbing their chosen provider or the defaulted signature.
+        let settings = Settings(schemaVersion: 15, pollIntervalSeconds: 300, llmProvider: "managed")
+        let persistence = AppStateMemoryPersistence(settings: settings)
+
+        let migrated = AppState.fullyMigratedSettings(
+            loaded: settings,
+            secrets: InMemorySecretStore(),
+            persistence: persistence
+        )
+
+        XCTAssertEqual(migrated.schemaVersion, Settings.currentSchemaVersion)
+        XCTAssertEqual(migrated.llmProvider, "managed")
+        XCTAssertEqual(migrated.signaturePolicy, SignaturePolicy.default.rawValue)
+        XCTAssertEqual(migrated.signatureText, "")
+        XCTAssertEqual(persistence.settingsSaveCount, 1)
+        XCTAssertEqual(persistence.savedSettingsHistory.map(\.schemaVersion), [Settings.currentSchemaVersion])
+    }
+
+    func testFullLaunchMigrationIsIdempotentAtSignatureSchema() {
+        // Relaunching once already at the current schema performs no write.
+        let settings = Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed"
+        )
+        let persistence = AppStateMemoryPersistence(settings: settings)
+
+        let migrated = AppState.fullyMigratedSettings(
+            loaded: settings,
+            secrets: InMemorySecretStore(),
+            persistence: persistence
+        )
+
+        XCTAssertEqual(migrated.schemaVersion, Settings.currentSchemaVersion)
+        XCTAssertEqual(persistence.settingsSaveCount, 0)
+    }
+
     // MARK: - LLMService routing + hunt-mode stub
 
     func testHuntModeReturnsCannedResponseWithoutNetwork() async throws {

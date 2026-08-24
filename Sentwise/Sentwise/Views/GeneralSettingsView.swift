@@ -53,6 +53,8 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            SignatureSettingsView()
+
             Section("Post-call follow-ups") {
                 Toggle("Watch a folder for new transcripts", isOn: Binding(
                     get: { appState.transcriptWatchedFolderEnabled },

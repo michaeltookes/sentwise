@@ -150,6 +150,44 @@ final class AppStateVoiceTests: XCTestCase {
         XCTAssertEqual(appState.voiceError, "Connection settings changed. Learn your voice again.")
     }
 
+    func testSuggestSignatureDoesNotOverwriteEditsMadeDuringDetection() async {
+        let mailProvider = SuspendedVoiceSampleMailProvider(messages: [sentMessage()])
+        let appState = makeSignatureAppState(mailProvider: mailProvider)
+
+        let task = Task { await appState.suggestSignatureFromSentMail() }
+        await fulfillment(of: [mailProvider.didStartBodyFetch], timeout: 1)
+
+        appState.signaturePolicy = .custom
+        appState.signatureText = "Typed,\nMe"
+        mailProvider.completeBody(with: .success(Data("Sounds good.\n\nBest,\nDetected".utf8)))
+        await task.value
+
+        XCTAssertEqual(appState.signaturePolicy, .custom)
+        XCTAssertEqual(appState.signatureText, "Typed,\nMe")
+        XCTAssertEqual(
+            appState.signatureDetectionMessage,
+            "Signature settings changed while detection was running, so your edits were left unchanged."
+        )
+        XCTAssertEqual(appState.signatureDetectionSucceeded, false)
+    }
+
+    func testSuggestSignatureReportsAccountChangeDuringDetection() async {
+        let mailProvider = SuspendedVoiceSampleMailProvider(messages: [sentMessage()])
+        let appState = makeSignatureAppState(mailProvider: mailProvider)
+
+        let task = Task { await appState.suggestSignatureFromSentMail() }
+        await fulfillment(of: [mailProvider.didStartBodyFetch], timeout: 1)
+
+        appState.mailEmail = "other@gmail.com"
+        mailProvider.completeBody(with: .success(Data("Sounds good.\n\nBest,\nDetected".utf8)))
+        await task.value
+
+        XCTAssertEqual(appState.signaturePolicy, .none)
+        XCTAssertEqual(appState.signatureText, "")
+        XCTAssertEqual(appState.signatureDetectionMessage, "Email account changed while detection was running. Try again.")
+        XCTAssertEqual(appState.signatureDetectionSucceeded, false)
+    }
+
     func testManagedProxyAuthFailureFromStaleVoiceLearningClearsPublishedAccountState() async throws {
         let secrets = InMemorySecretStore(seed: [
             .mailAppPassword(email: "me@gmail.com"): "app-pw",
@@ -256,6 +294,22 @@ final class AppStateVoiceTests: XCTestCase {
         let (appState, _, _) = makeConnectedAppState(persistence: persistence)
 
         XCTAssertEqual(appState.voiceProfile?.summary, "Loaded.")
+    }
+
+    private func makeSignatureAppState(mailProvider: MailProvider) -> AppState {
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            mailEmail: "me@gmail.com"
+        ))
+        let appState = AppState(
+            persistence: persistence,
+            secrets: InMemorySecretStore(),
+            mailProvider: mailProvider,
+            llm: FakeLLMProvider(result: .success(()))
+        )
+        appState.mailAppPassword = "app-pw"
+        return appState
     }
 }
 
