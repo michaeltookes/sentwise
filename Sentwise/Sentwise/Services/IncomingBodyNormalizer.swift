@@ -54,7 +54,7 @@ enum IncomingBodyNormalizer {
             let fenceLine = fence.stripsBlockquote && strippedTrailing.depth == fence.blockquoteDepth
                 ? strippedTrailing.text
                 : trimmedTrailing
-            if let candidate = closingFenceCandidate(fenceLine), fence.closes(candidate) {
+            if let candidate = fenceCandidate(fenceLine), fence.closes(candidate) {
                 fenceState = nil
                 return CleanedLine("")
             }
@@ -65,8 +65,8 @@ enum IncomingBodyNormalizer {
             return CleanedLine(literalLine, preservesBlankRuns: true)
         }
 
-        let trimmed = trimmedTrailing.trimmingCharacters(in: .whitespaces)
-        if let fence = FenceState(openingLine: trimmed, blockquoteDepth: 0) {
+        if let candidate = fenceCandidate(trimmedTrailing),
+           let fence = FenceState(openingLine: candidate, blockquoteDepth: 0) {
             fenceState = fence
             return CleanedLine("")
         }
@@ -74,7 +74,8 @@ enum IncomingBodyNormalizer {
         let strippedOpening = stripBlockquoteMarkers(trimmedTrailing)
         let unquotedTrimmed = strippedOpening.text.trimmingCharacters(in: .whitespaces)
         if strippedOpening.depth > 0,
-           let fence = FenceState(openingLine: unquotedTrimmed, blockquoteDepth: strippedOpening.depth) {
+           let candidate = fenceCandidate(strippedOpening.text),
+           let fence = FenceState(openingLine: candidate, blockquoteDepth: strippedOpening.depth) {
             fenceState = fence
             return CleanedLine("")
         }
@@ -126,7 +127,7 @@ enum IncomingBodyNormalizer {
         }
     }
 
-    private static func closingFenceCandidate(_ line: String) -> String? {
+    private static func fenceCandidate(_ line: String) -> String? {
         let leadingSpaces = line.prefix { $0 == " " }.count
         guard leadingSpaces <= 3 else { return nil }
         return String(line.dropFirst(leadingSpaces))

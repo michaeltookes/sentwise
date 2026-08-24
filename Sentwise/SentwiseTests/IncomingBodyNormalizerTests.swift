@@ -223,6 +223,18 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "After")
     }
 
+    func testFourSpaceIndentedFenceDelimiterDoesNotOpenCodeBlock() {
+        let input = "    ```\n**prose**"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "prose")
+    }
+
+    func testFourSpaceIndentedBlockquotedFenceDelimiterDoesNotOpenCodeBlock() {
+        let input = ">     ```\n> **prose**"
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "prose")
+    }
+
     func testPreservesEscapedEmphasisDelimiters() {
         XCTAssertEqual(
             IncomingBodyNormalizer.normalize(#"Escaped \**literal** and \__value__"#),

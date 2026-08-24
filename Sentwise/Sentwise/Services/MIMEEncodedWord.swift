@@ -30,7 +30,9 @@ enum MIMEEncodedWord {
 
         let ns = input as NSString
         let full = NSRange(location: 0, length: ns.length)
-        let matches = regex.matches(in: input, range: full)
+        let matches = regex.matches(in: input, range: full).filter {
+            hasEncodedWordBoundaries(in: ns, range: $0.range)
+        }
         guard !matches.isEmpty else { return input }
 
         var result = ""
@@ -77,6 +79,22 @@ enum MIMEEncodedWord {
     /// with a readable fallback for empty subjects.
     static func displaySubject(_ subject: String) -> String {
         subject.isEmpty ? "(no subject)" : decode(subject)
+    }
+
+    private static func hasEncodedWordBoundaries(in text: NSString, range: NSRange) -> Bool {
+        let end = range.location + range.length
+        let hasLeadingBoundary = range.location == 0 || isLinearWhitespace(text.character(at: range.location - 1))
+        let hasTrailingBoundary = end == text.length || isLinearWhitespace(text.character(at: end))
+        return hasLeadingBoundary && hasTrailingBoundary
+    }
+
+    private static func isLinearWhitespace(_ character: unichar) -> Bool {
+        switch character {
+        case 9, 10, 13, 32:
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - One encoded-word

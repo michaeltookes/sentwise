@@ -49,6 +49,12 @@ final class MIMEEncodedWordTests: XCTestCase {
         )
     }
 
+    func testEmbeddedEncodedWordLookingTokenIsUnchanged() {
+        let raw = "build=?UTF-8?Q?failed?=log"
+
+        XCTAssertEqual(MIMEEncodedWord.decode(raw), raw)
+    }
+
     func testAdjacentEncodedWordsCollapseSeparatingWhitespace() {
         // Two encoded-words split a long word; the whitespace between them is
         // per RFC 2047 not part of the text and must be dropped.
