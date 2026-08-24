@@ -35,7 +35,9 @@ extension AppState {
         }
 
         do {
-            let bodies = try await fetchSentSampleBodies(credentials: credentials)
+            let bodies = try await fetchSentSampleBodies(credentials: credentials) { [weak self] progress in
+                self?.voiceProgress = progress
+            }
             guard isCurrentVoiceContext(credentials: credentials, llmConfiguration: llmConfiguration) else {
                 voiceError = Self.staleVoiceLLMConfigurationMessage
                 return
@@ -73,15 +75,22 @@ extension AppState {
     // MARK: - Helpers
 
     /// Fetches recent Sent messages and reduces each to readable body text.
-    private func fetchSentSampleBodies(credentials: MailAccountCredentials) async throws -> [String] {
+    /// Shared by voice-profile learning and signature detection (item 24). The
+    /// optional `progress` closure reports per-message status; signature
+    /// detection passes none since it runs without a progress display.
+    func fetchSentSampleBodies(
+        credentials: MailAccountCredentials,
+        limit: Int = AppState.voiceSampleLimit,
+        progress: ((String) -> Void)? = nil
+    ) async throws -> [String] {
         let messages = try await mailProvider.fetchRecentMessages(
             credentials,
             mailbox: .sent,
-            limit: Self.voiceSampleLimit
+            limit: limit
         )
         var bodies: [String] = []
         for (index, message) in messages.enumerated() {
-            voiceProgress = "Reading message \(index + 1) of \(messages.count)…"
+            progress?("Reading message \(index + 1) of \(messages.count)…")
             let data = try await mailProvider.fetchBodyText(
                 credentials,
                 mailbox: .sent,

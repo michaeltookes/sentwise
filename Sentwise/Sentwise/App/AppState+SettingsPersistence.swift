@@ -30,6 +30,8 @@ extension AppState {
             llmBaseURL: llmBaseURL.trimmingCharacters(in: .whitespacesAndNewlines),
             llmVerifiedModel: verifiedLLMModel,
             managedAccountEmail: managedAccountEmail,
+            signaturePolicy: signaturePolicy.rawValue,
+            signatureText: signatureText,
             sendBehavior: sendBehavior.rawValue,
             sendDelaySeconds: sendDelaySeconds,
             onboardingCompleted: onboardingCompleted,

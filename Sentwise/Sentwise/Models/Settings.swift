@@ -19,7 +19,7 @@ enum SendBehavior: String, CaseIterable, Equatable {
 struct Settings: Codable, Equatable {
 
     /// The current settings schema version.
-    static let currentSchemaVersion = 15
+    static let currentSchemaVersion = 16
 
     /// Schema version that introduced the persisted onboarding completion flag.
     static let onboardingCompletionSchemaVersion = 6
@@ -58,6 +58,12 @@ struct Settings: Codable, Equatable {
     /// launch at this version, an install with no configured BYO provider moves to
     /// the managed provider; a configured BYO user keeps their provider.
     static let managedInferenceSchemaVersion = 15
+
+    /// Schema version that introduced the signature policy + custom text (item
+    /// 24). Purely additive: older files decode the policy as `none` (append
+    /// nothing) with an empty custom signature, a safe default for existing
+    /// installs.
+    static let signatureSchemaVersion = 16
 
     /// The default auto-send undo window, in seconds (item 23). Zero disables it.
     static let defaultSendDelaySeconds = 10
@@ -112,6 +118,16 @@ struct Settings: Codable, Equatable {
     /// Keychain. Empty when not signed in.
     var managedAccountEmail: String
 
+    /// How a signature is applied to generated drafts (raw value of
+    /// `SignaturePolicy`, item 24). Stored as a string so an unknown/future value
+    /// decodes gracefully to the default (`none`).
+    var signaturePolicy: String
+
+    /// The user's custom signature text, appended to drafts when the policy is
+    /// `custom` and the draft doesn't already end with a signature. Only
+    /// meaningful for the `custom` policy; empty otherwise.
+    var signatureText: String
+
     /// What approving a draft does (raw value of `SendBehavior`). Stored as a
     /// string so an unknown/future value decodes gracefully to the default.
     var sendBehavior: String
@@ -161,6 +177,8 @@ struct Settings: Codable, Equatable {
         llmBaseURL: String = "",
         llmVerifiedModel: String = "",
         managedAccountEmail: String = "",
+        signaturePolicy: String = SignaturePolicy.default.rawValue,
+        signatureText: String = "",
         sendBehavior: String = SendBehavior.default.rawValue,
         sendDelaySeconds: Int = Settings.defaultSendDelaySeconds,
         onboardingCompleted: Bool = false,
@@ -183,6 +201,8 @@ struct Settings: Codable, Equatable {
         self.llmBaseURL = llmBaseURL
         self.llmVerifiedModel = llmVerifiedModel
         self.managedAccountEmail = managedAccountEmail
+        self.signaturePolicy = signaturePolicy
+        self.signatureText = signatureText
         self.sendBehavior = sendBehavior
         self.sendDelaySeconds = sendDelaySeconds
         self.onboardingCompleted = onboardingCompleted
@@ -203,6 +223,7 @@ struct Settings: Codable, Equatable {
         case schemaVersion, pollIntervalSeconds, mailEmail, mailHost, mailHostGuidanceEmail
         case mailHostGuidancePendingEmail, mailPort, savedAccounts
         case llmProvider, llmModel, llmBaseURL, llmVerifiedModel, managedAccountEmail
+        case signaturePolicy, signatureText
         case sendBehavior, sendDelaySeconds, onboardingCompleted
         case senderAllowlist, senderBlocklist
         case transcriptWatchedFolderEnabled, transcriptWatchedFolderPath, transcriptWatchedFolderSeenSnapshots
@@ -224,6 +245,9 @@ struct Settings: Codable, Equatable {
         llmBaseURL = try container.decodeIfPresent(String.self, forKey: .llmBaseURL) ?? ""
         llmVerifiedModel = try container.decodeIfPresent(String.self, forKey: .llmVerifiedModel) ?? ""
         managedAccountEmail = try container.decodeIfPresent(String.self, forKey: .managedAccountEmail) ?? ""
+        signaturePolicy =
+            try container.decodeIfPresent(String.self, forKey: .signaturePolicy) ?? SignaturePolicy.default.rawValue
+        signatureText = try container.decodeIfPresent(String.self, forKey: .signatureText) ?? ""
         sendBehavior = try container.decodeIfPresent(String.self, forKey: .sendBehavior) ?? SendBehavior.default.rawValue
         sendDelaySeconds =
             try container.decodeIfPresent(Int.self, forKey: .sendDelaySeconds) ?? Settings.defaultSendDelaySeconds
@@ -248,6 +272,7 @@ struct Settings: Codable, Equatable {
         copy.mailPort = min(max(mailPort, 1), 65535)
         copy.sendDelaySeconds = min(max(sendDelaySeconds, 0), Settings.maxSendDelaySeconds)
         copy.llmBaseURL = llmBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.signatureText = signatureText.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasStoredGuidanceHost = !copy.mailHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if copy.mailHost.isEmpty && copy.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             copy.mailHost = "imap.gmail.com"

@@ -146,6 +146,24 @@ final class AppState: ObservableObject {
     /// How often (in seconds) the inbox is polled while the Mac is awake.
     @Published var pollIntervalSeconds: Int
 
+    /// How a signature is applied to generated drafts (item 24).
+    @Published var signaturePolicy: SignaturePolicy
+
+    /// The user's custom signature text, appended to drafts under the `.custom`
+    /// policy unless the draft already ends with a signature.
+    @Published var signatureText: String
+
+    /// Whether a "Suggest from my Sent mail" signature detection is in flight.
+    @Published var isDetectingSignature: Bool = false
+
+    /// User-facing result of the last signature detection (success or failure).
+    /// Non-nil after a detection attempt so feedback is never silent (item 24).
+    @Published var signatureDetectionMessage: String?
+
+    /// Whether the last detection succeeded, for styling the feedback message.
+    /// `nil` when no detection has run.
+    @Published var signatureDetectionSucceeded: Bool?
+
     /// What approving a draft does: save a Gmail draft or send immediately.
     @Published var sendBehavior: SendBehavior
 
@@ -354,6 +372,8 @@ final class AppState: ObservableObject {
         let loadedSettings = persistence.loadSettings()
         let settings = Self.fullyMigratedSettings(loaded: loadedSettings, secrets: secrets, persistence: persistence)
         self.pollIntervalSeconds = settings.pollIntervalSeconds
+        self.signaturePolicy = SignaturePolicy(rawValue: settings.signaturePolicy) ?? .default
+        self.signatureText = settings.signatureText
         self.sendBehavior = SendBehavior(rawValue: settings.sendBehavior) ?? .default
         self.sendDelaySeconds = settings.sendDelaySeconds
         self.onboardingCompleted = settings.onboardingCompleted
@@ -460,6 +480,16 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
 
         $sendDelaySeconds
+            .dropFirst()
+            .sink { [weak self] _ in self?.saveSettings() }
+            .store(in: &cancellables)
+
+        $signaturePolicy
+            .dropFirst()
+            .sink { [weak self] _ in self?.saveSettings() }
+            .store(in: &cancellables)
+
+        $signatureText
             .dropFirst()
             .sink { [weak self] _ in self?.saveSettings() }
             .store(in: &cancellables)
