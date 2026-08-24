@@ -45,6 +45,17 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         )
     }
 
+    func testPreservesEmphasisDelimitersInsideMultiBacktickCodeSpans() {
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Call ``__init__`` before use"),
+            "Call __init__ before use"
+        )
+        XCTAssertEqual(
+            IncomingBodyNormalizer.normalize("Use ``a`b`` in examples"),
+            "Use a`b in examples"
+        )
+    }
+
     func testPreservesRepeatedUnmatchedEmphasisOpeners() {
         let input = "Start" + String(repeating: " **a", count: 200)
 
@@ -54,6 +65,16 @@ final class IncomingBodyNormalizerTests: XCTestCase {
     func testSimplifiesMarkdownLinks() {
         let input = "See [the docs](https://example.com/tracking?id=abc123) for more."
         XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "See the docs for more.")
+    }
+
+    func testSimplifiesMarkdownLinksWithBalancedDestinationParentheses() {
+        let input = "See [docs](https://example.com/a_(b)) for details."
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "See docs for details.")
+    }
+
+    func testSimplifiesMarkdownLinksWithEscapedDestinationParentheses() {
+        let input = "See [docs](https://example.com/a\\)b) for details."
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), "See docs for details.")
     }
 
     func testCollapsesExcessiveBlankLines() {

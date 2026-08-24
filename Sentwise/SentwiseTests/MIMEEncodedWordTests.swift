@@ -91,6 +91,12 @@ final class MIMEEncodedWordTests: XCTestCase {
         XCTAssertEqual(MIMEEncodedWord.decode(raw), raw)
     }
 
+    func testEmptyEncodedWordPayloadFallsBackToRaw() {
+        let raw = "=?UTF-8?B??="
+        XCTAssertEqual(MIMEEncodedWord.decode(raw), raw)
+        XCTAssertEqual(MIMEEncodedWord.displaySubject(raw), raw)
+    }
+
     func testTruncatedQuotedPrintableEscapeFallsBackToRaw() {
         let raw = "=?UTF-8?Q?Caf=E?="   // dangling =E, missing a hex digit
         XCTAssertEqual(MIMEEncodedWord.decode(raw), raw)

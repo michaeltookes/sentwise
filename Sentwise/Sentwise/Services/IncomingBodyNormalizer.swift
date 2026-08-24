@@ -99,8 +99,8 @@ enum IncomingBodyNormalizer {
         return line
     }
 
-    /// Strips paired emphasis markers (`**`, `__`, backticks). Bare or intraword
-    /// `*`/`_` markers are left alone to avoid mangling literal identifiers.
+    /// Strips paired emphasis markers (`**`, `__`, backtick code spans). Bare or
+    /// intraword `*`/`_` markers are left alone to avoid mangling identifiers.
     private static func stripEmphasis(_ line: String) -> String {
         var result = ""
         var proseSegment = ""
@@ -113,9 +113,14 @@ enum IncomingBodyNormalizer {
                 continue
             }
 
-            let codeStart = line.index(after: index)
-            guard let codeEnd = line[codeStart...].firstIndex(of: "`") else {
-                // Preserve the old cleanup behavior for stray backticks.
+            let codeStart = backtickRunEnd(in: line, startingAt: index)
+            let delimiterLength = line.distance(from: index, to: codeStart)
+            guard let codeEnd = closingBacktickRun(
+                in: line,
+                delimiterLength: delimiterLength,
+                after: codeStart
+            ) else {
+                // Preserve the old cleanup behavior for stray backtick runs.
                 index = codeStart
                 continue
             }
@@ -123,11 +128,40 @@ enum IncomingBodyNormalizer {
             result += stripProseEmphasis(proseSegment)
             proseSegment.removeAll(keepingCapacity: true)
             result.append(contentsOf: line[codeStart..<codeEnd])
-            index = line.index(after: codeEnd)
+            index = line.index(codeEnd, offsetBy: delimiterLength)
         }
 
         result += stripProseEmphasis(proseSegment)
         return result
+    }
+
+    private static func backtickRunEnd(in line: String, startingAt index: String.Index) -> String.Index {
+        var runEnd = index
+        while runEnd < line.endIndex, line[runEnd] == "`" {
+            runEnd = line.index(after: runEnd)
+        }
+        return runEnd
+    }
+
+    private static func closingBacktickRun(
+        in line: String,
+        delimiterLength: Int,
+        after index: String.Index
+    ) -> String.Index? {
+        var current = index
+        while current < line.endIndex {
+            guard line[current] == "`" else {
+                current = line.index(after: current)
+                continue
+            }
+
+            let runEnd = backtickRunEnd(in: line, startingAt: current)
+            if line.distance(from: current, to: runEnd) == delimiterLength {
+                return current
+            }
+            current = runEnd
+        }
+        return nil
     }
 
     private static func stripProseEmphasis(_ line: String) -> String {
@@ -191,20 +225,66 @@ enum IncomingBodyNormalizer {
     }
 
     /// Converts `[label](url)` to just `label`, dropping the (often tracking-laden)
-    /// URL. Uses a regex; on failure returns the input unchanged.
+    /// URL. Link destinations can contain escaped or balanced parentheses.
     private static func simplifyLinks(_ line: String) -> String {
-        guard line.contains("]("), let regex = linkRegex else { return line }
-        let ns = line as NSString
-        return regex.stringByReplacingMatches(
-            in: line,
-            range: NSRange(location: 0, length: ns.length),
-            withTemplate: "$1"
-        )
+        guard line.contains("](") else { return line }
+
+        var result = ""
+        var index = line.startIndex
+        while index < line.endIndex {
+            if line[index] == "[",
+               let labelEnd = closingLabelBracket(in: line, after: line.index(after: index)) {
+                let destinationStart = line.index(after: labelEnd)
+                if destinationStart < line.endIndex, line[destinationStart] == "(" {
+                    let urlStart = line.index(after: destinationStart)
+                    if let destinationEnd = closingDestinationParen(in: line, after: urlStart) {
+                        result.append(contentsOf: line[line.index(after: index)..<labelEnd])
+                        index = line.index(after: destinationEnd)
+                        continue
+                    }
+                }
+            }
+
+            result.append(line[index])
+            index = line.index(after: index)
+        }
+
+        return result
     }
 
-    private static let linkRegex = try? NSRegularExpression(
-        pattern: "\\[([^\\]]*)\\]\\([^)]*\\)"
-    )
+    private static func closingLabelBracket(in line: String, after index: String.Index) -> String.Index? {
+        var current = index
+        while current < line.endIndex {
+            if line[current] == "\\" {
+                current = line.index(after: current)
+                if current < line.endIndex { current = line.index(after: current) }
+                continue
+            }
+            if line[current] == "]" { return current }
+            current = line.index(after: current)
+        }
+        return nil
+    }
+
+    private static func closingDestinationParen(in line: String, after index: String.Index) -> String.Index? {
+        var depth = 0
+        var current = index
+        while current < line.endIndex {
+            if line[current] == "\\" {
+                current = line.index(after: current)
+                if current < line.endIndex { current = line.index(after: current) }
+                continue
+            }
+            if line[current] == "(" {
+                depth += 1
+            } else if line[current] == ")" {
+                guard depth > 0 else { return current }
+                depth -= 1
+            }
+            current = line.index(after: current)
+        }
+        return nil
+    }
 
     /// Collapses runs of two or more interior spaces/tabs into a single space.
     private static func collapseSpaces(_ line: String) -> String {

@@ -20,7 +20,7 @@ enum MIMEEncodedWord {
     /// carry no whitespace or `?` (a literal `?` in Q-text is escaped as `=3F`),
     /// so the character classes below cannot run past the closing `?=`.
     private static let regex = try? NSRegularExpression(
-        pattern: "=\\?([^?\\s]+)\\?([BbQq])\\?([^\\s?]*)\\?="
+        pattern: "=\\?([^?\\s]+)\\?([BbQq])\\?([^\\s?]+)\\?="
     )
 
     /// Returns `input` with every well-formed encoded-word replaced by its
@@ -84,6 +84,8 @@ enum MIMEEncodedWord {
     /// Decodes a single encoded-word's payload, or `nil` when the charset is
     /// unknown or the payload cannot be decoded (caller falls back to raw text).
     private static func decodeWord(charset: String, encoding: String, text: String) -> String? {
+        guard !text.isEmpty else { return nil }
+
         let bytes: [UInt8]?
         switch encoding.uppercased() {
         case "B":
