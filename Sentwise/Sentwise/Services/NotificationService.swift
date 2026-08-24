@@ -278,7 +278,7 @@ final class UserNotificationService: NSObject, DraftNotifying {
     ) {
         let subject = draft.replySubject.isEmpty
             ? "Post-call follow-up"
-            : MIMEEncodedWord.decode(draft.replySubject)
+            : draft.replySubject
         guard draft.hasAuthoredRecipients else {
             content.title = "Follow-up drafted — add recipients"
             content.subtitle = subject

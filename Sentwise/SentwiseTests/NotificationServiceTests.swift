@@ -83,6 +83,17 @@ final class NotificationServiceTests: XCTestCase {
         XCTAssertEqual(content.subtitle, "Café ☕", "banner subtitle must show the decoded subject")
     }
 
+    func testAuthoredNotificationSubtitleDoesNotDecodeUserSubject() {
+        var draft = recipientlessFollowUp()
+        draft.replySubject = "☕ =?UTF-8?Q?failed?="
+        let content = UserNotificationService.notificationContent(
+            for: draft,
+            sendBehavior: .autoSend
+        )
+
+        XCTAssertEqual(content.subtitle, "☕ =?UTF-8?Q?failed?=")
+    }
+
     func testFlaggedNotificationOffersNoApproveAction() {
         let actions = UserNotificationService.needsInputActions()
         XCTAssertFalse(

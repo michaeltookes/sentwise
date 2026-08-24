@@ -40,6 +40,13 @@ struct PendingDraftCard: View {
         draft.needsInfo != nil ? "Can't draft this one" : (draft.notReplyWorthy != nil ? "Write a reply" : "Proposed reply")
     }
 
+    private var replySubjectDisplayText: String {
+        if draft.isAuthored {
+            return draft.replySubject.isEmpty ? "(no subject)" : draft.replySubject
+        }
+        return MIMEEncodedWord.displaySubject(draft.replySubject)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if draft.isFlagged {
@@ -178,7 +185,7 @@ struct PendingDraftCard: View {
                         .help(recipient)
                 }
             }
-            Text(MIMEEncodedWord.displaySubject(draft.replySubject))
+            Text(replySubjectDisplayText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

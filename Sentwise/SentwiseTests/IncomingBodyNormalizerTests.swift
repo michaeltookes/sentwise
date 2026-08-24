@@ -145,6 +145,14 @@ final class IncomingBodyNormalizerTests: XCTestCase {
         )
     }
 
+    func testUnmatchedBacktickRunsDoNotRescanLineSuffixes() {
+        let input = (1...800)
+            .map { String(repeating: "`", count: $0) + "x" }
+            .joined(separator: " ")
+
+        XCTAssertEqual(IncomingBodyNormalizer.normalize(input), input)
+    }
+
     func testPreservesFencedCodeBlockContents() {
         let input = """
         Before

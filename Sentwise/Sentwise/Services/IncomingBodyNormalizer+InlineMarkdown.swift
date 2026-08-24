@@ -11,11 +11,12 @@ extension IncomingBodyNormalizer {
         var proseSegment = ""
         var index = line.startIndex
         let preservesBlankRuns = inlineCodeState != nil
+        let backtickRuns = backtickRunStartsByLength(in: line)
 
         while index < line.endIndex {
             if let state = inlineCodeState {
                 guard let codeEnd = closingBacktickRun(
-                    in: line,
+                    in: backtickRuns,
                     delimiterLength: state.delimiterLength,
                     after: index
                 ) else {
@@ -42,7 +43,7 @@ extension IncomingBodyNormalizer {
             let codeStart = backtickRunEnd(in: line, startingAt: index)
             let delimiterLength = line.distance(from: index, to: codeStart)
             if let codeEnd = closingBacktickRun(
-                in: line,
+                in: backtickRuns,
                 delimiterLength: delimiterLength,
                 after: codeStart
             ) {
@@ -90,12 +91,37 @@ private extension IncomingBodyNormalizer {
         return false
     }
 
+    static func backtickRunStartsByLength(in line: String) -> [Int: [String.Index]] {
+        var result: [Int: [String.Index]] = [:]
+        var current = line.startIndex
+        while current < line.endIndex {
+            guard line[current] == "`" else {
+                current = line.index(after: current)
+                continue
+            }
+            let runEnd = backtickRunEnd(in: line, startingAt: current)
+            if !isEscaped(in: line, at: current) {
+                result[line.distance(from: current, to: runEnd), default: []].append(current)
+            }
+            current = runEnd
+        }
+        return result
+    }
+
     static func backtickRunEnd(in line: String, startingAt index: String.Index) -> String.Index {
         var runEnd = index
         while runEnd < line.endIndex, line[runEnd] == "`" {
             runEnd = line.index(after: runEnd)
         }
         return runEnd
+    }
+
+    static func closingBacktickRun(
+        in runsByLength: [Int: [String.Index]],
+        delimiterLength: Int,
+        after index: String.Index
+    ) -> String.Index? {
+        runsByLength[delimiterLength]?.first { $0 >= index }
     }
 
     static func closingBacktickRun(
