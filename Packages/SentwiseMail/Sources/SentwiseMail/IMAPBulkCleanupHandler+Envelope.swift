@@ -142,7 +142,7 @@ extension IMAPBulkCleanupHandler {
     func settle(_ result: Result<IMAPBulkOutcome, Error>) {
         guard !settled else { return }
         settled = true
-        promise.completeWith(result)
+        complete(result)
     }
 
     static func address(from element: EmailAddressListElement) -> MailAddress? {

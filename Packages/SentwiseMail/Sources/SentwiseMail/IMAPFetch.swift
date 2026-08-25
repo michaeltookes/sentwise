@@ -13,7 +13,12 @@ extension IMAPMailProvider {
         guard credentials.isComplete else { throw MailError.incompleteCredentials }
         guard limit > 0 else { return [] }
 
-        let attempts = IMAPFetchAttempts()
+        let attempts = ChannelPromiseTracker<[MailMessage]>()
+        // Always settle every tracked promise, including losing Happy Eyeballs
+        // candidates that never became active, so none is deallocated unfulfilled
+        // (backlog item 77). The winner is already claimed by its handler by the
+        // time this runs, so it is untouched.
+        defer { attempts.failRemaining(MailError.connectionFailed("The connection attempt was superseded.")) }
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
@@ -25,13 +30,13 @@ extension IMAPMailProvider {
             .channelInitializer { channel in
                 do {
                     let ssl = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
-                    let promise = attempts.makePromise(for: channel)
+                    let complete = attempts.register(channel)
                     let handler = IMAPFetchHandler(
                         email: email,
                         password: password,
                         mailboxName: mailboxName,
                         limit: limit,
-                        promise: promise
+                        complete: complete
                     )
                     return channel.pipeline.addHandlers([ssl, IMAPClientHandler(), handler])
                 } catch {
@@ -66,28 +71,7 @@ extension IMAPMailProvider {
     }
 }
 
-/// Tracks fetch futures per channel (mirrors the verify tracker) so Happy
-/// Eyeballs attempts can't settle the winning channel's result.
-final class IMAPFetchAttempts: @unchecked Sendable {
-    private let lock = NSLock()
-    private var futures: [ObjectIdentifier: EventLoopFuture<[MailMessage]>] = [:]
-
-    func makePromise(for channel: Channel) -> EventLoopPromise<[MailMessage]> {
-        let promise = channel.eventLoop.makePromise(of: [MailMessage].self)
-        lock.lock()
-        futures[ObjectIdentifier(channel)] = promise.futureResult
-        lock.unlock()
-        return promise
-    }
-
-    func future(for channel: Channel) -> EventLoopFuture<[MailMessage]>? {
-        lock.lock()
-        defer { lock.unlock() }
-        return futures.removeValue(forKey: ObjectIdentifier(channel))
-    }
-}
-
-/// Drives LOGIN → SELECT → FETCH (envelope) → LOGOUT and completes `promise`
+/// Drives LOGIN → SELECT → FETCH (envelope) → LOGOUT and settles via `complete`
 /// with the parsed messages, newest first.
 final class IMAPFetchHandler: ChannelInboundHandler {
     typealias InboundIn = Response
@@ -112,7 +96,7 @@ final class IMAPFetchHandler: ChannelInboundHandler {
     private let password: String
     private let mailboxName: String
     private let limit: Int
-    private let promise: EventLoopPromise<[MailMessage]>
+    private let complete: @Sendable (Result<[MailMessage], Error>) -> Void
 
     private let loginTag = "A1"
     private let selectTag = "A2"
@@ -131,13 +115,13 @@ final class IMAPFetchHandler: ChannelInboundHandler {
         password: String,
         mailboxName: String,
         limit: Int,
-        promise: EventLoopPromise<[MailMessage]>
+        complete: @escaping @Sendable (Result<[MailMessage], Error>) -> Void
     ) {
         self.email = email
         self.password = password
         self.mailboxName = mailboxName
         self.limit = limit
-        self.promise = promise
+        self.complete = complete
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -330,7 +314,7 @@ final class IMAPFetchHandler: ChannelInboundHandler {
     private func settle(_ result: Result<[MailMessage], Error>) {
         guard !settled else { return }
         settled = true
-        promise.completeWith(result)
+        complete(result)
     }
 
     private static func address(from element: EmailAddressListElement) -> MailAddress? {

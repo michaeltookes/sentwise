@@ -131,7 +131,12 @@ extension IMAPMailProvider {
             )
         }
 
-        let attempts = IMAPBulkCleanupAttempts()
+        let attempts = ChannelPromiseTracker<IMAPBulkOutcome>()
+        // Settle every tracked promise on exit — including losing Happy Eyeballs
+        // candidates that never became active — so none is deallocated
+        // unfulfilled (backlog item 77). The winner is already claimed by its
+        // handler before this runs, so it is untouched.
+        defer { attempts.failRemaining(MailError.connectionFailed("The connection attempt was superseded.")) }
         let bootstrap = try makeBulkCleanupBootstrap(
             credentials,
             request: request,
@@ -176,7 +181,7 @@ extension IMAPMailProvider {
         request: IMAPBulkCleanupRequest,
         mailboxName: String,
         destinationName: String?,
-        attempts: IMAPBulkCleanupAttempts
+        attempts: ChannelPromiseTracker<IMAPBulkOutcome>
     ) throws -> ClientBootstrap {
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
@@ -194,33 +199,12 @@ extension IMAPMailProvider {
                         mailboxName: mailboxName,
                         destinationName: destinationName,
                         request: request,
-                        promise: attempts.makePromise(for: channel)
+                        complete: attempts.register(channel)
                     )
                     return channel.pipeline.addHandlers([ssl, IMAPClientHandler(), handler])
                 } catch {
                     return channel.eventLoop.makeFailedFuture(error)
                 }
             }
-    }
-}
-
-/// Tracks bulk-cleanup futures per channel (mirrors the search/page trackers) so
-/// Happy Eyeballs attempts can't settle the winning channel's result.
-final class IMAPBulkCleanupAttempts: @unchecked Sendable {
-    private let lock = NSLock()
-    private var futures: [ObjectIdentifier: EventLoopFuture<IMAPBulkOutcome>] = [:]
-
-    func makePromise(for channel: Channel) -> EventLoopPromise<IMAPBulkOutcome> {
-        let promise = channel.eventLoop.makePromise(of: IMAPBulkOutcome.self)
-        lock.lock()
-        futures[ObjectIdentifier(channel)] = promise.futureResult
-        lock.unlock()
-        return promise
-    }
-
-    func future(for channel: Channel) -> EventLoopFuture<IMAPBulkOutcome>? {
-        lock.lock()
-        defer { lock.unlock() }
-        return futures.removeValue(forKey: ObjectIdentifier(channel))
     }
 }

@@ -62,7 +62,12 @@ extension IMAPMailProvider {
         guard credentials.isComplete else { throw MailError.incompleteCredentials }
         guard limit > 0, offset >= 0 else { return .empty(offset: max(0, offset)) }
 
-        let attempts = IMAPMessagePageAttempts()
+        let attempts = ChannelPromiseTracker<MailSearchResult>()
+        // Settle every tracked promise on exit — including losing Happy Eyeballs
+        // candidates that never became active — so none is deallocated
+        // unfulfilled (backlog item 77). The winner is already claimed by its
+        // handler before this runs, so it is untouched.
+        defer { attempts.failRemaining(MailError.connectionFailed("The connection attempt was superseded.")) }
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
@@ -74,7 +79,7 @@ extension IMAPMailProvider {
             .channelInitializer { channel in
                 do {
                     let ssl = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
-                    let promise = attempts.makePromise(for: channel)
+                    let complete = attempts.register(channel)
                     let handler = IMAPMessagePageHandler(
                         email: email,
                         password: password,
@@ -82,7 +87,7 @@ extension IMAPMailProvider {
                         offset: offset,
                         limit: limit,
                         snapshotMessageCount: snapshotMessageCount,
-                        promise: promise
+                        complete: complete
                     )
                     return channel.pipeline.addHandlers([ssl, IMAPClientHandler(), handler])
                 } catch {
@@ -117,29 +122,8 @@ extension IMAPMailProvider {
     }
 }
 
-/// Tracks message-page futures per channel (mirrors the fetch/search trackers) so
-/// Happy Eyeballs attempts can't settle the winning channel's result.
-final class IMAPMessagePageAttempts: @unchecked Sendable {
-    private let lock = NSLock()
-    private var futures: [ObjectIdentifier: EventLoopFuture<MailSearchResult>] = [:]
-
-    func makePromise(for channel: Channel) -> EventLoopPromise<MailSearchResult> {
-        let promise = channel.eventLoop.makePromise(of: MailSearchResult.self)
-        lock.lock()
-        futures[ObjectIdentifier(channel)] = promise.futureResult
-        lock.unlock()
-        return promise
-    }
-
-    func future(for channel: Channel) -> EventLoopFuture<MailSearchResult>? {
-        lock.lock()
-        defer { lock.unlock() }
-        return futures.removeValue(forKey: ObjectIdentifier(channel))
-    }
-}
-
 /// Drives LOGIN → SELECT → FETCH (one bounded sequence range) → LOGOUT and
-/// completes `promise` with the page plus the total message count (`EXISTS`).
+/// settles via `complete` with the page plus the total message count (`EXISTS`).
 final class IMAPMessagePageHandler: ChannelInboundHandler {
     typealias InboundIn = Response
 
@@ -165,7 +149,7 @@ final class IMAPMessagePageHandler: ChannelInboundHandler {
     private let offset: Int
     private let limit: Int
     private let snapshotMessageCount: Int?
-    private let promise: EventLoopPromise<MailSearchResult>
+    private let complete: @Sendable (Result<MailSearchResult, Error>) -> Void
 
     private let loginTag = "A1"
     private let selectTag = "A2"
@@ -186,7 +170,7 @@ final class IMAPMessagePageHandler: ChannelInboundHandler {
         offset: Int,
         limit: Int,
         snapshotMessageCount: Int?,
-        promise: EventLoopPromise<MailSearchResult>
+        complete: @escaping @Sendable (Result<MailSearchResult, Error>) -> Void
     ) {
         self.email = email
         self.password = password
@@ -194,7 +178,7 @@ final class IMAPMessagePageHandler: ChannelInboundHandler {
         self.offset = offset
         self.limit = limit
         self.snapshotMessageCount = snapshotMessageCount
-        self.promise = promise
+        self.complete = complete
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -415,7 +399,7 @@ final class IMAPMessagePageHandler: ChannelInboundHandler {
     private func settle(_ result: Result<MailSearchResult, Error>) {
         guard !settled else { return }
         settled = true
-        promise.completeWith(result)
+        complete(result)
     }
 
     private static func address(from element: EmailAddressListElement) -> MailAddress? {

@@ -23,7 +23,7 @@ final class IMAPMessagePageTests: XCTestCase {
             offset: offset,
             limit: limit,
             snapshotMessageCount: snapshotMessageCount,
-            promise: promise
+            complete: { promise.completeWith($0) }
         )
         try channel.pipeline.syncOperations.addHandlers([IMAPClientHandler(), handler])
         return (channel, promise.futureResult)

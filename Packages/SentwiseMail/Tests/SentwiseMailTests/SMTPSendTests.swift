@@ -21,7 +21,7 @@ final class SMTPSendTests: XCTestCase {
             senderDomain: "gmail.com",
             envelope: envelope,
             message: ByteBuffer(bytes: rfc822),
-            promise: promise
+            complete: { promise.completeWith($0) }
         )
         try channel.pipeline.syncOperations.addHandlers([
             ByteToMessageHandler(SMTPResponseDecoder()),

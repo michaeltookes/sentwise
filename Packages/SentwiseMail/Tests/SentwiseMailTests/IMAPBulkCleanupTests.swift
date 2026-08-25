@@ -39,7 +39,7 @@ final class IMAPBulkCleanupTests: XCTestCase {
                 selectionCap: selectionCap,
                 onProgress: onProgress
             ),
-            promise: promise
+            complete: { promise.completeWith($0) }
         )
         try channel.pipeline.syncOperations.addHandlers([IMAPClientHandler(), handler])
         return (channel, promise.futureResult)

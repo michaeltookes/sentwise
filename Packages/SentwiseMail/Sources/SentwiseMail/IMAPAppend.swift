@@ -14,7 +14,12 @@ extension IMAPMailProvider {
         guard credentials.isComplete else { throw MailError.incompleteCredentials }
         guard !rfc822.isEmpty else { throw MailError.commandFailed("The message to append is empty.") }
 
-        let attempts = IMAPAppendAttempts()
+        let attempts = ChannelPromiseTracker<Void>()
+        // Settle every tracked promise on exit — including losing Happy Eyeballs
+        // candidates that never became active — so none is deallocated
+        // unfulfilled (backlog item 77). The winner is already claimed by its
+        // handler before this runs, so it is untouched.
+        defer { attempts.failRemaining(MailError.connectionFailed("The connection attempt was superseded.")) }
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
@@ -26,14 +31,14 @@ extension IMAPMailProvider {
             .channelInitializer { channel in
                 do {
                     let ssl = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
-                    let promise = attempts.makePromise(for: channel)
+                    let complete = attempts.register(channel)
                     let handler = IMAPAppendHandler(
                         email: email,
                         password: password,
                         mailboxName: mailboxName,
                         message: ByteBuffer(bytes: rfc822),
                         flags: flags,
-                        promise: promise
+                        complete: complete
                     )
                     return channel.pipeline.addHandlers([ssl, IMAPClientHandler(), handler])
                 } catch {
@@ -67,29 +72,8 @@ extension IMAPMailProvider {
     }
 }
 
-/// Tracks append futures per channel (mirrors the fetch trackers) so Happy
-/// Eyeballs attempts can't settle the winning channel's result.
-final class IMAPAppendAttempts: @unchecked Sendable {
-    private let lock = NSLock()
-    private var futures: [ObjectIdentifier: EventLoopFuture<Void>] = [:]
-
-    func makePromise(for channel: Channel) -> EventLoopPromise<Void> {
-        let promise = channel.eventLoop.makePromise(of: Void.self)
-        lock.lock()
-        futures[ObjectIdentifier(channel)] = promise.futureResult
-        lock.unlock()
-        return promise
-    }
-
-    func future(for channel: Channel) -> EventLoopFuture<Void>? {
-        lock.lock()
-        defer { lock.unlock() }
-        return futures.removeValue(forKey: ObjectIdentifier(channel))
-    }
-}
-
-/// Drives LOGIN → APPEND (message literal with flags) → LOGOUT and completes
-/// `promise` when the append is acknowledged. The `IMAPClientHandler` buffers
+/// Drives LOGIN → APPEND (message literal with flags) → LOGOUT and settles via
+/// `complete` when the append is acknowledged. The `IMAPClientHandler` buffers
 /// the message bytes and releases them on the server's continuation request.
 final class IMAPAppendHandler: ChannelInboundHandler {
     typealias InboundIn = Response
@@ -103,7 +87,7 @@ final class IMAPAppendHandler: ChannelInboundHandler {
     private let mailboxName: String
     private let message: ByteBuffer
     private let flags: [MailFlag]
-    private let promise: EventLoopPromise<Void>
+    private let complete: @Sendable (Result<Void, Error>) -> Void
 
     private let loginTag = "A1"
     private let appendTag = "A2"
@@ -118,14 +102,14 @@ final class IMAPAppendHandler: ChannelInboundHandler {
         mailboxName: String,
         message: ByteBuffer,
         flags: [MailFlag],
-        promise: EventLoopPromise<Void>
+        complete: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
         self.email = email
         self.password = password
         self.mailboxName = mailboxName
         self.message = message
         self.flags = flags
-        self.promise = promise
+        self.complete = complete
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -220,6 +204,6 @@ final class IMAPAppendHandler: ChannelInboundHandler {
     private func settle(_ result: Result<Void, Error>) {
         guard !settled else { return }
         settled = true
-        promise.completeWith(result)
+        complete(result)
     }
 }

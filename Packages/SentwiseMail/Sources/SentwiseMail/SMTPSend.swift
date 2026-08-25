@@ -15,7 +15,12 @@ extension IMAPMailProvider {
             throw MailError.commandFailed("The message has no recipients.")
         }
 
-        let attempts = SMTPSendAttempts()
+        let attempts = ChannelPromiseTracker<Void>()
+        // Settle every tracked promise on exit — including losing Happy Eyeballs
+        // candidates that never became active — so none is deallocated
+        // unfulfilled (backlog item 77). The winner is already claimed by its
+        // handler before this runs, so it is untouched.
+        defer { attempts.failRemaining(MailError.connectionFailed("The connection attempt was superseded.")) }
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.smtpHost
         let email = credentials.email
@@ -26,14 +31,14 @@ extension IMAPMailProvider {
             .channelInitializer { channel in
                 do {
                     let ssl = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
-                    let promise = attempts.makePromise(for: channel)
+                    let complete = attempts.register(channel)
                     let handler = SMTPSendHandler(
                         email: email,
                         password: password,
                         senderDomain: SMTPSendHandler.domain(of: email),
                         envelope: envelope,
                         message: ByteBuffer(bytes: rfc822),
-                        promise: promise
+                        complete: complete
                     )
                     return channel.pipeline.addHandlers([
                         ssl,
@@ -120,30 +125,9 @@ final class SMTPResponseDecoder: ByteToMessageDecoder {
     }
 }
 
-/// Tracks send futures per channel (mirrors the fetch/append trackers) so Happy
-/// Eyeballs attempts can't settle the winning channel's result.
-final class SMTPSendAttempts: @unchecked Sendable {
-    private let lock = NSLock()
-    private var futures: [ObjectIdentifier: EventLoopFuture<Void>] = [:]
-
-    func makePromise(for channel: Channel) -> EventLoopPromise<Void> {
-        let promise = channel.eventLoop.makePromise(of: Void.self)
-        lock.lock()
-        futures[ObjectIdentifier(channel)] = promise.futureResult
-        lock.unlock()
-        return promise
-    }
-
-    func future(for channel: Channel) -> EventLoopFuture<Void>? {
-        lock.lock()
-        defer { lock.unlock() }
-        return futures.removeValue(forKey: ObjectIdentifier(channel))
-    }
-}
-
 /// Drives the SMTP submission exchange over an already-TLS'd channel:
 /// greeting → EHLO → AUTH LOGIN → MAIL FROM → RCPT TO… → DATA → body → QUIT,
-/// completing `promise` when the server accepts the message (250 after DATA).
+/// settling via `complete` when the server accepts the message (250 after DATA).
 final class SMTPSendHandler: ChannelInboundHandler {
     typealias InboundIn = SMTPResponse
     typealias OutboundOut = ByteBuffer
@@ -158,7 +142,7 @@ final class SMTPSendHandler: ChannelInboundHandler {
     private let senderDomain: String
     private let envelope: SMTPEnvelope
     private let message: ByteBuffer
-    private let promise: EventLoopPromise<Void>
+    private let complete: @Sendable (Result<Void, Error>) -> Void
 
     private var step: Step = .greeting
     private var settled = false
@@ -174,14 +158,14 @@ final class SMTPSendHandler: ChannelInboundHandler {
         senderDomain: String,
         envelope: SMTPEnvelope,
         message: ByteBuffer,
-        promise: EventLoopPromise<Void>
+        complete: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
         self.email = email
         self.password = password
         self.senderDomain = senderDomain
         self.envelope = envelope
         self.message = message
-        self.promise = promise
+        self.complete = complete
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -321,7 +305,7 @@ final class SMTPSendHandler: ChannelInboundHandler {
     private func settle(_ result: Result<Void, Error>) {
         guard !settled else { return }
         settled = true
-        promise.completeWith(result)
+        complete(result)
     }
 
     static func domain(of email: String) -> String {

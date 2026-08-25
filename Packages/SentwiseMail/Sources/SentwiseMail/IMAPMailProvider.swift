@@ -25,7 +25,12 @@ public struct IMAPMailProvider: MailProvider {
     public func verifyConnection(_ credentials: MailAccountCredentials) async throws {
         guard credentials.isComplete else { throw MailError.incompleteCredentials }
 
-        let attempts = IMAPVerificationAttempts()
+        let attempts = ChannelPromiseTracker<Void>()
+        // Settle every tracked promise on exit — including losing Happy Eyeballs
+        // candidates that never became active — so none is deallocated
+        // unfulfilled (backlog item 77). The winner is already claimed by its
+        // handler before this runs, so it is untouched.
+        defer { attempts.failRemaining(MailError.connectionFailed("The connection attempt was superseded.")) }
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
@@ -36,8 +41,8 @@ public struct IMAPMailProvider: MailProvider {
             .channelInitializer { channel in
                 do {
                     let ssl = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
-                    let promise = attempts.makePromise(for: channel)
-                    let verify = IMAPVerifyHandler(email: email, password: password, promise: promise)
+                    let complete = attempts.register(channel)
+                    let verify = IMAPVerifyHandler(email: email, password: password, complete: complete)
                     return channel.pipeline.addHandlers([ssl, IMAPClientHandler(), verify])
                 } catch {
                     return channel.eventLoop.makeFailedFuture(error)
@@ -72,28 +77,7 @@ public struct IMAPMailProvider: MailProvider {
     }
 }
 
-/// Tracks verification futures per channel so Happy Eyeballs connection attempts
-/// cannot settle the verification for the channel that ultimately wins.
-final class IMAPVerificationAttempts: @unchecked Sendable {
-    private let lock = NSLock()
-    private var futures: [ObjectIdentifier: EventLoopFuture<Void>] = [:]
-
-    func makePromise(for channel: Channel) -> EventLoopPromise<Void> {
-        let promise = channel.eventLoop.makePromise(of: Void.self)
-        lock.lock()
-        futures[ObjectIdentifier(channel)] = promise.futureResult
-        lock.unlock()
-        return promise
-    }
-
-    func future(for channel: Channel) -> EventLoopFuture<Void>? {
-        lock.lock()
-        defer { lock.unlock() }
-        return futures.removeValue(forKey: ObjectIdentifier(channel))
-    }
-}
-
-/// Drives a minimal IMAP `LOGIN`/`LOGOUT` exchange and completes `promise`.
+/// Drives a minimal IMAP `LOGIN`/`LOGOUT` exchange and settles via `complete`.
 ///
 /// The exchange: wait for the server greeting (an untagged response), send a
 /// tagged `LOGIN`, and complete on the tagged result.
@@ -102,16 +86,16 @@ final class IMAPVerifyHandler: ChannelInboundHandler {
 
     private let email: String
     private let password: String
-    private let promise: EventLoopPromise<Void>
+    private let complete: @Sendable (Result<Void, Error>) -> Void
     private let loginTag = "A1"
     private let logoutTag = "A2"
     private var didSendLogin = false
     private var settled = false
 
-    init(email: String, password: String, promise: EventLoopPromise<Void>) {
+    init(email: String, password: String, complete: @escaping @Sendable (Result<Void, Error>) -> Void) {
         self.email = email
         self.password = password
-        self.promise = promise
+        self.complete = complete
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -164,6 +148,6 @@ final class IMAPVerifyHandler: ChannelInboundHandler {
     private func settle(_ result: Result<Void, Error>) {
         guard !settled else { return }
         settled = true
-        promise.completeWith(result)
+        complete(result)
     }
 }

@@ -20,7 +20,7 @@ final class IMAPFetchTests: XCTestCase {
             password: "pw",
             mailboxName: mailbox,
             limit: limit,
-            promise: promise
+            complete: { promise.completeWith($0) }
         )
         try channel.pipeline.syncOperations.addHandlers([IMAPClientHandler(), handler])
         return (channel, promise.futureResult)
