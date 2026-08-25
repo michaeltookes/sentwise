@@ -4,7 +4,7 @@ Guidance for agents working in the **sentwise** repository.
 
 ## What this is
 
-Sentwise is a **native, local-first macOS menu-bar assistant** that learns the user's voice from their Sent mail and drafts email on their behalf for one-tap approval via a native macOS notification.
+Sentwise is a **native, local-first macOS menu-bar assistant** that learns the user's voice from their Sent mail and drafts email on their behalf. A native macOS notification alerts the user that a draft is ready and lets them open it; approval is a deliberate action in the Review Drafts window after reading the full draft (the notification banner can't show it in full — see item 79).
 
 **Product rename (2026-08-13):** the product was renamed **Email Junkie → Sentwise** (a clean, pre-release break — no released builds existed, so there is no migration code for settings or Keychain). Canonical domain **sentwise.ai**; **sentwise.app** and **sentwise.io** are owned and redirect to it. The GitHub repo is renamed to `sentwise` at merge time. Bundle id is `com.tookes.Sentwise`; the local mail package is `SentwiseMail`.
 
@@ -14,7 +14,7 @@ It is a **Prompter-family product** — a native Mac app for individual knowledg
 
 ### v1 design decisions
 - **Platform:** native macOS menu-bar app (Swift), shipped via the Prompter pattern — signed/notarized DMG + Homebrew cask + Sparkle auto-update. **Affirmed over an Electron rewrite 2026-08-12**; Windows demand is measured via a landing-page waitlist (item 57) before any port is considered.
-- **Approval channel:** native macOS notification first. Slack is a future item.
+- **Approval channel:** native macOS notification first — it alerts that a draft is ready and opens the Review Drafts window (Open / Close only, no approve-from-banner); approval happens in that window (item 79). Slack is a future item.
 - **Email provider:** Gmail first. Outlook/M365 and IMAP/SMTP are future items.
 - **Send behavior:** user-configurable — auto-send on approve *or* save-as-draft.
 - **LLM access:** pluggable provider architecture — **managed inference is the default** (bundled into the subscription, no keys; backlog item 56); BYO-any-provider and a local-model option (e.g. Ollama) remain as the power/privacy path (item 59). **56a shipped (2026-08-20):** the `.managed` provider (`LLMProviderKind.managed`, default for new installs; `ManagedInferenceClient`) drafts through the stateless **`sentwise-service`** Cloudflare Worker (`sentwise-inference`, deployed at `https://sentwise-inference.sentwise-service.workers.dev`) under a Clerk account session. Auth is **Clerk** (email-code sign-in via the Frontend API, implemented natively in the app — not the clerk-ios SDK; see `docs/managed-inference.md`); the model provider is the **Anthropic Messages API** (`claude-sonnet-4-6` default) under zero-data-retention terms; the 14-day trial is enforced server-side. Metering/caps (56b) and checkout/licensing (56c) are not built yet.

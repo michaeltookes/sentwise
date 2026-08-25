@@ -2,8 +2,9 @@
 
 A native, local-first, open-source macOS menu-bar email assistant. It learns
 your voice from your Sent mail, watches your inbox, drafts replies with a
-pluggable LLM, and surfaces them for one-tap approval — so your drafts are
-waiting when you glance, not sitting on someone else's server.
+pluggable LLM, and alerts you when a draft is ready to review and approve in
+the app — so your drafts are waiting when you glance, not sitting on someone
+else's server.
 
 > **Status: early development.** The menu-bar app shell is in place. The email,
 > voice-learning, and drafting features are being built out. See
@@ -32,7 +33,7 @@ your machine, stores your data locally, and uses whatever LLM you point it at
 
 - Learns your writing voice from your Gmail Sent folder
 - Watches your inbox and drafts replies while your Mac is awake
-- Approve or deny drafts from a native macOS notification
+- Get alerted by a native macOS notification, then review and approve the full draft in the app
 - Configurable: auto-send on approval, or save as a draft
 - Pluggable LLM providers plus a local-model option
 - Secrets stored in the macOS Keychain

@@ -1,6 +1,6 @@
 # Backlog
 
-Prioritized list of planned features, improvements, and technical debt for **sentwise** — a native, local-first macOS assistant that learns your voice from your Sent mail and drafts email on your behalf for one-tap approval. Its **flagship workflow (2026-08-12 pivot)** is the **post-call follow-up**: when a call ends, ingest the transcript and draft the next-steps email in the user's voice. Inbox reply drafting remains, as one workflow among several.
+Prioritized list of planned features, improvements, and technical debt for **sentwise** — a native, local-first macOS assistant that learns your voice from your Sent mail and drafts email on your behalf, then alerts you when a draft is ready so you can review and approve it in the app (item 79). Its **flagship workflow (2026-08-12 pivot)** is the **post-call follow-up**: when a call ends, ingest the transcript and draft the next-steps email in the user's voice. Inbox reply drafting remains, as one workflow among several.
 
 **Product direction (updated 2026-08-12):**
 - **Flagship workflow:** transcript in → next-steps follow-up email out, in the user's voice (items 51–55). The existing drafting → approval → send plumbing is reused; transcript acquisition is the new subsystem, phased: file/paste ingestion first (51), calendar awareness (52), platform APIs (53), native no-bot capture last (54).
@@ -11,7 +11,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 **v1 design decisions:**
 - **Platform:** native macOS menu-bar app (Swift), following the Prompter distribution pattern (DMG + Homebrew cask + Sparkle auto-update). **Affirmed over an Electron rewrite 2026-08-12** — validate on macOS first (the ICP skews Mac); measure Windows demand via a landing-page waitlist (item 57) and revisit Tauri/Electron only if it fills.
-- **Approval channel:** native macOS notification first; Slack as a peer channel is item 30 (post-launch).
+- **Approval channel:** native macOS notification first — it alerts that a draft is ready and opens the Review Drafts window (Open / Close only); approval is a deliberate in-app action there (item 79). Slack as a peer channel is item 30 (post-launch).
 - **Email provider:** Gmail first. (Outlook/M365 and IMAP/SMTP are future items.)
 - **Send behavior:** user-configurable — auto-send on approve *or* save-as-draft.
 - **LLM access:** pluggable provider architecture — **managed inference is the default** (bundled, no keys; item 56); BYO-any-provider and a local-model option remain as the power/privacy path (item 59).
