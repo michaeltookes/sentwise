@@ -22,7 +22,7 @@ final class IMAPAppendTests: XCTestCase {
             mailboxName: "[Gmail]/Drafts",
             message: ByteBuffer(bytes: rfc822),
             flags: flags,
-            promise: promise
+            complete: { promise.completeWith($0) }
         )
         try channel.pipeline.syncOperations.addHandlers([IMAPClientHandler(), handler])
         return (channel, promise.futureResult)

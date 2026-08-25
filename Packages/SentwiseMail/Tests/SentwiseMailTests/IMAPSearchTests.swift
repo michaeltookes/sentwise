@@ -28,7 +28,7 @@ final class IMAPSearchTests: XCTestCase {
             offset: offset,
             limit: limit,
             calendar: calendar,
-            promise: promise
+            complete: { promise.completeWith($0) }
         )
         try channel.pipeline.syncOperations.addHandlers([IMAPClientHandler(), handler])
         return (channel, promise.futureResult)

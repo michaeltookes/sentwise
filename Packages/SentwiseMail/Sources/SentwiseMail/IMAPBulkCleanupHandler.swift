@@ -36,7 +36,7 @@ final class IMAPBulkCleanupHandler: ChannelInboundHandler {
     let mailboxName: String
     let destinationName: String?
     private let request: IMAPBulkCleanupRequest
-    let promise: EventLoopPromise<IMAPBulkOutcome>
+    let complete: @Sendable (Result<IMAPBulkOutcome, Error>) -> Void
 
     private var criteria: MailSearchCriteria { request.criteria }
     var action: MailBulkAction? { request.action }
@@ -83,14 +83,14 @@ final class IMAPBulkCleanupHandler: ChannelInboundHandler {
         mailboxName: String,
         destinationName: String?,
         request: IMAPBulkCleanupRequest,
-        promise: EventLoopPromise<IMAPBulkOutcome>
+        complete: @escaping @Sendable (Result<IMAPBulkOutcome, Error>) -> Void
     ) {
         self.email = email
         self.password = password
         self.mailboxName = mailboxName
         self.destinationName = destinationName
         self.request = request
-        self.promise = promise
+        self.complete = complete
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {

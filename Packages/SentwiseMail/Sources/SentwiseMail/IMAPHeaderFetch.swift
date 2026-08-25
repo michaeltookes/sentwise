@@ -19,7 +19,12 @@ extension IMAPMailProvider {
         guard credentials.isComplete else { throw MailError.incompleteCredentials }
         guard uid > 0 else { throw MailError.commandFailed("A message UID is required to fetch headers.") }
 
-        let attempts = IMAPHeaderFetchAttempts()
+        let attempts = ChannelPromiseTracker<MailHeaderFields>()
+        // Settle every tracked promise on exit — including losing Happy Eyeballs
+        // candidates that never became active — so none is deallocated
+        // unfulfilled (backlog item 77). The winner is already claimed by its
+        // handler before this runs, so it is untouched.
+        defer { attempts.failRemaining(MailError.connectionFailed("The connection attempt was superseded.")) }
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
@@ -31,14 +36,14 @@ extension IMAPMailProvider {
             .channelInitializer { channel in
                 do {
                     let ssl = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
-                    let promise = attempts.makePromise(for: channel)
+                    let complete = attempts.register(channel)
                     let handler = IMAPHeaderFetchHandler(
                         email: email,
                         password: password,
                         mailboxName: mailboxName,
                         uid: uid,
                         expectedUIDValidity: expectedUIDValidity,
-                        promise: promise
+                        complete: complete
                     )
                     return channel.pipeline.addHandlers([ssl, IMAPClientHandler(), handler])
                 } catch {
@@ -73,29 +78,8 @@ extension IMAPMailProvider {
     }
 }
 
-/// Tracks header-fetch futures per channel (mirrors the body-fetch tracker) so
-/// Happy Eyeballs attempts can't settle the winning channel's result.
-final class IMAPHeaderFetchAttempts: @unchecked Sendable {
-    private let lock = NSLock()
-    private var futures: [ObjectIdentifier: EventLoopFuture<MailHeaderFields>] = [:]
-
-    func makePromise(for channel: Channel) -> EventLoopPromise<MailHeaderFields> {
-        let promise = channel.eventLoop.makePromise(of: MailHeaderFields.self)
-        lock.lock()
-        futures[ObjectIdentifier(channel)] = promise.futureResult
-        lock.unlock()
-        return promise
-    }
-
-    func future(for channel: Channel) -> EventLoopFuture<MailHeaderFields>? {
-        lock.lock()
-        defer { lock.unlock() }
-        return futures.removeValue(forKey: ObjectIdentifier(channel))
-    }
-}
-
 /// Drives LOGIN → SELECT → UID FETCH (BODYSTRUCTURE + BODY.PEEK[HEADER.FIELDS (...)])
-/// → LOGOUT and completes `promise` with the parsed header fields plus MIME part
+/// → LOGOUT and settles via `complete` with the parsed header fields plus MIME part
 /// content types. A FETCH that returns no header section (the message carries none
 /// of the requested fields) settles with empty fields, not an error; absence of
 /// these headers is a valid, reply-worthy signal.
@@ -111,7 +95,7 @@ final class IMAPHeaderFetchHandler: ChannelInboundHandler {
     private let mailboxName: String
     private let uid: UInt32
     private let expectedUIDValidity: UInt32?
-    private let promise: EventLoopPromise<MailHeaderFields>
+    private let complete: @Sendable (Result<MailHeaderFields, Error>) -> Void
 
     private let loginTag = "A1"
     private let selectTag = "A2"
@@ -131,14 +115,14 @@ final class IMAPHeaderFetchHandler: ChannelInboundHandler {
         mailboxName: String,
         uid: UInt32,
         expectedUIDValidity: UInt32? = nil,
-        promise: EventLoopPromise<MailHeaderFields>
+        complete: @escaping @Sendable (Result<MailHeaderFields, Error>) -> Void
     ) {
         self.email = email
         self.password = password
         self.mailboxName = mailboxName
         self.uid = uid
         self.expectedUIDValidity = expectedUIDValidity
-        self.promise = promise
+        self.complete = complete
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -369,6 +353,6 @@ final class IMAPHeaderFetchHandler: ChannelInboundHandler {
     private func settle(_ result: Result<MailHeaderFields, Error>) {
         guard !settled else { return }
         settled = true
-        promise.completeWith(result)
+        complete(result)
     }
 }

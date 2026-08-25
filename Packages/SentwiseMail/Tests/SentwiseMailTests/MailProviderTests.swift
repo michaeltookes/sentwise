@@ -29,24 +29,28 @@ final class MailProviderTests: XCTestCase {
     }
 
     func testVerificationAttemptsAreScopedPerChannel() throws {
-        let attempts = IMAPVerificationAttempts()
+        let attempts = ChannelPromiseTracker<Void>()
         let firstChannel = EmbeddedChannel()
         let secondChannel = EmbeddedChannel()
-        let firstPromise = attempts.makePromise(for: firstChannel)
-        let secondPromise = attempts.makePromise(for: secondChannel)
-
-        firstPromise.fail(MailError.connectionFailed("lost race"))
-
-        let secondFuture = try XCTUnwrap(attempts.future(for: secondChannel))
-        secondPromise.succeed(())
-
-        XCTAssertNoThrow(try secondFuture.wait())
-        XCTAssertNil(attempts.future(for: secondChannel))
+        let firstComplete = attempts.register(firstChannel)
+        let secondComplete = attempts.register(secondChannel)
 
         let firstFuture = try XCTUnwrap(attempts.future(for: firstChannel))
+        let secondFuture = try XCTUnwrap(attempts.future(for: secondChannel))
+
+        // Each channel's completion settles only that channel's future.
+        firstComplete(.failure(MailError.connectionFailed("lost race")))
+        secondComplete(.success(()))
+
+        XCTAssertNoThrow(try secondFuture.wait())
         XCTAssertThrowsError(try firstFuture.wait()) { error in
             XCTAssertEqual(error as? MailError, .connectionFailed("lost race"))
         }
+
+        // Both promises are already claimed, so nothing is left to fail.
+        attempts.failRemaining(MailError.connectionFailed("superseded"))
+        _ = try firstChannel.finish()
+        _ = try secondChannel.finish()
     }
 }
 
