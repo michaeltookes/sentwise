@@ -76,96 +76,137 @@ final class NotificationServiceTests: XCTestCase {
     }
 
     func testNotificationSubtitleDecodesEncodedWordSubject() {
-        let content = UserNotificationService.notificationContent(
-            for: encodedSubjectDraft(),
-            sendBehavior: .autoSend
-        )
+        let content = UserNotificationService.notificationContent(for: encodedSubjectDraft())
         XCTAssertEqual(content.subtitle, "Café ☕", "banner subtitle must show the decoded subject")
     }
 
     func testAuthoredNotificationSubtitleDoesNotDecodeUserSubject() {
         var draft = recipientlessFollowUp()
         draft.replySubject = "☕ =?UTF-8?Q?failed?="
-        let content = UserNotificationService.notificationContent(
-            for: draft,
-            sendBehavior: .autoSend
-        )
+        let content = UserNotificationService.notificationContent(for: draft)
 
         XCTAssertEqual(content.subtitle, "☕ =?UTF-8?Q?failed?=")
     }
 
-    func testFlaggedNotificationOffersNoApproveAction() {
-        let actions = UserNotificationService.needsInputActions()
-        XCTAssertFalse(
-            actions.contains { $0.identifier == UserNotificationService.approveActionIdentifier },
-            "a needs-input notification must never offer Approve"
-        )
-        XCTAssertTrue(actions.contains { $0.identifier == UserNotificationService.denyActionIdentifier })
+    // MARK: - Open / Close alert (item 79)
+
+    func testNotificationOffersOnlyOpenAndCloseActions() {
+        let actions = UserNotificationService.openCloseActions()
+        let identifiers = actions.map(\.identifier)
+
+        XCTAssertEqual(identifiers, [
+            UserNotificationService.openActionIdentifier,
+            UserNotificationService.closeActionIdentifier
+        ])
+        // No approve/deny/destructive action exists on the banner any more.
+        XCTAssertFalse(actions.contains { $0.options.contains(.destructive) })
     }
 
-    func testReadyDraftNotificationStillOffersApprove() {
-        let actions = UserNotificationService.draftActions(for: .autoSend)
-        XCTAssertTrue(actions.contains { $0.identifier == UserNotificationService.approveActionIdentifier })
+    func testOpenActionBringsAppToForeground() throws {
+        let open = try XCTUnwrap(
+            UserNotificationService.openCloseActions()
+                .first { $0.identifier == UserNotificationService.openActionIdentifier }
+        )
+        XCTAssertEqual(open.title, "Open")
+        XCTAssertTrue(open.options.contains(.foreground))
     }
 
-    func testNotReplyWorthyNotificationOffersNoApproveAction() {
-        let content = UserNotificationService.notificationContent(
-            for: notReplyWorthyDraft(),
-            sendBehavior: .autoSend
-        )
+    func testRegisteredCategoryIsASingleOpenCloseCategory() async throws {
+        let center = FakeUserNotificationCenter()
+        let service = UserNotificationService(center: center)
 
-        XCTAssertEqual(content.categoryIdentifier, UserNotificationService.needsInputCategoryIdentifier)
+        service.requestAuthorization()
+
+        XCTAssertEqual(center.categories.count, 1)
+        let category = try XCTUnwrap(center.categories.first)
+        XCTAssertEqual(category.identifier, UserNotificationService.categoryIdentifier)
+        XCTAssertEqual(category.actions.map(\.identifier), [
+            UserNotificationService.openActionIdentifier,
+            UserNotificationService.closeActionIdentifier
+        ])
+    }
+
+    func testEveryDraftVariantUsesTheOpenCloseCategory() {
+        for draft in [pendingDraft(), notReplyWorthyDraft(), recipientlessFollowUp()] {
+            let content = UserNotificationService.notificationContent(for: draft)
+            XCTAssertEqual(content.categoryIdentifier, UserNotificationService.categoryIdentifier)
+        }
+    }
+
+    func testNotReplyWorthyNotificationShowsSummaryPreview() {
+        let content = UserNotificationService.notificationContent(for: notReplyWorthyDraft())
+
+        XCTAssertEqual(content.categoryIdentifier, UserNotificationService.categoryIdentifier)
         XCTAssertEqual(content.title, "No reply needed for Billing")
         XCTAssertEqual(content.body, "This receipt does not need a reply.")
     }
 
-    func testEditedNotReplyWorthyNotificationOffersApproveAction() {
+    func testReadyNotificationBodyIsPreviewOnlyWithNoApprovalCopy() {
         let content = UserNotificationService.notificationContent(
-            for: notReplyWorthyDraft(body: "Thanks for sending this receipt."),
-            sendBehavior: .autoSend
+            for: notReplyWorthyDraft(body: "Thanks for sending this receipt.")
         )
 
-        XCTAssertEqual(content.categoryIdentifier, UserNotificationService.categoryIdentifier(for: .autoSend))
+        XCTAssertEqual(content.categoryIdentifier, UserNotificationService.categoryIdentifier)
         XCTAssertEqual(content.title, "Reply ready for Billing")
-        XCTAssertEqual(content.body, "Approve sends this reply now. Thanks for sending this receipt.")
+        // Body is the preview snippet only — no "Approve sends…" copy (item 79).
+        XCTAssertEqual(content.body, "Thanks for sending this receipt.")
+        XCTAssertFalse(content.body.contains("Approve"))
     }
 
-    func testRecipientlessFollowUpNotificationHasNoDestructiveActions() {
-        let content = UserNotificationService.notificationContent(
-            for: recipientlessFollowUp(),
-            sendBehavior: .autoSend
-        )
-        let actions = UserNotificationService.recipientNeededActions()
+    // MARK: - Action routing (item 79)
 
-        XCTAssertEqual(content.categoryIdentifier, UserNotificationService.recipientNeededCategoryIdentifier)
-        XCTAssertTrue(actions.isEmpty)
+    func testOpenActionAndBodyTapMapToOpen() {
+        XCTAssertEqual(
+            UserNotificationService.action(for: UserNotificationService.openActionIdentifier),
+            .open
+        )
+        XCTAssertEqual(
+            UserNotificationService.action(for: UNNotificationDefaultActionIdentifier),
+            .open
+        )
+    }
+
+    func testCloseAndDismissActionsAreNoOps() {
+        XCTAssertNil(UserNotificationService.action(for: UserNotificationService.closeActionIdentifier))
+        XCTAssertNil(UserNotificationService.action(for: UNNotificationDismissActionIdentifier))
+    }
+
+    // MARK: - Authorization status (item 78)
+
+    func testCurrentAuthorizationStatusMapsSystemStatus() async {
+        let center = FakeUserNotificationCenter()
+        let service = UserNotificationService(center: center)
+
+        center.authorizationStatusToReturn = .denied
+        let denied = await service.currentAuthorizationStatus()
+        XCTAssertEqual(denied, .denied)
+
+        center.authorizationStatusToReturn = .notDetermined
+        let notDetermined = await service.currentAuthorizationStatus()
+        XCTAssertEqual(notDetermined, .notDetermined)
+
+        center.authorizationStatusToReturn = .provisional
+        let provisional = await service.currentAuthorizationStatus()
+        XCTAssertEqual(provisional, .authorized, "provisional delivers banners, so it counts as authorized")
     }
 
     func testRefreshUserInfoSuppressesPresentation() {
-        let normal = UserNotificationService.notificationUserInfo(
-            for: pendingDraft(),
-            sendBehavior: .autoSend
-        )
+        let normal = UserNotificationService.notificationUserInfo(for: pendingDraft())
         XCTAssertFalse(UserNotificationService.suppressesPresentation(userInfo: normal))
 
         let refresh = UserNotificationService.notificationUserInfo(
             for: pendingDraft(),
-            sendBehavior: .autoSend,
             suppressPresentation: true
         )
         XCTAssertTrue(UserNotificationService.suppressesPresentation(userInfo: refresh))
     }
 
     func testRefreshNotificationContentUsesPassiveDelivery() {
-        let normal = UserNotificationService.notificationContent(
-            for: pendingDraft(),
-            sendBehavior: .autoSend
-        )
+        let normal = UserNotificationService.notificationContent(for: pendingDraft())
         XCTAssertNotEqual(normal.interruptionLevel, .passive)
 
         let refresh = UserNotificationService.notificationContent(
             for: pendingDraft(),
-            sendBehavior: .autoSend,
             suppressPresentation: true
         )
         XCTAssertEqual(refresh.interruptionLevel, .passive)
@@ -248,6 +289,7 @@ private final class FakeUserNotificationCenter: UserNotificationCentering {
     var delegate: UNUserNotificationCenterDelegate?
     var pendingIdentifiers: Set<String> = []
     var deliveredIdentifiers: Set<String> = []
+    var authorizationStatusToReturn: UNAuthorizationStatus = .authorized
     var pendingLookupHandler: NotificationIdentifierLookupHandler?
     var deliveredLookupHandler: NotificationIdentifierLookupHandler?
     private(set) var addedRequests: [UNNotificationRequest] = []
@@ -259,6 +301,10 @@ private final class FakeUserNotificationCenter: UserNotificationCentering {
 
     func requestAuthorization(options: UNAuthorizationOptions, completionHandler: @escaping (Bool, Error?) -> Void) {
         completionHandler(true, nil)
+    }
+
+    func authorizationStatus(completionHandler: @escaping (UNAuthorizationStatus) -> Void) {
+        completionHandler(authorizationStatusToReturn)
     }
 
     func setNotificationCategories(_ categories: Set<UNNotificationCategory>) {

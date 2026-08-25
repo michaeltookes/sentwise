@@ -10,10 +10,19 @@ final class FakeDraftNotifier: DraftNotifying {
     private(set) var notifiedDrafts: [Draft] = []
     private(set) var refreshedDrafts: [Draft] = []
     private(set) var removedIdentities: [String] = []
+    /// The status `currentAuthorizationStatus()` reports; tests set this to
+    /// simulate notifications being off (item 78).
+    var authorizationStatus: NotificationPermission = .authorized
+    private(set) var authorizationStatusChecks = 0
 
     nonisolated init() {}
 
     func requestAuthorization() { authorizationRequested = true }
+
+    func currentAuthorizationStatus() async -> NotificationPermission {
+        authorizationStatusChecks += 1
+        return authorizationStatus
+    }
 
     func notify(for draft: Draft, sendBehavior: SendBehavior) {
         notifiedDrafts.append(draft)
