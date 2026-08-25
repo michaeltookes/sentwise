@@ -227,7 +227,9 @@ struct PendingDraftCard: View {
 
             // Needs-info drafts cannot approve; model-declined overrides need a user-written body.
             if canOfferApprovalAction {
-                Button(appState.approveActionLabel) {
+                // Button reads "Approve" (item 79); the window's caption conveys
+                // whether that saves to drafts or sends.
+                Button("Approve") {
                     Task { await approve() }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -363,7 +365,7 @@ struct PendingDraftCard: View {
                     Task { await regenerate() }
                 }
                 .disabled(isBusy)
-                Button("\(appState.approveActionLabel) anyway") {
+                Button("Approve anyway") {
                     Task { await approve(force: true) }
                 }
                 .disabled(isBusy)
