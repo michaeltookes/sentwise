@@ -116,8 +116,11 @@ protocol DraftNotifying: AnyObject {
     /// completed until this async handler returns.
     var onAction: ((DraftNotificationAction, String) async -> Void)? { get set }
 
+    /// Registers delegate/category state needed to deliver and route notifications.
+    func prepareNotificationDelivery()
+
     /// Requests notification authorization (no-op if already decided).
-    func requestAuthorization()
+    func requestAuthorization() async
 
     /// Reads the current system authorization status (item 78), so the app can
     /// surface a hint when notifications are off.
@@ -142,7 +145,8 @@ protocol DraftNotifying: AnyObject {
 final class NullDraftNotifier: DraftNotifying {
     var onAction: ((DraftNotificationAction, String) async -> Void)?
     nonisolated init() {}
-    func requestAuthorization() {}
+    func prepareNotificationDelivery() {}
+    func requestAuthorization() async {}
     func currentAuthorizationStatus() async -> NotificationPermission { .authorized }
     func notify(for draft: Draft, sendBehavior: SendBehavior) {}
     func refreshNotification(for draft: Draft, sendBehavior: SendBehavior) {}
@@ -154,8 +158,8 @@ final class NullDraftNotifier: DraftNotifying {
 /// Registers a single "draft ready" category whose only actions are **Open**
 /// (surface the Review Drafts window to read and approve the full draft) and
 /// **Close** (dismiss, no side effects) — item 79. Tapping the body also
-/// triggers `.open`. The center is only touched from `requestAuthorization()`
-/// onward, so unit tests that never call it stay off the notification system
+/// triggers `.open`. The center is only touched from `prepareNotificationDelivery()`
+/// onward, so unit tests that never prepare it stay off the notification system
 /// entirely.
 @MainActor
 final class UserNotificationService: NSObject, DraftNotifying {
@@ -176,14 +180,21 @@ final class UserNotificationService: NSObject, DraftNotifying {
         super.init()
     }
 
-    func requestAuthorization() {
+    func prepareNotificationDelivery() {
         center.delegate = self
         registerCategory()
-        center.requestAuthorization(options: [.alert, .sound]) { granted, error in
-            if let error {
-                logger.error("Notification authorization failed: \(error.localizedDescription)")
-            } else {
-                logger.info("Notification authorization granted: \(granted)")
+    }
+
+    func requestAuthorization() async {
+        prepareNotificationDelivery()
+        await withCheckedContinuation { continuation in
+            center.requestAuthorization(options: [.alert, .sound]) { granted, error in
+                if let error {
+                    logger.error("Notification authorization failed: \(error.localizedDescription)")
+                } else {
+                    logger.info("Notification authorization granted: \(granted)")
+                }
+                continuation.resume()
             }
         }
     }

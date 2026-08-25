@@ -111,12 +111,13 @@ final class NotificationServiceTests: XCTestCase {
         XCTAssertTrue(open.options.contains(.foreground))
     }
 
-    func testRegisteredCategoryIsASingleOpenCloseCategory() async throws {
+    func testPrepareNotificationDeliveryRegistersSingleOpenCloseCategory() throws {
         let center = FakeUserNotificationCenter()
         let service = UserNotificationService(center: center)
 
-        service.requestAuthorization()
+        service.prepareNotificationDelivery()
 
+        XCTAssertTrue(center.delegate === service)
         XCTAssertEqual(center.categories.count, 1)
         let category = try XCTUnwrap(center.categories.first)
         XCTAssertEqual(category.identifier, UserNotificationService.categoryIdentifier)
@@ -124,6 +125,17 @@ final class NotificationServiceTests: XCTestCase {
             UserNotificationService.openActionIdentifier,
             UserNotificationService.closeActionIdentifier
         ])
+    }
+
+    func testRequestAuthorizationPreparesNotificationDelivery() async {
+        let center = FakeUserNotificationCenter()
+        let service = UserNotificationService(center: center)
+
+        await service.requestAuthorization()
+
+        XCTAssertTrue(center.delegate === service)
+        XCTAssertEqual(center.authorizationRequestCount, 1)
+        XCTAssertEqual(center.categories.count, 1)
     }
 
     func testEveryDraftVariantUsesTheOpenCloseCategory() {
@@ -298,8 +310,10 @@ private final class FakeUserNotificationCenter: UserNotificationCentering {
     private(set) var categories: Set<UNNotificationCategory> = []
     private(set) var removedDeliveredIdentifiers: [String] = []
     private(set) var removedPendingIdentifiers: [String] = []
+    private(set) var authorizationRequestCount = 0
 
     func requestAuthorization(options: UNAuthorizationOptions, completionHandler: @escaping (Bool, Error?) -> Void) {
+        authorizationRequestCount += 1
         completionHandler(true, nil)
     }
 

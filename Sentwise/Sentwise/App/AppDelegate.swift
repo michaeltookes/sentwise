@@ -63,10 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateManager.startUpdater()
         }
 
-        // Ask for notification permission so ready drafts can surface natively,
-        // then read the resulting status so the app can flag it when off (item 78).
+        // Prepare native delivery, then read/prompt for permission so the app can
+        // flag notification status when off (item 78).
         if runtime.allowsStartupSideEffects {
-            appState.notifier.requestAuthorization()
+            appState.notifier.prepareNotificationDelivery()
             Task { await appState.refreshNotificationPermission() }
         }
 

@@ -70,6 +70,20 @@ final class AppStateNotificationPermissionTests: XCTestCase {
         XCTAssertTrue(notifier.authorizationRequested)
     }
 
+    func testNotDeterminedRefreshesStatusAfterAuthorizationRequest() async {
+        let notifier = FakeDraftNotifier()
+        notifier.authorizationStatus = .notDetermined
+        notifier.authorizationStatusAfterRequest = .authorized
+        let appState = makeAppState(notifier: notifier)
+
+        await appState.refreshNotificationPermission()
+
+        XCTAssertTrue(notifier.authorizationRequested)
+        XCTAssertEqual(notifier.authorizationStatusChecks, 2)
+        XCTAssertEqual(appState.notificationPermission, .authorized)
+        XCTAssertFalse(appState.notificationsBlocked)
+    }
+
     func testDeniedDoesNotReRequestAuthorization() async {
         let notifier = FakeDraftNotifier()
         notifier.authorizationStatus = .denied
@@ -80,5 +94,12 @@ final class AppStateNotificationPermissionTests: XCTestCase {
         // macOS won't re-prompt once denied; the app must guide to System Settings
         // instead of firing a no-op request.
         XCTAssertFalse(notifier.authorizationRequested)
+    }
+
+    func testNotificationSettingsURLTargetsSentwiseBundle() throws {
+        let url = try XCTUnwrap(URL(string: AppState.notificationSettingsURLString))
+
+        XCTAssertEqual(url.scheme, "x-apple.systempreferences")
+        XCTAssertTrue(AppState.notificationSettingsURLString.contains("?id=com.tookes.Sentwise"))
     }
 }

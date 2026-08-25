@@ -13,7 +13,7 @@ extension AppState {
 
     /// Deep link to System Settings → Notifications → Sentwise.
     static let notificationSettingsURLString =
-        "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+        "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.tookes.Sentwise"
 
     /// Whether notifications are currently unavailable — denied outright, or not
     /// yet decided. Drives the "notifications are off" hint.
@@ -27,9 +27,11 @@ extension AppState {
     /// not re-prompt and the user must go to System Settings.
     func refreshNotificationPermission() async {
         let permission = await notifier.currentAuthorizationStatus()
-        notificationPermission = permission
         if permission == .notDetermined {
-            notifier.requestAuthorization()
+            await notifier.requestAuthorization()
+            notificationPermission = await notifier.currentAuthorizationStatus()
+        } else {
+            notificationPermission = permission
         }
     }
 
