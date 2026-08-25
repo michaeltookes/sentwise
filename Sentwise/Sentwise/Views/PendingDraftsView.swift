@@ -25,6 +25,10 @@ struct PendingDraftsView: View {
             tabBar
             Divider()
 
+            if appState.notificationsBlocked {
+                notificationsOffBanner
+            }
+
             if let error = appState.approvalError {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .font(.caption)
@@ -43,6 +47,31 @@ struct PendingDraftsView: View {
             }
         }
         .frame(width: 720, height: 540)
+        .task { await appState.refreshNotificationPermission() }
+    }
+
+    /// The "notifications are off" hint (item 78). Because the notification is now
+    /// just an alert-to-open (item 79), this window is the real approval surface —
+    /// the banner reassures the user they can review here regardless, and offers a
+    /// one-click path to re-enable notifications. Shown only while off.
+    private var notificationsOffBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "bell.slash")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Notifications are off")
+                    .font(.caption.weight(.semibold))
+                Text("You won't be alerted when drafts are ready — review them here anytime.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Turn On…") { appState.openNotificationSystemSettings() }
+                .accessibilityIdentifier("enableNotifications")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.1))
     }
 
     @ViewBuilder
