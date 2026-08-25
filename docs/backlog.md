@@ -84,13 +84,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Basic discoverability: SEO fundamentals, OG/social cards, and a home for a demo video.
     - Held in a separate repo with its own deployment; all stack/hosting/analytics decisions deferred to the pre-build discussion.
 
-61. **Live exercise of the watcher → notification → approve loop**
-    The one check split out of item 9 when it closed (2026-08-13): the full autonomous loop — a real fresh inbound message triggers watch → draft → native notification → approve → dispatch — has never been observed end-to-end on a live account with a watcher-produced draft. Both dispatch paths are now individually live-verified (items 9/44); this is about the loop as a whole, and daily dogfooding of the app will likely cover it naturally.
-    *As the maintainer, I want the autonomous loop observed working end-to-end at least once on a live account, so that the core product promise is verified as a system, not just as parts.*
-    - A fresh inbound message on a connected account produces a draft and a native notification without any manual triggering.
-    - Approving from the notification dispatches per the configured send behavior (both settings observed, or the second covered by the item 9/44 live tests).
-    - The observation is recorded (activity-history entries or a note here), then this item closes.
-
 36. **Feedback channel + diagnostics / log export** — *promoted to High 2026-08-20 (launch prerequisite)*
     Developer-facing logs for OSS bug reports.
     *As Sam, I want to export diagnostic logs, so that I can file a useful bug report without leaking email content.*
