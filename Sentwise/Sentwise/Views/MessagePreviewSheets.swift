@@ -100,13 +100,18 @@ struct DraftView: View {
                     if let remaining = countdownRemaining {
                         countdownControls(remaining)
                     } else {
+                        // The button reads "Approve" (item 79); the caption beside
+                        // it conveys whether that saves to drafts or sends.
+                        Text(approveBehaviorCaption)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                         Button {
                             dispatchOrStartCountdown()
                         } label: {
                             if isBusy {
                                 ProgressView().controlSize(.small)
                             } else {
-                                Text(appState.sendBehavior == .autoSend ? "Send now" : "Save to Drafts")
+                                Text("Approve")
                             }
                         }
                         .disabled(isBusy || isDone || dispatchNeedsBody)
@@ -153,7 +158,12 @@ struct DraftView: View {
     }
 
     private var staleApprovalLabel: String {
-        (staleApprovalSendBehavior ?? appState.sendBehavior) == .autoSend ? "Send anyway" : "Save anyway"
+        "Approve anyway"
+    }
+
+    /// Caption beside the Approve button conveying the send behavior (item 79).
+    private var approveBehaviorCaption: String {
+        appState.sendBehavior == .autoSend ? "Approve will send now" : "Approve will save to Drafts"
     }
 
     private var hasEditedReplyBody: Bool {

@@ -92,6 +92,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     // MARK: - NSMenuDelegate
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        // Re-check notification authorization when the menu opens (item 78) so the
+        // "notifications are off" row appears/clears; the async result lands before
+        // the next open, and applicationDidBecomeActive keeps it fresh meanwhile.
+        Task { await appState.refreshNotificationPermission() }
         menu.removeAllItems()
         for item in buildMenuItems() {
             menu.addItem(item)
@@ -166,6 +170,21 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let status = NSMenuItem(title: appState.statusText, action: nil, keyEquivalent: "")
         status.isEnabled = false
         items.append(status)
+
+        // Notifications-off hint (item 78): shown only while authorization is off,
+        // so it never nags. Clicking it deep-links to System Settings.
+        if appState.notificationsBlocked {
+            let warn = NSMenuItem(
+                title: "⚠ Notifications are off — turn on…",
+                action: #selector(openNotificationSettingsMenu),
+                keyEquivalent: ""
+            )
+            warn.target = self
+            warn.toolTip = "You won't see when drafts are ready. "
+                + "Open Review Drafts from this menu to review them anytime."
+            warn.setAccessibilityIdentifier("notificationsDisabledWarning")
+            items.append(warn)
+        }
 
         items.append(contentsOf: contextualActionItems())
 
@@ -243,6 +262,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func openActivityMenu() {
         openActivity()
+    }
+
+    @objc private func openNotificationSettingsMenu() {
+        appState.openNotificationSystemSettings()
     }
 
     @objc private func openFollowUpComposerMenu() {

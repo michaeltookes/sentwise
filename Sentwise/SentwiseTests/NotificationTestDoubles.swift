@@ -6,14 +6,37 @@ import Foundation
 @MainActor
 final class FakeDraftNotifier: DraftNotifying {
     var onAction: ((DraftNotificationAction, String) async -> Void)?
+    private(set) var notificationDeliveryPrepared = false
     private(set) var authorizationRequested = false
     private(set) var notifiedDrafts: [Draft] = []
     private(set) var refreshedDrafts: [Draft] = []
     private(set) var removedIdentities: [String] = []
+    /// The status `currentAuthorizationStatus()` reports; tests set this to
+    /// simulate notifications being off (item 78).
+    var authorizationStatus: NotificationPermission = .authorized
+    /// Optional status to apply when authorization is requested, simulating the
+    /// user response to the system prompt.
+    var authorizationStatusAfterRequest: NotificationPermission?
+    private(set) var authorizationStatusChecks = 0
 
     nonisolated init() {}
 
-    func requestAuthorization() { authorizationRequested = true }
+    func prepareNotificationDelivery() {
+        notificationDeliveryPrepared = true
+    }
+
+    func requestAuthorization() async {
+        prepareNotificationDelivery()
+        authorizationRequested = true
+        if let authorizationStatusAfterRequest {
+            authorizationStatus = authorizationStatusAfterRequest
+        }
+    }
+
+    func currentAuthorizationStatus() async -> NotificationPermission {
+        authorizationStatusChecks += 1
+        return authorizationStatus
+    }
 
     func notify(for draft: Draft, sendBehavior: SendBehavior) {
         notifiedDrafts.append(draft)

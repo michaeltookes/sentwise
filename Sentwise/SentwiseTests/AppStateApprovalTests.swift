@@ -345,52 +345,25 @@ final class AppStateApprovalTests: XCTestCase {
         XCTAssertEqual(appState.pendingDrafts.count, 1)
     }
 
-    func testInlineNotificationActionsRequireAuthentication() {
-        let actions = UserNotificationService.draftActions()
-        let approve = actions.first { $0.identifier == UserNotificationService.approveActionIdentifier }
-        let deny = actions.first { $0.identifier == UserNotificationService.denyActionIdentifier }
-
-        XCTAssertTrue(approve?.options.contains(.authenticationRequired) ?? false)
-        XCTAssertTrue(deny?.options.contains(.authenticationRequired) ?? false)
-        XCTAssertTrue(deny?.options.contains(.destructive) ?? false)
-    }
-
-    func testInlineNotificationCopyReflectsSendBehavior() {
-        let sendActions = UserNotificationService.draftActions(for: .autoSend)
-        let saveActions = UserNotificationService.draftActions(for: .saveAsDraft)
-        let sendApprove = sendActions.first { $0.identifier == UserNotificationService.approveActionIdentifier }
-        let saveApprove = saveActions.first { $0.identifier == UserNotificationService.approveActionIdentifier }
-
-        XCTAssertEqual(sendApprove?.title, "Send Now")
-        XCTAssertEqual(saveApprove?.title, "Save Draft")
+    func testNotificationOffersOnlyOpenAndCloseNoApproval() {
+        // The banner can't show the full reply, so it no longer approves/denies
+        // — it only opens the app (item 79).
+        let identifiers = UserNotificationService.openCloseActions().map(\.identifier)
+        XCTAssertEqual(identifiers, [
+            UserNotificationService.openActionIdentifier,
+            UserNotificationService.closeActionIdentifier
+        ])
         XCTAssertEqual(
-            UserNotificationService.notificationBody(replyBody: "Thursday works!", sendBehavior: .autoSend),
-            "Approve sends this reply now. Thursday works!"
-        )
-        XCTAssertEqual(
-            UserNotificationService.notificationBody(replyBody: "Thursday works!", sendBehavior: .saveAsDraft),
-            "Approve saves this as a draft. Thursday works!"
-        )
-        XCTAssertNotEqual(
-            UserNotificationService.categoryIdentifier(for: .autoSend),
-            UserNotificationService.categoryIdentifier(for: .saveAsDraft)
-        )
-
-        let userInfo = UserNotificationService.notificationUserInfo(for: pendingDraft(), sendBehavior: .autoSend)
-        XCTAssertEqual(
-            UserNotificationService.action(
-                for: UserNotificationService.approveActionIdentifier,
-                userInfo: userInfo
-            ),
-            .approve(.autoSend)
-        )
-        XCTAssertEqual(
-            UserNotificationService.action(
-                for: UserNotificationService.approveActionIdentifier,
-                userInfo: [:]
-            ),
+            UserNotificationService.action(for: UserNotificationService.openActionIdentifier),
             .open
         )
+        XCTAssertNil(UserNotificationService.action(for: UserNotificationService.closeActionIdentifier))
+    }
+
+    func testNotificationBodyIsPreviewWithNoApprovalCopy() {
+        let body = UserNotificationService.notificationBody(replyBody: "Thursday works!")
+        XCTAssertEqual(body, "Thursday works!")
+        XCTAssertFalse(body.contains("Approve"))
     }
 
     // MARK: - Enqueue posts a notification (and captures the incoming body)

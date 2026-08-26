@@ -63,9 +63,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateManager.startUpdater()
         }
 
-        // Ask for notification permission so ready drafts can surface natively.
+        // Prepare native delivery, then read/prompt for permission so the app can
+        // flag notification status when off (item 78).
         if runtime.allowsStartupSideEffects {
-            appState.notifier.requestAuthorization()
+            appState.notifier.prepareNotificationDelivery()
+            Task { await appState.refreshNotificationPermission() }
         }
 
         // Begin watching reachability so work pauses offline and resumes on
@@ -119,6 +121,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for url in urls {
             appState.handleIncomingURL(url)
         }
+    }
+
+    /// Re-check notification authorization whenever the app returns to the
+    /// foreground (item 78): a user who toggled the setting in System Settings and
+    /// switched back sees the hint appear — or clear — without relaunching.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        guard runtime.allowsStartupSideEffects, let appState else { return }
+        Task { await appState.refreshNotificationPermission() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

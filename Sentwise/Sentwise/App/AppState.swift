@@ -24,6 +24,10 @@ final class AppState: ObservableObject {
     /// Number of drafts awaiting the user's approval.
     @Published var pendingDraftCount: Int = 0
 
+    /// System notification-authorization status (item 78); see
+    /// `AppState+NotificationPermission`. Starts `.authorized` (non-nagging).
+    @Published var notificationPermission: NotificationPermission = .authorized
+
     /// Whether an email account is connected.
     @Published var isAccountConnected: Bool = false
 
