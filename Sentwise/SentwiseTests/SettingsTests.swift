@@ -156,12 +156,35 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(decoded.llmVerifiedModel, "")
     }
 
-    func testCurrentSchemaVersionIsSixteen() {
-        XCTAssertEqual(Settings.currentSchemaVersion, 16)
+    func testCurrentSchemaVersionIsSeventeen() {
+        XCTAssertEqual(Settings.currentSchemaVersion, 17)
     }
 
     func testSignatureSchemaVersionIsSixteen() {
         XCTAssertEqual(Settings.signatureSchemaVersion, 16)
+    }
+
+    func testVerboseDiagnosticLoggingSchemaVersionIsSeventeen() {
+        XCTAssertEqual(Settings.verboseDiagnosticLoggingSchemaVersion, 17)
+    }
+
+    func testLegacyFileWithoutVerboseLoggingDecodesToOff() throws {
+        // A pre-v17 file has no verbose-logging key; it must decode to off (normal
+        // logging) — the safe, non-chatty default for existing installs.
+        let legacy = #"{"schemaVersion":16,"pollIntervalSeconds":300,"mailEmail":"me@x.com"}"#
+        let decoded = try JSONDecoder().decode(Settings.self, from: Data(legacy.utf8))
+        XCTAssertFalse(decoded.verboseDiagnosticLogging)
+    }
+
+    func testVerboseDiagnosticLoggingRoundTripsThroughCodable() throws {
+        let original = Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            verboseDiagnosticLogging: true
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Settings.self, from: data)
+        XCTAssertTrue(decoded.verboseDiagnosticLogging)
     }
 
     func testLegacyFileWithoutSignatureKeysDecodesToDefaults() throws {
