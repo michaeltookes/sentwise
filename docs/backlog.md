@@ -117,6 +117,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - **Clean-machine run** (fresh macOS user account or VM): DMG install via browser download (Gatekeeper/notarization path), `brew install --cask` path, first-run onboarding with sign-in/trial + Gmail app password, voice learn, first inbox draft, first transcript follow-up, approve via notification, Sparkle update from the previous version. Every friction point logged as a backlog item.
     - **Security pass** via `/security-review` on the app and the service repo: token handling, proxy auth, Keychain usage, log redaction, dependency audit.
     - **Release hygiene:** version **1.0.0** via `/release-prep`; CHANGELOG written for humans; cask and appcast verified from a machine that isn't the maintainer's; GitHub release notes link the quickstart (item 71).
+    - **Feedback inbox live:** the `feedback@sentwise.ai` address wired into the app's "Report a Problem" (item 36) must be a real, monitored mailbox before launch (Google Workspace setup) — the app ships the address regardless, but a stranger's feedback must actually reach the maintainer.
     - Launch checklist recorded in `docs/` and ticked; this item closes when the public link goes out.
 
 75. **Google Workspace accounts where app passwords are disabled**
