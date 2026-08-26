@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import os
 
@@ -6,6 +7,57 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "Setting
 /// Builds and persists the `Settings` snapshot from `AppState`'s live published
 /// values. Kept in its own file so `AppState` stays within lint limits.
 extension AppState {
+
+    /// Persists settings automatically when a tracked preference changes, and
+    /// mirrors the verbose-logging preference into the global `DiagnosticLog`
+    /// flag (both at launch and on change). Called once from `AppState.init`.
+    func setupAutoSave() {
+        DiagnosticLog.isVerbose = verboseDiagnosticLogging
+
+        $pollIntervalSeconds
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.saveSettingsAfterPublishedSet(rescheduleInboxWatcher: true)
+            }
+            .store(in: &cancellables)
+
+        $sendBehavior
+            .dropFirst()
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
+            .store(in: &cancellables)
+
+        $sendDelaySeconds
+            .dropFirst()
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
+            .store(in: &cancellables)
+
+        $verboseDiagnosticLogging
+            .dropFirst()
+            .sink { [weak self] isVerbose in
+                DiagnosticLog.isVerbose = isVerbose
+                self?.saveSettingsAfterPublishedSet()
+            }
+            .store(in: &cancellables)
+
+        $signaturePolicy
+            .dropFirst()
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
+            .store(in: &cancellables)
+
+        $signatureText
+            .dropFirst()
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
+            .store(in: &cancellables)
+
+        $llmModel
+            .dropFirst()
+            .sink { [weak self] model in
+                self?.resetDraftPreviewForLLMChange()
+                self?.refreshLLMConnectionStatus(llmModel: model)
+                self?.saveSettings(llmModel: model)
+            }
+            .store(in: &cancellables)
+    }
 
     /// Builds a `Settings` snapshot from the current published values.
     /// Internal so the `AppState+Onboarding` extension can persist the
@@ -39,6 +91,7 @@ extension AppState {
             onboardingCompleted: onboardingCompleted,
             senderAllowlist: senderAllowlist,
             senderBlocklist: senderBlocklist,
+            verboseDiagnosticLogging: verboseDiagnosticLogging,
             transcriptWatchedFolderEnabled: transcriptWatchedFolderEnabled,
             transcriptWatchedFolderPath: transcriptWatchedFolderPath,
             transcriptWatchedFolderSeenSnapshots: transcriptWatchedFolderSeenSnapshots

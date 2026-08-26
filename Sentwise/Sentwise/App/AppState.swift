@@ -187,6 +187,10 @@ final class AppState: ObservableObject {
     /// Senders to never draft; matches are skipped with a visible reason (item 18).
     @Published var senderBlocklist: [SenderRule]
 
+    /// Whether verbose diagnostic logging is enabled (item 36). Off by default.
+    /// `setupAutoSave` mirrors it into the global `DiagnosticLog.isVerbose`.
+    @Published var verboseDiagnosticLogging: Bool
+
     /// Whether the loaded settings file predates the onboarding completion flag.
     /// Used only to keep already-configured installs out of first-run setup.
     let loadedSettingsPredateOnboardingCompletion: Bool
@@ -338,7 +342,9 @@ final class AppState: ObservableObject {
     /// onboarding window at launch or from the menu.
     var openOnboardingHandler: (() -> Void)?
     let settingsDebouncer = Debouncer(delay: 0.5)
-    private var cancellables = Set<AnyCancellable>()
+    /// Internal (not private) so `AppState+SettingsPersistence` can wire the
+    /// autosave sinks that observe the published preferences.
+    var cancellables = Set<AnyCancellable>()
     var previewGeneration = 0
     var bodyPreviewGeneration = 0
     var draftGeneration = 0
@@ -381,6 +387,7 @@ final class AppState: ObservableObject {
         self.onboardingCompleted = settings.onboardingCompleted
         self.senderAllowlist = settings.senderAllowlist
         self.senderBlocklist = settings.senderBlocklist
+        self.verboseDiagnosticLogging = settings.verboseDiagnosticLogging
         self.transcriptWatchedFolderEnabled = settings.transcriptWatchedFolderEnabled
         self.transcriptWatchedFolderPath = settings.transcriptWatchedFolderPath
         self.transcriptWatchedFolderSeenSnapshots = settings.transcriptWatchedFolderSeenSnapshots
@@ -446,45 +453,6 @@ final class AppState: ObservableObject {
         reachability.onChange = { [weak self] online in
             self?.handleReachabilityChange(online)
         }
-    }
-
-    /// Persists settings automatically when a tracked preference changes.
-    private func setupAutoSave() {
-        $pollIntervalSeconds
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.saveSettingsAfterPublishedSet(rescheduleInboxWatcher: true)
-            }
-            .store(in: &cancellables)
-
-        $sendBehavior
-            .dropFirst()
-            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
-            .store(in: &cancellables)
-
-        $sendDelaySeconds
-            .dropFirst()
-            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
-            .store(in: &cancellables)
-
-        $signaturePolicy
-            .dropFirst()
-            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
-            .store(in: &cancellables)
-
-        $signatureText
-            .dropFirst()
-            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
-            .store(in: &cancellables)
-
-        $llmModel
-            .dropFirst()
-            .sink { [weak self] model in
-                self?.resetDraftPreviewForLLMChange()
-                self?.refreshLLMConnectionStatus(llmModel: model)
-                self?.saveSettings(llmModel: model)
-            }
-            .store(in: &cancellables)
     }
 
     // MARK: - Launch at Login
