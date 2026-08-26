@@ -70,16 +70,20 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - **Training-data contrast (updated 2026-08-12 for the managed-inference decision):** cloud notetakers' own policies state customer call data (de-identified) is used to improve their models — e.g. Fathom's FAQ — and they store calls indefinitely. Our claim, stated accurately and without overreach: **"your calls are never stored on our servers and never train anyone's models"** — the managed proxy is stateless with zero-retention provider terms (item 56), and the BYO-key/local path removes us from the loop entirely. Copy must not blur the tiers: "we never even see your calls" belongs to the BYO/local option only.
     - Pricing page and checkout wired to the item 56 licensing/billing flow; prominent trial/download CTA.
     - **"Windows — join the waitlist"** email capture — the demand probe that decides if/when a cross-platform port (Tauri/Electron) is justified.
+    - **Feedback form (moved here from item 36, 2026-08-26):** a small "send feedback / feature request" form for site visitors and general (non-bug) feedback the maintainer can triage into the backlog. Complements — does not replace — the in-app "Report a Problem" path (item 36), which owns bug reports because only the app can produce the redacted diagnostic log bundle (a web form can't). The app may deep-link to this form with app/macOS version prefilled. Needs a form backend/service; scope with the rest of the site.
     - Basic discoverability: SEO fundamentals, OG/social cards, and a home for a demo video.
     - Held in a separate repo with its own deployment; all stack/hosting/analytics decisions deferred to the pre-build discussion.
 
-36. **Feedback channel + diagnostics / log export** — *promoted to High 2026-08-20 (launch prerequisite)*
-    Developer-facing logs for OSS bug reports.
-    *As Sam, I want to export diagnostic logs, so that I can file a useful bug report without leaking email content.*
-    - A "export diagnostics" action produces redacted logs (no message bodies/PII by default).
-    - Distinct from the user-facing activity history (item 21).
-    - Log verbosity is configurable.
-    - **Launch scope (2026-08-20):** a "Send Feedback…" menu/Settings action that opens a pre-filled GitHub issue (or mailto) with app version, macOS version, and an attached redacted log bundle — the minimum so a stranger's failure reaches the maintainer.
+36. **In-app feedback + diagnostics / log export** — *promoted to High 2026-08-20 (launch prerequisite); resliced 2026-08-26*
+    An in-app "Report a Problem" action that packages redacted diagnostics and routes them to the maintainer by email.
+    *As Sam, I want to export diagnostic logs and send them without leaking email content, so that my bug report is actually actionable; as Priya/Marcus, I want a one-click "Report a Problem" that just works without a GitHub account.*
+    > **Reslice decision 2026-08-26 (owner):** the load-bearing piece is the **redacted diagnostic log bundle**, which only the app can produce and which cannot ride through a web form — so it stays **in-app**, routed by **email to a dedicated address** (GitHub-issue routing rejected: the ICP won't file public issues needing an account). A prettier **landing-page feedback form** for general/feature feedback moves to the site work (see item 57) and complements, not replaces, this in-app path.
+    - **"Report a Problem…" action** in the menu and/or Settings that: (1) generates a **redacted log bundle** (no message bodies/PII by default — redact addresses, subjects, and body content), saves it, and reveals it in Finder; and (2) opens the user's mail client via `mailto:` to the **dedicated feedback address** (TBD — e.g. `feedback@sentwise.ai`) pre-filled with app version + macOS version + a short template and an "attach the log bundle from Finder" note (neither mailto nor a web form can auto-attach a file).
+    - Redacted logs produced from the app's own `os_log`/diagnostics — **distinct from the user-facing activity history** (item 21).
+    - **Log verbosity is configurable** (a Settings toggle for verbose/diagnostic logging), off/normal by default.
+    - Redaction is verifiable and default-safe: a stranger's bundle must not contain mail content or PII unless they opt into a more verbose level knowingly.
+    - The dedicated feedback address is also the app's/README's stated contact until the site ships.
+    - *(Deferred to the site work, item 57: a landing-page feedback form the app can deep-link to with version prefilled — general/feature feedback, no logs.)*
 
 71. **README + quickstart rewrite (the front door until item 57 ships)**
     The README still says *"Status: early development… features are being built out"*, lists shipped features under "Planned features", and says "No subscription" — the opposite of the current strategy. Until the landing page exists, the README is what every prospective user reads.
