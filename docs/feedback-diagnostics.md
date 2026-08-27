@@ -46,7 +46,8 @@ issue. It contains:
 - **Recent app log entries** from the unified log, read via `OSLogStore` scoped
   to the system log and the `com.tookes.Sentwise` subsystem, covering the last
   24 hours across Sentwise process launches. Collection is bounded by entry
-  count and captured message bytes so report generation stays finite.
+  count and captured message bytes, retaining the newest matching entries so the
+  reproduction immediately before reporting is preserved.
 
 It **never** contains message bodies, subjects, or recipients; credentials;
 your account or mailbox email; the mail host or username; tokens; or the

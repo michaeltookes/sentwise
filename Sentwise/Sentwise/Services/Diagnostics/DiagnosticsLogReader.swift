@@ -35,6 +35,36 @@ protocol DiagnosticsLogReading: Sendable {
     func recentEntries(since date: Date, includingVerbose: Bool) throws -> [DiagnosticsLogEntry]
 }
 
+/// Bounded tail buffer for unified-log collection. Enumeration is oldest to
+/// newest, so evict from the front when limits are reached to keep the newest
+/// entries near the user's report action.
+struct DiagnosticsLogTailBuffer {
+    let maxEntries: Int
+    let maxMessageBytes: Int
+    private(set) var entries: [DiagnosticsLogEntry] = []
+    private var collectedMessageBytes = 0
+
+    init(maxEntries: Int, maxMessageBytes: Int) {
+        self.maxEntries = maxEntries
+        self.maxMessageBytes = maxMessageBytes
+    }
+
+    mutating func append(_ entry: DiagnosticsLogEntry) {
+        guard maxEntries > 0, maxMessageBytes > 0 else { return }
+
+        let messageBytes = entry.message.utf8.count
+        guard messageBytes <= maxMessageBytes else { return }
+
+        while entries.count >= maxEntries || collectedMessageBytes + messageBytes > maxMessageBytes {
+            let removed = entries.removeFirst()
+            collectedMessageBytes -= removed.message.utf8.count
+        }
+
+        entries.append(entry)
+        collectedMessageBytes += messageBytes
+    }
+}
+
 /// Testable wrapper for the `OSLogStore` scope used by diagnostics collection.
 enum DiagnosticsLogStoreScope: Equatable, Sendable {
     case system
@@ -94,19 +124,16 @@ struct OSLogStoreDiagnosticsReader: DiagnosticsLogReading {
         let predicate = Self.makePredicate(subsystem: subsystem)
         let enumerator = try store.getEntries(at: position, matching: predicate)
 
-        var entries: [DiagnosticsLogEntry] = []
-        var collectedMessageBytes = 0
+        var tail = DiagnosticsLogTailBuffer(
+            maxEntries: maxEntries,
+            maxMessageBytes: maxMessageBytes
+        )
         for element in enumerator {
             guard let log = element as? OSLogEntryLog else { continue }
             let level = Self.map(log.level)
             if level.isVerboseOnly && !includingVerbose { continue }
             let message = log.composedMessage
-            let messageBytes = message.utf8.count
-            guard entries.count < maxEntries,
-                  collectedMessageBytes + messageBytes <= maxMessageBytes else {
-                break
-            }
-            entries.append(
+            tail.append(
                 DiagnosticsLogEntry(
                     date: log.date,
                     category: log.category,
@@ -114,9 +141,8 @@ struct OSLogStoreDiagnosticsReader: DiagnosticsLogReading {
                     message: message
                 )
             )
-            collectedMessageBytes += messageBytes
         }
-        return entries
+        return tail.entries
     }
 
     static func makePredicate(subsystem: String) -> NSPredicate {

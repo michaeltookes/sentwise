@@ -26,6 +26,35 @@ final class DiagnosticsLogReaderTests: XCTestCase {
         XCTAssertEqual(try noBytes.recentEntries(since: .distantPast, includingVerbose: true), [])
     }
 
+    func testTailBufferRetainsNewestEntriesWhenEntryLimitIsExceeded() {
+        var buffer = DiagnosticsLogTailBuffer(maxEntries: 3, maxMessageBytes: 1_000)
+
+        ["oldest", "older", "middle", "newer", "newest"].forEach {
+            buffer.append(entry(message: $0))
+        }
+
+        XCTAssertEqual(buffer.entries.map(\.message), ["middle", "newer", "newest"])
+    }
+
+    func testTailBufferRetainsNewestEntriesWhenByteLimitIsExceeded() {
+        var buffer = DiagnosticsLogTailBuffer(maxEntries: 10, maxMessageBytes: 14)
+
+        ["oldest", "middle", "newest"].forEach {
+            buffer.append(entry(message: $0))
+        }
+
+        XCTAssertEqual(buffer.entries.map(\.message), ["middle", "newest"])
+    }
+
+    func testTailBufferSkipsSingleEntriesLargerThanByteLimit() {
+        var buffer = DiagnosticsLogTailBuffer(maxEntries: 10, maxMessageBytes: 8)
+
+        buffer.append(entry(message: "too-large-entry"))
+        buffer.append(entry(message: "new"))
+
+        XCTAssertEqual(buffer.entries.map(\.message), ["new"])
+    }
+
     func testSubsystemPredicateOnlyMatchesConfiguredSubsystem() {
         let predicate = OSLogStoreDiagnosticsReader.makePredicate(
             subsystem: "com.example.Sentwise"
@@ -33,5 +62,14 @@ final class DiagnosticsLogReaderTests: XCTestCase {
 
         XCTAssertTrue(predicate.evaluate(with: ["subsystem": "com.example.Sentwise"]))
         XCTAssertFalse(predicate.evaluate(with: ["subsystem": "com.example.Other"]))
+    }
+
+    private func entry(message: String) -> DiagnosticsLogEntry {
+        DiagnosticsLogEntry(
+            date: Date(timeIntervalSince1970: 1_700_000_000),
+            category: "Diagnostics",
+            level: .notice,
+            message: message
+        )
     }
 }

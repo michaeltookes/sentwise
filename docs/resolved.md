@@ -16,7 +16,7 @@ Completed backlog items, most recent first. Item numbers are the stable IDs from
 
 **Review follow-up 2026-08-26**: Surfaced total diagnostics bundle write failures to the user: when both Downloads and the temporary fallback fail, `Report a Problem…` now records a redacted user-facing error and presents an alert instead of only writing another unified-log entry.
 
-**Review follow-up 2026-08-26**: Surfaced post-bundle feedback-mail failures too: the `NSWorkspace.open` result is now propagated, and if macOS cannot open `mailto:` the user still sees an alert with `feedback@sentwise.ai` and the generated bundle filename. The report preparation path now snapshots app state on the main actor, then collects logs, builds/redacts the report, and writes the bundle on a utility task; `OSLogStore` enumeration is bounded by entry count and message bytes so the menu is not blocked by unbounded log traversal.
+**Review follow-up 2026-08-26**: Surfaced post-bundle feedback-mail failures too: the `NSWorkspace.open` result is now propagated, and if macOS cannot open `mailto:` the user still sees an alert with `feedback@sentwise.ai` and the generated bundle filename. The report preparation path now snapshots app state on the main actor, then collects logs, builds/redacts the report, and writes the bundle on a utility task; `OSLogStore` collection is bounded by entry count and message bytes while retaining the newest matching entries so the menu is not blocked by unbounded report construction and the reproduction just before reporting is preserved.
 
 ### ~~79: Rework the draft notification into an "Open / Close" alert (approve in the app, not from the banner)~~
 **Resolved**: 2026-08-25 (branch notification-ux, commits f7896d5, f2a1016)
