@@ -5,9 +5,10 @@
 Sentwise is a native, local-first macOS menu-bar assistant that learns your
 writing voice from your own Sent mail and drafts email on your behalf — then
 alerts you when a draft is ready so you can read it in full and approve it in
-the app. Your mail, your voice profile, and your call transcripts stay on your
-Mac. Nothing is stored on anyone's server, and nothing you write is ever used
-as training data.
+the app. Sentwise does not store your mail, voice profile, or call transcripts
+on Sentwise servers. With managed inference, the text needed for drafting or
+voice learning transits a stateless, zero-retention proxy; with a BYO provider,
+that provider's policies apply; with a local model, inference stays on your Mac.
 
 The flagship workflow is the **post-call follow-up**: when a call ends, drop in
 the transcript and Sentwise drafts the next-steps email in your voice, addressed
@@ -20,13 +21,15 @@ Most AI email tools are cloud services that read your mail on their servers,
 store your calls indefinitely, and train their models on your data. Sentwise is
 built the opposite way:
 
-- **Nothing stored, nothing trained on.** Drafting runs through a **stateless,
-  zero-retention** inference proxy — your request is held in memory for the
-  length of the call and never logged or kept. Or bring your own key / run a
-  local model and take us out of the loop entirely.
+- **No Sentwise storage, no Sentwise training.** Managed drafting runs through a
+  **stateless, zero-retention** inference proxy — request and response bodies are
+  held in memory only and never logged or kept by Sentwise. BYO requests go
+  directly to the provider you choose under that provider's policy; local-model
+  requests stay on your Mac.
 - **No bot in your meetings.** Sentwise never joins your calls. Transcripts
   arrive as a file or a paste (with automatic pickup and on-device capture on
-  the roadmap), and stay on your Mac.
+  the roadmap), not as a cloud meeting archive; transcript text is sent only
+  when a non-local inference provider drafts from it.
 - **A send-ready email, not a summary.** The output is a finished draft in
   *your* learned voice, sent from *your* mailbox — not a note stranded in a
   separate app.
@@ -100,7 +103,8 @@ licensed to your account.
    ![Sentwise Settings → Account: paste your email address and app password into the Add account fields](docs/images/account-connect.png)
 
 4. **Learn your voice.** Sentwise samples your Sent mail to build a private voice
-   profile. This stays on your Mac.
+   profile. The profile is stored locally; when you use managed or BYO
+   inference, the sampled text is sent to that inference endpoint for profiling.
 
 5. **Get your first draft.** Send yourself a test email (or drop in a call
    transcript via **New Follow-up from Transcript…**). When the draft is ready,
@@ -120,20 +124,24 @@ option for power users and the privacy-maximal:
   in the Keychain), or point Sentwise at a **local model** (e.g. Ollama) for
   fully on-device drafting.
 - On this path, drafting requests go directly from your Mac to the provider you
-  chose — never through our proxy.
+  chose and follow that provider's retention and training policy — never through
+  our proxy. With a local model, the request stays on your Mac.
 
 ## Privacy in one screen
 
-- **What stays on your Mac:** your mail, your learned voice profile, and your
-  call transcripts.
-- **What leaves, and when:** only the drafting request itself — and only to the
-  inference endpoint. On managed inference that's a **stateless, zero-retention**
-  proxy (held in memory, never logged or stored); on BYO-key/local it's the
-  provider you chose, or nowhere at all with a local model.
+- **What Sentwise stores locally:** your learned voice profile, settings, pending
+  drafts, and transcript files you provide. Sentwise does not store your email
+  or call content on its servers.
+- **What leaves, and when:** non-local inference requests include the content
+  needed for the job — Sent-mail samples for voice learning, incoming email text
+  for replies, or transcript text for follow-ups. Managed inference sends that
+  through a **stateless, zero-retention** proxy; BYO inference sends it directly
+  to the provider you choose; local-model inference sends it nowhere.
 - **What the account stores:** your email, subscription state, and usage
   counters — **never your email or call content.**
-- **What is never done:** your content is never stored on our servers and never
-  used to train any model.
+- **What Sentwise never does:** your content is never logged or stored on
+  Sentwise servers and never used by Sentwise to train models. BYO provider
+  retention and training are governed by the provider you select.
 
 ## Requirements
 
