@@ -105,7 +105,8 @@ licensed to your account.
    Drafts, and approve.
 
    <!-- SCREENSHOT: notification banner "A draft is ready" (Open / Close) -->
-   <!-- SCREENSHOT: Review Drafts window showing a drafted reply with Approve -->
+
+   ![Review Drafts: the incoming message beside the proposed reply, with Deny and Approve](docs/images/review-approve.png)
 
 ### Bring your own provider
 
