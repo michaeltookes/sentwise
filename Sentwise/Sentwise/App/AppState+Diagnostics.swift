@@ -35,37 +35,52 @@ extension AppState {
     /// Generates and saves a redacted diagnostics bundle, reveals it in Finder,
     /// and opens a pre-filled feedback email. Returns the bundle URL (if the write
     /// succeeded) so callers/tests can inspect it. In Prowl hunt mode the file is
-    /// still written but the Finder/Mail side effects are suppressed.
+    /// still written but the Finder/Mail side effects are suppressed. If both the
+    /// primary and fallback writes fail, no misleading feedback email is opened.
     @discardableResult
     func reportAProblem(
         reader: DiagnosticsLogReading = OSLogStoreDiagnosticsReader(),
         router: DiagnosticsActionRouting = SystemDiagnosticsActionRouter(),
         now: Date = Date(),
         directory: URL? = nil,
+        fallbackDirectory: URL? = nil,
         isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
     ) -> URL? {
         let context = makeDiagnosticsContext()
         let since = now.addingTimeInterval(-Self.diagnosticsLookbackSeconds)
-        let entries = (try? reader.recentEntries(
+        let collection = collectDiagnosticLogEntries(
+            reader: reader,
             since: since,
             includingVerbose: verboseDiagnosticLogging
-        )) ?? []
-        let report = DiagnosticsReportBuilder.build(context: context, entries: entries, generatedAt: now)
-        DiagnosticLog.verbose("Generated diagnostics bundle with \(entries.count) log entries")
+        )
+        let report = DiagnosticsReportBuilder.build(
+            context: context,
+            entries: collection.entries,
+            generatedAt: now,
+            collectionError: collection.error
+        )
+        DiagnosticLog.verbose("Generated diagnostics bundle with \(collection.entries.count) log entries")
 
-        var bundleURL: URL?
+        let bundleURL: URL
         do {
-            bundleURL = try writeDiagnosticsBundle(report, generatedAt: now, directory: directory)
-        } catch {
-            DiagnosticLog.logger.error(
-                "Failed to write diagnostics bundle: \(error.localizedDescription, privacy: .public)"
+            bundleURL = try writeDiagnosticsBundle(
+                report,
+                generatedAt: now,
+                directory: directory,
+                fallbackDirectory: fallbackDirectory
             )
+        } catch {
+            let description = DiagnosticsRedactor.redact(error.localizedDescription)
+            DiagnosticLog.logger.error(
+                "Failed to write diagnostics bundle: \(description, privacy: .public)"
+            )
+            return nil
         }
 
         // Never launch Finder/Mail during an automated Prowl hunt.
         guard !isHuntMode else { return bundleURL }
 
-        if let bundleURL { router.revealInFinder(bundleURL) }
+        router.revealInFinder(bundleURL)
         openFeedbackMail(context: context, bundleURL: bundleURL, router: router)
         return bundleURL
     }
@@ -74,26 +89,62 @@ extension AppState {
     func writeDiagnosticsBundle(
         _ text: String,
         generatedAt: Date = Date(),
-        directory: URL? = nil
+        directory: URL? = nil,
+        fallbackDirectory: URL? = nil
     ) throws -> URL {
-        let dir = directory ?? Self.defaultDiagnosticsDirectory()
         let filename = "Sentwise-Diagnostics-\(Self.filenameTimestamp(generatedAt)).txt"
-        let url = dir.appendingPathComponent(filename)
+        let primaryDirectory = directory ?? Self.defaultDiagnosticsDirectory()
+        do {
+            return try writeDiagnosticsBundle(text, filename: filename, directory: primaryDirectory)
+        } catch {
+            let fallback = fallbackDirectory ?? FileManager.default.temporaryDirectory
+            guard primaryDirectory.standardizedFileURL != fallback.standardizedFileURL else {
+                throw error
+            }
+            let description = DiagnosticsRedactor.redact(error.localizedDescription)
+            DiagnosticLog.logger.error(
+                "Failed to write diagnostics bundle in primary directory; retrying temp: \(description, privacy: .public)"
+            )
+            return try writeDiagnosticsBundle(text, filename: filename, directory: fallback)
+        }
+    }
+
+    private func collectDiagnosticLogEntries(
+        reader: DiagnosticsLogReading,
+        since: Date,
+        includingVerbose: Bool
+    ) -> (entries: [DiagnosticsLogEntry], error: String?) {
+        do {
+            return (try reader.recentEntries(since: since, includingVerbose: includingVerbose), nil)
+        } catch {
+            let description = DiagnosticsRedactor.redact(error.localizedDescription)
+            DiagnosticLog.logger.error(
+                "Failed to collect diagnostics logs: \(description, privacy: .public)"
+            )
+            return ([], description)
+        }
+    }
+
+    private func writeDiagnosticsBundle(
+        _ text: String,
+        filename: String,
+        directory: URL
+    ) throws -> URL {
+        let url = directory.appendingPathComponent(filename)
         try text.write(to: url, atomically: true, encoding: .utf8)
         return url
     }
 
     private func openFeedbackMail(
         context: DiagnosticsContext,
-        bundleURL: URL?,
+        bundleURL: URL,
         router: DiagnosticsActionRouting
     ) {
-        let filename = bundleURL?.lastPathComponent ?? "Sentwise-Diagnostics.txt"
         guard let mailto = FeedbackMailComposer.mailtoURL(
             appVersion: context.appVersion,
             buildNumber: context.buildNumber,
             osVersion: context.osVersion,
-            bundleFilename: filename
+            bundleFilename: bundleURL.lastPathComponent
         ) else { return }
         router.open(mailto)
     }

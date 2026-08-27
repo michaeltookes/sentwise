@@ -44,6 +44,30 @@ final class DiagnosticsRedactorTests: XCTestCase {
         XCTAssertTrue(output.contains("password"))
     }
 
+    func testRedactsWatchedFolderPathsWithSpaces() {
+        let input = """
+        Transcript file not readable yet; will retry on a later scan: /Users/priya/Documents/Zoom/2026-08-26 Discovery Call.vtt
+        Watched transcript delivery exhausted retry budget: /Users/priya/Documents/Calls/acme pricing follow-up.md
+        """
+        let output = DiagnosticsRedactor.redact(input)
+        XCTAssertFalse(output.contains("/Users/priya"), output)
+        XCTAssertFalse(output.contains("Discovery Call.vtt"), output)
+        XCTAssertFalse(output.contains("acme pricing follow-up.md"), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.pathPlaceholder).count - 1,
+            2
+        )
+    }
+
+    func testRedactsQuotedAndLabeledPaths() {
+        let input = #"path=/Users/priya/Documents/call.vtt file: "/private/tmp/Sentwise-Diagnostics.txt""#
+        let output = DiagnosticsRedactor.redact(input)
+        XCTAssertFalse(output.contains("/Users/priya"), output)
+        XCTAssertFalse(output.contains("/private/tmp"), output)
+        XCTAssertTrue(output.contains("path=\(DiagnosticsRedactor.pathPlaceholder)"))
+        XCTAssertTrue(output.contains(#"file: ""# + DiagnosticsRedactor.pathPlaceholder))
+    }
+
     func testLeavesNonSensitiveTextIntact() {
         let input = """
         App version: 1.2.3 (45)

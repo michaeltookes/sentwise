@@ -50,6 +50,22 @@ final class DiagnosticsReportBuilderTests: XCTestCase {
         XCTAssertTrue(report.contains("(no recent log entries)"))
     }
 
+    func testReportIncludesRedactedLogCollectionFailure() {
+        let report = DiagnosticsReportBuilder.build(
+            context: sampleContext(),
+            entries: [],
+            collectionError: "OSLogStore failed at /Users/priya/Library/Logs token=abc123"
+        )
+
+        XCTAssertTrue(report.contains("--- Recent logs (collection failed) ---"))
+        XCTAssertTrue(report.contains("Log collection failed:"))
+        XCTAssertFalse(report.contains("(no recent log entries)"))
+        XCTAssertFalse(report.contains("/Users/priya"), report)
+        XCTAssertFalse(report.contains("abc123"), report)
+        XCTAssertTrue(report.contains(DiagnosticsRedactor.pathPlaceholder))
+        XCTAssertTrue(report.contains(DiagnosticsRedactor.tokenPlaceholder))
+    }
+
     func testBundleContainsNoAccountEmailEvenIfContextIsPolluted() {
         // Defence in depth: even if an email somehow reached a context field, the
         // whole assembled report is redacted, so nothing leaks.

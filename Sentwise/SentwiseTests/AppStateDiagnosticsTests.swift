@@ -5,17 +5,28 @@ import XCTest
 /// tested without touching the real `OSLogStore`.
 private final class StubDiagnosticsLogReader: DiagnosticsLogReading {
     let entries: [DiagnosticsLogEntry]
+    let error: Error?
     private(set) var lastIncludingVerbose: Bool?
     private(set) var lastSince: Date?
 
-    init(entries: [DiagnosticsLogEntry]) {
+    init(entries: [DiagnosticsLogEntry], error: Error? = nil) {
         self.entries = entries
+        self.error = error
     }
 
     func recentEntries(since date: Date, includingVerbose: Bool) throws -> [DiagnosticsLogEntry] {
         lastSince = date
         lastIncludingVerbose = includingVerbose
+        if let error { throw error }
         return entries
+    }
+}
+
+private enum StubDiagnosticsError: LocalizedError {
+    case logStoreUnavailable
+
+    var errorDescription: String? {
+        "OSLogStore unavailable at /Users/priya/Library/Logs token=abc123"
     }
 }
 
@@ -100,6 +111,84 @@ final class AppStateDiagnosticsTests: XCTestCase {
         appState.reportAProblem(reader: reader, router: router, directory: dir, isHuntMode: false)
 
         XCTAssertEqual(reader.lastIncludingVerbose, true)
+    }
+
+    func testReportAProblemWritesCollectionFailureIntoBundle() throws {
+        let persistence = AppStateMemoryPersistence()
+        let appState = makeAppState(persistence: persistence)
+        let reader = StubDiagnosticsLogReader(entries: [], error: StubDiagnosticsError.logStoreUnavailable)
+        let router = RecordingDiagnosticsActionRouter()
+        let dir = try tempDirectory()
+
+        let url = appState.reportAProblem(
+            reader: reader,
+            router: router,
+            directory: dir,
+            isHuntMode: false
+        )
+
+        let bundleURL = try XCTUnwrap(url)
+        let contents = try String(contentsOf: bundleURL, encoding: .utf8)
+        XCTAssertTrue(contents.contains("Log collection failed:"))
+        XCTAssertFalse(contents.contains("/Users/priya"), contents)
+        XCTAssertFalse(contents.contains("abc123"), contents)
+        XCTAssertTrue(contents.contains(DiagnosticsRedactor.pathPlaceholder))
+        XCTAssertTrue(contents.contains(DiagnosticsRedactor.tokenPlaceholder))
+        XCTAssertEqual(router.revealed, [bundleURL])
+        XCTAssertEqual(router.opened.count, 1)
+    }
+
+    func testReportAProblemFallsBackToTemporaryDirectoryWhenPrimaryWriteFails() throws {
+        let persistence = AppStateMemoryPersistence()
+        let appState = makeAppState(persistence: persistence)
+        let reader = StubDiagnosticsLogReader(entries: [])
+        let router = RecordingDiagnosticsActionRouter()
+        let dir = try tempDirectory()
+        let blockedDirectory = dir.appendingPathComponent("not-a-directory")
+        let fallbackDirectory = dir.appendingPathComponent("fallback")
+        try "occupied".write(to: blockedDirectory, atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: fallbackDirectory, withIntermediateDirectories: true)
+
+        let url = appState.reportAProblem(
+            reader: reader,
+            router: router,
+            directory: blockedDirectory,
+            fallbackDirectory: fallbackDirectory,
+            isHuntMode: false
+        )
+
+        let bundleURL = try XCTUnwrap(url)
+        XCTAssertEqual(
+            bundleURL.deletingLastPathComponent().standardizedFileURL.path,
+            fallbackDirectory.standardizedFileURL.path
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: bundleURL.path))
+        XCTAssertEqual(router.revealed, [bundleURL])
+        XCTAssertEqual(router.opened.count, 1)
+    }
+
+    func testReportAProblemDoesNotOpenMailWhenBundleWriteFails() throws {
+        let persistence = AppStateMemoryPersistence()
+        let appState = makeAppState(persistence: persistence)
+        let reader = StubDiagnosticsLogReader(entries: [])
+        let router = RecordingDiagnosticsActionRouter()
+        let dir = try tempDirectory()
+        let blockedDirectory = dir.appendingPathComponent("not-a-directory")
+        let blockedFallback = dir.appendingPathComponent("not-a-fallback-directory")
+        try "occupied".write(to: blockedDirectory, atomically: true, encoding: .utf8)
+        try "occupied".write(to: blockedFallback, atomically: true, encoding: .utf8)
+
+        let url = appState.reportAProblem(
+            reader: reader,
+            router: router,
+            directory: blockedDirectory,
+            fallbackDirectory: blockedFallback,
+            isHuntMode: false
+        )
+
+        XCTAssertNil(url)
+        XCTAssertTrue(router.revealed.isEmpty)
+        XCTAssertTrue(router.opened.isEmpty)
     }
 
     func testReportAProblemSuppressesSideEffectsInHuntMode() throws {

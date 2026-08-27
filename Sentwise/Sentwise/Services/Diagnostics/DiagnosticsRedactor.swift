@@ -14,6 +14,8 @@ import Foundation
 /// - **Email addresses** → `[redacted-email]` (the primary PII risk in a log).
 /// - **Bearer tokens / `Authorization:` values** → `[redacted-token]` (managed
 ///   session JWTs and API keys, should any ever reach a log line).
+/// - **Absolute filesystem paths** → `[redacted-path]` (macOS usernames and
+///   transcript filenames can appear in private unified-log interpolations).
 ///
 /// It is a pure function of its input so it can be unit-tested exhaustively
 /// without touching the log store or the filesystem.
@@ -24,6 +26,9 @@ enum DiagnosticsRedactor {
 
     /// Replacement for a redacted bearer/authorization token or API key.
     static let tokenPlaceholder = "[redacted-token]"
+
+    /// Replacement for a redacted absolute filesystem path.
+    static let pathPlaceholder = "[redacted-path]"
 
     /// Matches an RFC-shaped email address, case-insensitively.
     private static let emailPattern =
@@ -44,6 +49,31 @@ enum DiagnosticsRedactor {
     private static let secretAssignmentPattern =
         #"(?i)\b("# + secretKeys + #")\b(\s*[:=]\s*)\S+"#
 
+    /// Common absolute path roots in app/unified-log output. Keep this scoped so
+    /// ordinary punctuation or URL paths are not treated as filesystem paths.
+    private static let pathRootPattern =
+        "(Users|Volumes|private|var|tmp|Applications|Library|System|opt|etc|usr|bin|sbin|home)"
+
+    /// Matches quoted absolute paths, preserving the opening quote.
+    private static let quotedPathPattern =
+        #"(?m)(["'`])/"# + pathRootPattern + #"([^"'`\r\n]*)"#
+
+    /// Matches log phrases ending with `: /absolute/path`, including filenames
+    /// with spaces through the end of that log line.
+    private static let colonPathPattern =
+        #"(?m)(:\s*)/"# + pathRootPattern + #"([^\r\n]*)"#
+
+    /// Matches compact `path=/absolute/path` / `file: /absolute/path` fields.
+    private static let labeledPathPattern =
+        #"(?i)\b(path|file|folder|directory|seenKey|key)(\s*[:=]\s*)/"#
+        + pathRootPattern
+        + #"(\S+)"#
+
+    /// Matches unquoted absolute paths in free-form errors, stopping before the
+    /// next word so adjacent `token=...` style fields still get scrubbed as tokens.
+    private static let barePathPattern =
+        #"(?m)(^|[\s(])/"# + pathRootPattern + #"([^\s"'`,;)]+)"#
+
     /// Returns `text` with email addresses and secret-looking tokens redacted.
     static func redact(_ text: String) -> String {
         var result = text
@@ -60,6 +90,26 @@ enum DiagnosticsRedactor {
         result = result.replacingOccurrences(
             of: secretAssignmentPattern,
             with: "$1$2\(tokenPlaceholder)",
+            options: [.regularExpression]
+        )
+        result = result.replacingOccurrences(
+            of: quotedPathPattern,
+            with: "$1\(pathPlaceholder)",
+            options: [.regularExpression]
+        )
+        result = result.replacingOccurrences(
+            of: labeledPathPattern,
+            with: "$1$2\(pathPlaceholder)",
+            options: [.regularExpression]
+        )
+        result = result.replacingOccurrences(
+            of: colonPathPattern,
+            with: "$1\(pathPlaceholder)",
+            options: [.regularExpression]
+        )
+        result = result.replacingOccurrences(
+            of: barePathPattern,
+            with: "$1\(pathPlaceholder)",
             options: [.regularExpression]
         )
         return result
