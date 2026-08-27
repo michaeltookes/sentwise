@@ -20,6 +20,11 @@ tracked separately with the marketing site (item 57) and complements this path.
    the file just revealed in Finder — `mailto:` cannot attach a file itself, so
    the reveal-in-Finder + instruction is the flow.
 
+If Sentwise cannot write the bundle to Downloads or the temporary fallback
+(for example, because the disk is full or both folders are unavailable), it
+shows an alert instead of silently doing nothing or opening an email without the
+bundle.
+
 The feedback address is baked into the app and is the app's stated contact until
 the marketing site ships. (Standing up the inbox as a monitored mailbox is a
 separate launch prerequisite — item 74.)

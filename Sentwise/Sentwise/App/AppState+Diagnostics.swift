@@ -46,6 +46,7 @@ extension AppState {
         fallbackDirectory: URL? = nil,
         isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
     ) -> URL? {
+        diagnosticsError = nil
         let context = makeDiagnosticsContext()
         let since = now.addingTimeInterval(-Self.diagnosticsLookbackSeconds)
         let collection = collectDiagnosticLogEntries(
@@ -73,6 +74,9 @@ extension AppState {
             let description = DiagnosticsRedactor.redact(error.localizedDescription)
             DiagnosticLog.logger.error(
                 "Failed to write diagnostics bundle: \(description, privacy: .public)"
+            )
+            diagnosticsError = Self.diagnosticsBundleWriteFailureMessage(
+                redactedDescription: description
             )
             return nil
         }
@@ -147,6 +151,13 @@ extension AppState {
             bundleFilename: bundleURL.lastPathComponent
         ) else { return }
         router.open(mailto)
+    }
+
+    static func diagnosticsBundleWriteFailureMessage(redactedDescription: String) -> String {
+        let base = "Couldn't create the diagnostics bundle. Check that your Downloads folder "
+            + "or disk has space, then try again."
+        guard !redactedDescription.isEmpty else { return base }
+        return "\(base) \(redactedDescription)"
     }
 
     /// Downloads folder when available, else the temporary directory.

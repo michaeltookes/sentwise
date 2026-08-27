@@ -274,7 +274,22 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func reportAProblemMenu() {
         NSApp.activate(ignoringOtherApps: true)
-        appState.reportAProblem()
+        let bundleURL = appState.reportAProblem()
+        guard bundleURL == nil, !ProwlHuntRuntime.current.isEnabled else { return }
+        let message = appState.diagnosticsError
+            ?? AppState.diagnosticsBundleWriteFailureMessage(
+                redactedDescription: "No further details were available."
+            )
+        showDiagnosticsFailureAlert(message: message)
+    }
+
+    private func showDiagnosticsFailureAlert(message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Couldn't Create Diagnostics Bundle"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     @objc private func openNotificationSettingsMenu() {

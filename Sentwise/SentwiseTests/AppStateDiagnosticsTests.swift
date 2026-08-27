@@ -86,6 +86,7 @@ final class AppStateDiagnosticsTests: XCTestCase {
 
         let bundleURL = try XCTUnwrap(url)
         XCTAssertTrue(FileManager.default.fileExists(atPath: bundleURL.path))
+        XCTAssertNil(appState.diagnosticsError)
         let contents = try String(contentsOf: bundleURL, encoding: .utf8)
         XCTAssertFalse(contents.contains("marcus@acme.example"), contents)
         XCTAssertTrue(contents.contains(DiagnosticsRedactor.emailPlaceholder))
@@ -207,8 +208,29 @@ final class AppStateDiagnosticsTests: XCTestCase {
         )
 
         XCTAssertNil(url)
+        let diagnosticsError = try XCTUnwrap(appState.diagnosticsError)
+        XCTAssertTrue(diagnosticsError.contains("Couldn't create the diagnostics bundle."), diagnosticsError)
         XCTAssertTrue(router.revealed.isEmpty)
         XCTAssertTrue(router.opened.isEmpty)
+    }
+
+    func testReportAProblemClearsPreviousFailureAfterSuccessfulWrite() throws {
+        let persistence = AppStateMemoryPersistence()
+        let appState = makeAppState(persistence: persistence)
+        appState.diagnosticsError = "Previous diagnostics failure."
+        let reader = StubDiagnosticsLogReader(entries: [])
+        let router = RecordingDiagnosticsActionRouter()
+        let dir = try tempDirectory()
+
+        let url = appState.reportAProblem(
+            reader: reader,
+            router: router,
+            directory: dir,
+            isHuntMode: false
+        )
+
+        XCTAssertNotNil(url)
+        XCTAssertNil(appState.diagnosticsError)
     }
 
     func testReportAProblemSuppressesSideEffectsInHuntMode() throws {
