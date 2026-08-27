@@ -6,9 +6,30 @@ import Foundation
 /// The heavy lifting lives in small, pure, unit-tested types (`DiagnosticsContext`,
 /// `DiagnosticsRedactor`, `DiagnosticsReportBuilder`, `FeedbackMailComposer`) and
 /// injectable seams (`DiagnosticsLogReading`, `DiagnosticsActionRouting`); this
-/// extension only wires the app's live state into them and performs the file
-/// write. Kept in its own file so `AppState` stays within lint limits.
+/// extension snapshots the app's live state and performs only final UI-facing
+/// side effects on the main actor. Kept in its own file so `AppState` stays
+/// within lint limits.
 extension AppState {
+
+    private enum DiagnosticsBundlePreparation: Sendable {
+        case success(url: URL, entryCount: Int)
+        case failure(redactedDescription: String)
+    }
+
+    private struct DiagnosticsLogCollection: Sendable {
+        let entries: [DiagnosticsLogEntry]
+        let error: String?
+    }
+
+    private struct DiagnosticsBundleRequest: Sendable {
+        let reader: DiagnosticsLogReading
+        let context: DiagnosticsContext
+        let generatedAt: Date
+        let since: Date
+        let includingVerbose: Bool
+        let directory: URL?
+        let fallbackDirectory: URL?
+    }
 
     /// The recent window of logs captured into a bundle (last 24 hours).
     static let diagnosticsLookbackSeconds: TimeInterval = 24 * 60 * 60
@@ -45,33 +66,37 @@ extension AppState {
         directory: URL? = nil,
         fallbackDirectory: URL? = nil,
         isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
-    ) -> URL? {
+    ) async -> URL? {
         diagnosticsError = nil
         let context = makeDiagnosticsContext()
         let since = now.addingTimeInterval(-Self.diagnosticsLookbackSeconds)
-        let collection = collectDiagnosticLogEntries(
-            reader: reader,
-            since: since,
-            includingVerbose: verboseDiagnosticLogging
-        )
-        let report = DiagnosticsReportBuilder.build(
-            context: context,
-            entries: collection.entries,
-            generatedAt: now,
-            collectionError: collection.error
-        )
-        DiagnosticLog.verbose("Generated diagnostics bundle with \(collection.entries.count) log entries")
-
-        let bundleURL: URL
-        do {
-            bundleURL = try writeDiagnosticsBundle(
-                report,
+        let includingVerbose = verboseDiagnosticLogging
+        let preparation = await Self.prepareDiagnosticsBundle(
+            DiagnosticsBundleRequest(
+                reader: reader,
+                context: context,
                 generatedAt: now,
+                since: since,
+                includingVerbose: includingVerbose,
                 directory: directory,
                 fallbackDirectory: fallbackDirectory
             )
-        } catch {
-            let description = DiagnosticsRedactor.redact(error.localizedDescription)
+        )
+
+        switch preparation {
+        case .success(let bundleURL, let entryCount):
+            DiagnosticLog.verbose("Generated diagnostics bundle with \(entryCount) log entries")
+            // Never launch Finder/Mail during an automated Prowl hunt.
+            guard !isHuntMode else { return bundleURL }
+
+            router.revealInFinder(bundleURL)
+            if !openFeedbackMail(context: context, bundleURL: bundleURL, router: router) {
+                DiagnosticLog.logger.error("Failed to open feedback mail for diagnostics bundle")
+                diagnosticsError = Self.feedbackMailOpenFailureMessage(bundleURL: bundleURL)
+            }
+            return bundleURL
+
+        case .failure(let description):
             DiagnosticLog.logger.error(
                 "Failed to write diagnostics bundle: \(description, privacy: .public)"
             )
@@ -80,17 +105,41 @@ extension AppState {
             )
             return nil
         }
+    }
 
-        // Never launch Finder/Mail during an automated Prowl hunt.
-        guard !isHuntMode else { return bundleURL }
+    private nonisolated static func prepareDiagnosticsBundle(
+        _ request: DiagnosticsBundleRequest
+    ) async -> DiagnosticsBundlePreparation {
+        await Task.detached(priority: .utility) {
+            let collection = collectDiagnosticLogEntries(
+                reader: request.reader,
+                since: request.since,
+                includingVerbose: request.includingVerbose
+            )
+            let report = DiagnosticsReportBuilder.build(
+                context: request.context,
+                entries: collection.entries,
+                generatedAt: request.generatedAt,
+                collectionError: collection.error
+            )
 
-        router.revealInFinder(bundleURL)
-        openFeedbackMail(context: context, bundleURL: bundleURL, router: router)
-        return bundleURL
+            do {
+                let bundleURL = try writeDiagnosticsBundle(
+                    report,
+                    generatedAt: request.generatedAt,
+                    directory: request.directory,
+                    fallbackDirectory: request.fallbackDirectory
+                )
+                return .success(url: bundleURL, entryCount: collection.entries.count)
+            } catch {
+                let description = DiagnosticsRedactor.redact(error.localizedDescription)
+                return .failure(redactedDescription: description)
+            }
+        }.value
     }
 
     /// Writes the report text to a timestamped `.txt` file and returns its URL.
-    func writeDiagnosticsBundle(
+    private nonisolated static func writeDiagnosticsBundle(
         _ text: String,
         generatedAt: Date = Date(),
         directory: URL? = nil,
@@ -113,23 +162,24 @@ extension AppState {
         }
     }
 
-    private func collectDiagnosticLogEntries(
+    private nonisolated static func collectDiagnosticLogEntries(
         reader: DiagnosticsLogReading,
         since: Date,
         includingVerbose: Bool
-    ) -> (entries: [DiagnosticsLogEntry], error: String?) {
+    ) -> DiagnosticsLogCollection {
         do {
-            return (try reader.recentEntries(since: since, includingVerbose: includingVerbose), nil)
+            let entries = try reader.recentEntries(since: since, includingVerbose: includingVerbose)
+            return DiagnosticsLogCollection(entries: entries, error: nil)
         } catch {
             let description = DiagnosticsRedactor.redact(error.localizedDescription)
             DiagnosticLog.logger.error(
                 "Failed to collect diagnostics logs: \(description, privacy: .public)"
             )
-            return ([], description)
+            return DiagnosticsLogCollection(entries: [], error: description)
         }
     }
 
-    private func writeDiagnosticsBundle(
+    private nonisolated static func writeDiagnosticsBundle(
         _ text: String,
         filename: String,
         directory: URL
@@ -143,14 +193,14 @@ extension AppState {
         context: DiagnosticsContext,
         bundleURL: URL,
         router: DiagnosticsActionRouting
-    ) {
+    ) -> Bool {
         guard let mailto = FeedbackMailComposer.mailtoURL(
             appVersion: context.appVersion,
             buildNumber: context.buildNumber,
             osVersion: context.osVersion,
             bundleFilename: bundleURL.lastPathComponent
-        ) else { return }
-        router.open(mailto)
+        ) else { return false }
+        return router.open(mailto)
     }
 
     static func diagnosticsBundleWriteFailureMessage(redactedDescription: String) -> String {
@@ -160,8 +210,13 @@ extension AppState {
         return "\(base) \(redactedDescription)"
     }
 
+    static func feedbackMailOpenFailureMessage(bundleURL: URL) -> String {
+        "Couldn't open your mail app. Attach \(bundleURL.lastPathComponent) to an email sent to "
+            + "\(FeedbackMailComposer.feedbackAddress)."
+    }
+
     /// Downloads folder when available, else the temporary directory.
-    static func defaultDiagnosticsDirectory() -> URL {
+    nonisolated static func defaultDiagnosticsDirectory() -> URL {
         if let downloads = try? FileManager.default.url(
             for: .downloadsDirectory,
             in: .userDomainMask,
@@ -174,7 +229,7 @@ extension AppState {
     }
 
     /// A filesystem-safe, sortable timestamp for the bundle filename.
-    static func filenameTimestamp(_ date: Date) -> String {
+    nonisolated static func filenameTimestamp(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone.current

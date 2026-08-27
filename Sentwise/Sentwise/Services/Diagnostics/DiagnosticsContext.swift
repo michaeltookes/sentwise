@@ -9,7 +9,7 @@ import Foundation
 /// mail host/username, tokens, or the watched-folder path (which would leak the
 /// macOS username). The assembled report is additionally run through
 /// `DiagnosticsRedactor`, so even an accidental value is scrubbed.
-struct DiagnosticsContext: Equatable {
+struct DiagnosticsContext: Equatable, Sendable {
 
     let appVersion: String
     let buildNumber: String

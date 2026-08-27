@@ -191,7 +191,7 @@ final class AppState: ObservableObject {
     /// `setupAutoSave` mirrors it into the global `DiagnosticLog.isVerbose`.
     @Published var verboseDiagnosticLogging: Bool
 
-    /// A user-facing message describing the last diagnostics bundle failure, if any.
+    /// A user-facing message describing the last diagnostics report failure, if any.
     @Published var diagnosticsError: String?
 
     /// Whether the loaded settings file predates the onboarding completion flag.

@@ -274,13 +274,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func reportAProblemMenu() {
         NSApp.activate(ignoringOtherApps: true)
-        let bundleURL = appState.reportAProblem()
-        guard bundleURL == nil, !ProwlHuntRuntime.current.isEnabled else { return }
-        let message = appState.diagnosticsError
-            ?? AppState.diagnosticsBundleWriteFailureMessage(
-                redactedDescription: "No further details were available."
-            )
-        showDiagnosticsFailureAlert(message: message)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            _ = await self.appState.reportAProblem()
+            guard let message = self.appState.diagnosticsError,
+                  !ProwlHuntRuntime.current.isEnabled else { return }
+            self.showDiagnosticsFailureAlert(message: message)
+        }
     }
 
     private func showDiagnosticsFailureAlert(message: String) {

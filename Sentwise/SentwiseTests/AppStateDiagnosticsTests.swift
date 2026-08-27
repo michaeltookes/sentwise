@@ -3,7 +3,7 @@ import XCTest
 
 /// A fake log reader returning injected entries, so the diagnostics flow can be
 /// tested without touching the real `OSLogStore`.
-private final class StubDiagnosticsLogReader: DiagnosticsLogReading {
+private final class StubDiagnosticsLogReader: DiagnosticsLogReading, @unchecked Sendable {
     let entries: [DiagnosticsLogEntry]
     let error: Error?
     private(set) var lastIncludingVerbose: Bool?
@@ -30,14 +30,36 @@ private enum StubDiagnosticsError: LocalizedError {
     }
 }
 
+private final class ThreadRecordingDiagnosticsLogReader: DiagnosticsLogReading, @unchecked Sendable {
+    private let lock = NSLock()
+    private var observedMainThread: Bool?
+
+    var wasCalledOnMainThread: Bool? {
+        lock.lock()
+        defer { lock.unlock() }
+        return observedMainThread
+    }
+
+    func recentEntries(since date: Date, includingVerbose: Bool) throws -> [DiagnosticsLogEntry] {
+        lock.lock()
+        observedMainThread = Thread.isMainThread
+        lock.unlock()
+        return []
+    }
+}
+
 /// A fake action router that records reveal/open calls instead of launching
 /// Finder or Mail.
 private final class RecordingDiagnosticsActionRouter: DiagnosticsActionRouting, @unchecked Sendable {
     private(set) var revealed: [URL] = []
     private(set) var opened: [URL] = []
+    var openResult = true
 
     func revealInFinder(_ url: URL) { revealed.append(url) }
-    func open(_ url: URL) { opened.append(url) }
+    func open(_ url: URL) -> Bool {
+        opened.append(url)
+        return openResult
+    }
 }
 
 @MainActor
@@ -62,7 +84,7 @@ final class AppStateDiagnosticsTests: XCTestCase {
         return dir
     }
 
-    func testReportAProblemWritesRedactedBundleAndRoutesFinderAndMail() throws {
+    func testReportAProblemWritesRedactedBundleAndRoutesFinderAndMail() async throws {
         let persistence = AppStateMemoryPersistence()
         let appState = makeAppState(persistence: persistence)
         let reader = StubDiagnosticsLogReader(entries: [
@@ -76,7 +98,7 @@ final class AppStateDiagnosticsTests: XCTestCase {
         let router = RecordingDiagnosticsActionRouter()
         let dir = try tempDirectory()
 
-        let url = appState.reportAProblem(
+        let url = await appState.reportAProblem(
             reader: reader,
             router: router,
             now: Date(timeIntervalSince1970: 1_700_000_100),
@@ -98,7 +120,7 @@ final class AppStateDiagnosticsTests: XCTestCase {
         XCTAssertTrue(opened.absoluteString.hasPrefix("mailto:feedback@sentwise.ai"))
     }
 
-    func testReportAProblemPassesVerboseFlagToReader() throws {
+    func testReportAProblemPassesVerboseFlagToReader() async throws {
         let persistence = AppStateMemoryPersistence(settings: Settings(
             schemaVersion: Settings.currentSchemaVersion,
             pollIntervalSeconds: 300,
@@ -109,9 +131,32 @@ final class AppStateDiagnosticsTests: XCTestCase {
         let router = RecordingDiagnosticsActionRouter()
         let dir = try tempDirectory()
 
-        appState.reportAProblem(reader: reader, router: router, directory: dir, isHuntMode: false)
+        await appState.reportAProblem(
+            reader: reader,
+            router: router,
+            directory: dir,
+            isHuntMode: false
+        )
 
         XCTAssertEqual(reader.lastIncludingVerbose, true)
+    }
+
+    func testReportAProblemCollectsLogsOffMainThread() async throws {
+        let persistence = AppStateMemoryPersistence()
+        let appState = makeAppState(persistence: persistence)
+        let reader = ThreadRecordingDiagnosticsLogReader()
+        let router = RecordingDiagnosticsActionRouter()
+        let dir = try tempDirectory()
+
+        let url = await appState.reportAProblem(
+            reader: reader,
+            router: router,
+            directory: dir,
+            isHuntMode: false
+        )
+
+        XCTAssertNotNil(url)
+        XCTAssertEqual(reader.wasCalledOnMainThread, false)
     }
 
     func testVerboseHelperOnlyEvaluatesWhenEnabled() {
@@ -134,14 +179,14 @@ final class AppStateDiagnosticsTests: XCTestCase {
         XCTAssertEqual(evaluations, 1)
     }
 
-    func testReportAProblemWritesCollectionFailureIntoBundle() throws {
+    func testReportAProblemWritesCollectionFailureIntoBundle() async throws {
         let persistence = AppStateMemoryPersistence()
         let appState = makeAppState(persistence: persistence)
         let reader = StubDiagnosticsLogReader(entries: [], error: StubDiagnosticsError.logStoreUnavailable)
         let router = RecordingDiagnosticsActionRouter()
         let dir = try tempDirectory()
 
-        let url = appState.reportAProblem(
+        let url = await appState.reportAProblem(
             reader: reader,
             router: router,
             directory: dir,
@@ -159,7 +204,7 @@ final class AppStateDiagnosticsTests: XCTestCase {
         XCTAssertEqual(router.opened.count, 1)
     }
 
-    func testReportAProblemFallsBackToTemporaryDirectoryWhenPrimaryWriteFails() throws {
+    func testReportAProblemFallsBackToTemporaryDirectoryWhenPrimaryWriteFails() async throws {
         let persistence = AppStateMemoryPersistence()
         let appState = makeAppState(persistence: persistence)
         let reader = StubDiagnosticsLogReader(entries: [])
@@ -170,7 +215,7 @@ final class AppStateDiagnosticsTests: XCTestCase {
         try "occupied".write(to: blockedDirectory, atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(at: fallbackDirectory, withIntermediateDirectories: true)
 
-        let url = appState.reportAProblem(
+        let url = await appState.reportAProblem(
             reader: reader,
             router: router,
             directory: blockedDirectory,
@@ -188,7 +233,7 @@ final class AppStateDiagnosticsTests: XCTestCase {
         XCTAssertEqual(router.opened.count, 1)
     }
 
-    func testReportAProblemDoesNotOpenMailWhenBundleWriteFails() throws {
+    func testReportAProblemDoesNotOpenMailWhenBundleWriteFails() async throws {
         let persistence = AppStateMemoryPersistence()
         let appState = makeAppState(persistence: persistence)
         let reader = StubDiagnosticsLogReader(entries: [])
@@ -199,7 +244,7 @@ final class AppStateDiagnosticsTests: XCTestCase {
         try "occupied".write(to: blockedDirectory, atomically: true, encoding: .utf8)
         try "occupied".write(to: blockedFallback, atomically: true, encoding: .utf8)
 
-        let url = appState.reportAProblem(
+        let url = await appState.reportAProblem(
             reader: reader,
             router: router,
             directory: blockedDirectory,
@@ -214,7 +259,31 @@ final class AppStateDiagnosticsTests: XCTestCase {
         XCTAssertTrue(router.opened.isEmpty)
     }
 
-    func testReportAProblemClearsPreviousFailureAfterSuccessfulWrite() throws {
+    func testReportAProblemSurfacesMailOpenFailureWithFallbackAddress() async throws {
+        let persistence = AppStateMemoryPersistence()
+        let appState = makeAppState(persistence: persistence)
+        let reader = StubDiagnosticsLogReader(entries: [])
+        let router = RecordingDiagnosticsActionRouter()
+        router.openResult = false
+        let dir = try tempDirectory()
+
+        let url = await appState.reportAProblem(
+            reader: reader,
+            router: router,
+            directory: dir,
+            isHuntMode: false
+        )
+
+        let bundleURL = try XCTUnwrap(url)
+        XCTAssertEqual(router.revealed, [bundleURL])
+        XCTAssertEqual(router.opened.count, 1)
+        let diagnosticsError = try XCTUnwrap(appState.diagnosticsError)
+        XCTAssertTrue(diagnosticsError.contains("Couldn't open your mail app."), diagnosticsError)
+        XCTAssertTrue(diagnosticsError.contains(FeedbackMailComposer.feedbackAddress), diagnosticsError)
+        XCTAssertTrue(diagnosticsError.contains(bundleURL.lastPathComponent), diagnosticsError)
+    }
+
+    func testReportAProblemClearsPreviousFailureAfterSuccessfulWrite() async throws {
         let persistence = AppStateMemoryPersistence()
         let appState = makeAppState(persistence: persistence)
         appState.diagnosticsError = "Previous diagnostics failure."
@@ -222,7 +291,7 @@ final class AppStateDiagnosticsTests: XCTestCase {
         let router = RecordingDiagnosticsActionRouter()
         let dir = try tempDirectory()
 
-        let url = appState.reportAProblem(
+        let url = await appState.reportAProblem(
             reader: reader,
             router: router,
             directory: dir,
@@ -233,14 +302,14 @@ final class AppStateDiagnosticsTests: XCTestCase {
         XCTAssertNil(appState.diagnosticsError)
     }
 
-    func testReportAProblemSuppressesSideEffectsInHuntMode() throws {
+    func testReportAProblemSuppressesSideEffectsInHuntMode() async throws {
         let persistence = AppStateMemoryPersistence()
         let appState = makeAppState(persistence: persistence)
         let reader = StubDiagnosticsLogReader(entries: [])
         let router = RecordingDiagnosticsActionRouter()
         let dir = try tempDirectory()
 
-        let url = appState.reportAProblem(
+        let url = await appState.reportAProblem(
             reader: reader,
             router: router,
             directory: dir,

@@ -4,7 +4,7 @@ import OSLog
 /// The coarse severity of a captured log entry, ordered from most to least
 /// chatty. `debug`/`info` are the "verbose" tiers, only included when the user
 /// has opted into verbose logging.
-enum DiagnosticsLogLevel: String, Equatable {
+enum DiagnosticsLogLevel: String, Equatable, Sendable {
     case debug
     case info
     case notice
@@ -18,7 +18,7 @@ enum DiagnosticsLogLevel: String, Equatable {
 }
 
 /// One captured log line, reduced to the non-PII fields the bundle needs.
-struct DiagnosticsLogEntry: Equatable {
+struct DiagnosticsLogEntry: Equatable, Sendable {
     let date: Date
     let category: String
     let level: DiagnosticsLogLevel
@@ -28,7 +28,7 @@ struct DiagnosticsLogEntry: Equatable {
 /// Reads the app's own recent log entries. Behind a protocol so the bundle
 /// builder can be unit-tested with injected fake lines, never touching the real
 /// unified log store.
-protocol DiagnosticsLogReading {
+protocol DiagnosticsLogReading: Sendable {
     /// Returns the app's own log entries since `date`, newest handling left to the
     /// caller. When `includingVerbose` is false, `debug`/`info` entries are
     /// omitted so a default bundle stays lean.
@@ -36,7 +36,7 @@ protocol DiagnosticsLogReading {
 }
 
 /// Testable wrapper for the `OSLogStore` scope used by diagnostics collection.
-enum DiagnosticsLogStoreScope: Equatable {
+enum DiagnosticsLogStoreScope: Equatable, Sendable {
     case system
     case currentProcessIdentifier
 
@@ -55,6 +55,12 @@ enum DiagnosticsLogStoreScope: Equatable {
 /// collecting unrelated system noise.
 struct OSLogStoreDiagnosticsReader: DiagnosticsLogReading {
 
+    /// Upper bound for entries included in one report.
+    static let defaultMaxEntries = 2_000
+
+    /// Upper bound for captured log-message bytes included in one report.
+    static let defaultMaxMessageBytes = 1_000_000
+
     /// Subsystem filter — only entries the app itself logged.
     let subsystem: String
 
@@ -62,33 +68,53 @@ struct OSLogStoreDiagnosticsReader: DiagnosticsLogReading {
     /// a crash can still recover the previous Sentwise process's entries.
     let scope: DiagnosticsLogStoreScope
 
+    /// Maximum number of entries to collect before stopping enumeration.
+    let maxEntries: Int
+
+    /// Maximum total UTF-8 bytes across captured log messages.
+    let maxMessageBytes: Int
+
     init(
         subsystem: String = DiagnosticLog.subsystem,
-        scope: DiagnosticsLogStoreScope = .system
+        scope: DiagnosticsLogStoreScope = .system,
+        maxEntries: Int = Self.defaultMaxEntries,
+        maxMessageBytes: Int = Self.defaultMaxMessageBytes
     ) {
         self.subsystem = subsystem
         self.scope = scope
+        self.maxEntries = maxEntries
+        self.maxMessageBytes = maxMessageBytes
     }
 
     func recentEntries(since date: Date, includingVerbose: Bool) throws -> [DiagnosticsLogEntry] {
+        guard maxEntries > 0, maxMessageBytes > 0 else { return [] }
+
         let store = try OSLogStore(scope: scope.osLogStoreScope)
         let position = store.position(date: date)
         let predicate = Self.makePredicate(subsystem: subsystem)
         let enumerator = try store.getEntries(at: position, matching: predicate)
 
         var entries: [DiagnosticsLogEntry] = []
+        var collectedMessageBytes = 0
         for element in enumerator {
             guard let log = element as? OSLogEntryLog else { continue }
             let level = Self.map(log.level)
             if level.isVerboseOnly && !includingVerbose { continue }
+            let message = log.composedMessage
+            let messageBytes = message.utf8.count
+            guard entries.count < maxEntries,
+                  collectedMessageBytes + messageBytes <= maxMessageBytes else {
+                break
+            }
             entries.append(
                 DiagnosticsLogEntry(
                     date: log.date,
                     category: log.category,
                     level: level,
-                    message: log.composedMessage
+                    message: message
                 )
             )
+            collectedMessageBytes += messageBytes
         }
         return entries
     }
