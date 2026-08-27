@@ -93,7 +93,8 @@ licensed to your account.
    3. Paste your email address and the 16-character password into Sentwise.
 
    <!-- SCREENSHOT: Google "App passwords" page with a generated 16-char password -->
-   <!-- SCREENSHOT: Sentwise Settings → account connect fields (email + app password) -->
+
+   ![Sentwise Settings → Account: paste your email address and app password into the Add account fields](docs/images/account-connect.png)
 
 4. **Learn your voice.** Sentwise samples your Sent mail to build a private voice
    profile. This stays on your Mac.
