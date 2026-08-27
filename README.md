@@ -82,14 +82,7 @@ licensed to your account.
 
    Sentwise lives in your menu bar (no Dock icon) and keeps itself up to date.
 
-2. **Sign in and start your trial.** Open Sentwise from the menu bar, sign in
-   with your email, and your 14-day trial begins. Drafting is included — no key
-   to paste.
-
-   *(Prefer to bring your own key or a local model? Choose that provider in
-   Settings instead — see [Bring your own provider](#bring-your-own-provider).)*
-
-3. **Connect your Gmail.** You'll need a Google **app password** (Gmail's
+2. **Connect your Gmail.** You'll need a Google **app password** (Gmail's
    per-app credential), which requires 2-Step Verification on your account:
    1. Turn on 2-Step Verification at <https://myaccount.google.com/security>.
    2. Create an app password at <https://myaccount.google.com/apppasswords>.
@@ -102,6 +95,13 @@ licensed to your account.
 
    ![Sentwise Settings → Account: paste your email address and app password into the Add account fields](docs/images/account-connect.png)
 
+3. **Choose your AI and start your trial.** After Gmail connects, sign in with
+   your email to use managed inference. Your 14-day trial begins and drafting is
+   included — no key to paste.
+
+   *(Prefer to bring your own key or a local model? Choose that provider instead
+   — see [Bring your own provider](#bring-your-own-provider).)*
+
 4. **Learn your voice.** Sentwise samples your Sent mail to build a private voice
    profile. The profile is stored locally; when you use managed or BYO
    inference, the sampled text is sent to that inference endpoint for profiling.
@@ -109,7 +109,8 @@ licensed to your account.
 5. **Get your first draft.** Send yourself a test email (or drop in a call
    transcript via **New Follow-up from Transcript…**). When the draft is ready,
    the notification banner appears — open it, read the full draft in Review
-   Drafts, and approve.
+   Drafts, add recipients if you started from a transcript without them, and
+   approve.
 
    <!-- SCREENSHOT: notification banner "A draft is ready" (Open / Close) -->
 
