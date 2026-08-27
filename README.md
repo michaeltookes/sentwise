@@ -74,14 +74,14 @@ licensed to your account.
 
 ## Quickstart
 
-> **Packaged install arrives at the 1.0 release.** Today you can run Sentwise by
-> [building from source](#build-from-source); after building, start at step 2.
-> Managed sign-in and the 14-day trial are available in the source build, while
-> subscription checkout arrives with launch.
+> **Packaged prereleases are available now.** Use the latest GitHub release DMG
+> or the qualified Homebrew tap below. Managed sign-in and the 14-day trial work
+> today; subscription checkout and 1.0 launch polish are next. Self-compilers can
+> [build from source](#build-from-source) and continue at step 2.
 
 1. **Install.**
-   - Download the DMG — *link available at the 1.0 release ([Releases](https://github.com/michaeltookes/sentwise/releases))* — and drag Sentwise to Applications, **or**
-   - `brew install --cask sentwise` — *available at launch.*
+   - Download the latest DMG from [Releases](https://github.com/michaeltookes/sentwise/releases/latest) and drag Sentwise to Applications, **or**
+   - `brew install --cask michaeltookes/tap/sentwise`
 
    Sentwise lives in your menu bar (no Dock icon) and keeps itself up to date.
 
@@ -180,10 +180,11 @@ They are credential-gated and skip by default; see
 ## Roadmap
 
 Sentwise is in active development toward its 1.0 release. Shipping next:
-packaged distribution (signed DMG + Homebrew cask), subscription checkout, and a
-landing page. On the longer roadmap: calendar-aware follow-up recipients,
-automatic transcript pickup from meeting platforms, on-device call capture and
-transcription, a Slack approval channel, and Outlook/M365 support.
+subscription checkout, a landing page, and 1.0 polish for the signed
+DMG/Homebrew distribution already available as prereleases. On the longer
+roadmap: calendar-aware follow-up recipients, automatic transcript pickup from
+meeting platforms, on-device call capture and transcription, a Slack approval
+channel, and Outlook/M365 support.
 
 See [`docs/backlog.md`](docs/backlog.md) for the full roadmap and
 [`docs/resolved.md`](docs/resolved.md) for what's already shipped.
