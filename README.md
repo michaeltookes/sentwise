@@ -86,10 +86,10 @@ licensed to your account.
 2. **Connect your Gmail.** You'll need a Google **app password** (Gmail's
    per-app credential), which requires 2-Step Verification on your account:
    1. Turn on 2-Step Verification at <https://myaccount.google.com/security>.
-   2. Create an app password at <https://myaccount.google.com/apppasswords>.
-      For Google Workspace accounts, your admin must allow IMAP and app
-      passwords; security-key-only policies can block app passwords even after
-      2-Step Verification is on.
+   2. Create an app password at <https://myaccount.google.com/apppasswords>;
+      for Google Workspace accounts, your admin must allow IMAP and app
+      passwords, and security-key-only policies can block app passwords even
+      after 2-Step Verification is on.
    3. Paste your email address and the 16-character password into Sentwise.
 
    ![Google Account → App passwords: name it "Sentwise" and click Create to get a 16-character password](docs/images/app-password.png)
