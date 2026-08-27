@@ -30,9 +30,9 @@ enum DiagnosticsRedactor {
     /// Replacement for a redacted absolute filesystem path.
     static let pathPlaceholder = "[redacted-path]"
 
-    /// Matches an RFC-shaped email address, case-insensitively.
+    /// Matches an email address, including internal domains without a public TLD.
     private static let emailPattern =
-        #"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}"#
+        #"\b[A-Z0-9._%+\-]+@[A-Z0-9][A-Z0-9._\-]*\b"#
 
     /// Matches `Bearer <token>` (keeps the `Bearer` label, drops the value).
     private static let bearerPattern =
@@ -67,6 +67,11 @@ enum DiagnosticsRedactor {
     /// Matches quoted absolute paths, preserving the opening quote.
     private static let quotedPathPattern =
         #"(?m)(["'`])/(?!/)([^"'`\r\n]*)"#
+
+    /// Matches filesystem URLs emitted by Foundation/logging, such as
+    /// `file:///Users/name/Client%20Calls/call.vtt`.
+    private static let fileURLPattern =
+        #"(?i)\bfile:///[^\s"'`,;)]+"#
 
     /// Matches an unquoted absolute path body until punctuation that usually
     /// separates log fields. This intentionally consumes spaces for local paths
@@ -107,6 +112,11 @@ enum DiagnosticsRedactor {
         result = result.replacingOccurrences(
             of: secretAssignmentPattern,
             with: "$1\(tokenPlaceholder)",
+            options: [.regularExpression]
+        )
+        result = result.replacingOccurrences(
+            of: fileURLPattern,
+            with: "file://\(pathPlaceholder)",
             options: [.regularExpression]
         )
         result = result.replacingOccurrences(

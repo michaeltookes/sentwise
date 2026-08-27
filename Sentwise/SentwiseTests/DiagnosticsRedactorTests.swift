@@ -26,6 +26,18 @@ final class DiagnosticsRedactorTests: XCTestCase {
         )
     }
 
+    func testRedactsInternalDomainEmailAddress() {
+        let input = "Connected account alice@mailserver routed to bob@intranet"
+        let output = DiagnosticsRedactor.redact(input)
+
+        XCTAssertFalse(output.contains("alice@mailserver"), output)
+        XCTAssertFalse(output.contains("bob@intranet"), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.emailPlaceholder).count - 1,
+            2
+        )
+    }
+
     func testRedactsBearerTokens() {
         let input = "authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature"
         let output = DiagnosticsRedactor.redact(input)
@@ -114,6 +126,23 @@ final class DiagnosticsRedactorTests: XCTestCase {
         XCTAssertFalse(output.contains("Client Calls"), output)
         XCTAssertFalse(output.contains("customer interview.vtt"), output)
         XCTAssertEqual(output, "Could not open \(DiagnosticsRedactor.pathPlaceholder)")
+    }
+
+    func testRedactsFilesystemURLs() {
+        let input = """
+        source=file:///Users/priya/Client/meeting.vtt
+        url=file:///Volumes/Client%20Calls/customer%20interview.vtt
+        Help URL: https://sentwise.ai/docs
+        """
+        let output = DiagnosticsRedactor.redact(input)
+
+        XCTAssertFalse(output.contains("file:///Users/priya"), output)
+        XCTAssertFalse(output.contains("file:///Volumes/Client%20Calls"), output)
+        XCTAssertTrue(output.contains("https://sentwise.ai/docs"), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.pathPlaceholder).count - 1,
+            2
+        )
     }
 
     func testLeavesNonSensitiveTextIntact() {

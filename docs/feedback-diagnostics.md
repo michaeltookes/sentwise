@@ -47,11 +47,12 @@ Two layers keep it safe:
 - **The app never logs mail content** at any level — addresses, subjects, and
   bodies are not passed to the logger.
 - **A redaction pass** runs over the *entire assembled report* (context header
-  included) as belt-and-suspenders: email addresses become `[redacted-email]`,
-  filesystem paths become `[redacted-path]`, and bearer tokens / `key: value`
-  secret assignments, including JSON-quoted forms, become `[redacted-token]`.
-  So even an accidentally-logged address, token, or local path is scrubbed
-  before the file is written.
+  included) as belt-and-suspenders: email addresses, including internal-domain
+  forms, become `[redacted-email]`; filesystem paths and `file://` URLs become
+  `[redacted-path]`; and bearer tokens / `key: value` secret assignments,
+  including JSON-quoted forms, become `[redacted-token]`. So even an
+  accidentally-logged address, token, or local path is scrubbed before the file
+  is written.
 
 This is developer diagnostics from `os_log`, deliberately kept **distinct from
 the user-facing Activity History** (item 21) — they serve different audiences.
