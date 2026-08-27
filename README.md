@@ -89,6 +89,10 @@ licensed to your account.
    2. Create an app password at <https://myaccount.google.com/apppasswords>.
    3. Paste your email address and the 16-character password into Sentwise.
 
+   Company Google Workspace accounts may need administrator help: your admin must
+   allow IMAP and app passwords, and security-key-only policies can block app
+   passwords even after 2-Step Verification is on.
+
    ![Google Account → App passwords: name it "Sentwise" and click Create to get a 16-character password](docs/images/app-password.png)
 
    Google then shows a 16-character password — copy it and paste it, with your
