@@ -259,7 +259,9 @@ when the window never appears):
 
 Step kinds used by these hunts: `click` (selector), `fill` (`{ selector, value }`
 — types text into a field, used for the managed email field), `assert`
-(`{ visible: <selector> }`), and `waitForSelector` (`{ selector, timeout }`).
+(`{ visible: <selector> }`), `waitForSelector` (`{ selector, timeout }`), and
+`scrollTo` (`{ selector }`, used to bring lower Settings content into view
+without activating controls).
 
 ## CI (Prowl QA workflow)
 

@@ -1,8 +1,8 @@
-# Diagnostics settings surface (item 36): open Settings → General and verify the
-# Diagnostics section renders. Asserts a non-interactive descriptive-text id
-# (`diagnosticsSectionInfo`) so this stays read-only and never touches the
-# verbose-logging toggle (which mutates persisted settings and is forbidden).
-# The "Report a Problem" action itself is asserted by the menu-smoke hunt.
+# Diagnostics settings surface (item 36): open Settings, scroll the General tab
+# to Diagnostics, and verify the section renders. Uses a non-interactive
+# descriptive-text id (`diagnosticsSectionInfo`) so this stays read-only and
+# never touches the verbose-logging toggle (which mutates persisted settings and
+# is forbidden). The "Report a Problem" action itself is asserted by menu-smoke.
 #
 # Run it:  prowl run diagnostics-settings
 
@@ -20,8 +20,8 @@ steps:
       selector: label="Sentwise Settings"
       timeout: 10000
 
-  - click:
-      selector: label="General"
+  - scrollTo:
+      selector: id=diagnosticsSectionInfo
 
   - assert:
       visible: id=diagnosticsSectionInfo
