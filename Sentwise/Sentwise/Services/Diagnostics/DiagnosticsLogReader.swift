@@ -35,21 +35,45 @@ protocol DiagnosticsLogReading {
     func recentEntries(since date: Date, includingVerbose: Bool) throws -> [DiagnosticsLogEntry]
 }
 
-/// Production reader backed by `OSLogStore`, scoped to the current process and
-/// the Sentwise subsystem so only the app's own entries are read.
+/// Testable wrapper for the `OSLogStore` scope used by diagnostics collection.
+enum DiagnosticsLogStoreScope: Equatable {
+    case system
+    case currentProcessIdentifier
+
+    var osLogStoreScope: OSLogStore.Scope {
+        switch self {
+        case .system:
+            return .system
+        case .currentProcessIdentifier:
+            return .currentProcessIdentifier
+        }
+    }
+}
+
+/// Production reader backed by `OSLogStore`, scoped to the system log and the
+/// Sentwise subsystem so reports can include the app's prior launches without
+/// collecting unrelated system noise.
 struct OSLogStoreDiagnosticsReader: DiagnosticsLogReading {
 
     /// Subsystem filter — only entries the app itself logged.
     let subsystem: String
 
-    init(subsystem: String = DiagnosticLog.subsystem) {
+    /// Log scope for collection. The default is system-wide so a relaunch after
+    /// a crash can still recover the previous Sentwise process's entries.
+    let scope: DiagnosticsLogStoreScope
+
+    init(
+        subsystem: String = DiagnosticLog.subsystem,
+        scope: DiagnosticsLogStoreScope = .system
+    ) {
         self.subsystem = subsystem
+        self.scope = scope
     }
 
     func recentEntries(since date: Date, includingVerbose: Bool) throws -> [DiagnosticsLogEntry] {
-        let store = try OSLogStore(scope: .currentProcessIdentifier)
+        let store = try OSLogStore(scope: scope.osLogStoreScope)
         let position = store.position(date: date)
-        let predicate = NSPredicate(format: "subsystem == %@", subsystem)
+        let predicate = Self.makePredicate(subsystem: subsystem)
         let enumerator = try store.getEntries(at: position, matching: predicate)
 
         var entries: [DiagnosticsLogEntry] = []
@@ -67,6 +91,10 @@ struct OSLogStoreDiagnosticsReader: DiagnosticsLogReading {
             )
         }
         return entries
+    }
+
+    static func makePredicate(subsystem: String) -> NSPredicate {
+        NSPredicate(format: "subsystem == %@", subsystem)
     }
 
     static func map(_ level: OSLogEntryLog.Level) -> DiagnosticsLogLevel {

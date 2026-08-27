@@ -35,8 +35,8 @@ issue. It contains:
   state, whether verbose logging is on, and whether a transcript folder is being
   watched (the boolean only — never the folder path).
 - **Recent app log entries** from the unified log, read via `OSLogStore` scoped
-  to the current process and the `com.tookes.Sentwise` subsystem, covering the
-  last 24 hours.
+  to the system log and the `com.tookes.Sentwise` subsystem, covering the last
+  24 hours across Sentwise process launches.
 
 It **never** contains message bodies, subjects, or recipients; credentials;
 your account or mailbox email; the mail host or username; tokens; or the
