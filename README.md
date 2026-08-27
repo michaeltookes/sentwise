@@ -52,14 +52,16 @@ built the opposite way:
 - **Inbox reply drafting** — watches your Gmail inbox while your Mac is awake and
   drafts replies to mail worth answering.
 - **Learns your voice** from your Gmail Sent folder, and re-learns on demand.
-- **Review and approve in the app** — a native macOS notification tells you a
-  draft is ready; you open the Review Drafts window, read the full draft, and
-  approve it deliberately. Approving either **saves it to your Gmail Drafts** or
+- **Review and approve in the app** *(source branch; v0.1.2 uses the older
+  prerelease notification flow)* — a native macOS notification tells you a draft
+  is ready; you open the Review Drafts window, read the full draft, and approve
+  it deliberately. Approving either **saves it to your Gmail Drafts** or
   **sends it** (your choice), with an optional undo window on auto-send.
-- **Your signature**, applied automatically — set it yourself or let Sentwise
-  suggest one from your Sent mail.
-- **Report a Problem** from the menu bar packages a redacted diagnostic log — no
-  email content — so issues are fixable without you sending anything sensitive.
+- **Your signature** *(source branch; not v0.1.2)*, applied automatically — set
+  it yourself or let Sentwise suggest one from your Sent mail.
+- **Report a Problem** *(source branch; not v0.1.2)* from the menu bar packages
+  a redacted diagnostic log — no email content — so issues are fixable without
+  you sending anything sensitive.
 
 ## How you connect and pay
 
@@ -126,8 +128,9 @@ account.
    inference, the sampled text is sent to that inference endpoint for profiling.
    With managed inference, this starts the trial clock.
 
-5. **Get your first draft.** Send a test email to the connected Gmail account
-   from another address (or drop in a call transcript via **New Follow-up from
+5. **Get your first draft.** Click **Finish** to complete onboarding and start
+   the inbox watcher, then send a test email to the connected Gmail account from
+   another address (or drop in a call transcript via **New Follow-up from
    Transcript…**). When the draft is ready, the notification banner appears —
    open it, read the full draft in Review Drafts, add recipients if you started
    from a transcript without them, and approve.
