@@ -53,6 +53,12 @@ enum DiagnosticsRedactor {
     private static let quotedPathPattern =
         #"(?m)(["'`])/(?!/)([^"'`\r\n]*)"#
 
+    /// Matches an unquoted absolute path body until punctuation that usually
+    /// separates log fields. This intentionally consumes spaces for local paths
+    /// like `/Volumes/Client Calls/customer interview.vtt`.
+    private static let unquotedPathTailPattern =
+        #"(.+?)(?=$|[\r\n"'`,;)]|\s+[A-Za-z][A-Za-z0-9_-]*\s*[:=])"#
+
     /// Matches log phrases ending with `: /absolute/path`, including filenames
     /// with spaces through the end of that log line.
     private static let colonPathPattern =
@@ -60,13 +66,15 @@ enum DiagnosticsRedactor {
 
     /// Matches compact `path=/absolute/path` / `file: /absolute/path` fields.
     private static let labeledPathPattern =
-        #"(?i)\b(path|file|folder|directory|seenKey|key)(\s*[:=]\s*)/"#
-        + #"(?!/)(\S+)"#
+        #"(?im)\b(path|file|folder|directory|seenKey|key)(\s*[:=]\s*)/"#
+        + #"(?!/)"#
+        + unquotedPathTailPattern
 
     /// Matches unquoted absolute paths in free-form errors, stopping before the
-    /// next word so adjacent `token=...` style fields still get scrubbed as tokens.
+    /// next separator so space-containing path components are fully scrubbed.
     private static let barePathPattern =
-        #"(?m)(^|[\s(])/(?!/)([^\s"'`,;)]+)"#
+        #"(?m)(^|[\s(])/(?!/)"#
+        + unquotedPathTailPattern
 
     /// Returns `text` with email addresses and secret-looking tokens redacted.
     static func redact(_ text: String) -> String {

@@ -86,6 +86,16 @@ final class DiagnosticsRedactorTests: XCTestCase {
         )
     }
 
+    func testRedactsFullUnlabeledPathsWithSpaces() {
+        let input = "Could not open /Volumes/Client Calls/customer interview.vtt"
+        let output = DiagnosticsRedactor.redact(input)
+
+        XCTAssertFalse(output.contains("/Volumes"), output)
+        XCTAssertFalse(output.contains("Client Calls"), output)
+        XCTAssertFalse(output.contains("customer interview.vtt"), output)
+        XCTAssertEqual(output, "Could not open \(DiagnosticsRedactor.pathPlaceholder)")
+    }
+
     func testLeavesNonSensitiveTextIntact() {
         let input = """
         App version: 1.2.3 (45)
