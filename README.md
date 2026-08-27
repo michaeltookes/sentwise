@@ -28,9 +28,10 @@ built the opposite way:
   directly to the provider you choose under that provider's policy; same-Mac
   local-model requests stay on your Mac.
 - **No bot in your meetings.** Sentwise never joins your calls. Transcripts
-  arrive as a file or a paste (with automatic pickup and on-device capture on
-  the roadmap), not as a cloud meeting archive; transcript text is sent only
-  when a non-local inference provider drafts from it.
+  arrive as a paste, file, or local watched folder (meeting-platform pickup and
+  on-device capture are on the roadmap), not as a cloud meeting archive;
+  transcript text is sent only when a non-local inference provider drafts from
+  it.
 - **A send-ready email, not a summary.** The output is a finished draft in
   *your* learned voice, sent from *your* mailbox — not a note stranded in a
   separate app.
@@ -73,9 +74,10 @@ licensed to your account.
 
 ## Quickstart
 
-> **Packaged install and the hosted trial arrive at the 1.0 release.** Today you
-> can run Sentwise by [building from source](#build-from-source); the steps
-> below are the 1.0 experience. Until then, start at step 2 after building.
+> **Packaged install arrives at the 1.0 release.** Today you can run Sentwise by
+> [building from source](#build-from-source); after building, start at step 2.
+> Managed sign-in and the 14-day trial are available in the source build, while
+> subscription checkout arrives with launch.
 
 1. **Install.**
    - Download the DMG — *link available at the 1.0 release ([Releases](https://github.com/michaeltookes/sentwise/releases))* — and drag Sentwise to Applications, **or**
@@ -116,8 +118,6 @@ licensed to your account.
    open it, read the full draft in Review Drafts, add recipients if you started
    from a transcript without them, and approve.
 
-   <!-- SCREENSHOT: notification banner "A draft is ready" (Open / Close) -->
-
    ![Review Drafts: the incoming message beside the proposed reply, with Deny and Approve](docs/images/review-approve.png)
 
 ### Bring your own provider
@@ -145,8 +145,8 @@ option for power users and the privacy-maximal:
   to the provider you choose; local-provider inference stays on this Mac only
   when its endpoint is loopback/localhost, and otherwise goes to the configured
   LAN or remote endpoint.
-- **What the account stores:** your email, subscription state, and usage
-  counters — **never your email or call content.**
+- **What the account stores:** your account email and trial/subscription state
+  — **never your email or call content.**
 - **What Sentwise never does:** your content is never logged or stored on
   Sentwise servers and never used by Sentwise to train models. BYO provider
   retention and training are governed by the provider you select.

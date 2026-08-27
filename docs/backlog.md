@@ -74,14 +74,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Basic discoverability: SEO fundamentals, OG/social cards, and a home for a demo video.
     - Held in a separate repo with its own deployment; all stack/hosting/analytics decisions deferred to the pre-build discussion.
 
-71. **README + quickstart rewrite (the front door until item 57 ships)**
-    The README still says *"Status: early development… features are being built out"*, lists shipped features under "Planned features", and says "No subscription" — the opposite of the current strategy. Until the landing page exists, the README is what every prospective user reads.
-    *As a first-time visitor, I want to understand in 30 seconds what Sentwise does, that it's ready, and how to install and start, so that I download instead of bouncing.*
-    - Status/positioning reflects the 2026-08-12 direction: post-call follow-up flagship, inbox drafting, local-first privacy, subscription with inference included, BYO-key/local as the power option.
-    - **Quickstart** covering install (DMG / `brew install --cask`), sign-in/trial, Gmail 2FA + app password with screenshots, first voice-learn, and first draft; a second path for the BYO-key option.
-    - Shipped features listed as shipped; roadmap links to the backlog; a short FAQ on privacy (what leaves the Mac and when).
-    - Kept in sync by `/update-docs` when launch-tier items close.
-
 72. **Legal, policy, and support foundations for a paid launch**
     A paid product with sign-in needs the documents and channels the rest of the stack depends on: the merchant-of-record won't enable checkout without Terms and a Privacy Policy, the auth provider links to them, and the "no storage, no training" claim needs a written policy behind it.
     *As a prospective customer, I want to read exactly what Sentwise does with my mail, my calls, and my payment, and know how to get help, so that I can trust a small company with my inbox.*
@@ -331,4 +323,3 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Uses the user's own CRM credentials; calls go directly Mac → CRM, keeping the local-first promise.
     - Off by default, per-call opt-out; failures never block the email send itself.
     - Positioned as the **Team-tier** feature in the item 56 pricing model — the follow-up email sells to the rep, CRM hygiene sells to the manager who holds budget.
-
