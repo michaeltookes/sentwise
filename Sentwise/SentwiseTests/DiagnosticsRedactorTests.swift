@@ -26,6 +26,18 @@ final class DiagnosticsRedactorTests: XCTestCase {
         )
     }
 
+    func testRedactsInternalDomainEmailAddress() {
+        let input = "Connected account alice@mailserver routed to bob@intranet"
+        let output = DiagnosticsRedactor.redact(input)
+
+        XCTAssertFalse(output.contains("alice@mailserver"), output)
+        XCTAssertFalse(output.contains("bob@intranet"), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.emailPlaceholder).count - 1,
+            2
+        )
+    }
+
     func testRedactsBearerTokens() {
         let input = "authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature"
         let output = DiagnosticsRedactor.redact(input)
@@ -42,6 +54,116 @@ final class DiagnosticsRedactorTests: XCTestCase {
         // The key names survive so the shape of the log stays readable.
         XCTAssertTrue(output.contains("apiKey"))
         XCTAssertTrue(output.contains("password"))
+    }
+
+    func testRedactsQuotedStructuredSecretAssignments() {
+        let input = #"""
+        {"access_token":"eyJ.header.payload","note":"safe"}
+        {\"refresh_token\":\"refresh secret value\"}
+        password="correct horse battery staple"
+        api_key='sk live with spaces'
+        """#
+        let output = DiagnosticsRedactor.redact(input)
+
+        XCTAssertFalse(output.contains("eyJ.header.payload"), output)
+        XCTAssertFalse(output.contains("refresh secret value"), output)
+        XCTAssertFalse(output.contains("correct horse battery staple"), output)
+        XCTAssertFalse(output.contains("sk live with spaces"), output)
+        XCTAssertTrue(output.contains("\"note\":\"safe\""), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.tokenPlaceholder).count - 1,
+            4
+        )
+    }
+
+    func testRedactsCompoundCredentialKeyNames() {
+        let input = #"""
+        client_secret=client-secret-value
+        clientSecret=camel-secret-value
+        aws_secret_access_key=aws-secret-access-value
+        private_key="BEGIN PRIVATE KEY"
+        db_password=database-password
+        """#
+        let output = DiagnosticsRedactor.redact(input)
+
+        XCTAssertFalse(output.contains("client-secret-value"), output)
+        XCTAssertFalse(output.contains("camel-secret-value"), output)
+        XCTAssertFalse(output.contains("aws-secret-access-value"), output)
+        XCTAssertFalse(output.contains("BEGIN PRIVATE KEY"), output)
+        XCTAssertFalse(output.contains("database-password"), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.tokenPlaceholder).count - 1,
+            5
+        )
+    }
+
+    func testRedactsWatchedFolderPathsWithSpaces() {
+        let input = """
+        Transcript file not readable yet; will retry on a later scan: /Users/priya/Documents/Zoom/2026-08-26 Discovery Call.vtt
+        Watched transcript delivery exhausted retry budget: /Users/priya/Documents/Calls/acme pricing follow-up.md
+        """
+        let output = DiagnosticsRedactor.redact(input)
+        XCTAssertFalse(output.contains("/Users/priya"), output)
+        XCTAssertFalse(output.contains("Discovery Call.vtt"), output)
+        XCTAssertFalse(output.contains("acme pricing follow-up.md"), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.pathPlaceholder).count - 1,
+            2
+        )
+    }
+
+    func testRedactsQuotedAndLabeledPaths() {
+        let input = #"path=/Users/priya/Documents/call.vtt file: "/private/tmp/Sentwise-Diagnostics.txt""#
+        let output = DiagnosticsRedactor.redact(input)
+        XCTAssertFalse(output.contains("/Users/priya"), output)
+        XCTAssertFalse(output.contains("/private/tmp"), output)
+        XCTAssertTrue(output.contains("path=\(DiagnosticsRedactor.pathPlaceholder)"))
+        XCTAssertTrue(output.contains(#"file: ""# + DiagnosticsRedactor.pathPlaceholder))
+    }
+
+    func testRedactsAbsolutePathsOutsideCommonRoots() {
+        let input = """
+        Watched transcript delivery exhausted retry budget: /Network/Meetings/team call.vtt
+        path=/data/transcripts/customer-alpha.md
+        seenKey=/mnt/custom-share/call.txt
+        Help URL: https://sentwise.ai/docs
+        """
+        let output = DiagnosticsRedactor.redact(input)
+        XCTAssertFalse(output.contains("/Network/Meetings"), output)
+        XCTAssertFalse(output.contains("/data/transcripts"), output)
+        XCTAssertFalse(output.contains("/mnt/custom-share"), output)
+        XCTAssertTrue(output.contains("https://sentwise.ai/docs"), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.pathPlaceholder).count - 1,
+            3
+        )
+    }
+
+    func testRedactsFullUnlabeledPathsWithSpaces() {
+        let input = "Could not open /Volumes/Client Calls/customer interview.vtt"
+        let output = DiagnosticsRedactor.redact(input)
+
+        XCTAssertFalse(output.contains("/Volumes"), output)
+        XCTAssertFalse(output.contains("Client Calls"), output)
+        XCTAssertFalse(output.contains("customer interview.vtt"), output)
+        XCTAssertEqual(output, "Could not open \(DiagnosticsRedactor.pathPlaceholder)")
+    }
+
+    func testRedactsFilesystemURLs() {
+        let input = """
+        source=file:///Users/priya/Client/meeting.vtt
+        url=file:///Volumes/Client%20Calls/customer%20interview.vtt
+        Help URL: https://sentwise.ai/docs
+        """
+        let output = DiagnosticsRedactor.redact(input)
+
+        XCTAssertFalse(output.contains("file:///Users/priya"), output)
+        XCTAssertFalse(output.contains("file:///Volumes/Client%20Calls"), output)
+        XCTAssertTrue(output.contains("https://sentwise.ai/docs"), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.pathPlaceholder).count - 1,
+            2
+        )
     }
 
     func testLeavesNonSensitiveTextIntact() {

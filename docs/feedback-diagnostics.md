@@ -20,6 +20,15 @@ tracked separately with the marketing site (item 57) and complements this path.
    the file just revealed in Finder — `mailto:` cannot attach a file itself, so
    the reveal-in-Finder + instruction is the flow.
 
+If Sentwise cannot write the bundle to Downloads or the temporary fallback
+(for example, because the disk is full or both folders are unavailable), it
+shows an alert instead of silently doing nothing or opening an email without the
+bundle.
+
+If the bundle is written but macOS cannot open a mail composer, Sentwise still
+reveals the file and shows an alert with the `feedback@sentwise.ai` address so
+you can send the attachment manually.
+
 The feedback address is baked into the app and is the app's stated contact until
 the marketing site ships. (Standing up the inbox as a monitored mailbox is a
 separate launch prerequisite — item 74.)
@@ -35,8 +44,10 @@ issue. It contains:
   state, whether verbose logging is on, and whether a transcript folder is being
   watched (the boolean only — never the folder path).
 - **Recent app log entries** from the unified log, read via `OSLogStore` scoped
-  to the current process and the `com.tookes.Sentwise` subsystem, covering the
-  last 24 hours.
+  to the system log and the `com.tookes.Sentwise` subsystem, covering the last
+  24 hours across Sentwise process launches. Collection is bounded by entry
+  count and captured message bytes, retaining the newest matching entries so the
+  reproduction immediately before reporting is preserved.
 
 It **never** contains message bodies, subjects, or recipients; credentials;
 your account or mailbox email; the mail host or username; tokens; or the
@@ -47,10 +58,12 @@ Two layers keep it safe:
 - **The app never logs mail content** at any level — addresses, subjects, and
   bodies are not passed to the logger.
 - **A redaction pass** runs over the *entire assembled report* (context header
-  included) as belt-and-suspenders: email addresses become `[redacted-email]`,
-  and bearer tokens / `key: value` secret assignments become `[redacted-token]`.
-  So even an accidentally-logged address or token is scrubbed before the file is
-  written.
+  included) as belt-and-suspenders: email addresses, including internal-domain
+  forms, become `[redacted-email]`; filesystem paths and `file://` URLs become
+  `[redacted-path]`; and bearer tokens / secret key-value assignments, including
+  JSON-quoted and compound-key forms, become `[redacted-token]`. So even an
+  accidentally-logged address, token, or local path is scrubbed before the file
+  is written.
 
 This is developer diagnostics from `os_log`, deliberately kept **distinct from
 the user-facing Activity History** (item 21) — they serve different audiences.
@@ -70,8 +83,8 @@ The feature is composed of small, pure, injectable pieces so the privacy-
 critical logic is unit-tested without touching the real log store or launching
 Finder/Mail:
 
-- `DiagnosticsRedactor` — the pure scrub (emails, bearer tokens, secret
-  assignments).
+- `DiagnosticsRedactor` — the pure scrub (emails, filesystem paths, bearer
+  tokens, secret assignments).
 - `DiagnosticsContext` — the non-PII environment block and its renderer.
 - `DiagnosticsLogReading` / `OSLogStoreDiagnosticsReader` — reads the app's own
   entries; a fake reader feeds tests injected log lines.
@@ -83,8 +96,10 @@ Finder/Mail:
 - `DiagnosticLog` — the global `isVerbose` flag (mirrored from
   `Settings.verboseDiagnosticLogging`) and a `verbose(_:)` helper.
 
-`AppState.reportAProblem(...)` wires the live state into these. In Prowl hunt
-mode the bundle is still written but the Finder/Mail side effects are
+`AppState.reportAProblem(...)` snapshots the live state on the main actor, then
+collects logs, builds/redacts the report, and writes the bundle on a utility
+task before returning to the main actor for Finder/Mail side effects. In Prowl
+hunt mode the bundle is still written but the Finder/Mail side effects are
 suppressed, and the menu action and verbose toggle are open-and-assert forbidden
 in `.prowl/config.yml`.
 

@@ -6,12 +6,13 @@ import Foundation
 /// orchestration without launching Finder or Mail (item 36).
 ///
 /// Not actor-isolated so it can be used as a default argument; `reportAProblem`
-/// only ever invokes it from the main actor, where `NSWorkspace` expects to run.
-protocol DiagnosticsActionRouting {
+/// only invokes it from the main actor after background bundle preparation.
+protocol DiagnosticsActionRouting: Sendable {
     /// Reveals `url` in Finder (selects the file in its enclosing folder).
     func revealInFinder(_ url: URL)
     /// Opens `url` with the default handler (the `mailto:` URL → mail client).
-    func open(_ url: URL)
+    @discardableResult
+    func open(_ url: URL) -> Bool
 }
 
 /// Production router backed by `NSWorkspace`.
@@ -20,7 +21,7 @@ struct SystemDiagnosticsActionRouter: DiagnosticsActionRouting {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    func open(_ url: URL) {
+    func open(_ url: URL) -> Bool {
         NSWorkspace.shared.open(url)
     }
 }

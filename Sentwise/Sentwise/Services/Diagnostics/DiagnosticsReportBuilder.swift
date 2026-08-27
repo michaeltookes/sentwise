@@ -21,18 +21,21 @@ enum DiagnosticsReportBuilder {
     static func build(
         context: DiagnosticsContext,
         entries: [DiagnosticsLogEntry],
-        generatedAt: Date = Date()
+        generatedAt: Date = Date(),
+        collectionError: String? = nil
     ) -> String {
         let header = """
         Sentwise diagnostics
         Generated: \(timestampFormatter.string(from: generatedAt))
 
-        This report is redacted: email addresses and tokens are removed. It contains
-        no message bodies, subjects, recipients, credentials, or account email.
+        This report is redacted: email addresses, tokens, and filesystem paths are removed.
+        It contains no message bodies, subjects, recipients, credentials, or account email.
         """
 
         let logSection: String
-        if entries.isEmpty {
+        if let collectionError {
+            logSection = "Log collection failed: \(collectionError)"
+        } else if entries.isEmpty {
             logSection = "(no recent log entries)"
         } else {
             logSection = entries.map(format).joined(separator: "\n")
@@ -42,7 +45,7 @@ enum DiagnosticsReportBuilder {
             header,
             "--- Environment ---",
             context.render(),
-            "--- Recent logs (\(entries.count)) ---",
+            "--- Recent logs (\(logSectionTitleCount(entries, collectionError: collectionError))) ---",
             logSection
         ].joined(separator: "\n\n")
 
@@ -53,5 +56,12 @@ enum DiagnosticsReportBuilder {
     private static func format(_ entry: DiagnosticsLogEntry) -> String {
         let timestamp = timestampFormatter.string(from: entry.date)
         return "\(timestamp) [\(entry.level.rawValue)] \(entry.category): \(entry.message)"
+    }
+
+    private static func logSectionTitleCount(
+        _ entries: [DiagnosticsLogEntry],
+        collectionError: String?
+    ) -> String {
+        collectionError == nil ? "\(entries.count)" : "collection failed"
     }
 }
