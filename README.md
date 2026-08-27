@@ -8,7 +8,8 @@ alerts you when a draft is ready so you can read it in full and approve it in
 the app. Sentwise does not store your mail, voice profile, or call transcripts
 on Sentwise servers. With managed inference, the text needed for drafting or
 voice learning transits a stateless, zero-retention proxy; with a BYO provider,
-that provider's policies apply; with a local model, inference stays on your Mac.
+that provider's policies apply; with a same-Mac local model, inference stays on
+your Mac.
 
 The flagship workflow is the **post-call follow-up**: when a call ends, drop in
 the transcript and Sentwise drafts the next-steps email in your voice, addressed
@@ -24,8 +25,8 @@ built the opposite way:
 - **No Sentwise storage, no Sentwise training.** Managed drafting runs through a
   **stateless, zero-retention** inference proxy — request and response bodies are
   held in memory only and never logged or kept by Sentwise. BYO requests go
-  directly to the provider you choose under that provider's policy; local-model
-  requests stay on your Mac.
+  directly to the provider you choose under that provider's policy; same-Mac
+  local-model requests stay on your Mac.
 - **No bot in your meetings.** Sentwise never joins your calls. Transcripts
   arrive as a file or a paste (with automatic pickup and on-device capture on
   the roadmap), not as a cloud meeting archive; transcript text is sent only
@@ -122,11 +123,12 @@ Sentwise's managed inference is the default, but the BYO path is a first-class
 option for power users and the privacy-maximal:
 
 - In **Settings → AI provider**, choose your provider and paste your key (stored
-  in the Keychain), or point Sentwise at a **local model** (e.g. Ollama) for
-  fully on-device drafting.
+  in the Keychain), or point Sentwise at a **same-Mac local model** (e.g. Ollama
+  on localhost) for on-device drafting.
 - On this path, drafting requests go directly from your Mac to the provider you
   chose and follow that provider's retention and training policy — never through
-  our proxy. With a local model, the request stays on your Mac.
+  our proxy. With a loopback local model, the request stays on your Mac; with a
+  LAN or remote endpoint, it goes to the host you configured.
 
 ## Privacy in one screen
 
@@ -137,7 +139,9 @@ option for power users and the privacy-maximal:
   needed for the job — Sent-mail samples for voice learning, incoming email text
   for replies, or transcript text for follow-ups. Managed inference sends that
   through a **stateless, zero-retention** proxy; BYO inference sends it directly
-  to the provider you choose; local-model inference sends it nowhere.
+  to the provider you choose; local-provider inference stays on this Mac only
+  when its endpoint is loopback/localhost, and otherwise goes to the configured
+  LAN or remote endpoint.
 - **What the account stores:** your email, subscription state, and usage
   counters — **never your email or call content.**
 - **What Sentwise never does:** your content is never logged or stored on
