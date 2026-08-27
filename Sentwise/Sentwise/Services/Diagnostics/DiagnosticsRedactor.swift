@@ -49,30 +49,24 @@ enum DiagnosticsRedactor {
     private static let secretAssignmentPattern =
         #"(?i)\b("# + secretKeys + #")\b(\s*[:=]\s*)\S+"#
 
-    /// Common absolute path roots in app/unified-log output. Keep this scoped so
-    /// ordinary punctuation or URL paths are not treated as filesystem paths.
-    private static let pathRootPattern =
-        "(Users|Volumes|private|var|tmp|Applications|Library|System|opt|etc|usr|bin|sbin|home)"
-
     /// Matches quoted absolute paths, preserving the opening quote.
     private static let quotedPathPattern =
-        #"(?m)(["'`])/"# + pathRootPattern + #"([^"'`\r\n]*)"#
+        #"(?m)(["'`])/(?!/)([^"'`\r\n]*)"#
 
     /// Matches log phrases ending with `: /absolute/path`, including filenames
     /// with spaces through the end of that log line.
     private static let colonPathPattern =
-        #"(?m)(:\s*)/"# + pathRootPattern + #"([^\r\n]*)"#
+        #"(?m)(:\s+)/(?!/)([^\r\n]*)"#
 
     /// Matches compact `path=/absolute/path` / `file: /absolute/path` fields.
     private static let labeledPathPattern =
         #"(?i)\b(path|file|folder|directory|seenKey|key)(\s*[:=]\s*)/"#
-        + pathRootPattern
-        + #"(\S+)"#
+        + #"(?!/)(\S+)"#
 
     /// Matches unquoted absolute paths in free-form errors, stopping before the
     /// next word so adjacent `token=...` style fields still get scrubbed as tokens.
     private static let barePathPattern =
-        #"(?m)(^|[\s(])/"# + pathRootPattern + #"([^\s"'`,;)]+)"#
+        #"(?m)(^|[\s(])/(?!/)([^\s"'`,;)]+)"#
 
     /// Returns `text` with email addresses and secret-looking tokens redacted.
     static func redact(_ text: String) -> String {

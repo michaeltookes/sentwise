@@ -68,6 +68,24 @@ final class DiagnosticsRedactorTests: XCTestCase {
         XCTAssertTrue(output.contains(#"file: ""# + DiagnosticsRedactor.pathPlaceholder))
     }
 
+    func testRedactsAbsolutePathsOutsideCommonRoots() {
+        let input = """
+        Watched transcript delivery exhausted retry budget: /Network/Meetings/team call.vtt
+        path=/data/transcripts/customer-alpha.md
+        seenKey=/mnt/custom-share/call.txt
+        Help URL: https://sentwise.ai/docs
+        """
+        let output = DiagnosticsRedactor.redact(input)
+        XCTAssertFalse(output.contains("/Network/Meetings"), output)
+        XCTAssertFalse(output.contains("/data/transcripts"), output)
+        XCTAssertFalse(output.contains("/mnt/custom-share"), output)
+        XCTAssertTrue(output.contains("https://sentwise.ai/docs"), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.pathPlaceholder).count - 1,
+            3
+        )
+    }
+
     func testLeavesNonSensitiveTextIntact() {
         let input = """
         App version: 1.2.3 (45)
