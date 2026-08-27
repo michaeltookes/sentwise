@@ -16,6 +16,12 @@ the transcript and Sentwise drafts the next-steps email in your voice, addressed
 and ready to send. It also watches your inbox and drafts replies to mail that
 deserves one. You stay in the loop — every draft waits for your approval.
 
+> **Release note:** This README describes the current source branch. The latest
+> packaged prerelease is v0.1.2, which predates managed sign-in/trial onboarding,
+> signature controls, Report a Problem, the Open/Close notification flow, and
+> other post-August 19 launch polish. Build from source for those until a newer
+> package is published.
+
 ## Why Sentwise
 
 Most AI email tools are cloud services that read your mail on their servers,
@@ -69,24 +75,27 @@ built the opposite way:
   password** (requires 2-Step Verification) — no Google Cloud console, no OAuth
   setup.
 
-After the trial, Sentwise is a subscription with the AI included. The source is
-public — self-compilers are welcome; the signed, auto-updating binary is
-licensed to your account.
+The planned paid model is a subscription with the AI included. Checkout/licensing
+is still in progress, so after a source-build managed trial expires, use the
+BYO/local-provider path until the paid path ships. The source is public —
+self-compilers are welcome; the signed, auto-updating binary is licensed to your
+account.
 
 ## Quickstart
 
 > **Packaged prerelease v0.1.2 is available now.** It installs from the latest
 > GitHub release DMG or the qualified Homebrew tap below, but it predates managed
-> sign-in/trial onboarding. Use it for the BYO/local-provider flow, or
-> [build from source](#build-from-source) to follow the managed quickstart below.
+> sign-in/trial onboarding and later source-branch features. Use it for the
+> BYO/local-provider flow, or [build from source](#build-from-source) to follow
+> the managed quickstart below.
 
 1. **Install.**
    - Download the latest DMG from [Releases](https://github.com/michaeltookes/sentwise/releases/latest) and drag Sentwise to Applications, **or**
    - `brew install --cask michaeltookes/tap/sentwise`
 
-   The current package installs v0.1.2; build from source for managed sign-in
-   until a newer package is published. Sentwise lives in your menu bar (no Dock
-   icon) and keeps itself up to date.
+   The current package installs v0.1.2; build from source for managed sign-in and
+   post-August 19 source-branch features until a newer package is published.
+   Sentwise lives in your menu bar (no Dock icon) and keeps itself up to date.
 
 2. **Connect your Gmail.** You'll need a Google **app password** (Gmail's
    per-app credential), which requires 2-Step Verification on your account:
