@@ -119,6 +119,14 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 ## Medium Priority
 
+80. **One-time reply-worthiness sweep of pre-gate pending drafts**
+    The transactional/no-reply gate (items 66/67, merged 2026-08-23) only runs at draft-*creation* time; drafts made before it shipped are never re-evaluated, so a queue can carry pre-fix junk (e.g. `auto-confirm@amazon.com`, `shipment-tracking@amazon.com`, `budgets@costalerts.amazonaws.com` order/shipping/AWS-budget mail). Confirmed on a live queue: 9 Amazon/AWS automated drafts, all generated 08-16…08-20, sitting in Drafts; every draft created after the fix was a legitimate human sender. Every user who upgrades will hit this once.
+    *As Priya, I want the drafts already in my queue to reflect the current junk filter, so that upgrading doesn't leave me staring at automated mail the app now knows to skip.*
+    - On first launch after this ships (guarded to run exactly once via a persisted flag; skipped in Prowl hunt mode), re-evaluate each **reply** pending draft with the pure `ReplyWorthiness` evaluator over its stored sender signals (`sourceFrom` + `sourceReplyTo`); any that now evaluate to `.skip(reason)` are removed from the pending queue and recorded on the skip log with that reason (recoverable via "Draft anyway"), and their notification cleared.
+    - **Exclusions (never swept):** authored follow-ups (`isAuthored`), drafts the user has edited (`wasEdited`), drafts with a queued offline dispatch, and needs-info flagged drafts.
+    - **Scope limit (documented):** pending drafts don't persist headers, so this catches sender-based junk (no-reply, transactional) deterministically and offline; header-only bulk/list mail (newsletters like Zillow/Substack) is out of scope for v1 — a header-refetch variant is a possible later enhancement. Note the limitation in code and docs.
+    - Unit-tested with a mixed seeded queue (transactional/no-reply junk → skipped with correct reasons; human sender, authored, and edited drafts retained) and idempotency (the one-time flag prevents a second run).
+
 76. **Search & filter the Review Drafts list**
     Let the user find a specific draft (or skipped message) without scrolling the whole list.
     *As Priya, I want to search and filter the Drafts and Skipped lists, so that I can find the message I'm looking for without scrolling past dozens of entries.*
