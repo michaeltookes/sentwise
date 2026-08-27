@@ -58,8 +58,9 @@ built the opposite way:
 ## How you connect and pay
 
 - **Sign in and go.** Create an account; your 14-day trial starts on the first
-  managed drafting request — no API key, no provider billing, drafting included.
-  Managed inference is the default; you never touch a key.
+  managed inference request, including voice learning or drafting — no API key,
+  no provider billing, drafting included. Managed inference is the default; you
+  never touch a key.
 - **Or bring your own.** Prefer to run it yourself? Point Sentwise at your own
   provider key (via OpenRouter and others) or a **local model** (e.g. Ollama).
   On this path, drafting never touches our servers at all. Your keys live in the
@@ -74,16 +75,18 @@ licensed to your account.
 
 ## Quickstart
 
-> **Packaged prereleases are available now.** Use the latest GitHub release DMG
-> or the qualified Homebrew tap below. Managed sign-in and the 14-day trial work
-> today; subscription checkout and 1.0 launch polish are next. Self-compilers can
-> [build from source](#build-from-source) and continue at step 2.
+> **Packaged prerelease v0.1.2 is available now.** It installs from the latest
+> GitHub release DMG or the qualified Homebrew tap below, but it predates managed
+> sign-in/trial onboarding. Use it for the BYO/local-provider flow, or
+> [build from source](#build-from-source) to follow the managed quickstart below.
 
 1. **Install.**
    - Download the latest DMG from [Releases](https://github.com/michaeltookes/sentwise/releases/latest) and drag Sentwise to Applications, **or**
    - `brew install --cask michaeltookes/tap/sentwise`
 
-   Sentwise lives in your menu bar (no Dock icon) and keeps itself up to date.
+   The current package installs v0.1.2; build from source for managed sign-in
+   until a newer package is published. Sentwise lives in your menu bar (no Dock
+   icon) and keeps itself up to date.
 
 2. **Connect your Gmail.** You'll need a Google **app password** (Gmail's
    per-app credential), which requires 2-Step Verification on your account:
@@ -102,8 +105,9 @@ licensed to your account.
    ![Sentwise Settings → Account: paste your email address and app password into the Add account fields](docs/images/account-connect.png)
 
 3. **Choose your AI.** After Gmail connects, sign in with your email to use
-   managed inference. Drafting is included, and your 14-day trial starts on the
-   first managed drafting request — no key to paste.
+   managed inference. Drafting is included, and your 14-day trial starts when
+   managed inference is first used, whether for voice learning or drafting — no
+   key to paste.
 
    *(Prefer to bring your own key or a local model? Choose that provider instead
    — see [Bring your own provider](#bring-your-own-provider).)*
@@ -111,6 +115,7 @@ licensed to your account.
 4. **Learn your voice.** Sentwise samples your Sent mail to build a private voice
    profile. The profile is stored locally; when you use managed or BYO
    inference, the sampled text is sent to that inference endpoint for profiling.
+   With managed inference, this starts the trial clock.
 
 5. **Get your first draft.** Send a test email to the connected Gmail account
    from another address (or drop in a call transcript via **New Follow-up from
