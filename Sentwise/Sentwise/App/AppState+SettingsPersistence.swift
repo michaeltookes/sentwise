@@ -13,6 +13,7 @@ extension AppState {
     /// flag (both at launch and on change). Called once from `AppState.init`.
     func setupAutoSave() {
         DiagnosticLog.isVerbose = verboseDiagnosticLogging
+        DiagnosticLog.verbose("Verbose diagnostic logging restored from settings")
 
         $pollIntervalSeconds
             .dropFirst()
@@ -35,6 +36,7 @@ extension AppState {
             .dropFirst()
             .sink { [weak self] isVerbose in
                 DiagnosticLog.isVerbose = isVerbose
+                DiagnosticLog.verbose("Verbose diagnostic logging enabled")
                 self?.saveSettingsAfterPublishedSet()
             }
             .store(in: &cancellables)

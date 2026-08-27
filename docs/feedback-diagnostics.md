@@ -48,9 +48,9 @@ Two layers keep it safe:
   bodies are not passed to the logger.
 - **A redaction pass** runs over the *entire assembled report* (context header
   included) as belt-and-suspenders: email addresses become `[redacted-email]`,
-  and bearer tokens / `key: value` secret assignments become `[redacted-token]`.
-  So even an accidentally-logged address or token is scrubbed before the file is
-  written.
+  filesystem paths become `[redacted-path]`, and bearer tokens / `key: value`
+  secret assignments become `[redacted-token]`. So even an accidentally-logged
+  address, token, or local path is scrubbed before the file is written.
 
 This is developer diagnostics from `os_log`, deliberately kept **distinct from
 the user-facing Activity History** (item 21) — they serve different audiences.
@@ -70,8 +70,8 @@ The feature is composed of small, pure, injectable pieces so the privacy-
 critical logic is unit-tested without touching the real log store or launching
 Finder/Mail:
 
-- `DiagnosticsRedactor` — the pure scrub (emails, bearer tokens, secret
-  assignments).
+- `DiagnosticsRedactor` — the pure scrub (emails, filesystem paths, bearer
+  tokens, secret assignments).
 - `DiagnosticsContext` — the non-PII environment block and its renderer.
 - `DiagnosticsLogReading` / `OSLogStoreDiagnosticsReader` — reads the app's own
   entries; a fake reader feeds tests injected log lines.

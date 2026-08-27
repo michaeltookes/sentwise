@@ -20,6 +20,10 @@ extension AppState {
     /// the app becomes ready. Idempotent.
     func startTranscriptFolderWatchingIfEnabled() {
         guard transcriptWatchedFolderEnabled, let url = transcriptWatchedFolderURL else {
+            DiagnosticLog.verbose(
+                "Transcript folder watcher inactive; enabled=\(self.transcriptWatchedFolderEnabled), "
+                + "hasFolder=\(self.transcriptWatchedFolderURL != nil)"
+            )
             stopTranscriptFolderWatching()
             return
         }
@@ -31,6 +35,7 @@ extension AppState {
                 return startTranscriptFolderWatchingIfEnabled()
             }
             existing.releaseDeferredDeliveries()
+            DiagnosticLog.verbose("Transcript folder watcher already active; triggering catch-up scan")
             Task { @MainActor in
                 await existing.scanForNewTranscripts()
             }
@@ -59,6 +64,7 @@ extension AppState {
         transcriptFolderSource = source
         source.start()
         transcriptFolderLogger.info("Started watching transcript folder")
+        DiagnosticLog.verbose("Transcript folder watcher started")
     }
 
     /// User-facing copy for a watched-folder failure.
@@ -131,23 +137,33 @@ extension AppState {
         _ ingested: IngestedTranscript,
         shouldCommit: (() -> Bool)? = nil
     ) async -> WatchedTranscriptDeliveryResult {
+        DiagnosticLog.verbose("Watched transcript delivery started")
         guard canCreateFollowUp else {
             transcriptFolderError =
                 "A transcript arrived, but connect an email account and AI provider to draft follow-ups."
+            DiagnosticLog.verbose("Watched transcript delivery deferred; mail or AI is unavailable")
             return .deferred
         }
         do {
             let draft = try await createFollowUp(from: ingested, shouldCommit: shouldCommit)
             transcriptFolderError = nil
+            DiagnosticLog.verbose(
+                "Watched transcript delivery accepted; pendingDraftCount=\(self.pendingDrafts.count)"
+            )
             return .acceptedWithRollback { [weak self] in
                 self?.rollbackWatchedFollowUp(draft)
             }
         } catch FollowUpCommitError.sourceChanged {
+            DiagnosticLog.verbose("Watched transcript delivery retrying; source changed before commit")
             return .retry
         } catch {
             transcriptFolderError = Self.draftMessage(for: error)
             transcriptFolderLogger.error("Watched-folder follow-up failed: \(error.localizedDescription)")
-            return Self.watchedTranscriptDeliveryResult(for: error)
+            let result = Self.watchedTranscriptDeliveryResult(for: error)
+            DiagnosticLog.verbose(
+                "Watched transcript delivery failed; result=\(result.diagnosticLabel)"
+            )
+            return result
         }
     }
 

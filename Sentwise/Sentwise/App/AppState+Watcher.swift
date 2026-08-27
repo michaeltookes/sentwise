@@ -83,18 +83,32 @@ extension AppState {
     /// a baseline so existing mail is not drafted as newly arrived. A message is
     /// marked processed only after its draft is durably queued.
     func pollInboxOnce() async {
-        guard watchStatus == .watching else { return }
+        guard watchStatus == .watching else {
+            DiagnosticLog.verbose("Inbox poll skipped; watcher is not active")
+            return
+        }
         guard canWatch else {
+            DiagnosticLog.verbose("Inbox poll paused; account or AI provider is unavailable")
             pauseWatching()
             return
         }
         // Offline (item 27): skip the poll rather than burn retries against an
         // unreachable server. Reconnect triggers an immediate catch-up poll.
-        guard hasConfirmedReachability || !reachability.isStarted else { return }
-        guard isOnline else { return }
-        guard !isPollingInbox else { return }
+        guard hasConfirmedReachability || !reachability.isStarted else {
+            DiagnosticLog.verbose("Inbox poll skipped; reachability has not been confirmed")
+            return
+        }
+        guard isOnline else {
+            DiagnosticLog.verbose("Inbox poll skipped; network is offline")
+            return
+        }
+        guard !isPollingInbox else {
+            DiagnosticLog.verbose("Inbox poll skipped; another poll is already running")
+            return
+        }
         isPollingInbox = true
         defer { isPollingInbox = false }
+        DiagnosticLog.verbose("Inbox poll started")
 
         let credentials = mailCredentials
         let mailbox = Mailbox.inbox
@@ -108,7 +122,11 @@ extension AppState {
             handlePollFetchFailure(error)
             return
         }
-        guard watchStatus == .watching, mailCredentials == credentials else { return }
+        DiagnosticLog.verbose("Inbox poll fetched \(messages.count) recent messages")
+        guard watchStatus == .watching, mailCredentials == credentials else {
+            DiagnosticLog.verbose("Inbox poll discarded; account or watcher changed after fetch")
+            return
+        }
         watchError = nil
 
         let messagesToProcess = messagesAfterSeedingWatcherBaselineIfNeeded(
@@ -117,14 +135,17 @@ extension AppState {
             mailbox: mailbox
         )
         if messagesToProcess.isEmpty {
+            DiagnosticLog.verbose("Inbox poll completed; no candidate messages after baseline")
             return
         }
+        DiagnosticLog.verbose("Inbox poll processing \(messagesToProcess.count) candidate messages")
 
         // Oldest first so enqueued drafts read in chronological order.
         for message in messagesToProcess.reversed() {
             guard watchStatus == .watching, mailCredentials == credentials else { break }
             await draftMessageIfNeeded(message, credentials: credentials, mailbox: mailbox)
         }
+        DiagnosticLog.verbose("Inbox poll completed")
     }
 
     /// Light replyability gate for the watcher: the message must have a real
@@ -152,6 +173,7 @@ extension AppState {
         mailbox: Mailbox
     ) async throws -> [MailMessage] {
         var limit = watchFetchLimit
+        DiagnosticLog.verbose("Inbox watcher fetching recent messages; limit=\(limit)")
         var messages = try await withResilientRetry {
             try await self.mailProvider.fetchRecentMessages(
                 credentials,
@@ -159,6 +181,7 @@ extension AppState {
                 limit: limit
             )
         }
+        DiagnosticLog.verbose("Inbox watcher fetched \(messages.count) messages; limit=\(limit)")
 
         while shouldExpandWatcherFetch(
             messages: messages,
@@ -170,6 +193,7 @@ extension AppState {
             guard nextLimit > limit else { break }
             limit = nextLimit
             let pageLimit = limit
+            DiagnosticLog.verbose("Inbox watcher expanding fetch; nextLimit=\(pageLimit)")
             messages = try await withResilientRetry {
                 try await self.mailProvider.fetchRecentMessages(
                     credentials,
@@ -177,6 +201,7 @@ extension AppState {
                     limit: pageLimit
                 )
             }
+            DiagnosticLog.verbose("Inbox watcher fetched \(messages.count) messages; limit=\(pageLimit)")
         }
 
         return messages
@@ -270,13 +295,17 @@ extension AppState {
         let baselineUID = processedMessages.baselineUID(account: account, mailbox: mailbox)
 
         if hasBaseline {
-            return messages.filter {
+            let filtered = messages.filter {
                 Self.isMessage(
                     $0,
                     afterBaselineUID: baselineUID,
                     onOrAfterBaselineStart: baselineStartDate
                 )
             }
+            DiagnosticLog.verbose(
+                "Inbox watcher baseline filter retained \(filtered.count) of \(messages.count) messages"
+            )
+            return filtered
         }
 
         let messagesToProcess: [MailMessage]
@@ -311,6 +340,10 @@ extension AppState {
         processedMessages.insertBaseline(account: account, mailbox: mailbox)
         persistence.saveProcessedMessages(processedMessages)
         logger.info("Inbox watcher baseline seeded: \(baselineMessages.count) historical, \(messagesToProcess.count) post-start eligible")
+        DiagnosticLog.verbose(
+            "Inbox watcher baseline seeded; historical=\(baselineMessages.count), "
+            + "postStartEligible=\(messagesToProcess.count)"
+        )
         return baselineStartDate == nil ? [] : messagesToProcess
     }
 

@@ -19,14 +19,17 @@ extension WatchedFolderTranscriptSource {
             rejectedDeliveries.removeValue(forKey: key)
             updateSeenVersion(snapshot, forKey: key)
             pendingFileStability.removeValue(forKey: key)
+            DiagnosticLog.verbose("Watched transcript delivery marked accepted")
         case .retry:
             if recordRejectedDeliveryRetry(forKey: key, snapshot: snapshot) == .exhausted {
                 rejectedDeliveryLogger.error("Watched transcript delivery exhausted retry budget: \(key)")
                 updateSeenVersion(snapshot, forKey: key)
                 pendingFileStability.removeValue(forKey: key)
+                DiagnosticLog.verbose("Watched transcript delivery retry budget exhausted")
             }
         case .deferred:
             recordDeferredDelivery(forKey: key, snapshot: snapshot)
+            DiagnosticLog.verbose("Watched transcript delivery deferred")
         }
     }
 
@@ -66,6 +69,10 @@ extension WatchedFolderTranscriptSource {
             attempts: attempts,
             nextRetryAt: Date().addingTimeInterval(TimeInterval(delay) / 1_000_000_000)
         )
+        DiagnosticLog.verbose(
+            "Watched transcript delivery retry scheduled; attempt=\(attempts), "
+            + "delaySeconds=\(TimeInterval(delay) / 1_000_000_000)"
+        )
         rescheduleRejectedDeliveryRetry()
         return .scheduled
     }
@@ -80,10 +87,13 @@ extension WatchedFolderTranscriptSource {
             nextRetryAt: .distantFuture,
             isDeferred: true
         )
+        DiagnosticLog.verbose("Watched transcript delivery waiting for app readiness")
     }
 
     func releaseDeferredDeliveries() {
+        let deferredCount = rejectedDeliveries.values.filter(\.isDeferred).count
         rejectedDeliveries = rejectedDeliveries.filter { !$0.value.isDeferred }
+        DiagnosticLog.verbose("Released \(deferredCount) deferred watched transcript deliveries")
     }
 
     func rejectedDeliveryBackoffDelayNanoseconds(forAttempt attempt: Int) -> UInt64 {

@@ -22,6 +22,19 @@ enum WatchedTranscriptDeliveryResult: Equatable {
         }
     }
 
+    var diagnosticLabel: String {
+        switch self {
+        case .accepted:
+            return "accepted"
+        case .acceptedWithRollback:
+            return "acceptedWithRollback"
+        case .retry:
+            return "retry"
+        case .deferred:
+            return "deferred"
+        }
+    }
+
     static func == (lhs: WatchedTranscriptDeliveryResult, rhs: WatchedTranscriptDeliveryResult) -> Bool {
         switch (lhs, rhs) {
         case (.accepted, .accepted),

@@ -113,6 +113,26 @@ final class AppStateDiagnosticsTests: XCTestCase {
         XCTAssertEqual(reader.lastIncludingVerbose, true)
     }
 
+    func testVerboseHelperOnlyEvaluatesWhenEnabled() {
+        let original = DiagnosticLog.isVerbose
+        defer { DiagnosticLog.isVerbose = original }
+        var evaluations = 0
+
+        DiagnosticLog.isVerbose = false
+        DiagnosticLog.verbose({
+            evaluations += 1
+            return "disabled"
+        }())
+        XCTAssertEqual(evaluations, 0)
+
+        DiagnosticLog.isVerbose = true
+        DiagnosticLog.verbose({
+            evaluations += 1
+            return "enabled"
+        }())
+        XCTAssertEqual(evaluations, 1)
+    }
+
     func testReportAProblemWritesCollectionFailureIntoBundle() throws {
         let persistence = AppStateMemoryPersistence()
         let appState = makeAppState(persistence: persistence)
