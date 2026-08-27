@@ -44,6 +44,26 @@ final class DiagnosticsRedactorTests: XCTestCase {
         XCTAssertTrue(output.contains("password"))
     }
 
+    func testRedactsQuotedStructuredSecretAssignments() {
+        let input = #"""
+        {"access_token":"eyJ.header.payload","note":"safe"}
+        {\"refresh_token\":\"refresh secret value\"}
+        password="correct horse battery staple"
+        api_key='sk live with spaces'
+        """#
+        let output = DiagnosticsRedactor.redact(input)
+
+        XCTAssertFalse(output.contains("eyJ.header.payload"), output)
+        XCTAssertFalse(output.contains("refresh secret value"), output)
+        XCTAssertFalse(output.contains("correct horse battery staple"), output)
+        XCTAssertFalse(output.contains("sk live with spaces"), output)
+        XCTAssertTrue(output.contains("\"note\":\"safe\""), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.tokenPlaceholder).count - 1,
+            4
+        )
+    }
+
     func testRedactsWatchedFolderPathsWithSpaces() {
         let input = """
         Transcript file not readable yet; will retry on a later scan: /Users/priya/Documents/Zoom/2026-08-26 Discovery Call.vtt

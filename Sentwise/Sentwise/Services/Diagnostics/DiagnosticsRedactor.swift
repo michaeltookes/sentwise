@@ -43,11 +43,26 @@ enum DiagnosticsRedactor {
         "authorization|api[_-]?key|apikey|password|passwd|secret|token"
         + "|access[_-]?token|refresh[_-]?token|client[_-]?token|session[_-]?id"
 
+    /// Matches a quoted secret value, including escaped JSON-style quotes.
+    private static let quotedSecretValuePattern =
+        #"\\?["'][^\r\n]*?\\?["']"#
+
+    /// Matches an unquoted secret value until punctuation or the next compact
+    /// key/value field. This lets `password: correct horse` redact the whole
+    /// value without swallowing `sessionId=...` when another field follows.
+    private static let unquotedSecretValuePattern =
+        #".+?(?=$|[\r\n"'`,;)}]|\s+[A-Za-z][A-Za-z0-9_-]*\s*[:=])"#
+
     /// Matches a `key: value` / `key=value` pair whose key names a secret, so an
-    /// inline `token=…`, `apiKey=…`, `password=…`, or `authorization: …` value is
-    /// scrubbed even when the value itself doesn't look like an email or bearer.
+    /// inline `token=...`, `apiKey=...`, `password=...`, or `authorization: ...`
+    /// value is scrubbed even when the key/value is JSON-quoted or the value
+    /// itself doesn't look like an email or bearer.
     private static let secretAssignmentPattern =
-        #"(?i)\b("# + secretKeys + #")\b(\s*[:=]\s*)\S+"#
+        #"(?i)((?:\\?["'])?\b("# + secretKeys + #")\b(?:\\?["'])?\s*[:=]\s*)(?:"#
+        + quotedSecretValuePattern
+        + #"|"#
+        + unquotedSecretValuePattern
+        + #")"#
 
     /// Matches quoted absolute paths, preserving the opening quote.
     private static let quotedPathPattern =
@@ -91,7 +106,7 @@ enum DiagnosticsRedactor {
         )
         result = result.replacingOccurrences(
             of: secretAssignmentPattern,
-            with: "$1$2\(tokenPlaceholder)",
+            with: "$1\(tokenPlaceholder)",
             options: [.regularExpression]
         )
         result = result.replacingOccurrences(
