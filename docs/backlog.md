@@ -30,7 +30,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 > Resolved items are recorded in [`resolved.md`](./resolved.md). Item numbers are stable IDs — they are not reused or renumbered when items are completed.
 
-> **Launch plan (owner decision 2026-08-20) — the High tier is ordered for a paid public launch:** 56 (managed inference — top priority) → 59 (sign-in-and-go onboarding, depends on 56a) → 66/67 + 69 (first-hour experience) → 24 (signatures) → 61 (live loop observed) → 36 (feedback channel) → 71 (README/quickstart) → 73 (account pane) → 72 (legal/policy/support, in parallel with 56c) → 75 (Workspace app-password guidance) → 57 (landing page + checkout, in its own repo) → 74 (clean-Mac verification + 1.0 release, closes last). Slack (30), native capture (54), and the transcript test plan (70) are deliberately **deferred** until after launch feedback.
+> **Launch plan (owner decision 2026-08-20) — the High tier is ordered for a paid public launch:** 56 (managed inference — top priority) → 59 (sign-in-and-go onboarding, depends on 56a) → 66/67 + 69 (first-hour experience) → 24 (signatures) → 61 (live loop observed) → 71 (README/quickstart) → 73 (account pane) → 72 (legal/policy/support, in parallel with 56c) → 75 (Workspace app-password guidance) → 57 (landing page + checkout, in its own repo) → 74 (clean-Mac verification + 1.0 release, closes last). Slack (30), native capture (54), and the transcript test plan (70) are deliberately **deferred** until after launch feedback.
 
 56. **Licensing, billing, and the managed-inference service (open core / paid binary)** — *⬆️ TOP PRIORITY (owner decision 2026-08-20)*
     > **Decision 2026-08-20:** launch **with** managed inference, not BYO-key-only. Rationale: the primary ICP (Marcus) has never heard of an API key and a key-paste in onboarding deters exactly the first-time users we need; bundling inference also lets the product charge from day one. BYO-key/local remains the escape hatch (item 59), never the default. The beta-with-technical-users shortcut was considered and rejected.
@@ -70,16 +70,9 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - **Training-data contrast (updated 2026-08-12 for the managed-inference decision):** cloud notetakers' own policies state customer call data (de-identified) is used to improve their models — e.g. Fathom's FAQ — and they store calls indefinitely. Our claim, stated accurately and without overreach: **"your calls are never stored on our servers and never train anyone's models"** — the managed proxy is stateless with zero-retention provider terms (item 56), and the BYO-key/local path removes us from the loop entirely. Copy must not blur the tiers: "we never even see your calls" belongs to the BYO/local option only.
     - Pricing page and checkout wired to the item 56 licensing/billing flow; prominent trial/download CTA.
     - **"Windows — join the waitlist"** email capture — the demand probe that decides if/when a cross-platform port (Tauri/Electron) is justified.
+    - **Feedback form (moved here from item 36, 2026-08-26):** a small "send feedback / feature request" form for site visitors and general (non-bug) feedback the maintainer can triage into the backlog. Complements — does not replace — the in-app "Report a Problem" path (item 36), which owns bug reports because only the app can produce the redacted diagnostic log bundle (a web form can't). The app may deep-link to this form with app/macOS version prefilled. Needs a form backend/service; scope with the rest of the site.
     - Basic discoverability: SEO fundamentals, OG/social cards, and a home for a demo video.
     - Held in a separate repo with its own deployment; all stack/hosting/analytics decisions deferred to the pre-build discussion.
-
-36. **Feedback channel + diagnostics / log export** — *promoted to High 2026-08-20 (launch prerequisite)*
-    Developer-facing logs for OSS bug reports.
-    *As Sam, I want to export diagnostic logs, so that I can file a useful bug report without leaking email content.*
-    - A "export diagnostics" action produces redacted logs (no message bodies/PII by default).
-    - Distinct from the user-facing activity history (item 21).
-    - Log verbosity is configurable.
-    - **Launch scope (2026-08-20):** a "Send Feedback…" menu/Settings action that opens a pre-filled GitHub issue (or mailto) with app version, macOS version, and an attached redacted log bundle — the minimum so a stranger's failure reaches the maintainer.
 
 71. **README + quickstart rewrite (the front door until item 57 ships)**
     The README still says *"Status: early development… features are being built out"*, lists shipped features under "Planned features", and says "No subscription" — the opposite of the current strategy. Until the landing page exists, the README is what every prospective user reads.
@@ -113,6 +106,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - **Clean-machine run** (fresh macOS user account or VM): DMG install via browser download (Gatekeeper/notarization path), `brew install --cask` path, first-run onboarding with sign-in/trial + Gmail app password, voice learn, first inbox draft, first transcript follow-up, approve via notification, Sparkle update from the previous version. Every friction point logged as a backlog item.
     - **Security pass** via `/security-review` on the app and the service repo: token handling, proxy auth, Keychain usage, log redaction, dependency audit.
     - **Release hygiene:** version **1.0.0** via `/release-prep`; CHANGELOG written for humans; cask and appcast verified from a machine that isn't the maintainer's; GitHub release notes link the quickstart (item 71).
+    - **Feedback inbox live:** the `feedback@sentwise.ai` address wired into the app's "Report a Problem" (item 36) must be a real, monitored mailbox before launch (Google Workspace setup) — the app ships the address regardless, but a stranger's feedback must actually reach the maintainer.
     - Launch checklist recorded in `docs/` and ticked; this item closes when the public link goes out.
 
 75. **Google Workspace accounts where app passwords are disabled**

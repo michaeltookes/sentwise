@@ -10,6 +10,17 @@ enum WatcherDraftResult {
     case enqueued
     case modelSkipped
     case contextChanged
+
+    var diagnosticLabel: String {
+        switch self {
+        case .enqueued:
+            return "enqueued"
+        case .modelSkipped:
+            return "modelSkipped"
+        case .contextChanged:
+            return "contextChanged"
+        }
+    }
 }
 
 /// Watcher draft gating that combines sender rules (item 18) with the
@@ -28,11 +39,13 @@ extension AppState {
         // skipped with a visible reason. Only a no-opinion verdict falls through.
         switch senderRuleDecision(for: message) {
         case .block:
+            DiagnosticLog.verbose("Inbox watcher candidate skipped; sender rule blocked it")
             guard skippedReason != .senderBlocklisted else { return false }
             guard watchStatus == .watching, mailCredentials == credentials else { return false }
             recordSkip(message, reason: .senderBlocklisted, account: credentials.email, mailbox: mailbox)
             return false
         case .forceDraft:
+            DiagnosticLog.verbose("Inbox watcher candidate forced through reply-worthiness gate")
             removeSkippedMessage(message, account: credentials.email, mailbox: mailbox)
             return true
         case .noOpinion:
@@ -41,10 +54,15 @@ extension AppState {
                 removeSkippedMessage(message, account: credentials.email, mailbox: mailbox)
             }
             if let reason = await replyWorthinessSkipReason(message, credentials: credentials, mailbox: mailbox) {
+                DiagnosticLog.verbose(
+                    "Inbox watcher candidate skipped by reply-worthiness gate; "
+                    + "reason=\(reason.rawValue)"
+                )
                 guard watchStatus == .watching, mailCredentials == credentials else { return false }
                 recordSkip(message, reason: reason, account: credentials.email, mailbox: mailbox)
                 return false
             }
+            DiagnosticLog.verbose("Inbox watcher candidate passed reply-worthiness gate")
             return true
         }
     }
@@ -71,7 +89,10 @@ extension AppState {
         mailbox: Mailbox,
         bypassModelSkip: Bool = false
     ) async throws -> WatcherDraftResult {
-        try await withResilientRetry { () -> WatcherDraftResult in
+        DiagnosticLog.verbose(
+            "Inbox watcher drafting candidate; bypassModelSkip=\(bypassModelSkip)"
+        )
+        return try await withResilientRetry { () -> WatcherDraftResult in
             try self.validateWatcherDraftContext(credentials)
             guard let draft = try await self.makePendingDraft(
                 for: message,
@@ -98,6 +119,7 @@ extension AppState {
         credentials: MailAccountCredentials,
         mailbox: Mailbox
     ) {
+        DiagnosticLog.verbose("Inbox watcher draft result: \(result.diagnosticLabel)")
         switch result {
         case .contextChanged:
             break
@@ -112,7 +134,9 @@ extension AppState {
     /// self-heal, pauses watching and records it (item 27).
     func handleWatcherDraftError(_ error: Error, draftProvider: LLMProviderKind?) {
         watchError = Self.draftMessage(for: error)
-        if ResilienceClassifier.classify(error) == .authentication {
+        let failureClass = ResilienceClassifier.classify(error)
+        DiagnosticLog.verbose("Inbox watcher draft failed; failureClass=\(failureClass)")
+        if failureClass == .authentication {
             recordActivity(ActivityEvent(
                 kind: .authFailed,
                 account: normalizedConnectedAccountEmail,

@@ -86,6 +86,19 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            Section("Diagnostics") {
+                Toggle("Verbose diagnostic logging", isOn: $appState.verboseDiagnosticLogging)
+                    .accessibilityLabel("Verbose diagnostic logging")
+                    .accessibilityIdentifier("verboseDiagnosticLoggingToggle")
+                Text(appState.verboseDiagnosticLogging
+                     ? "Sentwise records extra non-personal detail. Turn this on before "
+                       + "reproducing a bug, then use Report a Problem from the menu."
+                     : "Off by default. Report a Problem (in the menu bar menu) packages a "
+                       + "redacted log — no email content — to send to the maintainer.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Privacy") {
                 Text(AppState.privacyStatement)
                     .font(.caption)

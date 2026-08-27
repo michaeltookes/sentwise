@@ -208,6 +208,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         activity.setAccessibilityIdentifier("openActivityMenu")
         items.append(activity)
 
+        // Report a Problem… — packages a redacted diagnostics bundle and opens a
+        // pre-filled feedback email (item 36). This fires live Finder/Mail side
+        // effects, so it is treated as open-and-assert forbidden by Prowl hunts.
+        let report = NSMenuItem(title: "Report a Problem…", action: #selector(reportAProblemMenu), keyEquivalent: "")
+        report.target = self
+        report.setAccessibilityIdentifier("reportAProblem")
+        items.append(report)
+
         items.append(.separator())
 
         // Launch at Login toggle
@@ -262,6 +270,26 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func openActivityMenu() {
         openActivity()
+    }
+
+    @objc private func reportAProblemMenu() {
+        NSApp.activate(ignoringOtherApps: true)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            _ = await self.appState.reportAProblem()
+            guard let message = self.appState.diagnosticsError,
+                  !ProwlHuntRuntime.current.isEnabled else { return }
+            self.showDiagnosticsFailureAlert(message: message)
+        }
+    }
+
+    private func showDiagnosticsFailureAlert(message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Couldn't Create Diagnostics Bundle"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     @objc private func openNotificationSettingsMenu() {

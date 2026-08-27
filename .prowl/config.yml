@@ -138,6 +138,13 @@ guardrails:
     - "Archive"
     - "Move to Trash"
     - "Stop"
+    # Report a Problem (item 36) fires a live mailto + reveal-in-Finder side
+    # effect, and the verbose-logging toggle mutates persisted settings — both are
+    # open-and-assert forbidden, by AX id and by visible label.
+    - "reportAProblem"
+    - "Report a Problem"
+    - "verboseDiagnosticLoggingToggle"
+    - "Verbose diagnostic logging"
     # System-level toggles and app lifecycle.
     - "Login"
     - "login"

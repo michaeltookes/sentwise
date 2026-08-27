@@ -19,7 +19,7 @@ enum SendBehavior: String, CaseIterable, Equatable {
 struct Settings: Codable, Equatable {
 
     /// The current settings schema version.
-    static let currentSchemaVersion = 16
+    static let currentSchemaVersion = 17
 
     /// Schema version that introduced the persisted onboarding completion flag.
     static let onboardingCompletionSchemaVersion = 6
@@ -64,6 +64,11 @@ struct Settings: Codable, Equatable {
     /// nothing) with an empty custom signature, a safe default for existing
     /// installs.
     static let signatureSchemaVersion = 16
+
+    /// Schema version that introduced the verbose diagnostic-logging toggle (item
+    /// 36). Purely additive: older files decode it as off (normal logging), the
+    /// safe default. The terminal launch migration stamps this version.
+    static let verboseDiagnosticLoggingSchemaVersion = 17
 
     /// The default auto-send undo window, in seconds (item 23). Zero disables it.
     static let defaultSendDelaySeconds = 10
@@ -151,6 +156,13 @@ struct Settings: Codable, Equatable {
     /// reason (item 18). Each entry is a full address or a whole domain.
     var senderBlocklist: [SenderRule]
 
+    /// Whether verbose diagnostic logging is enabled (item 36). Off by default —
+    /// normal logging. When on, the app emits additional `debug`/`info` detail and
+    /// the "Report a Problem" bundle includes those lower-level entries so a bug
+    /// report is richer. Purely non-secret; never affects what mail content is
+    /// logged (that is never logged at any level).
+    var verboseDiagnosticLogging: Bool
+
     /// Whether the transcript watched folder is active (item 51). Off by default.
     var transcriptWatchedFolderEnabled: Bool
 
@@ -184,6 +196,7 @@ struct Settings: Codable, Equatable {
         onboardingCompleted: Bool = false,
         senderAllowlist: [SenderRule] = [],
         senderBlocklist: [SenderRule] = [],
+        verboseDiagnosticLogging: Bool = false,
         transcriptWatchedFolderEnabled: Bool = false,
         transcriptWatchedFolderPath: String = "",
         transcriptWatchedFolderSeenSnapshots: [String: WatchedFolderFileSnapshot]? = nil
@@ -208,6 +221,7 @@ struct Settings: Codable, Equatable {
         self.onboardingCompleted = onboardingCompleted
         self.senderAllowlist = senderAllowlist
         self.senderBlocklist = senderBlocklist
+        self.verboseDiagnosticLogging = verboseDiagnosticLogging
         self.transcriptWatchedFolderEnabled = transcriptWatchedFolderEnabled
         self.transcriptWatchedFolderPath = transcriptWatchedFolderPath
         self.transcriptWatchedFolderSeenSnapshots = transcriptWatchedFolderSeenSnapshots
@@ -225,7 +239,7 @@ struct Settings: Codable, Equatable {
         case llmProvider, llmModel, llmBaseURL, llmVerifiedModel, managedAccountEmail
         case signaturePolicy, signatureText
         case sendBehavior, sendDelaySeconds, onboardingCompleted
-        case senderAllowlist, senderBlocklist
+        case senderAllowlist, senderBlocklist, verboseDiagnosticLogging
         case transcriptWatchedFolderEnabled, transcriptWatchedFolderPath, transcriptWatchedFolderSeenSnapshots
     }
 
@@ -254,6 +268,8 @@ struct Settings: Codable, Equatable {
         onboardingCompleted = try container.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? false
         senderAllowlist = try container.decodeIfPresent([SenderRule].self, forKey: .senderAllowlist) ?? []
         senderBlocklist = try container.decodeIfPresent([SenderRule].self, forKey: .senderBlocklist) ?? []
+        verboseDiagnosticLogging =
+            try container.decodeIfPresent(Bool.self, forKey: .verboseDiagnosticLogging) ?? false
         transcriptWatchedFolderEnabled =
             try container.decodeIfPresent(Bool.self, forKey: .transcriptWatchedFolderEnabled) ?? false
         transcriptWatchedFolderPath =
