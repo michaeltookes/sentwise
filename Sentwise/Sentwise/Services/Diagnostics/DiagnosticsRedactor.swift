@@ -38,10 +38,17 @@ enum DiagnosticsRedactor {
     private static let bearerPattern =
         #"(?i)(bearer)\s+[A-Za-z0-9._\-]{6,}"#
 
-    /// Alternation of key names that name a secret.
-    private static let secretKeys =
-        "authorization|api[_-]?key|apikey|password|passwd|secret|token"
-        + "|access[_-]?token|refresh[_-]?token|client[_-]?token|session[_-]?id"
+    /// Lowercased key fragments that make a key/value field secret-looking.
+    private static let secretKeyNeedles = [
+        "authorization",
+        "apikey",
+        "password",
+        "passwd",
+        "privatekey",
+        "secret",
+        "sessionid",
+        "token"
+    ]
 
     /// Matches a quoted secret value, including escaped JSON-style quotes.
     private static let quotedSecretValuePattern =
@@ -58,11 +65,19 @@ enum DiagnosticsRedactor {
     /// value is scrubbed even when the key/value is JSON-quoted or the value
     /// itself doesn't look like an email or bearer.
     private static let secretAssignmentPattern =
-        #"(?i)((?:\\?["'])?\b("# + secretKeys + #")\b(?:\\?["'])?\s*[:=]\s*)(?:"#
+        #"((?:\\?["'])?\b([A-Z0-9][A-Z0-9_-]*)(?:\\?["'])?\s*[:=]\s*)("#
         + quotedSecretValuePattern
         + #"|"#
         + unquotedSecretValuePattern
         + #")"#
+
+    private static let secretAssignmentRegex: NSRegularExpression = {
+        do {
+            return try NSRegularExpression(pattern: secretAssignmentPattern, options: [.caseInsensitive])
+        } catch {
+            preconditionFailure("Invalid diagnostics secret assignment regex: \(error)")
+        }
+    }()
 
     /// Matches quoted absolute paths, preserving the opening quote.
     private static let quotedPathPattern =
@@ -109,11 +124,7 @@ enum DiagnosticsRedactor {
             with: "Bearer \(tokenPlaceholder)",
             options: [.regularExpression]
         )
-        result = result.replacingOccurrences(
-            of: secretAssignmentPattern,
-            with: "$1\(tokenPlaceholder)",
-            options: [.regularExpression]
-        )
+        result = redactSecretAssignments(in: result)
         result = result.replacingOccurrences(
             of: fileURLPattern,
             with: "file://\(pathPlaceholder)",
@@ -140,5 +151,28 @@ enum DiagnosticsRedactor {
             options: [.regularExpression]
         )
         return result
+    }
+
+    private static func redactSecretAssignments(in text: String) -> String {
+        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = secretAssignmentRegex.matches(in: text, range: fullRange)
+        guard !matches.isEmpty else { return text }
+
+        let original = text as NSString
+        let redacted = NSMutableString(string: text)
+        for match in matches.reversed() where match.numberOfRanges >= 4 {
+            let key = original.substring(with: match.range(at: 2))
+            guard isSecretKey(key) else { continue }
+
+            redacted.replaceCharacters(in: match.range(at: 3), with: tokenPlaceholder)
+        }
+        return redacted as String
+    }
+
+    private static func isSecretKey(_ key: String) -> Bool {
+        let compactKey = key.lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+        return secretKeyNeedles.contains { compactKey.contains($0) }
     }
 }

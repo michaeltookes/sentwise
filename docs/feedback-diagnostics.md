@@ -49,8 +49,8 @@ Two layers keep it safe:
 - **A redaction pass** runs over the *entire assembled report* (context header
   included) as belt-and-suspenders: email addresses, including internal-domain
   forms, become `[redacted-email]`; filesystem paths and `file://` URLs become
-  `[redacted-path]`; and bearer tokens / `key: value` secret assignments,
-  including JSON-quoted forms, become `[redacted-token]`. So even an
+  `[redacted-path]`; and bearer tokens / secret key-value assignments, including
+  JSON-quoted and compound-key forms, become `[redacted-token]`. So even an
   accidentally-logged address, token, or local path is scrubbed before the file
   is written.
 

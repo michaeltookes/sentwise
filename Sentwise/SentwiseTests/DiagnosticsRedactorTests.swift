@@ -76,6 +76,27 @@ final class DiagnosticsRedactorTests: XCTestCase {
         )
     }
 
+    func testRedactsCompoundCredentialKeyNames() {
+        let input = #"""
+        client_secret=client-secret-value
+        clientSecret=camel-secret-value
+        aws_secret_access_key=aws-secret-access-value
+        private_key="BEGIN PRIVATE KEY"
+        db_password=database-password
+        """#
+        let output = DiagnosticsRedactor.redact(input)
+
+        XCTAssertFalse(output.contains("client-secret-value"), output)
+        XCTAssertFalse(output.contains("camel-secret-value"), output)
+        XCTAssertFalse(output.contains("aws-secret-access-value"), output)
+        XCTAssertFalse(output.contains("BEGIN PRIVATE KEY"), output)
+        XCTAssertFalse(output.contains("database-password"), output)
+        XCTAssertEqual(
+            output.components(separatedBy: DiagnosticsRedactor.tokenPlaceholder).count - 1,
+            5
+        )
+    }
+
     func testRedactsWatchedFolderPathsWithSpaces() {
         let input = """
         Transcript file not readable yet; will retry on a later scan: /Users/priya/Documents/Zoom/2026-08-26 Discovery Call.vtt
