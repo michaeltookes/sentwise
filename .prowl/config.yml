@@ -138,11 +138,18 @@ guardrails:
     - "Archive"
     - "Move to Trash"
     - "Stop"
-    # Report a Problem (item 36) fires a live mailto + reveal-in-Finder side
-    # effect, and the verbose-logging toggle mutates persisted settings — both are
-    # open-and-assert forbidden, by AX id and by visible label.
-    - "reportAProblem"
+    # Report a Problem (item 36): activation fires a live mailto + reveal-in-Finder
+    # side effect, so it stays forbidden by its visible label. Its AX id is
+    # deliberately NOT forbidden so the menu-smoke hunt can assert the entry point
+    # is present (read-only) — the same relaxation applied to the sign-in controls,
+    # and safe here because hunt mode suppresses the mailto/Finder side effects
+    # (a click would only write a redacted file). Activation-by-name is still
+    # blocked by the "Report a Problem" label forbid below.
     - "Report a Problem"
+    # The verbose-logging toggle mutates persisted settings and stays FULLY
+    # forbidden (id + label). The diagnostics-settings hunt asserts the Diagnostics
+    # section via the non-interactive `diagnosticsSectionInfo` id instead, so it
+    # never needs to reference this toggle.
     - "verboseDiagnosticLoggingToggle"
     - "Verbose diagnostic logging"
     # System-level toggles and app lifecycle.

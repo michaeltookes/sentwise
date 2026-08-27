@@ -97,6 +97,10 @@ struct GeneralSettingsView: View {
                        + "redacted log — no email content — to send to the maintainer.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    // Non-interactive; carries an AX id so a Prowl hunt can
+                    // assert the Diagnostics section renders without touching the
+                    // forbidden verbose-logging toggle (item 36 hunt coverage).
+                    .accessibilityIdentifier("diagnosticsSectionInfo")
             }
 
             Section("Privacy") {

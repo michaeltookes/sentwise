@@ -34,3 +34,11 @@ steps:
 
   - assert:
       visible: id=openBrowseMailbox
+
+  # Report a Problem (item 36) — assert the feedback entry point is present.
+  # Read-only: the hunt never activates it (in hunt mode the mailto/Finder side
+  # effects are suppressed anyway; the diagnostics file is still written on click,
+  # so we assert-only). Activation stays blocked by the "Report a Problem" label
+  # forbid in config.yml.
+  - assert:
+      visible: id=reportAProblem

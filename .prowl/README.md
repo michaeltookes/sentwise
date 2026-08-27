@@ -34,7 +34,8 @@ From the repo root:
 
 ```bash
 prowl list
-prowl run menu-smoke            # status-item menu opens; all safe actions exist
+prowl run menu-smoke            # status-item menu opens; all safe actions exist (incl. Report a Problem, item 36)
+prowl run diagnostics-settings  # item 36: Diagnostics section renders on the Settings General tab
 prowl run follow-up-composer    # flagship: New Follow-up window opens
 prowl run review-drafts         # approval surface: Review Drafts window opens
 prowl run browse-mailbox        # Browse Mailbox window opens
@@ -157,6 +158,7 @@ Menu actions must use the explicit safe AX identifiers assigned in
 | `id=openFollowUpComposer` | New Follow-up from Transcript… (fixture-gated) |
 | `id=openReviewWindow` | Review Drafts (N)… (fixture-gated) |
 | `id=openBrowseMailbox` | Browse Mailbox… (fixture-gated) |
+| `id=reportAProblem` | Report a Problem… (item 36 — assert-only; see below) |
 
 ### Review Drafts window tab switch (item 69)
 
@@ -174,6 +176,27 @@ forbids (`Approve`, `Deny`, `Discard`, `Draft anyway`, `Clear`, `Dismiss`, …).
 |---|---|---|
 | `id=reviewDraftsTab` | "Drafts (N)" tab of the review window | yes (read-only switch) |
 | `id=reviewSkippedTab` | "Skipped (N)" tab of the review window | yes (read-only switch) |
+
+### Feedback / diagnostics controls (item 36)
+
+The `menu-smoke` hunt asserts the **Report a Problem…** menu item is present, and
+the `diagnostics-settings` hunt asserts the **Diagnostics** section renders on the
+Settings → General tab. Both are **assert-only**; neither activates anything.
+
+- `id=reportAProblem` (the menu item) is **not** in `forbiddenSelectors` so it can
+  be asserted, mirroring the sign-in relaxation. Activation is safe anyway — hunt
+  mode suppresses the mailto + reveal-in-Finder side effects (a click would only
+  write a redacted diagnostics file) — and activation *by name* stays blocked by
+  the `"Report a Problem"` label forbid.
+- The **verbose-logging toggle** mutates persisted settings, so it stays fully
+  forbidden (`verboseDiagnosticLoggingToggle` + `"Verbose diagnostic logging"`).
+  To assert the section without touching it, the section's non-interactive
+  descriptive text carries `id=diagnosticsSectionInfo` (read-only, not forbidden).
+
+| Identifier | Control | Clickable in hunts |
+|---|---|---|
+| `id=reportAProblem` | "Report a Problem…" menu item | no (assert-only; label forbid blocks activation) |
+| `id=diagnosticsSectionInfo` | Diagnostics section descriptive text (General tab) | n/a (non-interactive, assert-only) |
 
 ### Managed-inference sign-in / provider controls (items 56a, 59, 70)
 
@@ -236,7 +259,9 @@ when the window never appears):
 
 Step kinds used by these hunts: `click` (selector), `fill` (`{ selector, value }`
 — types text into a field, used for the managed email field), `assert`
-(`{ visible: <selector> }`), and `waitForSelector` (`{ selector, timeout }`).
+(`{ visible: <selector> }`), `waitForSelector` (`{ selector, timeout }`), and
+`scrollTo` (`{ selector }`, used to bring lower Settings content into view
+without activating controls).
 
 ## CI (Prowl QA workflow)
 
