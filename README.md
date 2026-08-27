@@ -92,7 +92,10 @@ licensed to your account.
    2. Create an app password at <https://myaccount.google.com/apppasswords>.
    3. Paste your email address and the 16-character password into Sentwise.
 
-   <!-- SCREENSHOT: Google "App passwords" page with a generated 16-char password -->
+   ![Google Account → App passwords: name it "Sentwise" and click Create to get a 16-character password](docs/images/app-password.png)
+
+   Google then shows a 16-character password — copy it and paste it, with your
+   email address, into Sentwise's Add account fields:
 
    ![Sentwise Settings → Account: paste your email address and app password into the Add account fields](docs/images/account-connect.png)
 
