@@ -57,9 +57,9 @@ built the opposite way:
 
 ## How you connect and pay
 
-- **Sign in and go.** Create an account, and your 14-day trial starts — no API
-  key, no provider billing, drafting included. Managed inference is the default;
-  you never touch a key.
+- **Sign in and go.** Create an account; your 14-day trial starts on the first
+  managed drafting request — no API key, no provider billing, drafting included.
+  Managed inference is the default; you never touch a key.
 - **Or bring your own.** Prefer to run it yourself? Point Sentwise at your own
   provider key (via OpenRouter and others) or a **local model** (e.g. Ollama).
   On this path, drafting never touches our servers at all. Your keys live in the
@@ -101,9 +101,9 @@ licensed to your account.
 
    ![Sentwise Settings → Account: paste your email address and app password into the Add account fields](docs/images/account-connect.png)
 
-3. **Choose your AI and start your trial.** After Gmail connects, sign in with
-   your email to use managed inference. Your 14-day trial begins and drafting is
-   included — no key to paste.
+3. **Choose your AI.** After Gmail connects, sign in with your email to use
+   managed inference. Drafting is included, and your 14-day trial starts on the
+   first managed drafting request — no key to paste.
 
    *(Prefer to bring your own key or a local model? Choose that provider instead
    — see [Bring your own provider](#bring-your-own-provider).)*
