@@ -96,7 +96,8 @@ extension AppState {
             verboseDiagnosticLogging: verboseDiagnosticLogging,
             transcriptWatchedFolderEnabled: transcriptWatchedFolderEnabled,
             transcriptWatchedFolderPath: transcriptWatchedFolderPath,
-            transcriptWatchedFolderSeenSnapshots: transcriptWatchedFolderSeenSnapshots
+            transcriptWatchedFolderSeenSnapshots: transcriptWatchedFolderSeenSnapshots,
+            hasRunPreGateDraftSweep: hasRunPreGateDraftSweep
         )
     }
 
@@ -139,15 +140,19 @@ extension AppState {
     }
 
     /// Applies the persisted draft-production preferences (signature policy/text
-    /// and send behavior/delay) loaded at launch. Called from `init` before
-    /// `setupAutoSave()` wires the change sinks, so seeding these values does not
-    /// trigger a spurious save. Kept here so `AppState.init` stays within the
-    /// function-body length limit.
+    /// and send behavior/delay) loaded at launch, plus the one-time pre-gate
+    /// draft-sweep flag (item 80). Called from `init` before `setupAutoSave()`
+    /// wires the change sinks, so seeding these values does not trigger a spurious
+    /// save. Kept here so `AppState.init` stays within the function-body length
+    /// limit. Seeding `hasRunPreGateDraftSweep` from settings is essential: without
+    /// it `buildSettings` would persist the default `false` and un-set the flag,
+    /// making the sweep re-run on every launch.
     func restoreDraftPreferences(from settings: Settings) {
         signaturePolicy = SignaturePolicy(rawValue: settings.signaturePolicy) ?? .default
         signatureText = settings.signatureText
         sendBehavior = SendBehavior(rawValue: settings.sendBehavior) ?? .default
         sendDelaySeconds = settings.sendDelaySeconds
+        hasRunPreGateDraftSweep = settings.hasRunPreGateDraftSweep
     }
 
     /// Restores pending drafts at launch, dropping any already-approved ones and

@@ -198,6 +198,12 @@ final class AppState: ObservableObject {
     /// Used only to keep already-configured installs out of first-run setup.
     let loadedSettingsPredateOnboardingCompletion: Bool
 
+    /// Whether the one-time reply-worthiness sweep of pre-gate pending drafts has
+    /// already run (item 80). Seeded from settings at launch; flipped to `true`
+    /// and persisted once the sweep completes so it never runs again. Not
+    /// `@Published` — it drives no UI, only the launch-time guard.
+    var hasRunPreGateDraftSweep: Bool = false
+
     // MARK: - Transcript Watched Folder (item 51)
 
     /// Whether the transcript watched folder is active. Off by default.

@@ -301,8 +301,10 @@ extension AppState {
     }
 
     /// Removes a draft from the queue only after the updated queue is durable.
+    /// Internal (not `private`) so the one-time pre-gate draft sweep (item 80) can
+    /// dequeue a now-skippable draft through the same durable-persistence path.
     @discardableResult
-    private func removePendingDraft(_ draft: Draft, removeNotification: Bool = true) throws -> Int? {
+    func removePendingDraft(_ draft: Draft, removeNotification: Bool = true) throws -> Int? {
         let previousDrafts = pendingDrafts
         guard let removalIndex = pendingDrafts.firstIndex(where: { $0.identity == draft.identity }) else { return nil }
         pendingDrafts.removeAll { $0.identity == draft.identity }

@@ -156,8 +156,12 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(decoded.llmVerifiedModel, "")
     }
 
-    func testCurrentSchemaVersionIsSeventeen() {
-        XCTAssertEqual(Settings.currentSchemaVersion, 17)
+    func testCurrentSchemaVersionIsEighteen() {
+        XCTAssertEqual(Settings.currentSchemaVersion, 18)
+    }
+
+    func testPreGateDraftSweepSchemaVersionIsEighteen() {
+        XCTAssertEqual(Settings.preGateDraftSweepSchemaVersion, 18)
     }
 
     func testSignatureSchemaVersionIsSixteen() {
@@ -185,6 +189,25 @@ final class SettingsTests: XCTestCase {
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(Settings.self, from: data)
         XCTAssertTrue(decoded.verboseDiagnosticLogging)
+    }
+
+    func testLegacyFileWithoutPreGateSweepFlagDecodesToNotYetRun() throws {
+        // A pre-v18 file has no sweep flag; it must decode to `false` so every
+        // install that predates the reply-worthiness gate runs the sweep once.
+        let legacy = #"{"schemaVersion":17,"pollIntervalSeconds":300,"mailEmail":"me@x.com"}"#
+        let decoded = try JSONDecoder().decode(Settings.self, from: Data(legacy.utf8))
+        XCTAssertFalse(decoded.hasRunPreGateDraftSweep)
+    }
+
+    func testPreGateDraftSweepFlagRoundTripsThroughCodable() throws {
+        let original = Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            hasRunPreGateDraftSweep: true
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Settings.self, from: data)
+        XCTAssertTrue(decoded.hasRunPreGateDraftSweep)
     }
 
     func testLegacyFileWithoutSignatureKeysDecodesToDefaults() throws {

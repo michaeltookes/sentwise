@@ -76,6 +76,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState.startReachabilityMonitoring()
         }
 
+        // One-time sweep of pre-gate pending drafts (item 80): re-evaluate drafts
+        // enqueued before the reply-worthiness gate shipped and move now-skippable
+        // junk to the skip log. Offline/synchronous; guarded so a single run ever.
+        if runtime.allowsStartupSideEffects {
+            appState.runPreGateDraftSweepIfNeeded()
+        }
+
         // First-run onboarding: show the setup assistant until it's completed
         // once. An already-configured install is reconciled to "complete" so
         // existing users are never sent back through the flow.
