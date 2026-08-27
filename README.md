@@ -106,11 +106,11 @@ licensed to your account.
    profile. The profile is stored locally; when you use managed or BYO
    inference, the sampled text is sent to that inference endpoint for profiling.
 
-5. **Get your first draft.** Send yourself a test email (or drop in a call
-   transcript via **New Follow-up from Transcript…**). When the draft is ready,
-   the notification banner appears — open it, read the full draft in Review
-   Drafts, add recipients if you started from a transcript without them, and
-   approve.
+5. **Get your first draft.** Send a test email to the connected Gmail account
+   from another address (or drop in a call transcript via **New Follow-up from
+   Transcript…**). When the draft is ready, the notification banner appears —
+   open it, read the full draft in Review Drafts, add recipients if you started
+   from a transcript without them, and approve.
 
    <!-- SCREENSHOT: notification banner "A draft is ready" (Open / Close) -->
 
