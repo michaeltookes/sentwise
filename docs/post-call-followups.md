@@ -25,7 +25,9 @@ draft simply avoids guessing who owns what.
 Optionally enter **recipients** (comma-separated; `Name <email>` is accepted) and
 a **subject** before drafting. Both are optional here — recipients can also be
 added in review. Click **Draft follow-up** and the draft appears in
-**Review Drafts**.
+**Review Drafts**. The composer confirms with a green "Follow-up drafted" line
+and an **Open Review Drafts** button beside it, so you can jump straight to the
+review window to approve the draft without going back up to the menu bar.
 
 The generated email contains, when the call supports it: a brief recap, the
 agreed next steps / action items with an owner named for each, and a proposed
