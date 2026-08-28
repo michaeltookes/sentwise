@@ -313,6 +313,57 @@ final class AppStateReplyWorthinessTests: XCTestCase {
         XCTAssertNil(appState.watchError)
     }
 
+    func testRemoveSkippedMessagePersistenceFailureKeepsEntryVisible() throws {
+        let (appState, _, persistence) = makeAppState()
+        let entry = try appState.recordSkipSync(
+            message(id: 9, uidValidity: 7, from: "no-reply@x.com"),
+            reason: .noReplySender,
+            account: "me@gmail.com",
+            mailbox: .inbox,
+            preservesRecoveryWhenProcessed: true
+        )
+        persistence.skippedMessageSaveError = AppStatePersistenceError.writeDenied
+
+        appState.removeSkippedMessage(entry)
+
+        XCTAssertEqual(appState.skippedMessages, [entry])
+        XCTAssertEqual(persistence.skippedMessages, [entry])
+    }
+
+    func testForceDraftRemovalFailureKeepsEntryVisibleAndRetryDoesNotDuplicateDraft() async throws {
+        let (appState, provider, persistence) = makeAppState()
+        let source = message(id: 10, uidValidity: 7, from: "no-reply@x.com")
+        let entry = try appState.recordSkipSync(
+            source,
+            reason: .noReplySender,
+            account: "me@gmail.com",
+            mailbox: .inbox,
+            preservesRecoveryWhenProcessed: true
+        )
+        persistence.skippedMessageSaveError = AppStatePersistenceError.writeDenied
+
+        let failedRemoval = await appState.forceDraftSkippedMessage(entry)
+
+        XCTAssertFalse(failedRemoval)
+        XCTAssertEqual(appState.pendingDrafts.count, 1)
+        XCTAssertEqual(provider.bodyFetchCallCount, 1)
+        XCTAssertEqual(appState.skippedMessages, [entry])
+        XCTAssertEqual(persistence.skippedMessages, [entry])
+        XCTAssertTrue(persistence.processedMessages.contains(source, account: "me@gmail.com", mailbox: .inbox))
+        XCTAssertNotNil(appState.approvalError)
+
+        persistence.skippedMessageSaveError = nil
+        appState.approvalError = nil
+        let retry = await appState.forceDraftSkippedMessage(entry)
+
+        XCTAssertTrue(retry)
+        XCTAssertEqual(appState.pendingDrafts.count, 1)
+        XCTAssertEqual(provider.bodyFetchCallCount, 1)
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertTrue(persistence.skippedMessages.isEmpty)
+        XCTAssertNil(appState.approvalError)
+    }
+
     func testForceDraftMissingAccountSurfacesApprovalError() async throws {
         let (appState, _, _) = makeAppState()
         appState.mailEmail = ""

@@ -118,7 +118,6 @@ extension AppState {
             try removeSkippedMessageSync(entry)
         } catch {
             logger.error("Failed to persist skipped-message removal: \(error.localizedDescription)")
-            removeSkippedMessageFromMemory(entry)
         }
     }
 
@@ -339,20 +338,31 @@ extension AppState {
         }
 
         do {
-            let enqueued = try await draftAndEnqueue(
-                entry.message,
-                mailbox: entry.mailbox,
-                requireWatching: false,
-                replyWorthinessOverride: true
-            )
-            guard enqueued else { return false }
+            if !hasPendingReplyWorthinessOverride(for: entry, account: credentials.email) {
+                let enqueued = try await draftAndEnqueue(
+                    entry.message,
+                    mailbox: entry.mailbox,
+                    requireWatching: false,
+                    replyWorthinessOverride: true
+                )
+                guard enqueued else { return false }
+            }
             markProcessed(entry.message, account: credentials.email, mailbox: entry.mailbox)
-            removeSkippedMessage(entry)
+            try removeSkippedMessageSync(entry)
             return true
         } catch {
             approvalError = Self.draftMessage(for: error)
             logger.error("Force-draft of skipped message failed: \(error.localizedDescription)")
             return false
+        }
+    }
+
+    private func hasPendingReplyWorthinessOverride(for entry: SkippedMessage, account: String) -> Bool {
+        let mailbox = entry.mailbox.imapName
+        let uidValidity = entry.message.uidValidity.map(String.init) ?? "?"
+        let identity = "\(account)|\(mailbox)|\(uidValidity)|\(entry.message.id)"
+        return pendingDrafts.contains {
+            $0.identity == identity && $0.replyWorthinessOverride == true
         }
     }
 }
