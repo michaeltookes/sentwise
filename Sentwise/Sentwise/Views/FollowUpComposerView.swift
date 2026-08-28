@@ -116,9 +116,14 @@ struct FollowUpComposerView: View {
                 .foregroundStyle(.orange)
         }
         if let statusMessage {
-            Label(statusMessage, systemImage: "checkmark.circle")
-                .font(.caption)
-                .foregroundStyle(.green)
+            HStack {
+                Label(statusMessage, systemImage: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+                Spacer()
+                Button("Open Review Drafts") { appState.openReviewHandler?() }
+                    .accessibilityIdentifier("openReviewDraftsFromComposer")
+            }
         }
         if let errorMessage {
             Label(errorMessage, systemImage: "exclamationmark.triangle")

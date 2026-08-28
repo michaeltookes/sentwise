@@ -176,6 +176,14 @@ forbids (`Approve`, `Deny`, `Discard`, `Draft anyway`, `Clear`, `Dismiss`, …).
 |---|---|---|
 | `id=reviewDraftsTab` | "Drafts (N)" tab of the review window | yes (read-only switch) |
 | `id=reviewSkippedTab` | "Skipped (N)" tab of the review window | yes (read-only switch) |
+| `id=openReviewDraftsFromComposer` | "Open Review Drafts" button shown in the Follow-up composer after a draft (item 81) | yes (read-only; same `openReviewWindow` action) |
+
+The composer's `openReviewDraftsFromComposer` button (item 81) only invokes the
+already-allowed `openReviewWindow` action to front the Review Drafts window — no
+state mutation — so it is intentionally **not** in `forbiddenSelectors`, and
+neither its id nor its "Open Review Drafts" label collides with a forbidden
+substring (`Open message from` is the only `Open …` forbid, and bare `Draft` is
+not forbidden).
 
 ### Feedback / diagnostics controls (item 36)
 
