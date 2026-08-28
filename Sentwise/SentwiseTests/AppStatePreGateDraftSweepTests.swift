@@ -32,6 +32,7 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
         replyToEmail: String? = nil,
         originalBody: String? = nil,
         generatedAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
+        regeneratedAt: Date? = nil,
         needsInfo: DraftNeedsInfo? = nil,
         offlineQueuedDispatch: OfflineQueuedDraftDispatch? = nil,
         authoredRecipients: [MailAddress]? = nil,
@@ -56,6 +57,7 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
             originalBody: originalBody,
             model: "claude-sonnet-4-6",
             generatedAt: generatedAt,
+            regeneratedAt: regeneratedAt,
             needsInfo: needsInfo,
             offlineQueuedDispatch: offlineQueuedDispatch,
             authoredRecipients: authoredRecipients,
@@ -248,6 +250,21 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
 
         XCTAssertEqual(Set(appState.pendingDrafts.map(\.id)), [1, 2])
         XCTAssertEqual(appState.skippedMessages.map(\.message.id), [3])
+        XCTAssertTrue(appState.hasRunPreGateDraftSweep)
+    }
+
+    func testSweepPreservesPostGateRegeneratedDraft() throws {
+        let regenerated = draft(
+            id: 1,
+            fromEmail: "no-reply@example.com",
+            regeneratedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let (appState, _) = makeAppState(seededDrafts: [regenerated])
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
         XCTAssertTrue(appState.hasRunPreGateDraftSweep)
     }
 

@@ -194,6 +194,7 @@ extension AppState {
                 return
             }
             replacement.generatedAt = draft.generatedAt
+            replacement.regeneratedAt = Date()
             let replacementWarning = await threadStalenessVerdict(
                 for: replacement,
                 credentials: credentials
@@ -234,6 +235,7 @@ extension AppState {
         }
         _ = try draftDispatchCredentialsStillCurrent(credentials, for: draft)
         replacement.generatedAt = draft.generatedAt
+        replacement.regeneratedAt = Date()
         generatedDraft = replacement
         return replacement
     }

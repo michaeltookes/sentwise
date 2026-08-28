@@ -101,6 +101,9 @@ struct Draft: Codable, Identifiable, Equatable {
     var model: String
     /// When the draft was generated.
     var generatedAt: Date
+    /// When the user explicitly regenerated this draft. `generatedAt` stays tied to
+    /// the original draft for stale-thread search windows.
+    var regeneratedAt: Date?
     /// Set when the assistant declined to fabricate a reply because it needs
     /// information only the user has (item 13). A flagged draft is never sent or
     /// saved until the user resolves it.
@@ -181,6 +184,7 @@ struct Draft: Codable, Identifiable, Equatable {
         originalBody: String? = nil,
         model: String,
         generatedAt: Date,
+        regeneratedAt: Date? = nil,
         needsInfo: DraftNeedsInfo? = nil,
         notReplyWorthy: DraftNotReplyWorthy? = nil,
         offlineQueuedDispatch: OfflineQueuedDraftDispatch? = nil,
@@ -203,6 +207,7 @@ struct Draft: Codable, Identifiable, Equatable {
         self.originalBody = originalBody
         self.model = model
         self.generatedAt = generatedAt
+        self.regeneratedAt = regeneratedAt
         self.needsInfo = needsInfo
         self.notReplyWorthy = notReplyWorthy
         self.replyWorthinessOverride = replyWorthinessOverride

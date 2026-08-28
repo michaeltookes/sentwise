@@ -309,6 +309,7 @@ final class AppStateAsyncReviewFeedbackTests: XCTestCase {
         XCTAssertEqual(replacement.id, 9)
         XCTAssertEqual(replacement.sourceMessageID, "<new@x.com>")
         XCTAssertEqual(replacement.generatedAt, staleDraft.generatedAt)
+        XCTAssertNotNil(replacement.regeneratedAt)
         XCTAssertEqual(replacement.body, "Regenerated preview reply.")
         XCTAssertEqual(appState.generatedDraft, replacement)
         XCTAssertEqual(provider.lastBodyUID, 9)

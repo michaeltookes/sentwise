@@ -161,6 +161,7 @@ extension AppState {
     /// never touched.
     private func isPreGateSweepCandidate(_ draft: Draft) -> Bool {
         if draft.generatedAt >= preGateDraftSweepCutoff { return false }
+        if let regeneratedAt = draft.regeneratedAt, regeneratedAt >= preGateDraftSweepCutoff { return false }
         if draft.replyWorthinessOverride == true { return false }
         if isPotentialLegacyReplyWorthinessOverride(draft) { return false }
         if draft.isAuthored { return false }
