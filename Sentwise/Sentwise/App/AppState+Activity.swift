@@ -56,12 +56,20 @@ extension AppState {
     /// in-memory `skippedMessages` override entry still carries the full message
     /// for "Draft anyway"; this metadata-only event survives restart.
     func recordSkipActivity(for entry: SkippedMessage) {
+        recordSkipActivity(
+            for: entry,
+            sourceMailHost: currentActivitySourceMailHost,
+            sourceMailPort: currentActivitySourceMailPort
+        )
+    }
+
+    func recordSkipActivity(for entry: SkippedMessage, sourceMailHost: String?, sourceMailPort: Int?) {
         let event = ActivityEvent(
             kind: .skipped,
             account: entry.account,
             mailbox: entry.mailbox.imapName,
-            sourceMailHost: currentActivitySourceMailHost,
-            sourceMailPort: currentActivitySourceMailPort,
+            sourceMailHost: Self.normalizedActivitySourceMailHost(sourceMailHost),
+            sourceMailPort: Self.normalizedActivitySourceMailPort(sourceMailPort),
             sender: entry.senderDisplay,
             subject: entry.subject,
             skipReason: entry.reason,

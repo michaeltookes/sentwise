@@ -35,12 +35,17 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
         needsInfo: DraftNeedsInfo? = nil,
         offlineQueuedDispatch: OfflineQueuedDraftDispatch? = nil,
         authoredRecipients: [MailAddress]? = nil,
-        replyWorthinessOverride: Bool? = false
+        replyWorthinessOverride: Bool? = false,
+        sourceAccountEmail: String? = nil,
+        sourceMailHost: String? = nil,
+        sourceMailPort: Int? = nil
     ) -> Draft {
         var draft = Draft(
             id: id,
             sourceUIDValidity: 7,
-            sourceAccountEmail: account,
+            sourceAccountEmail: sourceAccountEmail ?? account,
+            sourceMailHost: sourceMailHost,
+            sourceMailPort: sourceMailPort,
             sourceMailbox: Mailbox.inbox.imapName,
             sourceSubject: "Subject \(id)",
             sourceFrom: MailAddress(email: fromEmail),
@@ -133,6 +138,35 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
         // The pending queue was persisted for each swept draft.
         XCTAssertEqual(persistence.pendingDrafts.count, 3)
         XCTAssertEqual(appState.activityEvents.filter { $0.kind == .skipped }.count, 2)
+    }
+
+    func testSweepRecordsActivityWithDraftSourceServerMetadata() throws {
+        let inactiveAccount = "other@example.com"
+        let noReply = draft(
+            id: 1,
+            fromEmail: "no-reply@example.com",
+            sourceAccountEmail: inactiveAccount,
+            sourceMailHost: "imap.other.example",
+            sourceMailPort: 995
+        )
+        let (appState, persistence) = makeAppState(seededDrafts: [noReply])
+        appState.mailHost = "imap.active.example"
+        appState.mailPort = 143
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        let event = try XCTUnwrap(appState.activityEvents.first)
+        XCTAssertEqual(event.account, inactiveAccount)
+        XCTAssertEqual(event.sourceMailHost, "imap.other.example")
+        XCTAssertEqual(event.sourceMailPort, 995)
+        XCTAssertEqual(persistence.activityEvents.first?.sourceMailHost, "imap.other.example")
+        XCTAssertEqual(persistence.activityEvents.first?.sourceMailPort, 995)
+
+        appState.mailEmail = inactiveAccount
+        appState.mailHost = "IMAP.OTHER.EXAMPLE"
+        appState.mailPort = 995
+        appState.isAccountConnected = true
+        XCTAssertTrue(appState.canOpenActivityEvent(event))
     }
 
     func testSweptSkipEntrySurvivesRelaunch() throws {

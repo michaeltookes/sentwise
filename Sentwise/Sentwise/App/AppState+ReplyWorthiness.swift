@@ -134,7 +134,6 @@ extension AppState {
             try clearSkippedMessagesSync()
         } catch {
             logger.error("Failed to persist skipped-message clear: \(error.localizedDescription)")
-            clearSkippedMessageState()
         }
     }
 
@@ -188,13 +187,13 @@ extension AppState {
         do {
             let persistedMessages = persistence.loadSkippedMessages().filter { !entryIDs.contains($0.id) }
             try persistence.saveSkippedMessagesSync(persistedMessages)
+            skippedMessages = visibleMessages
+            skippedMessageIDs.subtract(entryIDs)
+            for entryID in entryIDs {
+                skippedMessageReasonsByID.removeValue(forKey: entryID)
+            }
         } catch {
             logger.error("Failed to persist skipped-message dismissal: \(error.localizedDescription)")
-        }
-        skippedMessages = visibleMessages
-        skippedMessageIDs.subtract(entryIDs)
-        for entryID in entryIDs {
-            skippedMessageReasonsByID.removeValue(forKey: entryID)
         }
     }
 

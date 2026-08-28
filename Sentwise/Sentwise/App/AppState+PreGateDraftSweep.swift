@@ -138,7 +138,11 @@ extension AppState {
 
             do {
                 try removePendingDraft(draft, removeNotification: true)
-                recordSkipActivity(for: skippedEntry)
+                recordSkipActivity(
+                    for: skippedEntry,
+                    sourceMailHost: draft.sourceMailHost,
+                    sourceMailPort: draft.sourceMailPort
+                )
                 sweptCount += 1
             } catch {
                 completed = false

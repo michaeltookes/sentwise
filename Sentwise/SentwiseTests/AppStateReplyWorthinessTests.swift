@@ -330,6 +330,63 @@ final class AppStateReplyWorthinessTests: XCTestCase {
         XCTAssertEqual(persistence.skippedMessages, [entry])
     }
 
+    func testDismissAllSkippedMessagesPersistenceFailureKeepsEntriesVisible() throws {
+        let (appState, _, persistence) = makeAppState()
+        _ = try appState.recordSkipSync(
+            message(id: 11, uidValidity: 7, from: "no-reply@x.com"),
+            reason: .noReplySender,
+            account: "me@gmail.com",
+            mailbox: .inbox,
+            preservesRecoveryWhenProcessed: true
+        )
+        _ = try appState.recordSkipSync(
+            message(id: 12, uidValidity: 7, from: "notifications@x.com"),
+            reason: .noReplySender,
+            account: "me@gmail.com",
+            mailbox: .inbox,
+            preservesRecoveryWhenProcessed: true
+        )
+        let visibleBeforeDismissal = appState.skippedMessages
+        persistence.skippedMessageSaveError = AppStatePersistenceError.writeDenied
+
+        appState.dismissAllSkippedMessages()
+
+        XCTAssertEqual(appState.skippedMessages, visibleBeforeDismissal)
+        XCTAssertEqual(persistence.skippedMessages, visibleBeforeDismissal)
+        XCTAssertTrue(appState.hasSkippedMessage(
+            message(id: 11, uidValidity: 7, from: "no-reply@x.com"),
+            account: "me@gmail.com",
+            mailbox: .inbox
+        ))
+        XCTAssertTrue(appState.hasSkippedMessage(
+            message(id: 12, uidValidity: 7, from: "notifications@x.com"),
+            account: "me@gmail.com",
+            mailbox: .inbox
+        ))
+    }
+
+    func testClearSkippedMessagesPersistenceFailureKeepsEntriesVisible() throws {
+        let (appState, _, persistence) = makeAppState()
+        let entry = try appState.recordSkipSync(
+            message(id: 13, uidValidity: 7, from: "no-reply@x.com"),
+            reason: .noReplySender,
+            account: "me@gmail.com",
+            mailbox: .inbox,
+            preservesRecoveryWhenProcessed: true
+        )
+        persistence.skippedMessageSaveError = AppStatePersistenceError.writeDenied
+
+        appState.clearSkippedMessages()
+
+        XCTAssertEqual(appState.skippedMessages, [entry])
+        XCTAssertEqual(persistence.skippedMessages, [entry])
+        XCTAssertTrue(appState.hasSkippedMessage(
+            message(id: 13, uidValidity: 7, from: "no-reply@x.com"),
+            account: "me@gmail.com",
+            mailbox: .inbox
+        ))
+    }
+
     func testForceDraftRemovalFailureKeepsEntryVisibleAndRetryDoesNotDuplicateDraft() async throws {
         let (appState, provider, persistence) = makeAppState()
         let source = message(id: 10, uidValidity: 7, from: "no-reply@x.com")
