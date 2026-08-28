@@ -14,6 +14,16 @@ private let preGateDraftSweepCutoff: Date = {
     return components.date ?? .distantPast
 }()
 
+private let legacyReplyWorthinessOverrideCutoff: Date = {
+    var components = DateComponents()
+    components.calendar = Calendar(identifier: .gregorian)
+    components.timeZone = TimeZone(secondsFromGMT: 0)
+    components.year = 2026
+    components.month = 8
+    components.day = 2
+    return components.date ?? .distantPast
+}()
+
 private struct PreGateDraftSweepResult {
     var sweptCount: Int
     var completed: Bool
@@ -83,8 +93,6 @@ extension AppState {
         var completed = true
 
         for draft in snapshot {
-            guard isPreGateSweepCandidate(draft) else { continue }
-
             // The skip record needs a concrete account + mailbox to key off and to
             // re-draft from later. Without them, leave the draft in the queue rather
             // than dropping it into an unrecoverable skip entry.
@@ -104,13 +112,13 @@ extension AppState {
                 messageID: draft.sourceMessageID
             )
 
-            guard senderRuleDecision(for: message) != .forceDraft else { continue }
-
             let signals = ReplyWorthinessSignals(
                 fromEmail: draft.sourceFrom?.email,
                 replyToEmail: draft.sourceReplyTo?.email
             )
             guard let reason = ReplyWorthiness.evaluate(signals).skipReason else { continue }
+            guard isPreGateSweepCandidate(draft, skipReason: reason) else { continue }
+            guard senderRuleDecision(for: message) != .forceDraft else { continue }
 
             do {
                 try recordSkipSync(message, reason: reason, account: account, mailbox: mailbox)
@@ -138,14 +146,29 @@ extension AppState {
     /// (item 51), a draft they edited (item 19), a draft with a queued offline
     /// dispatch (item 27), or one flagged as needing their input (item 13) — is
     /// never touched.
-    private func isPreGateSweepCandidate(_ draft: Draft) -> Bool {
+    private func isPreGateSweepCandidate(_ draft: Draft, skipReason: ReplyWorthinessReason) -> Bool {
         if draft.generatedAt >= preGateDraftSweepCutoff { return false }
         if draft.replyWorthinessOverride == true { return false }
+        if isPotentialLegacyReplyWorthinessOverride(draft, skipReason: skipReason) { return false }
         if draft.isAuthored { return false }
         if draft.wasEdited { return false }
         if draft.offlineQueuedDispatch != nil { return false }
         if draft.needsInfo != nil { return false }
         return true
+    }
+
+    private func isPotentialLegacyReplyWorthinessOverride(
+        _ draft: Draft,
+        skipReason: ReplyWorthinessReason
+    ) -> Bool {
+        guard draft.replyWorthinessOverride == nil,
+              draft.generatedAt >= legacyReplyWorthinessOverrideCutoff else { return false }
+        // Builds between item 17 and this PR had a visible "Draft anyway"
+        // override but no persisted provenance bit. A no-reply draft created in
+        // that window could only have entered the queue by user request, so keep
+        // it. Transactional sender heuristics are the newer item-66 signal this
+        // sweep exists to apply to old drafts.
+        return skipReason == .noReplySender
     }
 
     private func removeSkippedMessageIfNeeded(_ message: MailMessage, account: String, mailbox: Mailbox) {

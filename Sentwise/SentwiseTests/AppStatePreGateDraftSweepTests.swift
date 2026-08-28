@@ -2,6 +2,16 @@ import SentwiseMail
 import XCTest
 @testable import Sentwise
 
+private func utcDate(year: Int, month: Int, day: Int) -> Date {
+    var components = DateComponents()
+    components.calendar = Calendar(identifier: .gregorian)
+    components.timeZone = TimeZone(secondsFromGMT: 0)
+    components.year = year
+    components.month = month
+    components.day = day
+    return components.date ?? .distantPast
+}
+
 /// Tests for the one-time pre-gate reply-worthiness sweep (item 80): drafts
 /// enqueued before the transactional/no-reply gate shipped are re-evaluated once
 /// at launch and the now-skippable ones move to the skip log, while anything the
@@ -10,6 +20,9 @@ import XCTest
 final class AppStatePreGateDraftSweepTests: XCTestCase {
 
     private let account = "me@gmail.com"
+    private let originalReplyWorthinessGateDate = utcDate(year: 2026, month: 8, day: 2)
+    private let dayBeforeOriginalReplyWorthinessGateDate = utcDate(year: 2026, month: 8, day: 1)
+    private let preTransactionalGateDate = utcDate(year: 2026, month: 8, day: 20)
 
     /// Builds a reply draft with the given source sender. Defaults produce a plain,
     /// unedited reply draft eligible for the sweep; overrides model the exclusions.
@@ -153,6 +166,31 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
 
         XCTAssertEqual(Set(appState.pendingDrafts.map(\.id)), [1, 2])
         XCTAssertEqual(appState.skippedMessages.map(\.message.id), [3])
+        XCTAssertTrue(appState.hasRunPreGateDraftSweep)
+    }
+
+    func testSweepPreservesPotentialLegacyNoReplyOverrideDrafts() throws {
+        let legacyOverride = draft(
+            id: 1,
+            fromEmail: "no-reply@example.com",
+            generatedAt: originalReplyWorthinessGateDate
+        )
+        let olderNoReply = draft(
+            id: 2,
+            fromEmail: "no-reply@example.com",
+            generatedAt: dayBeforeOriginalReplyWorthinessGateDate
+        )
+        let transactional = draft(
+            id: 3,
+            fromEmail: "auto-confirm@amazon.com",
+            generatedAt: preTransactionalGateDate
+        )
+        let (appState, _) = makeAppState(seededDrafts: [legacyOverride, olderNoReply, transactional])
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertEqual(Set(appState.skippedMessages.map(\.message.id)), [2, 3])
         XCTAssertTrue(appState.hasRunPreGateDraftSweep)
     }
 
