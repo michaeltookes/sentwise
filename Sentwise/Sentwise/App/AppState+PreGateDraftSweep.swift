@@ -117,7 +117,13 @@ extension AppState {
                 replyToEmail: draft.sourceReplyTo?.email
             )
             guard let reason = ReplyWorthiness.evaluate(signals).skipReason else { continue }
-            guard isPreGateSweepCandidate(draft, skipReason: reason) else { continue }
+            guard isPreGateSweepCandidate(
+                draft,
+                skipReason: reason,
+                sourceMessage: message,
+                account: account,
+                mailbox: mailbox
+            ) else { continue }
             guard senderRuleDecision(for: message) != .forceDraft else { continue }
 
             let skippedEntry: SkippedMessage
@@ -159,11 +165,25 @@ extension AppState {
     /// (item 51), a draft they edited (item 19), a draft with a queued offline
     /// dispatch (item 27), or one flagged as needing their input (item 13) — is
     /// never touched.
-    private func isPreGateSweepCandidate(_ draft: Draft, skipReason: ReplyWorthinessReason) -> Bool {
+    private func isPreGateSweepCandidate(
+        _ draft: Draft,
+        skipReason: ReplyWorthinessReason,
+        sourceMessage: MailMessage,
+        account: String,
+        mailbox: Mailbox
+    ) -> Bool {
         if draft.generatedAt >= preGateDraftSweepCutoff { return false }
         if let regeneratedAt = draft.regeneratedAt, regeneratedAt >= preGateDraftSweepCutoff { return false }
         if draft.replyWorthinessOverride == true { return false }
-        if isPotentialLegacyReplyWorthinessOverride(draft, skipReason: skipReason) { return false }
+        if isPotentialLegacyReplyWorthinessOverride(
+            draft,
+            skipReason: skipReason,
+            sourceMessage: sourceMessage,
+            account: account,
+            mailbox: mailbox
+        ) {
+            return false
+        }
         if draft.isAuthored { return false }
         if draft.wasEdited { return false }
         if draft.offlineQueuedDispatch != nil { return false }
@@ -173,17 +193,27 @@ extension AppState {
 
     private func isPotentialLegacyReplyWorthinessOverride(
         _ draft: Draft,
-        skipReason: ReplyWorthinessReason
+        skipReason: ReplyWorthinessReason,
+        sourceMessage: MailMessage,
+        account: String,
+        mailbox: Mailbox
     ) -> Bool {
         guard draft.replyWorthinessOverride == nil,
-              draft.generatedAt >= legacyReplyWorthinessOverrideCutoff,
-              skipReason == .noReplySender else { return false }
+              draft.generatedAt >= legacyReplyWorthinessOverrideCutoff else { return false }
         // Builds between item 17 and this PR had a visible "Draft anyway"
         // override but no persisted provenance bit. Preserve only drafts the old
         // single reply-target no-reply gate could have produced through that
         // action; transactional matches added later remain sweepable.
-        let legacyReplyTargetEmail = draft.sourceReplyTo?.email ?? draft.sourceFrom?.email
-        return ReplyWorthiness.isNoReplySender(legacyReplyTargetEmail)
+        if skipReason == .noReplySender {
+            let legacyReplyTargetEmail = draft.sourceReplyTo?.email ?? draft.sourceFrom?.email
+            if ReplyWorthiness.isNoReplySender(legacyReplyTargetEmail) {
+                return true
+            }
+        }
+        // Pre-upgrade regenerations also lack `regeneratedAt`; unlike ordinary
+        // watcher and force-draft enqueue paths, regeneration does not mark the
+        // replacement source message processed.
+        return !processedMessages.contains(sourceMessage, account: account, mailbox: mailbox)
     }
 
     private func removeSkippedMessageIfNeeded(_ entry: SkippedMessage) {

@@ -299,6 +299,16 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
             generatedAt: preTransactionalGateDate,
             replyWorthinessOverride: nil
         )
+        var processed = ProcessedMessages()
+        for draft in [
+            legacyOverride,
+            olderNoReply,
+            transactional,
+            unmarkedTransactional,
+            unmarkedNewBothAddressNoReply
+        ] {
+            processed.insert(sourceMessage(for: draft), account: account, mailbox: .inbox)
+        }
         let (appState, _) = makeAppState(
             seededDrafts: [
                 legacyOverride,
@@ -306,13 +316,30 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
                 transactional,
                 unmarkedTransactional,
                 unmarkedNewBothAddressNoReply
-            ]
+            ],
+            processedMessages: processed
         )
 
         appState.runPreGateDraftSweepIfNeeded()
 
         XCTAssertEqual(Set(appState.pendingDrafts.map(\.id)), [1])
         XCTAssertEqual(Set(appState.skippedMessages.map(\.message.id)), [2, 3, 4, 5])
+        XCTAssertTrue(appState.hasRunPreGateDraftSweep)
+    }
+
+    func testSweepPreservesUnmarkedPreUpgradeRegeneratedDraft() throws {
+        let regenerated = draft(
+            id: 1,
+            fromEmail: "auto-confirm@amazon.com",
+            generatedAt: preTransactionalGateDate,
+            replyWorthinessOverride: nil
+        )
+        let (appState, _) = makeAppState(seededDrafts: [regenerated])
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
         XCTAssertTrue(appState.hasRunPreGateDraftSweep)
     }
 
