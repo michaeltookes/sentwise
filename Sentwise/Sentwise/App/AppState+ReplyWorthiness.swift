@@ -68,39 +68,67 @@ extension AppState {
         account: String,
         mailbox: Mailbox
     ) {
-        let entry = SkippedMessage(
-            message: message,
-            mailbox: mailbox,
-            account: account,
-            reason: reason
-        )
-        skippedMessageIDs.insert(entry.id)
-        skippedMessageReasonsByID[entry.id] = reason
-        skippedMessages.removeAll { $0.id == entry.id }
-        skippedMessages.insert(entry, at: 0)
-        if skippedMessages.count > skippedMessageLogLimit {
-            skippedMessages.removeLast(skippedMessages.count - skippedMessageLogLimit)
+        let entry = skippedEntry(message, reason: reason, account: account, mailbox: mailbox)
+        do {
+            try recordSkipSync(entry)
+        } catch {
+            logger.error("Failed to persist skipped message: \(error.localizedDescription)")
+            recordSkipInMemory(entry)
         }
-        // The in-memory override entry above carries the full message for "Draft
-        // anyway"; the activity log records the skip durably as metadata only, so
-        // it survives restart even though the override entry does not (item 21,
-        // closing item 17's deferred "skip reasons visible in the activity log").
-        recordSkipActivity(for: entry)
-        logger.info("Recorded skipped message (\(reason.rawValue, privacy: .public)); \(self.skippedMessages.count) visible entries")
+    }
+
+    /// Records a skipped message only after its recoverable entry is durable.
+    /// Internal so the pre-gate draft sweep can preserve its recovery path before
+    /// deleting the corresponding pending draft.
+    @discardableResult
+    func recordSkipSync(
+        _ message: MailMessage,
+        reason: ReplyWorthinessReason,
+        account: String,
+        mailbox: Mailbox
+    ) throws -> SkippedMessage {
+        let entry = skippedEntry(message, reason: reason, account: account, mailbox: mailbox)
+        try recordSkipSync(entry)
+        return entry
+    }
+
+    private func recordSkipSync(_ entry: SkippedMessage) throws {
+        let visibleMessages = visibleSkippedMessages(recording: entry)
+        try persistence.saveSkippedMessagesSync(visibleMessages)
+        recordSkipInMemory(entry, visibleMessages: visibleMessages)
     }
 
     /// Removes a single entry from the skip log.
     func removeSkippedMessage(_ entry: SkippedMessage) {
-        skippedMessages.removeAll { $0.id == entry.id }
-        skippedMessageIDs.remove(entry.id)
-        skippedMessageReasonsByID.removeValue(forKey: entry.id)
+        do {
+            try removeSkippedMessageSync(entry)
+        } catch {
+            logger.error("Failed to persist skipped-message removal: \(error.localizedDescription)")
+            removeSkippedMessageFromMemory(entry)
+        }
+    }
+
+    /// Removes a skip entry durably before updating in-memory state.
+    func removeSkippedMessageSync(_ entry: SkippedMessage) throws {
+        let visibleMessages = skippedMessages.filter { $0.id != entry.id }
+        try persistence.saveSkippedMessagesSync(visibleMessages)
+        removeSkippedMessageFromMemory(entry)
     }
 
     /// Clears the whole skip log.
     func clearSkippedMessages() {
-        skippedMessages.removeAll()
-        skippedMessageIDs.removeAll()
-        skippedMessageReasonsByID.removeAll()
+        do {
+            try clearSkippedMessagesSync()
+        } catch {
+            logger.error("Failed to persist skipped-message clear: \(error.localizedDescription)")
+            clearSkippedMessageState()
+        }
+    }
+
+    /// Clears the skip log durably before updating in-memory state.
+    func clearSkippedMessagesSync() throws {
+        try persistence.saveSkippedMessagesSync([])
+        clearSkippedMessageState()
     }
 
     /// Dismisses a skipped entry and durably suppresses future watcher handling.
@@ -140,11 +168,62 @@ extension AppState {
             processedMessages.insert(entry.message, account: entry.account, mailbox: entry.mailbox)
         }
         persistence.saveProcessedMessages(processedMessages)
-        skippedMessages.removeAll { entryIDs.contains($0.id) }
+        let visibleMessages = skippedMessages.filter { !entryIDs.contains($0.id) }
+        do {
+            try persistence.saveSkippedMessagesSync(visibleMessages)
+        } catch {
+            logger.error("Failed to persist skipped-message dismissal: \(error.localizedDescription)")
+        }
+        skippedMessages = visibleMessages
         skippedMessageIDs.subtract(entryIDs)
         for entryID in entryIDs {
             skippedMessageReasonsByID.removeValue(forKey: entryID)
         }
+    }
+
+    private func visibleSkippedMessages(recording entry: SkippedMessage) -> [SkippedMessage] {
+        var visibleMessages = skippedMessages
+        visibleMessages.removeAll { $0.id == entry.id }
+        visibleMessages.insert(entry, at: 0)
+        if visibleMessages.count > skippedMessageLogLimit {
+            visibleMessages.removeLast(visibleMessages.count - skippedMessageLogLimit)
+        }
+        return visibleMessages
+    }
+
+    private func skippedEntry(
+        _ message: MailMessage,
+        reason: ReplyWorthinessReason,
+        account: String,
+        mailbox: Mailbox
+    ) -> SkippedMessage {
+        SkippedMessage(message: message, mailbox: mailbox, account: account, reason: reason)
+    }
+
+    private func recordSkipInMemory(
+        _ entry: SkippedMessage,
+        visibleMessages: [SkippedMessage]? = nil
+    ) {
+        skippedMessageIDs.insert(entry.id)
+        skippedMessageReasonsByID[entry.id] = entry.reason
+        skippedMessages = visibleMessages ?? visibleSkippedMessages(recording: entry)
+        // The visible skip entry carries the full message for "Draft anyway".
+        // When the skipped-message write succeeds, that same recovery entry is
+        // available after restart; activity history records metadata only.
+        recordSkipActivity(for: entry)
+        logger.info("Recorded skipped message (\(entry.reason.rawValue, privacy: .public)); \(self.skippedMessages.count) visible entries")
+    }
+
+    private func removeSkippedMessageFromMemory(_ entry: SkippedMessage) {
+        skippedMessages.removeAll { $0.id == entry.id }
+        skippedMessageIDs.remove(entry.id)
+        skippedMessageReasonsByID.removeValue(forKey: entry.id)
+    }
+
+    private func clearSkippedMessageState() {
+        skippedMessages.removeAll()
+        skippedMessageIDs.removeAll()
+        skippedMessageReasonsByID.removeAll()
     }
 
     // MARK: - Override
@@ -176,7 +255,8 @@ extension AppState {
             let enqueued = try await draftAndEnqueue(
                 entry.message,
                 mailbox: entry.mailbox,
-                requireWatching: false
+                requireWatching: false,
+                replyWorthinessOverride: true
             )
             guard enqueued else { return false }
             markProcessed(entry.message, account: credentials.email, mailbox: entry.mailbox)

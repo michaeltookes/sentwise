@@ -85,14 +85,15 @@ extension AppState {
         _ message: MailMessage,
         mailbox: Mailbox = .inbox,
         requireWatching: Bool = true,
-        credentials capturedCredentials: MailAccountCredentials? = nil
+        credentials capturedCredentials: MailAccountCredentials? = nil, replyWorthinessOverride: Bool = false
     ) async throws -> Bool {
-        guard let draft = try await makePendingDraft(
+        guard var draft = try await makePendingDraft(
             for: message,
             mailbox: mailbox,
             requireWatching: requireWatching,
             credentials: capturedCredentials
         ) else { return false }
+        draft.replyWorthinessOverride = replyWorthinessOverride ? true : nil
         try enqueuePendingDraft(draft)
         return true
     }
@@ -489,7 +490,6 @@ extension AppState {
     static func truncatedIncomingBody(_ text: String, maxChars: Int = 4000) -> String {
         text.count > maxChars ? String(text.prefix(maxChars)) + "…" : text
     }
-
 }
 
 struct DraftLLMConfiguration: Equatable {

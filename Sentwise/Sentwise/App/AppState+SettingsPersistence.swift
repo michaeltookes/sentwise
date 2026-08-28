@@ -155,6 +155,26 @@ extension AppState {
         hasRunPreGateDraftSweep = settings.hasRunPreGateDraftSweep
     }
 
+    /// Restores persisted review/history state after launch fields are seeded.
+    func restoreReviewPersistenceState() {
+        activityEvents = persistence.loadActivityEvents()
+        restoreSkippedMessagesFromPersistence()
+    }
+
+    /// Restores skipped-message state at launch, including the lookup maps used
+    /// to suppress duplicate skip work within the current session.
+    func restoreSkippedMessagesFromPersistence() {
+        skippedMessages = Self.restoredSkippedMessages(
+            persistence: persistence,
+            processedMessages: processedMessages,
+            limit: skippedMessageLogLimit
+        )
+        skippedMessageIDs = Set(skippedMessages.map(\.id))
+        skippedMessageReasonsByID = skippedMessages.reduce(into: [:]) { reasons, entry in
+            reasons[entry.id] = entry.reason
+        }
+    }
+
     /// Restores pending drafts at launch, dropping any already-approved ones and
     /// rebuilding the offline-dispatch bookkeeping. Extracted from `AppState.init`
     /// to keep that initializer and `AppState.swift` within the lint limits.
@@ -177,5 +197,27 @@ extension AppState {
         }
         let offlineQueuedDispatch = offlineQueuedDispatches(from: pendingDrafts)
         return (pendingDrafts, offlineQueuedDispatch, Set(offlineQueuedDispatch.keys))
+    }
+
+    /// Restores the visible skip log and drops entries that were already
+    /// dismissed into the durable processed-message set.
+    static func restoredSkippedMessages(
+        persistence: PersistenceProvider,
+        processedMessages: ProcessedMessages,
+        limit: Int
+    ) -> [SkippedMessage] {
+        let loadedMessages = persistence.loadSkippedMessages()
+        let activeMessages = loadedMessages.filter {
+            !processedMessages.contains($0.message, account: $0.account, mailbox: $0.mailbox)
+        }
+        let boundedMessages = Array(activeMessages.prefix(limit))
+        if boundedMessages.count != loadedMessages.count {
+            do {
+                try persistence.saveSkippedMessagesSync(boundedMessages)
+            } catch {
+                logger.error("Failed to clean skipped messages on launch: \(error.localizedDescription)")
+            }
+        }
+        return boundedMessages
     }
 }

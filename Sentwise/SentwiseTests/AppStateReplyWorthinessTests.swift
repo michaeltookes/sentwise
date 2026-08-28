@@ -268,6 +268,7 @@ final class AppStateReplyWorthinessTests: XCTestCase {
 
         XCTAssertTrue(ok)
         XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertEqual(appState.pendingDrafts.first?.replyWorthinessOverride, true)
         XCTAssertTrue(appState.skippedMessages.isEmpty)
         XCTAssertTrue(persistence.processedMessages.contains(message(id: 1), account: "me@gmail.com", mailbox: .inbox))
         // The original no-reply skip and override both bypass header fetch.

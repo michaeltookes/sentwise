@@ -8,17 +8,20 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     private(set) var voiceProfile: VoiceProfile?
     private(set) var processedMessages: ProcessedMessages
     private(set) var pendingDrafts: [Draft]
+    private(set) var skippedMessages: [SkippedMessage]
     private(set) var approvedDraftIdentities: Set<String>
     private(set) var activityEvents: [ActivityEvent]
     private(set) var settingsSaveCount = 0
     private(set) var savedSettingsHistory: [Settings] = []
     private(set) var processedSaveCount = 0
     private(set) var pendingDraftSaveCount = 0
+    private(set) var skippedMessageSaveCount = 0
     private(set) var approvedDraftSaveCount = 0
     private(set) var activityEventSaveCount = 0
     private(set) var saveEvents: [String] = []
     var syncSaveError: Error?
     var pendingDraftSaveError: Error?
+    var skippedMessageSaveError: Error?
     var approvedDraftSaveError: Error?
 
     init(
@@ -26,6 +29,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         voiceProfile: VoiceProfile? = nil,
         processedMessages: ProcessedMessages = ProcessedMessages(),
         pendingDrafts: [Draft] = [],
+        skippedMessages: [SkippedMessage] = [],
         approvedDraftIdentities: Set<String> = [],
         activityEvents: [ActivityEvent] = []
     ) {
@@ -33,6 +37,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         self.voiceProfile = voiceProfile
         self.processedMessages = processedMessages
         self.pendingDrafts = pendingDrafts
+        self.skippedMessages = skippedMessages
         self.approvedDraftIdentities = approvedDraftIdentities
         self.activityEvents = activityEvents
     }
@@ -71,6 +76,15 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         pendingDrafts = drafts
         pendingDraftSaveCount += 1
         saveEvents.append("pending")
+    }
+
+    func loadSkippedMessages() -> [SkippedMessage] { skippedMessages }
+    func saveSkippedMessagesSync(_ messages: [SkippedMessage]) throws {
+        if let skippedMessageSaveError {
+            throw skippedMessageSaveError
+        }
+        skippedMessages = messages
+        skippedMessageSaveCount += 1
     }
 
     func loadApprovedDraftIdentities() -> Set<String> { approvedDraftIdentities }

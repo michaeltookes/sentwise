@@ -7,7 +7,7 @@ import Foundation
 /// will later surface. It keeps enough of the original message to explain the
 /// skip (sender, subject, reason, when) and to re-draft it if the user overrides
 /// the decision (the full `MailMessage` plus its source `mailbox`).
-struct SkippedMessage: Identifiable, Equatable {
+struct SkippedMessage: Codable, Identifiable, Equatable {
     /// The message that was skipped, kept so an override can re-draft it through
     /// the normal pipeline.
     let message: MailMessage

@@ -4,6 +4,21 @@ import os
 
 private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "PreGateDraftSweep")
 
+private let preGateDraftSweepCutoff: Date = {
+    var components = DateComponents()
+    components.calendar = Calendar(identifier: .gregorian)
+    components.timeZone = TimeZone(secondsFromGMT: 0)
+    components.year = 2026
+    components.month = 8
+    components.day = 23
+    return components.date ?? .distantPast
+}()
+
+private struct PreGateDraftSweepResult {
+    var sweptCount: Int
+    var completed: Bool
+}
+
 /// One-time reply-worthiness sweep of pre-gate pending drafts (item 80).
 ///
 /// The transactional / no-reply reply-worthiness gate (items 66/67) only runs at
@@ -33,7 +48,12 @@ extension AppState {
     func runPreGateDraftSweepIfNeeded() {
         guard !hasRunPreGateDraftSweep else { return }
 
-        let sweptCount = runPreGateDraftSweep()
+        let result = runPreGateDraftSweep()
+
+        guard result.completed else {
+            logger.error("Pre-gate draft sweep left incomplete after a selected draft could not be swept")
+            return
+        }
 
         hasRunPreGateDraftSweep = true
         do {
@@ -45,8 +65,8 @@ extension AppState {
             logger.error("Failed to persist pre-gate draft sweep flag: \(error.localizedDescription)")
         }
 
-        if sweptCount > 0 {
-            logger.info("Pre-gate draft sweep moved \(sweptCount) now-skippable draft(s) to the skip log")
+        if result.sweptCount > 0 {
+            logger.info("Pre-gate draft sweep moved \(result.sweptCount) now-skippable draft(s) to the skip log")
         } else {
             logger.info("Pre-gate draft sweep found no now-skippable drafts")
         }
@@ -57,18 +77,13 @@ extension AppState {
     /// drafts were swept. Iterates a snapshot because `removePendingDraft` mutates
     /// `pendingDrafts`.
     @discardableResult
-    private func runPreGateDraftSweep() -> Int {
+    private func runPreGateDraftSweep() -> PreGateDraftSweepResult {
         let snapshot = pendingDrafts
         var sweptCount = 0
+        var completed = true
 
         for draft in snapshot {
             guard isPreGateSweepCandidate(draft) else { continue }
-
-            let signals = ReplyWorthinessSignals(
-                fromEmail: draft.sourceFrom?.email,
-                replyToEmail: draft.sourceReplyTo?.email
-            )
-            guard let reason = ReplyWorthiness.evaluate(signals).skipReason else { continue }
 
             // The skip record needs a concrete account + mailbox to key off and to
             // re-draft from later. Without them, leave the draft in the queue rather
@@ -89,16 +104,33 @@ extension AppState {
                 messageID: draft.sourceMessageID
             )
 
-            recordSkip(message, reason: reason, account: account, mailbox: mailbox)
+            guard senderRuleDecision(for: message) != .forceDraft else { continue }
+
+            let signals = ReplyWorthinessSignals(
+                fromEmail: draft.sourceFrom?.email,
+                replyToEmail: draft.sourceReplyTo?.email
+            )
+            guard let reason = ReplyWorthiness.evaluate(signals).skipReason else { continue }
+
+            do {
+                try recordSkipSync(message, reason: reason, account: account, mailbox: mailbox)
+            } catch {
+                completed = false
+                logger.error("Pre-gate sweep failed to persist a recoverable skipped entry: \(error.localizedDescription)")
+                continue
+            }
+
             do {
                 try removePendingDraft(draft, removeNotification: true)
                 sweptCount += 1
             } catch {
+                completed = false
                 logger.error("Pre-gate sweep failed to remove a swept draft: \(error.localizedDescription)")
+                removeSkippedMessageIfNeeded(message, account: account, mailbox: mailbox)
             }
         }
 
-        return sweptCount
+        return PreGateDraftSweepResult(sweptCount: sweptCount, completed: completed)
     }
 
     /// Whether a draft is eligible for the pre-gate sweep. Only plain reply drafts
@@ -107,10 +139,22 @@ extension AppState {
     /// dispatch (item 27), or one flagged as needing their input (item 13) — is
     /// never touched.
     private func isPreGateSweepCandidate(_ draft: Draft) -> Bool {
+        if draft.generatedAt >= preGateDraftSweepCutoff { return false }
+        if draft.replyWorthinessOverride == true { return false }
         if draft.isAuthored { return false }
         if draft.wasEdited { return false }
         if draft.offlineQueuedDispatch != nil { return false }
         if draft.needsInfo != nil { return false }
         return true
+    }
+
+    private func removeSkippedMessageIfNeeded(_ message: MailMessage, account: String, mailbox: Mailbox) {
+        let entry = SkippedMessage(message: message, mailbox: mailbox, account: account, reason: .noReplySender)
+        guard skippedMessages.contains(where: { $0.id == entry.id }) else { return }
+        do {
+            try removeSkippedMessageSync(entry)
+        } catch {
+            logger.error("Pre-gate sweep failed to roll back a skipped entry: \(error.localizedDescription)")
+        }
     }
 }

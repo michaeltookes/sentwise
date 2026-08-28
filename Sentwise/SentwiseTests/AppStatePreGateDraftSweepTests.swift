@@ -18,9 +18,11 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
         fromEmail: String,
         replyToEmail: String? = nil,
         originalBody: String? = nil,
+        generatedAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
         needsInfo: DraftNeedsInfo? = nil,
         offlineQueuedDispatch: OfflineQueuedDraftDispatch? = nil,
-        authoredRecipients: [MailAddress]? = nil
+        authoredRecipients: [MailAddress]? = nil,
+        replyWorthinessOverride: Bool = false
     ) -> Draft {
         Draft(
             id: id,
@@ -35,10 +37,11 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
             body: "Proposed reply \(id).",
             originalBody: originalBody,
             model: "claude-sonnet-4-6",
-            generatedAt: Date(),
+            generatedAt: generatedAt,
             needsInfo: needsInfo,
             offlineQueuedDispatch: offlineQueuedDispatch,
-            authoredRecipients: authoredRecipients
+            authoredRecipients: authoredRecipients,
+            replyWorthinessOverride: replyWorthinessOverride
         )
     }
 
@@ -100,6 +103,85 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
         XCTAssertEqual(persistedFlag, true)
         // The pending queue was persisted for each swept draft.
         XCTAssertEqual(persistence.pendingDrafts.count, 3)
+    }
+
+    func testSweptSkipEntrySurvivesRelaunch() throws {
+        let noReply = draft(id: 1, fromEmail: "no-reply@example.com")
+        let (appState, persistence) = makeAppState(seededDrafts: [noReply])
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        XCTAssertTrue(appState.pendingDrafts.isEmpty)
+        XCTAssertEqual(persistence.skippedMessages.map(\.message.id), [1])
+
+        let relaunched = AppState(
+            persistence: persistence,
+            secrets: InMemorySecretStore()
+        )
+
+        XCTAssertEqual(relaunched.skippedMessages.map(\.message.id), [1])
+        XCTAssertEqual(relaunched.skippedMessages.first?.reason, .noReplySender)
+    }
+
+    func testSweepPreservesAllowlistedJunkDraft() throws {
+        let noReply = draft(id: 1, fromEmail: "no-reply@example.com")
+        let (appState, _) = makeAppState(seededDrafts: [noReply])
+        appState.senderAllowlist = [SenderRule(rawInput: "no-reply@example.com")!]
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertTrue(appState.hasRunPreGateDraftSweep)
+    }
+
+    func testSweepPreservesPostGateAndOverrideDrafts() throws {
+        let postGate = draft(
+            id: 1,
+            fromEmail: "no-reply@example.com",
+            generatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let override = draft(
+            id: 2,
+            fromEmail: "shipment-tracking@amazon.com",
+            replyWorthinessOverride: true
+        )
+        let legacy = draft(id: 3, fromEmail: "auto-confirm@amazon.com")
+        let (appState, _) = makeAppState(seededDrafts: [postGate, override, legacy])
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        XCTAssertEqual(Set(appState.pendingDrafts.map(\.id)), [1, 2])
+        XCTAssertEqual(appState.skippedMessages.map(\.message.id), [3])
+        XCTAssertTrue(appState.hasRunPreGateDraftSweep)
+    }
+
+    func testSweepDoesNotRemoveDraftWhenSkipPersistenceFails() throws {
+        let noReply = draft(id: 1, fromEmail: "no-reply@example.com")
+        let (appState, persistence) = makeAppState(seededDrafts: [noReply])
+        persistence.skippedMessageSaveError = AppStatePersistenceError.writeDenied
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertEqual(persistence.pendingDrafts.map(\.id), [1])
+        XCTAssertFalse(appState.hasRunPreGateDraftSweep)
+        XCTAssertNotEqual(persistence.savedSettingsHistory.last?.hasRunPreGateDraftSweep, true)
+    }
+
+    func testSweepDoesNotCompleteAndRollsBackSkipWhenDraftRemovalFails() throws {
+        let noReply = draft(id: 1, fromEmail: "no-reply@example.com")
+        let (appState, persistence) = makeAppState(seededDrafts: [noReply])
+        persistence.pendingDraftSaveError = AppStatePersistenceError.writeDenied
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertTrue(persistence.skippedMessages.isEmpty)
+        XCTAssertFalse(appState.hasRunPreGateDraftSweep)
+        XCTAssertNotEqual(persistence.savedSettingsHistory.last?.hasRunPreGateDraftSweep, true)
     }
 
     func testSweepIsIdempotentWithinASession() throws {

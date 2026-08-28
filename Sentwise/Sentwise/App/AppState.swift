@@ -408,7 +408,6 @@ final class AppState: ObservableObject {
         self.pendingDraftCount = pendingState.drafts.count
         self.offlineQueuedDispatch = pendingState.offlineQueuedDispatch
         self.draftsWaitingForNetwork = pendingState.waitingForNetwork
-        self.activityEvents = persistence.loadActivityEvents()
         self.mailEmail = settings.mailEmail
         self.mailHost = settings.mailHost
         self.mailPort = settings.mailPort
@@ -430,6 +429,7 @@ final class AppState: ObservableObject {
         self.isManagedSignedIn = managedLaunch.hasCredentials
 
         self.voiceProfile = persistence.loadVoiceProfile()
+        restoreReviewPersistenceState()
 
         cleanupLegacyOAuthCredentials()
         self.isAccountConnected = !settings.mailEmail.isEmpty && !activePassword.isEmpty

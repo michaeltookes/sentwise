@@ -13,7 +13,7 @@ public struct MailAddress: Codable, Equatable, Sendable {
 
 /// A message summary fetched from a mailbox. Envelope-level for now; the body is
 /// added in a later slice.
-public struct MailMessage: Equatable, Sendable, Identifiable {
+public struct MailMessage: Codable, Equatable, Sendable, Identifiable {
     /// The IMAP UID — stable within a mailbox.
     public var id: UInt32
     /// The mailbox UIDVALIDITY captured with this UID, when the server provides it.
@@ -57,7 +57,7 @@ public struct MailMessage: Equatable, Sendable, Identifiable {
 }
 
 /// A mailbox to fetch from.
-public enum Mailbox: Sendable, Equatable, Hashable {
+public enum Mailbox: Codable, Sendable, Equatable, Hashable {
     case inbox
     case sent
     case drafts
