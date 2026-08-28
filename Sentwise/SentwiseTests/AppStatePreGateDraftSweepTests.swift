@@ -286,20 +286,33 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
             fromEmail: "auto-confirm@amazon.com",
             generatedAt: preTransactionalGateDate
         )
-        let legacyTransactionalOverride = draft(
+        let unmarkedTransactional = draft(
             id: 4,
             fromEmail: "auto-confirm@amazon.com",
             generatedAt: preTransactionalGateDate,
             replyWorthinessOverride: nil
         )
+        let unmarkedNewBothAddressNoReply = draft(
+            id: 5,
+            fromEmail: "notifications@github.com",
+            replyToEmail: "reply+abc@reply.github.com",
+            generatedAt: preTransactionalGateDate,
+            replyWorthinessOverride: nil
+        )
         let (appState, _) = makeAppState(
-            seededDrafts: [legacyOverride, olderNoReply, transactional, legacyTransactionalOverride]
+            seededDrafts: [
+                legacyOverride,
+                olderNoReply,
+                transactional,
+                unmarkedTransactional,
+                unmarkedNewBothAddressNoReply
+            ]
         )
 
         appState.runPreGateDraftSweepIfNeeded()
 
-        XCTAssertEqual(Set(appState.pendingDrafts.map(\.id)), [1, 4])
-        XCTAssertEqual(Set(appState.skippedMessages.map(\.message.id)), [2, 3])
+        XCTAssertEqual(Set(appState.pendingDrafts.map(\.id)), [1])
+        XCTAssertEqual(Set(appState.skippedMessages.map(\.message.id)), [2, 3, 4, 5])
         XCTAssertTrue(appState.hasRunPreGateDraftSweep)
     }
 
