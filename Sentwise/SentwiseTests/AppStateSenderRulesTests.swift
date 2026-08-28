@@ -211,6 +211,35 @@ final class AppStateSenderRulesTests: XCTestCase {
         XCTAssertTrue(persistence.processedMessages.contains(skipped, account: "me@gmail.com", mailbox: .inbox))
     }
 
+    func testAllowlistDoesNotDraftWhenSkipRemovalFails() async {
+        let skipped = message(id: 1, from: "no-reply@x.com")
+        let (appState, provider, persistence) = makeAppState(fetch: .success([skipped]))
+        appState.watchStatus = .watching
+        await appState.pollInboxOnce()
+        XCTAssertEqual(appState.skippedMessages.map(\.reason), [.noReplySender])
+        XCTAssertEqual(provider.bodyFetchCallCount, 0)
+
+        XCTAssertTrue(appState.addAllowedSender("no-reply@x.com"))
+        persistence.skippedMessageSaveError = AppStatePersistenceError.writeDenied
+        await appState.pollInboxOnce()
+
+        XCTAssertTrue(appState.pendingDrafts.isEmpty)
+        XCTAssertEqual(appState.skippedMessages.map(\.message.id), [1])
+        XCTAssertEqual(persistence.skippedMessages.map(\.message.id), [1])
+        XCTAssertTrue(appState.hasSkippedMessage(skipped, account: "me@gmail.com", mailbox: .inbox))
+        XCTAssertFalse(persistence.processedMessages.contains(skipped, account: "me@gmail.com", mailbox: .inbox))
+        XCTAssertEqual(provider.bodyFetchCallCount, 0)
+
+        persistence.skippedMessageSaveError = nil
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertFalse(appState.hasSkippedMessage(skipped, account: "me@gmail.com", mailbox: .inbox))
+        XCTAssertTrue(persistence.processedMessages.contains(skipped, account: "me@gmail.com", mailbox: .inbox))
+        XCTAssertEqual(provider.bodyFetchCallCount, 1)
+    }
+
     func testRemovingBlockRuleReconsidersSkippedMessageOnNextPoll() async {
         let blocked = message(id: 1, from: "friend@spam.net")
         let (appState, _, persistence) = makeAppState(fetch: .success([blocked]))
@@ -226,6 +255,36 @@ final class AppStateSenderRulesTests: XCTestCase {
         XCTAssertTrue(appState.skippedMessages.isEmpty)
         XCTAssertFalse(appState.hasSkippedMessage(blocked, account: "me@gmail.com", mailbox: .inbox))
         XCTAssertTrue(persistence.processedMessages.contains(blocked, account: "me@gmail.com", mailbox: .inbox))
+    }
+
+    func testRemovingBlockRuleDoesNotDraftWhenSkipRemovalFails() async {
+        let blocked = message(id: 1, from: "friend@spam.net")
+        let (appState, provider, persistence) = makeAppState(fetch: .success([blocked]))
+        appState.senderBlocklist = [SenderRule(normalized: "spam.net")]
+        appState.watchStatus = .watching
+        await appState.pollInboxOnce()
+        XCTAssertEqual(appState.skippedMessages.map(\.reason), [.senderBlocklisted])
+        XCTAssertEqual(provider.bodyFetchCallCount, 0)
+
+        appState.removeBlockedSenders([SenderRule(normalized: "spam.net")])
+        persistence.skippedMessageSaveError = AppStatePersistenceError.writeDenied
+        await appState.pollInboxOnce()
+
+        XCTAssertTrue(appState.pendingDrafts.isEmpty)
+        XCTAssertEqual(appState.skippedMessages.map(\.message.id), [1])
+        XCTAssertEqual(persistence.skippedMessages.map(\.message.id), [1])
+        XCTAssertTrue(appState.hasSkippedMessage(blocked, account: "me@gmail.com", mailbox: .inbox))
+        XCTAssertFalse(persistence.processedMessages.contains(blocked, account: "me@gmail.com", mailbox: .inbox))
+        XCTAssertEqual(provider.bodyFetchCallCount, 0)
+
+        persistence.skippedMessageSaveError = nil
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertFalse(appState.hasSkippedMessage(blocked, account: "me@gmail.com", mailbox: .inbox))
+        XCTAssertTrue(persistence.processedMessages.contains(blocked, account: "me@gmail.com", mailbox: .inbox))
+        XCTAssertEqual(provider.bodyFetchCallCount, 1)
     }
 
     // MARK: - Mutations

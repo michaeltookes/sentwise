@@ -46,12 +46,17 @@ extension AppState {
             return false
         case .forceDraft:
             DiagnosticLog.verbose("Inbox watcher candidate forced through reply-worthiness gate")
-            removeSkippedMessage(message, account: credentials.email, mailbox: mailbox)
-            return true
+            return removeSkippedMessageForSenderRuleIfNeeded(message, credentials: credentials, mailbox: mailbox)
         case .noOpinion:
             if let skippedReason {
                 guard skippedReason == .senderBlocklisted else { return false }
-                removeSkippedMessage(message, account: credentials.email, mailbox: mailbox)
+                guard removeSkippedMessageForSenderRuleIfNeeded(
+                    message,
+                    credentials: credentials,
+                    mailbox: mailbox
+                ) else {
+                    return false
+                }
             }
             if let reason = await replyWorthinessSkipReason(message, credentials: credentials, mailbox: mailbox) {
                 DiagnosticLog.verbose(
@@ -64,6 +69,33 @@ extension AppState {
             }
             DiagnosticLog.verbose("Inbox watcher candidate passed reply-worthiness gate")
             return true
+        }
+    }
+
+    private func removeSkippedMessageForSenderRuleIfNeeded(
+        _ message: MailMessage,
+        credentials: MailAccountCredentials,
+        mailbox: Mailbox
+    ) -> Bool {
+        guard skippedMessageReason(message, account: credentials.email, mailbox: mailbox) != nil else {
+            return true
+        }
+        guard watchStatus == .watching, mailCredentials == credentials else { return false }
+
+        let entry = SkippedMessage(
+            message: message,
+            mailbox: mailbox,
+            account: credentials.email,
+            reason: .noReplySender
+        )
+        do {
+            try removeSkippedMessageSync(entry)
+            return true
+        } catch {
+            decisionLogger.error(
+                "Failed to persist skipped-message removal before sender-rule drafting: \(error.localizedDescription)"
+            )
+            return false
         }
     }
 
