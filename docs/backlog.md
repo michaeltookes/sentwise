@@ -120,13 +120,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Prowl: rows and the expand/collapse control get AX identifiers; the expand toggle is a read-only view toggle (like `reviewDraftsTab`, item 69) and is **not** forbidden — document in `.prowl/README.md`; no collision with existing forbidden selectors.
     - Sets up **item 76** (search & filter): the list is the surface a filter field sits on. Consider applying the same list treatment to the Skipped tab for consistency (optional in v1).
 
-81. **One-click "Open Review Drafts" from the Follow-up composer**
-    After a follow-up is drafted, the composer shows "✓ Follow-up drafted. Open Review Drafts to approve it." but "Open Review Drafts" is static text — the user must go up to the menu bar to actually get there. Make it a button.
-    *As Marcus, I want to jump straight from the composer to Review Drafts after drafting, so that approving my follow-up isn't extra menu-bar clicks.*
-    - When a follow-up is drafted (the success confirmation shows), display an **"Open Review Drafts"** button beside/under the confirmation that opens the Review Drafts window via the existing `appState.openReviewHandler?()` (already wired by `MenuBarController`), bringing the window to front.
-    - No change to the drafting flow itself; the button appears only after a successful draft.
-    - Prowl: the button gets an AX identifier; opening the review window is the already-allowed read-only `openReviewWindow` action, so no guardrail change is needed (document if a new id warrants a note).
-
 76. **Search & filter the Review Drafts list**
     Let the user find a specific draft (or skipped message) without scrolling the whole list.
     *As Priya, I want to search and filter the Drafts and Skipped lists, so that I can find the message I'm looking for without scrolling past dozens of entries.*
