@@ -316,6 +316,24 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
         XCTAssertNotEqual(persistence.savedSettingsHistory.last?.hasRunPreGateDraftSweep, true)
     }
 
+    func testSweepDraftRemovalFailureRollsBackNonVisibleAccountSkip() throws {
+        let noReply = draft(
+            id: 1,
+            fromEmail: "no-reply@example.com",
+            sourceAccountEmail: "other@example.com"
+        )
+        let (appState, persistence) = makeAppState(seededDrafts: [noReply])
+        persistence.pendingDraftSaveError = AppStatePersistenceError.writeDenied
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertTrue(persistence.skippedMessages.isEmpty)
+        XCTAssertFalse(appState.hasRunPreGateDraftSweep)
+        XCTAssertNotEqual(persistence.savedSettingsHistory.last?.hasRunPreGateDraftSweep, true)
+    }
+
     func testSweepIsIdempotentWithinASession() throws {
         let amazon = draft(id: 1, fromEmail: "auto-confirm@amazon.com")
         let human = draft(id: 2, fromEmail: "jane@company.com")

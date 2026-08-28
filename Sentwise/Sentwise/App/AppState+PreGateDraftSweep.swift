@@ -181,7 +181,7 @@ extension AppState {
     }
 
     private func removeSkippedMessageIfNeeded(_ entry: SkippedMessage) {
-        guard skippedMessages.contains(where: { $0.id == entry.id }) else { return }
+        guard persistence.loadSkippedMessages().contains(where: { $0.id == entry.id }) else { return }
         do {
             try removeSkippedMessageSync(entry)
         } catch {
