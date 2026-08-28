@@ -120,8 +120,16 @@ extension AppState {
             guard isPreGateSweepCandidate(draft) else { continue }
             guard senderRuleDecision(for: message) != .forceDraft else { continue }
 
+            let skippedEntry: SkippedMessage
             do {
-                try recordSkipSync(message, reason: reason, account: account, mailbox: mailbox)
+                skippedEntry = try recordSkipSync(
+                    message,
+                    reason: reason,
+                    account: account,
+                    mailbox: mailbox,
+                    preservesRecoveryWhenProcessed: true,
+                    recordActivity: false
+                )
             } catch {
                 completed = false
                 logger.error("Pre-gate sweep failed to persist a recoverable skipped entry: \(error.localizedDescription)")
@@ -130,11 +138,12 @@ extension AppState {
 
             do {
                 try removePendingDraft(draft, removeNotification: true)
+                recordSkipActivity(for: skippedEntry)
                 sweptCount += 1
             } catch {
                 completed = false
                 logger.error("Pre-gate sweep failed to remove a swept draft: \(error.localizedDescription)")
-                removeSkippedMessageIfNeeded(message, account: account, mailbox: mailbox)
+                removeSkippedMessageIfNeeded(skippedEntry)
             }
         }
 
@@ -167,8 +176,7 @@ extension AppState {
         return true
     }
 
-    private func removeSkippedMessageIfNeeded(_ message: MailMessage, account: String, mailbox: Mailbox) {
-        let entry = SkippedMessage(message: message, mailbox: mailbox, account: account, reason: .noReplySender)
+    private func removeSkippedMessageIfNeeded(_ entry: SkippedMessage) {
         guard skippedMessages.contains(where: { $0.id == entry.id }) else { return }
         do {
             try removeSkippedMessageSync(entry)

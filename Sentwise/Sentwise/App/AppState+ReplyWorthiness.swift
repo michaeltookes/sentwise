@@ -85,17 +85,25 @@ extension AppState {
         _ message: MailMessage,
         reason: ReplyWorthinessReason,
         account: String,
-        mailbox: Mailbox
+        mailbox: Mailbox,
+        preservesRecoveryWhenProcessed: Bool = false,
+        recordActivity: Bool = true
     ) throws -> SkippedMessage {
-        let entry = skippedEntry(message, reason: reason, account: account, mailbox: mailbox)
-        try recordSkipSync(entry)
+        let entry = skippedEntry(
+            message,
+            reason: reason,
+            account: account,
+            mailbox: mailbox,
+            preservesRecoveryWhenProcessed: preservesRecoveryWhenProcessed
+        )
+        try recordSkipSync(entry, recordActivity: recordActivity)
         return entry
     }
 
-    private func recordSkipSync(_ entry: SkippedMessage) throws {
+    private func recordSkipSync(_ entry: SkippedMessage, recordActivity: Bool = true) throws {
         let visibleMessages = visibleSkippedMessages(recording: entry)
         try persistence.saveSkippedMessagesSync(visibleMessages)
-        recordSkipInMemory(entry, visibleMessages: visibleMessages)
+        recordSkipInMemory(entry, visibleMessages: visibleMessages, recordActivity: recordActivity)
     }
 
     /// Removes a single entry from the skip log.
@@ -195,14 +203,22 @@ extension AppState {
         _ message: MailMessage,
         reason: ReplyWorthinessReason,
         account: String,
-        mailbox: Mailbox
+        mailbox: Mailbox,
+        preservesRecoveryWhenProcessed: Bool = false
     ) -> SkippedMessage {
-        SkippedMessage(message: message, mailbox: mailbox, account: account, reason: reason)
+        SkippedMessage(
+            message: message,
+            mailbox: mailbox,
+            account: account,
+            reason: reason,
+            preservesRecoveryWhenProcessed: preservesRecoveryWhenProcessed
+        )
     }
 
     private func recordSkipInMemory(
         _ entry: SkippedMessage,
-        visibleMessages: [SkippedMessage]? = nil
+        visibleMessages: [SkippedMessage]? = nil,
+        recordActivity: Bool = true
     ) {
         skippedMessageIDs.insert(entry.id)
         skippedMessageReasonsByID[entry.id] = entry.reason
@@ -210,7 +226,9 @@ extension AppState {
         // The visible skip entry carries the full message for "Draft anyway".
         // When the skipped-message write succeeds, that same recovery entry is
         // available after restart; activity history records metadata only.
-        recordSkipActivity(for: entry)
+        if recordActivity {
+            recordSkipActivity(for: entry)
+        }
         logger.info("Recorded skipped message (\(entry.reason.rawValue, privacy: .public)); \(self.skippedMessages.count) visible entries")
     }
 

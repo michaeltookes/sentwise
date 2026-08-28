@@ -19,19 +19,54 @@ struct SkippedMessage: Codable, Identifiable, Equatable {
     let reason: ReplyWorthinessReason
     /// When the skip was recorded.
     let skippedAt: Date
+    /// True for entries promoted from already-processed pending drafts; the
+    /// processed marker is not an explicit user dismissal for these skips.
+    let preservesRecoveryWhenProcessed: Bool
 
     init(
         message: MailMessage,
         mailbox: Mailbox,
         account: String,
         reason: ReplyWorthinessReason,
-        skippedAt: Date = Date()
+        skippedAt: Date = Date(),
+        preservesRecoveryWhenProcessed: Bool = false
     ) {
         self.message = message
         self.mailbox = mailbox
         self.account = account
         self.reason = reason
         self.skippedAt = skippedAt
+        self.preservesRecoveryWhenProcessed = preservesRecoveryWhenProcessed
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case message
+        case mailbox
+        case account
+        case reason
+        case skippedAt
+        case preservesRecoveryWhenProcessed
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        message = try container.decode(MailMessage.self, forKey: .message)
+        mailbox = try container.decode(Mailbox.self, forKey: .mailbox)
+        account = try container.decode(String.self, forKey: .account)
+        reason = try container.decode(ReplyWorthinessReason.self, forKey: .reason)
+        skippedAt = try container.decode(Date.self, forKey: .skippedAt)
+        preservesRecoveryWhenProcessed =
+            try container.decodeIfPresent(Bool.self, forKey: .preservesRecoveryWhenProcessed) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(message, forKey: .message)
+        try container.encode(mailbox, forKey: .mailbox)
+        try container.encode(account, forKey: .account)
+        try container.encode(reason, forKey: .reason)
+        try container.encode(skippedAt, forKey: .skippedAt)
+        try container.encode(preservesRecoveryWhenProcessed, forKey: .preservesRecoveryWhenProcessed)
     }
 
     /// A stable identity for de-duping and list rendering: account + mailbox +

@@ -199,16 +199,19 @@ extension AppState {
         return (pendingDrafts, offlineQueuedDispatch, Set(offlineQueuedDispatch.keys))
     }
 
-    /// Restores the visible skip log and drops entries that were already
-    /// dismissed into the durable processed-message set.
+    /// Restores the visible skip log and drops entries that were already dismissed
+    /// into the durable processed-message set. Sweep-created skips are retained
+    /// because their source messages were processed before the pending drafts were
+    /// later promoted to recoverable skipped entries.
     static func restoredSkippedMessages(
         persistence: PersistenceProvider,
         processedMessages: ProcessedMessages,
         limit: Int
     ) -> [SkippedMessage] {
         let loadedMessages = persistence.loadSkippedMessages()
-        let activeMessages = loadedMessages.filter {
-            !processedMessages.contains($0.message, account: $0.account, mailbox: $0.mailbox)
+        let activeMessages = loadedMessages.filter { entry in
+            entry.preservesRecoveryWhenProcessed
+                || !processedMessages.contains(entry.message, account: entry.account, mailbox: entry.mailbox)
         }
         let boundedMessages = Array(activeMessages.prefix(limit))
         if boundedMessages.count != loadedMessages.count {

@@ -62,7 +62,8 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
 
     private func makeAppState(
         seededDrafts: [Draft],
-        hasRunPreGateDraftSweep: Bool = false
+        hasRunPreGateDraftSweep: Bool = false,
+        processedMessages: ProcessedMessages = ProcessedMessages()
     ) -> (AppState, AppStateMemoryPersistence) {
         let secrets = InMemorySecretStore()
         let persistence = AppStateMemoryPersistence(
@@ -72,10 +73,23 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
                 mailEmail: account,
                 hasRunPreGateDraftSweep: hasRunPreGateDraftSweep
             ),
+            processedMessages: processedMessages,
             pendingDrafts: seededDrafts
         )
         let appState = AppState(persistence: persistence, secrets: secrets)
         return (appState, persistence)
+    }
+
+    private func sourceMessage(for draft: Draft) -> MailMessage {
+        MailMessage(
+            id: draft.id,
+            uidValidity: draft.sourceUIDValidity,
+            from: draft.sourceFrom,
+            replyTo: draft.sourceReplyTo,
+            subject: draft.sourceSubject,
+            date: "",
+            messageID: draft.sourceMessageID
+        )
     }
 
     // MARK: - Sweep behaviour
@@ -118,16 +132,20 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
         XCTAssertEqual(persistedFlag, true)
         // The pending queue was persisted for each swept draft.
         XCTAssertEqual(persistence.pendingDrafts.count, 3)
+        XCTAssertEqual(appState.activityEvents.filter { $0.kind == .skipped }.count, 2)
     }
 
     func testSweptSkipEntrySurvivesRelaunch() throws {
         let noReply = draft(id: 1, fromEmail: "no-reply@example.com")
-        let (appState, persistence) = makeAppState(seededDrafts: [noReply])
+        var processed = ProcessedMessages()
+        processed.insert(sourceMessage(for: noReply), account: account, mailbox: .inbox)
+        let (appState, persistence) = makeAppState(seededDrafts: [noReply], processedMessages: processed)
 
         appState.runPreGateDraftSweepIfNeeded()
 
         XCTAssertTrue(appState.pendingDrafts.isEmpty)
         XCTAssertEqual(persistence.skippedMessages.map(\.message.id), [1])
+        XCTAssertEqual(persistence.skippedMessages.first?.preservesRecoveryWhenProcessed, true)
 
         let relaunched = AppState(
             persistence: persistence,
@@ -230,6 +248,8 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
         XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
         XCTAssertTrue(appState.skippedMessages.isEmpty)
         XCTAssertTrue(persistence.skippedMessages.isEmpty)
+        XCTAssertFalse(appState.activityEvents.contains { $0.kind == .skipped })
+        XCTAssertTrue(persistence.activityEvents.isEmpty)
         XCTAssertFalse(appState.hasRunPreGateDraftSweep)
         XCTAssertNotEqual(persistence.savedSettingsHistory.last?.hasRunPreGateDraftSweep, true)
     }

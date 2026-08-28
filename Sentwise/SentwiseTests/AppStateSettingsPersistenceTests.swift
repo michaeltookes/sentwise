@@ -1,3 +1,4 @@
+import SentwiseMail
 import XCTest
 @testable import Sentwise
 
@@ -63,6 +64,38 @@ final class AppStateSettingsPersistenceTests: XCTestCase {
         XCTAssertEqual(persistence.loadSettings().signatureText, "")
     }
 
+    func testRestoredSkippedMessagesKeepSweepRecoveryDespiteProcessedSource() {
+        let message = skippedSourceMessage()
+        let regularSkip = SkippedMessage(message: message, mailbox: .inbox, account: "me@gmail.com", reason: .noReplySender)
+        let sweptSkip = SkippedMessage(
+            message: MailMessage(
+                id: 2,
+                uidValidity: 7,
+                from: MailAddress(email: "auto-confirm@amazon.com"),
+                subject: "Order",
+                date: "",
+                messageID: "<2@example.com>"
+            ),
+            mailbox: .inbox,
+            account: "me@gmail.com",
+            reason: .automatedNotification,
+            preservesRecoveryWhenProcessed: true
+        )
+        var processed = ProcessedMessages()
+        processed.insert(message, account: "me@gmail.com", mailbox: .inbox)
+        processed.insert(sweptSkip.message, account: "me@gmail.com", mailbox: .inbox)
+        let persistence = AppStateMemoryPersistence(skippedMessages: [regularSkip, sweptSkip])
+
+        let restored = AppState.restoredSkippedMessages(
+            persistence: persistence,
+            processedMessages: processed,
+            limit: 10
+        )
+
+        XCTAssertEqual(restored, [sweptSkip])
+        XCTAssertEqual(persistence.skippedMessages, [sweptSkip])
+    }
+
     private func makeAppState(
         persistence: AppStateMemoryPersistence,
         secrets: SecretStore = InMemorySecretStore()
@@ -81,5 +114,16 @@ final class AppStateSettingsPersistenceTests: XCTestCase {
         appState.mailPort = 993
         appState.mailAppPassword = password
         await appState.testConnection()
+    }
+
+    private func skippedSourceMessage() -> MailMessage {
+        MailMessage(
+            id: 1,
+            uidValidity: 7,
+            from: MailAddress(email: "no-reply@example.com"),
+            subject: "Receipt",
+            date: "",
+            messageID: "<1@example.com>"
+        )
     }
 }
