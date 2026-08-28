@@ -52,12 +52,16 @@ them in review before approving.
 ## Recipients and approval
 
 A follow-up is an *authored* draft: it has no incoming message to reply to, so
-it does not thread, and its recipients come from you. In the review window the
-follow-up card shows an editable **To** field in place of the incoming-message
-column. Edit the recipients there; the draft can't be approved until it has at
-least one. Approving then sends or saves it exactly like any other draft,
-honoring your **On approve** setting (save as draft or send immediately) and the
-auto-send undo window.
+it does not thread, and its recipients come from you. The Drafts tab is a
+collapsible list: each draft is a compact row (sender, subject, and a status
+chip), and clicking one expands its full detail inline while collapsing any other
+open row — so the list scrolls smoothly and you read one draft at a time. A
+follow-up that still needs recipients shows an **Add recipients** chip on its
+row; expand it and the follow-up detail shows an editable **To** field in place
+of the incoming-message column. Edit the recipients there; the draft can't be
+approved until it has at least one. Approving then sends or saves it exactly like
+any other draft, honoring your **On approve** setting (save as draft or send
+immediately) and the auto-send undo window.
 
 ## Long calls
 

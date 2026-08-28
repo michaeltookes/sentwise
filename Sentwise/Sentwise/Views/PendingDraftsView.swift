@@ -74,16 +74,32 @@ struct PendingDraftsView: View {
         .background(Color.orange.opacity(0.1))
     }
 
+    /// The Drafts tab (item 82): a scrollable list of compact rows. Collapsed rows
+    /// carry no inner scroll region, so the outer `ScrollView` is the only scroll
+    /// surface and scrolls from anywhere in the list. Clicking a row expands the
+    /// full `PendingDraftCard` detail inline; only one row is expanded at a time
+    /// (`ReviewWindowSelection.expandedDraftIdentity`). The single expanded card
+    /// still contains inner scroll (incoming body / reply editor) — acceptable,
+    /// because there is only ever one and it is what the user is reading.
     @ViewBuilder
     private var draftsTab: some View {
         if appState.pendingDrafts.isEmpty {
             emptyState
         } else {
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 8) {
                     ForEach(appState.pendingDrafts, id: \.identity) { draft in
-                        PendingDraftCard(draft: draft)
-                            .environmentObject(appState)
+                        let isExpanded = selection.expandedDraftIdentity == draft.identity
+                        VStack(spacing: 0) {
+                            PendingDraftRow(draft: draft, isExpanded: isExpanded) {
+                                selection.toggleExpanded(draft.identity)
+                            }
+                            if isExpanded {
+                                PendingDraftCard(draft: draft)
+                                    .environmentObject(appState)
+                                    .padding(.top, 4)
+                            }
+                        }
                     }
                 }
                 .padding(12)
@@ -172,6 +188,12 @@ struct PendingDraftsView: View {
 final class ReviewWindowSelection: ObservableObject {
     @Published var selectedTab: PendingDraftsView.ReviewTab
 
+    /// The identity of the single pending draft whose detail is expanded inline in
+    /// the Drafts tab (item 82). `nil` means every row is collapsed. Because it is
+    /// a single value, at most one row can be open at a time — the accordion
+    /// behaviour is automatic.
+    @Published var expandedDraftIdentity: String?
+
     init(selectedTab: PendingDraftsView.ReviewTab = .drafts) {
         self.selectedTab = selectedTab
     }
@@ -179,5 +201,12 @@ final class ReviewWindowSelection: ObservableObject {
     func selectDraftsAfterSuccessfulOverride(_ didCreateDraft: Bool) {
         guard didCreateDraft else { return }
         selectedTab = .drafts
+    }
+
+    /// Toggles the expanded state of one draft row (item 82). Expanding a row
+    /// collapses any previously expanded one (single-value accordion); toggling
+    /// the already-expanded row collapses it.
+    func toggleExpanded(_ identity: String) {
+        expandedDraftIdentity = (expandedDraftIdentity == identity) ? nil : identity
     }
 }
