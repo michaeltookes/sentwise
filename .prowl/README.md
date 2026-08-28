@@ -176,7 +176,18 @@ forbids (`Approve`, `Deny`, `Discard`, `Draft anyway`, `Clear`, `Dismiss`, …).
 |---|---|---|
 | `id=reviewDraftsTab` | "Drafts (N)" tab of the review window | yes (read-only switch) |
 | `id=reviewSkippedTab` | "Skipped (N)" tab of the review window | yes (read-only switch) |
+| `id=pendingDraftRow` | A collapsed draft row in the Drafts list (item 82); clicking it expands/collapses that draft's detail inline | yes (read-only accordion toggle) |
 | `id=openReviewDraftsFromComposer` | "Open Review Drafts" button shown in the Follow-up composer after a draft (item 81) | yes (read-only; same `openReviewWindow` action) |
+
+The Drafts list is now a collapsible list (item 82): each draft is a compact
+`pendingDraftRow` that expands to the full detail card on click, one at a time.
+Expanding/collapsing is a **read-only view toggle** — exactly like
+`reviewDraftsTab` — so `pendingDraftRow` is intentionally **not** in
+`forbiddenSelectors`, and it collides with no forbidden substring (bare `Draft`
+is not forbidden). The dangerous per-draft actions (`Approve` / `Deny` /
+`Discard` / `Regenerate` / auto-send `Cancel` …) live inside the expanded detail
+card and keep their existing forbids, so a hunt can open a row to assert the
+detail appears but can never reach an action.
 
 The composer's `openReviewDraftsFromComposer` button (item 81) only invokes the
 already-allowed `openReviewWindow` action to front the Review Drafts window — no
