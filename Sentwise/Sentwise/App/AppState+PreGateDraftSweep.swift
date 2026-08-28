@@ -117,7 +117,7 @@ extension AppState {
                 replyToEmail: draft.sourceReplyTo?.email
             )
             guard let reason = ReplyWorthiness.evaluate(signals).skipReason else { continue }
-            guard isPreGateSweepCandidate(draft, skipReason: reason) else { continue }
+            guard isPreGateSweepCandidate(draft) else { continue }
             guard senderRuleDecision(for: message) != .forceDraft else { continue }
 
             do {
@@ -146,10 +146,10 @@ extension AppState {
     /// (item 51), a draft they edited (item 19), a draft with a queued offline
     /// dispatch (item 27), or one flagged as needing their input (item 13) — is
     /// never touched.
-    private func isPreGateSweepCandidate(_ draft: Draft, skipReason: ReplyWorthinessReason) -> Bool {
+    private func isPreGateSweepCandidate(_ draft: Draft) -> Bool {
         if draft.generatedAt >= preGateDraftSweepCutoff { return false }
         if draft.replyWorthinessOverride == true { return false }
-        if isPotentialLegacyReplyWorthinessOverride(draft, skipReason: skipReason) { return false }
+        if isPotentialLegacyReplyWorthinessOverride(draft) { return false }
         if draft.isAuthored { return false }
         if draft.wasEdited { return false }
         if draft.offlineQueuedDispatch != nil { return false }
@@ -157,18 +157,14 @@ extension AppState {
         return true
     }
 
-    private func isPotentialLegacyReplyWorthinessOverride(
-        _ draft: Draft,
-        skipReason: ReplyWorthinessReason
-    ) -> Bool {
+    private func isPotentialLegacyReplyWorthinessOverride(_ draft: Draft) -> Bool {
         guard draft.replyWorthinessOverride == nil,
               draft.generatedAt >= legacyReplyWorthinessOverrideCutoff else { return false }
         // Builds between item 17 and this PR had a visible "Draft anyway"
-        // override but no persisted provenance bit. A no-reply draft created in
-        // that window could only have entered the queue by user request, so keep
-        // it. Transactional sender heuristics are the newer item-66 signal this
-        // sweep exists to apply to old drafts.
-        return skipReason == .noReplySender
+        // override but no persisted provenance bit. Keep those ambiguous drafts;
+        // current builds persist explicit `false` for ordinary watcher drafts, so
+        // known non-overrides still sweep.
+        return true
     }
 
     private func removeSkippedMessageIfNeeded(_ message: MailMessage, account: String, mailbox: Mailbox) {

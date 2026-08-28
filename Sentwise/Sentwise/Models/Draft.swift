@@ -108,8 +108,9 @@ struct Draft: Codable, Identifiable, Equatable {
     /// Set only when the model used the dedicated not-reply-worthy protocol.
     /// Watcher code uses this explicit marker to skip automated/reply-less mail.
     var notReplyWorthy: DraftNotReplyWorthy?
-    /// Set when this draft came from the skip log's user-requested "Draft
-    /// anyway" override. Optional so existing persisted drafts decode cleanly.
+    /// Whether this draft came from the skip log's user-requested "Draft
+    /// anyway" override. Optional so existing persisted drafts decode cleanly;
+    /// `nil` means an old draft has no migration-safe provenance.
     var replyWorthinessOverride: Bool?
     /// An approved dispatch that could not run because the network was offline.
     /// Once dispatch starts, the intent is marked terminal so relaunch cannot
@@ -204,7 +205,7 @@ struct Draft: Codable, Identifiable, Equatable {
         self.generatedAt = generatedAt
         self.needsInfo = needsInfo
         self.notReplyWorthy = notReplyWorthy
-        self.replyWorthinessOverride = replyWorthinessOverride ? true : nil
+        self.replyWorthinessOverride = replyWorthinessOverride
         self.offlineQueuedDispatch = offlineQueuedDispatch
         self.authoredRecipients = authoredRecipients
     }

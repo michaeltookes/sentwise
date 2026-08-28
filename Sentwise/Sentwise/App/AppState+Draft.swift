@@ -93,7 +93,7 @@ extension AppState {
             requireWatching: requireWatching,
             credentials: capturedCredentials
         ) else { return false }
-        draft.replyWorthinessOverride = replyWorthinessOverride ? true : nil
+        draft.replyWorthinessOverride = replyWorthinessOverride
         try enqueuePendingDraft(draft)
         return true
     }

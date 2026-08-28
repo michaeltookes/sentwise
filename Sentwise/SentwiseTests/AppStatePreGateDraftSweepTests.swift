@@ -35,9 +35,9 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
         needsInfo: DraftNeedsInfo? = nil,
         offlineQueuedDispatch: OfflineQueuedDraftDispatch? = nil,
         authoredRecipients: [MailAddress]? = nil,
-        replyWorthinessOverride: Bool = false
+        replyWorthinessOverride: Bool? = false
     ) -> Draft {
-        Draft(
+        var draft = Draft(
             id: id,
             sourceUIDValidity: 7,
             sourceAccountEmail: account,
@@ -54,8 +54,10 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
             needsInfo: needsInfo,
             offlineQueuedDispatch: offlineQueuedDispatch,
             authoredRecipients: authoredRecipients,
-            replyWorthinessOverride: replyWorthinessOverride
+            replyWorthinessOverride: replyWorthinessOverride == true
         )
+        draft.replyWorthinessOverride = replyWorthinessOverride
+        return draft
     }
 
     private func makeAppState(
@@ -169,27 +171,37 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
         XCTAssertTrue(appState.hasRunPreGateDraftSweep)
     }
 
-    func testSweepPreservesPotentialLegacyNoReplyOverrideDrafts() throws {
+    func testSweepPreservesPotentialLegacyOverrideDrafts() throws {
         let legacyOverride = draft(
             id: 1,
             fromEmail: "no-reply@example.com",
-            generatedAt: originalReplyWorthinessGateDate
+            generatedAt: originalReplyWorthinessGateDate,
+            replyWorthinessOverride: nil
         )
         let olderNoReply = draft(
             id: 2,
             fromEmail: "no-reply@example.com",
-            generatedAt: dayBeforeOriginalReplyWorthinessGateDate
+            generatedAt: dayBeforeOriginalReplyWorthinessGateDate,
+            replyWorthinessOverride: nil
         )
         let transactional = draft(
             id: 3,
             fromEmail: "auto-confirm@amazon.com",
             generatedAt: preTransactionalGateDate
         )
-        let (appState, _) = makeAppState(seededDrafts: [legacyOverride, olderNoReply, transactional])
+        let legacyTransactionalOverride = draft(
+            id: 4,
+            fromEmail: "auto-confirm@amazon.com",
+            generatedAt: preTransactionalGateDate,
+            replyWorthinessOverride: nil
+        )
+        let (appState, _) = makeAppState(
+            seededDrafts: [legacyOverride, olderNoReply, transactional, legacyTransactionalOverride]
+        )
 
         appState.runPreGateDraftSweepIfNeeded()
 
-        XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
+        XCTAssertEqual(Set(appState.pendingDrafts.map(\.id)), [1, 4])
         XCTAssertEqual(Set(appState.skippedMessages.map(\.message.id)), [2, 3])
         XCTAssertTrue(appState.hasRunPreGateDraftSweep)
     }
