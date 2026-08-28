@@ -111,6 +111,22 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 ## Medium Priority
 
+82. **Review Drafts as a collapsible list (fix scroll-capture; row → expandable detail)**
+    The Drafts tab stacks full draft cards, each nesting an incoming-message `ScrollView` and a reply `TextEditor`; those inner regions capture the scroll wheel, so the outer list only scrolls when the cursor is over the thin strip between them ("you have to be in the middle to scroll"). Replace the stack with a clean scrollable list (like the Browse Mailbox window); clicking a row expands the existing detail card inline, collapsible back.
+    *As Priya, I want to scroll my drafts smoothly and expand just the one I want to read, so that reviewing drafts isn't a fight with nested scroll areas.*
+    - The Drafts tab renders as a scrollable **list of rows** (sender, MIME-decoded subject per item 69, and a status chip: Ready / Needs info / Add recipients). The list is the primary scroll surface and scrolls from anywhere in it.
+    - Clicking a row **expands it inline** to the existing detail (incoming ↔ proposed reply, inline recipient edit, body edit, Deny/Approve); clicking again or a chevron **collapses** it. Default: **one row expanded at a time** (accordion).
+    - All current behaviors preserved: approve/deny, inline recipient edit (item 51), body edit (item 19), needs-info flag (item 13), stale-thread warning (item 12), notifications-off banner (item 78), auto-send undo (item 23). The expanded reply editor's own scroll stays contained.
+    - Prowl: rows and the expand/collapse control get AX identifiers; the expand toggle is a read-only view toggle (like `reviewDraftsTab`, item 69) and is **not** forbidden — document in `.prowl/README.md`; no collision with existing forbidden selectors.
+    - Sets up **item 76** (search & filter): the list is the surface a filter field sits on. Consider applying the same list treatment to the Skipped tab for consistency (optional in v1).
+
+81. **One-click "Open Review Drafts" from the Follow-up composer**
+    After a follow-up is drafted, the composer shows "✓ Follow-up drafted. Open Review Drafts to approve it." but "Open Review Drafts" is static text — the user must go up to the menu bar to actually get there. Make it a button.
+    *As Marcus, I want to jump straight from the composer to Review Drafts after drafting, so that approving my follow-up isn't extra menu-bar clicks.*
+    - When a follow-up is drafted (the success confirmation shows), display an **"Open Review Drafts"** button beside/under the confirmation that opens the Review Drafts window via the existing `appState.openReviewHandler?()` (already wired by `MenuBarController`), bringing the window to front.
+    - No change to the drafting flow itself; the button appears only after a successful draft.
+    - Prowl: the button gets an AX identifier; opening the review window is the already-allowed read-only `openReviewWindow` action, so no guardrail change is needed (document if a new id warrants a note).
+
 76. **Search & filter the Review Drafts list**
     Let the user find a specific draft (or skipped message) without scrolling the whole list.
     *As Priya, I want to search and filter the Drafts and Skipped lists, so that I can find the message I'm looking for without scrolling past dozens of entries.*
