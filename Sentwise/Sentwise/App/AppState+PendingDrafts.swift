@@ -193,8 +193,7 @@ extension AppState {
                 approvalError = "The draft could not be regenerated because account settings changed."
                 return
             }
-            replacement.generatedAt = draft.generatedAt
-            replacement.regeneratedAt = Date()
+            preserveRegenerationProvenance(from: draft, on: &replacement)
             let replacementWarning = await threadStalenessVerdict(
                 for: replacement,
                 credentials: credentials
@@ -234,8 +233,7 @@ extension AppState {
             throw DraftDispatchError.accountChanged
         }
         _ = try draftDispatchCredentialsStillCurrent(credentials, for: draft)
-        replacement.generatedAt = draft.generatedAt
-        replacement.regeneratedAt = Date()
+        preserveRegenerationProvenance(from: draft, on: &replacement)
         generatedDraft = replacement
         return replacement
     }

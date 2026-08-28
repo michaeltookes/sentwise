@@ -360,17 +360,68 @@ extension AppState {
         let account = account.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let mailbox = entry.mailbox.imapName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return pendingDrafts.contains { draft in
-            guard draft.replyWorthinessOverride == true,
-                  draft.sourceAccountEmail?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == account,
-                  draft.sourceMailbox?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == mailbox else {
+            guard draft.replyWorthinessOverride == true else {
                 return false
             }
-            let matchesMessageID = draft.sourceMessageID.map { sourceMessageID in
-                guard let messageID = entry.message.messageID else { return false }
-                return !sourceMessageID.isEmpty && sourceMessageID == messageID
-            } ?? false
-            let matchesUID = draft.sourceUIDValidity == entry.message.uidValidity && draft.id == entry.message.id
-            return matchesMessageID || matchesUID
+            if let source = draft.replyWorthinessOverrideSource {
+                return Self.matchesReplyWorthinessOverrideSource(
+                    source,
+                    entry: entry,
+                    account: account,
+                    mailbox: mailbox
+                )
+            }
+            return Self.matchesDraftSource(draft, entry: entry, account: account, mailbox: mailbox)
         }
+    }
+
+    private static func matchesReplyWorthinessOverrideSource(
+        _ source: DraftReplyWorthinessOverrideSource,
+        entry: SkippedMessage,
+        account: String,
+        mailbox: String
+    ) -> Bool {
+        guard source.account.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == account,
+              source.mailbox.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == mailbox else {
+            return false
+        }
+        return matchesMessageIdentity(
+            id: source.id,
+            uidValidity: source.uidValidity,
+            messageID: source.messageID,
+            entry: entry
+        )
+    }
+
+    private static func matchesDraftSource(
+        _ draft: Draft,
+        entry: SkippedMessage,
+        account: String,
+        mailbox: String
+    ) -> Bool {
+        guard draft.sourceAccountEmail?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == account,
+              draft.sourceMailbox?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == mailbox else {
+            return false
+        }
+        return matchesMessageIdentity(
+            id: draft.id,
+            uidValidity: draft.sourceUIDValidity,
+            messageID: draft.sourceMessageID,
+            entry: entry
+        )
+    }
+
+    private static func matchesMessageIdentity(
+        id: UInt32,
+        uidValidity: UInt32?,
+        messageID: String?,
+        entry: SkippedMessage
+    ) -> Bool {
+        let matchesMessageID = messageID.map { sourceMessageID in
+            guard let entryMessageID = entry.message.messageID else { return false }
+            return !sourceMessageID.isEmpty && sourceMessageID == entryMessageID
+        } ?? false
+        let matchesUID = uidValidity == entry.message.uidValidity && id == entry.message.id
+        return matchesMessageID || matchesUID
     }
 }

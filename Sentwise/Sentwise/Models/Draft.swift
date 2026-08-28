@@ -24,6 +24,35 @@ struct DraftNotReplyWorthy: Codable, Equatable {
     var summary: String
 }
 
+/// Original skip-log identity for a user-requested "Draft anyway" override.
+/// Regenerated drafts may reply to a newer thread message, so this preserves the
+/// recovery entry they came from for retry/deduplication.
+struct DraftReplyWorthinessOverrideSource: Codable, Equatable {
+    var account: String
+    var mailbox: String
+    var id: UInt32
+    var uidValidity: UInt32?
+    var messageID: String?
+
+    init(account: String, mailbox: String, id: UInt32, uidValidity: UInt32?, messageID: String?) {
+        self.account = account
+        self.mailbox = mailbox
+        self.id = id
+        self.uidValidity = uidValidity
+        self.messageID = messageID
+    }
+
+    init(account: String, mailbox: Mailbox, message: MailMessage) {
+        self.init(
+            account: account,
+            mailbox: mailbox.imapName,
+            id: message.id,
+            uidValidity: message.uidValidity,
+            messageID: message.messageID
+        )
+    }
+}
+
 /// A user's already-approved dispatch. Stored on the pending draft so offline
 /// approvals survive relaunch with the exact approval mode the user chose.
 struct OfflineQueuedDraftDispatch: Codable, Equatable {
@@ -115,6 +144,8 @@ struct Draft: Codable, Identifiable, Equatable {
     /// anyway" override. Optional so existing persisted drafts decode cleanly;
     /// `nil` means an old draft has no migration-safe provenance.
     var replyWorthinessOverride: Bool?
+    /// The skipped message identity that produced a "Draft anyway" override.
+    var replyWorthinessOverrideSource: DraftReplyWorthinessOverrideSource?
     /// An approved dispatch that could not run because the network was offline.
     /// Once dispatch starts, the intent is marked terminal so relaunch cannot
     /// automatically repeat a send whose post-send persistence failed.
@@ -189,7 +220,8 @@ struct Draft: Codable, Identifiable, Equatable {
         notReplyWorthy: DraftNotReplyWorthy? = nil,
         offlineQueuedDispatch: OfflineQueuedDraftDispatch? = nil,
         authoredRecipients: [MailAddress]? = nil,
-        replyWorthinessOverride: Bool = false
+        replyWorthinessOverride: Bool = false,
+        replyWorthinessOverrideSource: DraftReplyWorthinessOverrideSource? = nil
     ) {
         self.id = id
         self.sourceUIDValidity = sourceUIDValidity
@@ -211,6 +243,7 @@ struct Draft: Codable, Identifiable, Equatable {
         self.needsInfo = needsInfo
         self.notReplyWorthy = notReplyWorthy
         self.replyWorthinessOverride = replyWorthinessOverride
+        self.replyWorthinessOverrideSource = replyWorthinessOverrideSource
         self.offlineQueuedDispatch = offlineQueuedDispatch
         self.authoredRecipients = authoredRecipients
     }

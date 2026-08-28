@@ -71,6 +71,11 @@ final class AppStateReplyWorthinessOverrideTests: XCTestCase {
         XCTAssertFalse(failedRemoval)
         XCTAssertEqual(appState.pendingDrafts.count, 1)
         XCTAssertEqual(appState.pendingDrafts.first?.sourceAccountEmail, "Me@Gmail.com")
+        XCTAssertEqual(appState.pendingDrafts.first?.replyWorthinessOverrideSource?.account, "Me@Gmail.com")
+        XCTAssertEqual(appState.pendingDrafts.first?.replyWorthinessOverrideSource?.mailbox, Mailbox.inbox.imapName)
+        XCTAssertEqual(appState.pendingDrafts.first?.replyWorthinessOverrideSource?.id, 11)
+        XCTAssertEqual(appState.pendingDrafts.first?.replyWorthinessOverrideSource?.uidValidity, 7)
+        XCTAssertEqual(appState.pendingDrafts.first?.replyWorthinessOverrideSource?.messageID, "<11@x.com>")
         XCTAssertEqual(provider.bodyFetchCallCount, 1)
         XCTAssertEqual(appState.skippedMessages, [entry])
 
