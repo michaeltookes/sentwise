@@ -156,6 +156,34 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
         XCTAssertEqual(relaunched.skippedMessages.first?.reason, .noReplySender)
     }
 
+    func testSweepRetainsAllRecoveryEntriesBeyondSkipLogLimit() throws {
+        let (limitState, _) = makeAppState(seededDrafts: [])
+        let count = limitState.skippedMessageLogLimit + 5
+        let drafts = (1...count).map { id in
+            draft(id: UInt32(id), fromEmail: "no-reply@example.com")
+        }
+        var processed = ProcessedMessages()
+        for draft in drafts {
+            processed.insert(sourceMessage(for: draft), account: account, mailbox: .inbox)
+        }
+        let (appState, persistence) = makeAppState(seededDrafts: drafts, processedMessages: processed)
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        XCTAssertTrue(appState.pendingDrafts.isEmpty)
+        XCTAssertEqual(appState.skippedMessages.count, count)
+        XCTAssertEqual(persistence.skippedMessages.count, count)
+        XCTAssertTrue(persistence.skippedMessages.allSatisfy(\.preservesRecoveryWhenProcessed))
+
+        let relaunched = AppState(
+            persistence: persistence,
+            secrets: InMemorySecretStore()
+        )
+
+        XCTAssertEqual(relaunched.skippedMessages.count, count)
+        XCTAssertEqual(Set(relaunched.skippedMessages.map(\.id)).count, count)
+    }
+
     func testSweepPreservesAllowlistedJunkDraft() throws {
         let noReply = draft(id: 1, fromEmail: "no-reply@example.com")
         let (appState, _) = makeAppState(seededDrafts: [noReply])

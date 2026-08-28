@@ -303,7 +303,8 @@ final class AppState: ObservableObject {
     /// reconnect. Injected for deterministic offline→online tests.
     let reachability: NetworkReachabilityMonitoring
     /// Messages the watcher passed over instead of drafting, newest first.
-    /// This rolling operational log is in-memory only.
+    /// This is the visible slice for the active account; recoverable skip records
+    /// are persisted across account transitions.
     @Published var skippedMessages: [SkippedMessage] = []
 
     var skippedMessageIDs: Set<String> = []

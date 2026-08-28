@@ -101,8 +101,14 @@ extension AppState {
     }
 
     private func recordSkipSync(_ entry: SkippedMessage, recordActivity: Bool = true) throws {
-        let visibleMessages = visibleSkippedMessages(recording: entry)
-        try persistence.saveSkippedMessagesSync(visibleMessages)
+        let persistedMessages = persistedSkippedMessages(recording: entry)
+        try persistence.saveSkippedMessagesSync(persistedMessages)
+        let accountEmail = mailEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? entry.account : mailEmail
+        let visibleMessages = Self.visibleSkippedMessages(
+            from: persistedMessages,
+            accountEmail: accountEmail,
+            limit: skippedMessageLogLimit
+        )
         recordSkipInMemory(entry, visibleMessages: visibleMessages, recordActivity: recordActivity)
     }
 
@@ -118,8 +124,8 @@ extension AppState {
 
     /// Removes a skip entry durably before updating in-memory state.
     func removeSkippedMessageSync(_ entry: SkippedMessage) throws {
-        let visibleMessages = skippedMessages.filter { $0.id != entry.id }
-        try persistence.saveSkippedMessagesSync(visibleMessages)
+        let persistedMessages = persistence.loadSkippedMessages().filter { $0.id != entry.id }
+        try persistence.saveSkippedMessagesSync(persistedMessages)
         removeSkippedMessageFromMemory(entry)
     }
 
@@ -135,7 +141,10 @@ extension AppState {
 
     /// Clears the skip log durably before updating in-memory state.
     func clearSkippedMessagesSync() throws {
-        try persistence.saveSkippedMessagesSync([])
+        let entryIDs = Set(skippedMessages.map(\.id))
+        guard !entryIDs.isEmpty else { return }
+        let persistedMessages = persistence.loadSkippedMessages().filter { !entryIDs.contains($0.id) }
+        try persistence.saveSkippedMessagesSync(persistedMessages)
         clearSkippedMessageState()
     }
 
@@ -178,7 +187,8 @@ extension AppState {
         persistence.saveProcessedMessages(processedMessages)
         let visibleMessages = skippedMessages.filter { !entryIDs.contains($0.id) }
         do {
-            try persistence.saveSkippedMessagesSync(visibleMessages)
+            let persistedMessages = persistence.loadSkippedMessages().filter { !entryIDs.contains($0.id) }
+            try persistence.saveSkippedMessagesSync(persistedMessages)
         } catch {
             logger.error("Failed to persist skipped-message dismissal: \(error.localizedDescription)")
         }
@@ -189,14 +199,31 @@ extension AppState {
         }
     }
 
+    private func persistedSkippedMessages(recording entry: SkippedMessage) -> [SkippedMessage] {
+        var persistedMessages = persistence.loadSkippedMessages()
+        let persistedIDs = Set(persistedMessages.map(\.id))
+        persistedMessages.append(contentsOf: skippedMessages.filter { !persistedIDs.contains($0.id) })
+        persistedMessages.removeAll { $0.id == entry.id }
+        persistedMessages.insert(entry, at: 0)
+        return Self.boundedPersistedSkippedMessages(
+            persistedMessages,
+            regularLimitPerAccount: skippedMessageLogLimit
+        )
+    }
+
     private func visibleSkippedMessages(recording entry: SkippedMessage) -> [SkippedMessage] {
-        var visibleMessages = skippedMessages
+        let accountEmail = mailEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? entry.account : mailEmail
+        var visibleMessages = Self.visibleSkippedMessages(
+            from: skippedMessages,
+            accountEmail: accountEmail,
+            limit: skippedMessageLogLimit
+        )
         visibleMessages.removeAll { $0.id == entry.id }
         visibleMessages.insert(entry, at: 0)
-        if visibleMessages.count > skippedMessageLogLimit {
-            visibleMessages.removeLast(visibleMessages.count - skippedMessageLogLimit)
-        }
-        return visibleMessages
+        return Self.boundedPersistedSkippedMessages(
+            visibleMessages,
+            regularLimitPerAccount: skippedMessageLogLimit
+        )
     }
 
     private func skippedEntry(
@@ -242,6 +269,48 @@ extension AppState {
         skippedMessages.removeAll()
         skippedMessageIDs.removeAll()
         skippedMessageReasonsByID.removeAll()
+    }
+
+    static func boundedPersistedSkippedMessages(
+        _ messages: [SkippedMessage],
+        regularLimitPerAccount limit: Int
+    ) -> [SkippedMessage] {
+        var visibleRegularCounts: [String: Int] = [:]
+        var retained: [SkippedMessage] = []
+        var retainedIDs: Set<String> = []
+
+        for entry in messages {
+            guard retainedIDs.insert(entry.id).inserted else { continue }
+            guard !entry.preservesRecoveryWhenProcessed else {
+                retained.append(entry)
+                continue
+            }
+
+            let account = skippedAccountKey(entry.account) ?? ""
+            let visibleCount = visibleRegularCounts[account, default: 0]
+            guard visibleCount < limit else { continue }
+            visibleRegularCounts[account] = visibleCount + 1
+            retained.append(entry)
+        }
+
+        return retained
+    }
+
+    static func visibleSkippedMessages(
+        from messages: [SkippedMessage],
+        accountEmail: String?,
+        limit: Int
+    ) -> [SkippedMessage] {
+        guard let account = skippedAccountKey(accountEmail) else { return [] }
+        return boundedPersistedSkippedMessages(
+            messages.filter { skippedAccountKey($0.account) == account },
+            regularLimitPerAccount: limit
+        )
+    }
+
+    private static func skippedAccountKey(_ account: String?) -> String? {
+        let normalized = (account ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
     }
 
     // MARK: - Override

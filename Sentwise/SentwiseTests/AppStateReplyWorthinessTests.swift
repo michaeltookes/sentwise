@@ -364,7 +364,7 @@ final class AppStateReplyWorthinessTests: XCTestCase {
     }
 
     func testSkipLogClearedOnDisconnect() async {
-        let (appState, _, _) = makeAppState(
+        let (appState, _, persistence) = makeAppState(
             fetch: .success([message(id: 1, from: "no-reply@x.com")])
         )
         appState.watchStatus = .watching
@@ -374,5 +374,6 @@ final class AppStateReplyWorthinessTests: XCTestCase {
         appState.disconnectMail()
 
         XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertEqual(persistence.skippedMessages.count, 1)
     }
 }

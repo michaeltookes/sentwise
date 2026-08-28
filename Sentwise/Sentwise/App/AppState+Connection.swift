@@ -121,7 +121,8 @@ extension AppState {
         isAccountConnected = false
         cancelAllSendCountdowns()
         stopWatching()
-        resetMessagePreviewForAccountChange()
+        resetMessagePreviewForAccountChange(clearSkippedMessages: false)
+        skippedMessages = []
         logger.info("Mailbox disconnected")
     }
 

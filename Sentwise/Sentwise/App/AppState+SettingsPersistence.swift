@@ -167,6 +167,7 @@ extension AppState {
         skippedMessages = Self.restoredSkippedMessages(
             persistence: persistence,
             processedMessages: processedMessages,
+            accountEmail: mailEmail,
             limit: skippedMessageLogLimit
         )
         skippedMessageIDs = Set(skippedMessages.map(\.id))
@@ -206,6 +207,7 @@ extension AppState {
     static func restoredSkippedMessages(
         persistence: PersistenceProvider,
         processedMessages: ProcessedMessages,
+        accountEmail: String?,
         limit: Int
     ) -> [SkippedMessage] {
         let loadedMessages = persistence.loadSkippedMessages()
@@ -213,14 +215,17 @@ extension AppState {
             entry.preservesRecoveryWhenProcessed
                 || !processedMessages.contains(entry.message, account: entry.account, mailbox: entry.mailbox)
         }
-        let boundedMessages = Array(activeMessages.prefix(limit))
-        if boundedMessages.count != loadedMessages.count {
+        let boundedMessages = Self.boundedPersistedSkippedMessages(
+            activeMessages,
+            regularLimitPerAccount: limit
+        )
+        if boundedMessages != loadedMessages {
             do {
                 try persistence.saveSkippedMessagesSync(boundedMessages)
             } catch {
                 logger.error("Failed to clean skipped messages on launch: \(error.localizedDescription)")
             }
         }
-        return boundedMessages
+        return Self.visibleSkippedMessages(from: boundedMessages, accountEmail: accountEmail, limit: limit)
     }
 }
