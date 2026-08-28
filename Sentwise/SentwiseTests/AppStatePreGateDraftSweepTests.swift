@@ -23,6 +23,7 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
     private let originalReplyWorthinessGateDate = utcDate(year: 2026, month: 8, day: 2)
     private let dayBeforeOriginalReplyWorthinessGateDate = utcDate(year: 2026, month: 8, day: 1)
     private let preTransactionalGateDate = utcDate(year: 2026, month: 8, day: 20)
+    private let postTransactionalGateDate = utcDate(year: 2026, month: 8, day: 24)
 
     /// Builds a reply draft with the given source sender. Defaults produce a plain,
     /// unedited reply draft eligible for the sweep; overrides model the exclusions.
@@ -265,6 +266,34 @@ final class AppStatePreGateDraftSweepTests: XCTestCase {
 
         XCTAssertEqual(appState.pendingDrafts.map(\.id), [1])
         XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertTrue(appState.hasRunPreGateDraftSweep)
+    }
+
+    func testSweepIncludesUnmarkedProcessedDraftCreatedAfterCutoff() throws {
+        let oldBuildTransactional = draft(
+            id: 1,
+            fromEmail: "auto-confirm@amazon.com",
+            generatedAt: postTransactionalGateDate,
+            replyWorthinessOverride: nil
+        )
+        let currentBuildTransactional = draft(
+            id: 2,
+            fromEmail: "shipment-tracking@amazon.com",
+            generatedAt: postTransactionalGateDate
+        )
+        var processed = ProcessedMessages()
+        for draft in [oldBuildTransactional, currentBuildTransactional] {
+            processed.insert(sourceMessage(for: draft), account: account, mailbox: .inbox)
+        }
+        let (appState, _) = makeAppState(
+            seededDrafts: [oldBuildTransactional, currentBuildTransactional],
+            processedMessages: processed
+        )
+
+        appState.runPreGateDraftSweepIfNeeded()
+
+        XCTAssertEqual(appState.pendingDrafts.map(\.id), [2])
+        XCTAssertEqual(appState.skippedMessages.map(\.message.id), [1])
         XCTAssertTrue(appState.hasRunPreGateDraftSweep)
     }
 

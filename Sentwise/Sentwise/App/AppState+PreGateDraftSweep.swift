@@ -172,7 +172,13 @@ extension AppState {
         account: String,
         mailbox: Mailbox
     ) -> Bool {
-        if draft.generatedAt >= preGateDraftSweepCutoff { return false }
+        // Old builds do not persist `replyWorthinessOverride`, so a timestamp
+        // after the gate cutoff does not prove the draft was created by a gated
+        // build. Current builds persist explicit provenance and stay out.
+        if draft.generatedAt >= preGateDraftSweepCutoff,
+           draft.replyWorthinessOverride != nil {
+            return false
+        }
         if let regeneratedAt = draft.regeneratedAt, regeneratedAt >= preGateDraftSweepCutoff { return false }
         if draft.replyWorthinessOverride == true { return false }
         if isPotentialLegacyReplyWorthinessOverride(
