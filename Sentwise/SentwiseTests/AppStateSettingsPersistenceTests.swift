@@ -1,3 +1,4 @@
+import SentwiseMail
 import XCTest
 @testable import Sentwise
 
@@ -63,6 +64,78 @@ final class AppStateSettingsPersistenceTests: XCTestCase {
         XCTAssertEqual(persistence.loadSettings().signatureText, "")
     }
 
+    func testRestoredSkippedMessagesKeepSweepRecoveryDespiteProcessedSource() {
+        let message = skippedSourceMessage()
+        let regularSkip = SkippedMessage(message: message, mailbox: .inbox, account: "me@gmail.com", reason: .noReplySender)
+        let sweptSkip = SkippedMessage(
+            message: MailMessage(
+                id: 2,
+                uidValidity: 7,
+                from: MailAddress(email: "auto-confirm@amazon.com"),
+                subject: "Order",
+                date: "",
+                messageID: "<2@example.com>"
+            ),
+            mailbox: .inbox,
+            account: "me@gmail.com",
+            reason: .automatedNotification,
+            preservesRecoveryWhenProcessed: true
+        )
+        var processed = ProcessedMessages()
+        processed.insert(message, account: "me@gmail.com", mailbox: .inbox)
+        processed.insert(sweptSkip.message, account: "me@gmail.com", mailbox: .inbox)
+        let persistence = AppStateMemoryPersistence(skippedMessages: [regularSkip, sweptSkip])
+
+        let restored = AppState.restoredSkippedMessages(
+            persistence: persistence,
+            processedMessages: processed,
+            accountEmail: "me@gmail.com",
+            limit: 10
+        )
+
+        XCTAssertEqual(restored, [sweptSkip])
+        XCTAssertEqual(persistence.skippedMessages, [sweptSkip])
+    }
+
+    func testAccountChangeReloadsVisibleSkippedMessagesWithoutClearingPersistence() {
+        let primary = SkippedMessage(
+            message: skippedSourceMessage(id: 1, from: "no-reply@example.com"),
+            mailbox: .inbox,
+            account: "me@gmail.com",
+            reason: .noReplySender,
+            preservesRecoveryWhenProcessed: true
+        )
+        let secondary = SkippedMessage(
+            message: skippedSourceMessage(id: 2, from: "auto-confirm@amazon.com"),
+            mailbox: .inbox,
+            account: "other@gmail.com",
+            reason: .automatedNotification,
+            preservesRecoveryWhenProcessed: true
+        )
+        let persistence = AppStateMemoryPersistence(
+            settings: Settings(
+                schemaVersion: Settings.currentSchemaVersion,
+                pollIntervalSeconds: 300,
+                mailEmail: "me@gmail.com"
+            ),
+            skippedMessages: [primary, secondary]
+        )
+        let appState = makeAppState(persistence: persistence)
+        XCTAssertEqual(appState.skippedMessages, [primary])
+
+        appState.mailEmail = "other@gmail.com"
+        appState.resetMessagePreviewForAccountChange()
+
+        XCTAssertEqual(appState.skippedMessages, [secondary])
+        XCTAssertEqual(persistence.skippedMessages, [primary, secondary])
+
+        appState.mailEmail = ""
+        appState.resetMessagePreviewForAccountChange()
+
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertEqual(persistence.skippedMessages, [primary, secondary])
+    }
+
     private func makeAppState(
         persistence: AppStateMemoryPersistence,
         secrets: SecretStore = InMemorySecretStore()
@@ -81,5 +154,19 @@ final class AppStateSettingsPersistenceTests: XCTestCase {
         appState.mailPort = 993
         appState.mailAppPassword = password
         await appState.testConnection()
+    }
+
+    private func skippedSourceMessage(
+        id: UInt32 = 1,
+        from: String = "no-reply@example.com"
+    ) -> MailMessage {
+        MailMessage(
+            id: id,
+            uidValidity: 7,
+            from: MailAddress(email: from),
+            subject: "Receipt",
+            date: "",
+            messageID: "<\(id)@example.com>"
+        )
     }
 }

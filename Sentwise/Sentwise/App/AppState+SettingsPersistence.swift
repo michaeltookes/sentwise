@@ -96,7 +96,8 @@ extension AppState {
             verboseDiagnosticLogging: verboseDiagnosticLogging,
             transcriptWatchedFolderEnabled: transcriptWatchedFolderEnabled,
             transcriptWatchedFolderPath: transcriptWatchedFolderPath,
-            transcriptWatchedFolderSeenSnapshots: transcriptWatchedFolderSeenSnapshots
+            transcriptWatchedFolderSeenSnapshots: transcriptWatchedFolderSeenSnapshots,
+            hasRunPreGateDraftSweep: hasRunPreGateDraftSweep
         )
     }
 
@@ -139,15 +140,40 @@ extension AppState {
     }
 
     /// Applies the persisted draft-production preferences (signature policy/text
-    /// and send behavior/delay) loaded at launch. Called from `init` before
-    /// `setupAutoSave()` wires the change sinks, so seeding these values does not
-    /// trigger a spurious save. Kept here so `AppState.init` stays within the
-    /// function-body length limit.
+    /// and send behavior/delay) loaded at launch, plus the one-time pre-gate
+    /// draft-sweep flag (item 80). Called from `init` before `setupAutoSave()`
+    /// wires the change sinks, so seeding these values does not trigger a spurious
+    /// save. Kept here so `AppState.init` stays within the function-body length
+    /// limit. Seeding `hasRunPreGateDraftSweep` from settings is essential: without
+    /// it `buildSettings` would persist the default `false` and un-set the flag,
+    /// making the sweep re-run on every launch.
     func restoreDraftPreferences(from settings: Settings) {
         signaturePolicy = SignaturePolicy(rawValue: settings.signaturePolicy) ?? .default
         signatureText = settings.signatureText
         sendBehavior = SendBehavior(rawValue: settings.sendBehavior) ?? .default
         sendDelaySeconds = settings.sendDelaySeconds
+        hasRunPreGateDraftSweep = settings.hasRunPreGateDraftSweep
+    }
+
+    /// Restores persisted review/history state after launch fields are seeded.
+    func restoreReviewPersistenceState() {
+        activityEvents = persistence.loadActivityEvents()
+        restoreSkippedMessagesFromPersistence()
+    }
+
+    /// Restores skipped-message state at launch, including the lookup maps used
+    /// to suppress duplicate skip work within the current session.
+    func restoreSkippedMessagesFromPersistence() {
+        skippedMessages = Self.restoredSkippedMessages(
+            persistence: persistence,
+            processedMessages: processedMessages,
+            accountEmail: mailEmail,
+            limit: skippedMessageLogLimit
+        )
+        skippedMessageIDs = Set(skippedMessages.map(\.id))
+        skippedMessageReasonsByID = skippedMessages.reduce(into: [:]) { reasons, entry in
+            reasons[entry.id] = entry.reason
+        }
     }
 
     /// Restores pending drafts at launch, dropping any already-approved ones and
@@ -172,5 +198,34 @@ extension AppState {
         }
         let offlineQueuedDispatch = offlineQueuedDispatches(from: pendingDrafts)
         return (pendingDrafts, offlineQueuedDispatch, Set(offlineQueuedDispatch.keys))
+    }
+
+    /// Restores the visible skip log and drops entries that were already dismissed
+    /// into the durable processed-message set. Sweep-created skips are retained
+    /// because their source messages were processed before the pending drafts were
+    /// later promoted to recoverable skipped entries.
+    static func restoredSkippedMessages(
+        persistence: PersistenceProvider,
+        processedMessages: ProcessedMessages,
+        accountEmail: String?,
+        limit: Int
+    ) -> [SkippedMessage] {
+        let loadedMessages = persistence.loadSkippedMessages()
+        let activeMessages = loadedMessages.filter { entry in
+            entry.preservesRecoveryWhenProcessed
+                || !processedMessages.contains(entry.message, account: entry.account, mailbox: entry.mailbox)
+        }
+        let boundedMessages = Self.boundedPersistedSkippedMessages(
+            activeMessages,
+            regularLimitPerAccount: limit
+        )
+        if boundedMessages != loadedMessages {
+            do {
+                try persistence.saveSkippedMessagesSync(boundedMessages)
+            } catch {
+                logger.error("Failed to clean skipped messages on launch: \(error.localizedDescription)")
+            }
+        }
+        return Self.visibleSkippedMessages(from: boundedMessages, accountEmail: accountEmail, limit: limit)
     }
 }

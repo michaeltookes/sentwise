@@ -19,7 +19,7 @@ enum SendBehavior: String, CaseIterable, Equatable {
 struct Settings: Codable, Equatable {
 
     /// The current settings schema version.
-    static let currentSchemaVersion = 17
+    static let currentSchemaVersion = 18
 
     /// Schema version that introduced the persisted onboarding completion flag.
     static let onboardingCompletionSchemaVersion = 6
@@ -69,6 +69,12 @@ struct Settings: Codable, Equatable {
     /// 36). Purely additive: older files decode it as off (normal logging), the
     /// safe default. The terminal launch migration stamps this version.
     static let verboseDiagnosticLoggingSchemaVersion = 17
+
+    /// Schema version that introduced the one-time pre-gate draft-sweep flag (item
+    /// 80). Purely additive: older files decode it as `false`, so every install
+    /// that predates the transactional/no-reply gate runs the sweep exactly once.
+    /// The terminal launch migration stamps this version.
+    static let preGateDraftSweepSchemaVersion = 18
 
     /// The default auto-send undo window, in seconds (item 23). Zero disables it.
     static let defaultSendDelaySeconds = 10
@@ -175,6 +181,12 @@ struct Settings: Codable, Equatable {
     /// for the currently configured folder.
     var transcriptWatchedFolderSeenSnapshots: [String: WatchedFolderFileSnapshot]?
 
+    /// Whether the one-time reply-worthiness sweep of pre-gate pending drafts has
+    /// already run (item 80). Old files without this key decode to `false`, so any
+    /// install created before the transactional/no-reply gate shipped runs the
+    /// sweep exactly once at launch and then persists `true` here.
+    var hasRunPreGateDraftSweep: Bool
+
     init(
         schemaVersion: Int,
         pollIntervalSeconds: Int,
@@ -199,7 +211,8 @@ struct Settings: Codable, Equatable {
         verboseDiagnosticLogging: Bool = false,
         transcriptWatchedFolderEnabled: Bool = false,
         transcriptWatchedFolderPath: String = "",
-        transcriptWatchedFolderSeenSnapshots: [String: WatchedFolderFileSnapshot]? = nil
+        transcriptWatchedFolderSeenSnapshots: [String: WatchedFolderFileSnapshot]? = nil,
+        hasRunPreGateDraftSweep: Bool = false
     ) {
         self.schemaVersion = schemaVersion
         self.pollIntervalSeconds = pollIntervalSeconds
@@ -225,6 +238,7 @@ struct Settings: Codable, Equatable {
         self.transcriptWatchedFolderEnabled = transcriptWatchedFolderEnabled
         self.transcriptWatchedFolderPath = transcriptWatchedFolderPath
         self.transcriptWatchedFolderSeenSnapshots = transcriptWatchedFolderSeenSnapshots
+        self.hasRunPreGateDraftSweep = hasRunPreGateDraftSweep
     }
 
     /// Default settings for a fresh install.
@@ -241,6 +255,7 @@ struct Settings: Codable, Equatable {
         case sendBehavior, sendDelaySeconds, onboardingCompleted
         case senderAllowlist, senderBlocklist, verboseDiagnosticLogging
         case transcriptWatchedFolderEnabled, transcriptWatchedFolderPath, transcriptWatchedFolderSeenSnapshots
+        case hasRunPreGateDraftSweep
     }
 
     init(from decoder: Decoder) throws {
@@ -279,6 +294,8 @@ struct Settings: Codable, Equatable {
                 [String: WatchedFolderFileSnapshot].self,
                 forKey: .transcriptWatchedFolderSeenSnapshots
             )
+        hasRunPreGateDraftSweep =
+            try container.decodeIfPresent(Bool.self, forKey: .hasRunPreGateDraftSweep) ?? false
     }
 
     /// Returns a copy with values clamped to sane ranges.

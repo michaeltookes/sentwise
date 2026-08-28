@@ -78,25 +78,6 @@ extension AppState {
         }
     }
 
-    /// Builds a watcher-selected reply and appends it to the pending queue. Unlike
-    /// `generateDraft`, this avoids Settings preview state.
-    @discardableResult
-    func draftAndEnqueue(
-        _ message: MailMessage,
-        mailbox: Mailbox = .inbox,
-        requireWatching: Bool = true,
-        credentials capturedCredentials: MailAccountCredentials? = nil
-    ) async throws -> Bool {
-        guard let draft = try await makePendingDraft(
-            for: message,
-            mailbox: mailbox,
-            requireWatching: requireWatching,
-            credentials: capturedCredentials
-        ) else { return false }
-        try enqueuePendingDraft(draft)
-        return true
-    }
-
     /// Builds a watcher-style queued draft without persisting it.
     func makePendingDraft(
         for message: MailMessage,
@@ -489,7 +470,6 @@ extension AppState {
     static func truncatedIncomingBody(_ text: String, maxChars: Int = 4000) -> String {
         text.count > maxChars ? String(text.prefix(maxChars)) + "…" : text
     }
-
 }
 
 struct DraftLLMConfiguration: Equatable {

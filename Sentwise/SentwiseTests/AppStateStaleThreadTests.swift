@@ -387,6 +387,9 @@ final class AppStateStaleThreadTests: XCTestCase {
         XCTAssertEqual(appState.pendingDrafts.first?.id, 9)
         XCTAssertEqual(appState.pendingDrafts.first?.sourceMessageID, "<new@x.com>")
         XCTAssertEqual(appState.pendingDrafts.first?.body, "Regenerated reply.")
+        XCTAssertNotNil(appState.pendingDrafts.first?.regeneratedAt)
+        let persistence = appState.persistence as? AppStateMemoryPersistence
+        XCTAssertNotNil(persistence?.pendingDrafts.first?.regeneratedAt)
         XCTAssertEqual(provider.lastBodyUID, 9)
         XCTAssertEqual(provider.lastExpectedUIDValidity, 1)
         XCTAssertEqual(provider.sendCount, 0, "regenerate does not send")

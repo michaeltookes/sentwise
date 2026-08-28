@@ -30,6 +30,11 @@ protocol PersistenceProvider {
     /// Persists watcher-created drafts before their source messages are marked processed.
     func savePendingDraftsSync(_ drafts: [Draft]) throws
 
+    /// Recoverable reply-worthiness skips visible in the Review window.
+    func loadSkippedMessages() -> [SkippedMessage]
+    /// Persists recoverable skips before source drafts are removed.
+    func saveSkippedMessagesSync(_ messages: [SkippedMessage]) throws
+
     /// Identities of drafts whose approve action completed.
     func loadApprovedDraftIdentities() -> Set<String>
     /// Persists completed approve identities before pending-draft cleanup is treated as complete.
@@ -57,6 +62,7 @@ final class PersistenceService: PersistenceProvider {
     private let voiceProfileURL: URL
     private let processedMessagesURL: URL
     private let pendingDraftsURL: URL
+    private let skippedMessagesURL: URL
     private let approvedDraftsURL: URL
     private let activityEventsURL: URL
     private let ioQueue = DispatchQueue(label: "com.tookes.Sentwise.persistence", qos: .utility)
@@ -86,6 +92,7 @@ final class PersistenceService: PersistenceProvider {
         voiceProfileURL = directory.appendingPathComponent("VoiceProfile.json")
         processedMessagesURL = directory.appendingPathComponent("ProcessedMessages.json")
         pendingDraftsURL = directory.appendingPathComponent("PendingDrafts.json")
+        skippedMessagesURL = directory.appendingPathComponent("SkippedMessages.json")
         approvedDraftsURL = directory.appendingPathComponent("ApprovedDrafts.json")
         activityEventsURL = directory.appendingPathComponent("ActivityEvents.json")
     }
@@ -211,6 +218,33 @@ final class PersistenceService: PersistenceProvider {
             }
         } catch {
             logger.error("Failed to save pending drafts: \(error.localizedDescription)")
+            throw error
+        }
+    }
+
+    // MARK: - Skipped Messages
+
+    func loadSkippedMessages() -> [SkippedMessage] {
+        guard FileManager.default.fileExists(atPath: skippedMessagesURL.path) else {
+            return []
+        }
+        do {
+            let data = try Data(contentsOf: skippedMessagesURL)
+            return try decoder.decode([SkippedMessage].self, from: data)
+        } catch {
+            logger.error("Failed to load skipped messages: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    func saveSkippedMessagesSync(_ messages: [SkippedMessage]) throws {
+        do {
+            try ioQueue.sync { [encoder, skippedMessagesURL] in
+                let data = try encoder.encode(messages)
+                try data.write(to: skippedMessagesURL, options: .atomic)
+            }
+        } catch {
+            logger.error("Failed to save skipped messages: \(error.localizedDescription)")
             throw error
         }
     }

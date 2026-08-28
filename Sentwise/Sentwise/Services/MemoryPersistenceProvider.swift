@@ -8,6 +8,7 @@ final class MemoryPersistenceProvider: PersistenceProvider {
     private var voiceProfile: VoiceProfile?
     private var processedMessages: ProcessedMessages
     private var pendingDrafts: [Draft]
+    private var skippedMessages: [SkippedMessage]
     private var approvedDraftIdentities: Set<String>
     private var activityEvents: [ActivityEvent]
 
@@ -16,6 +17,7 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         voiceProfile: VoiceProfile? = nil,
         processedMessages: ProcessedMessages = ProcessedMessages(),
         pendingDrafts: [Draft] = [],
+        skippedMessages: [SkippedMessage] = [],
         approvedDraftIdentities: Set<String> = [],
         activityEvents: [ActivityEvent] = []
     ) {
@@ -23,6 +25,7 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         self.voiceProfile = voiceProfile
         self.processedMessages = processedMessages
         self.pendingDrafts = pendingDrafts
+        self.skippedMessages = skippedMessages
         self.approvedDraftIdentities = approvedDraftIdentities
         self.activityEvents = activityEvents
     }
@@ -74,6 +77,16 @@ final class MemoryPersistenceProvider: PersistenceProvider {
     func savePendingDraftsSync(_ drafts: [Draft]) throws {
         withLock {
             pendingDrafts = drafts
+        }
+    }
+
+    func loadSkippedMessages() -> [SkippedMessage] {
+        withLock { skippedMessages }
+    }
+
+    func saveSkippedMessagesSync(_ messages: [SkippedMessage]) throws {
+        withLock {
+            skippedMessages = messages
         }
     }
 

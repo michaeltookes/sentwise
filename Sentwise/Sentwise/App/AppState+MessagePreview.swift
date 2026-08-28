@@ -118,7 +118,7 @@ extension AppState {
         resetMailboxBrowserForAccountChange()
         resetBulkCleanupForAccountChange()
         if shouldClearSkippedMessages {
-            clearSkippedMessages()
+            restoreSkippedMessagesFromPersistence()
         }
         isFetching = false
         isFetchingBody = false

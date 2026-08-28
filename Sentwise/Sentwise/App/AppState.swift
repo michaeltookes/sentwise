@@ -198,6 +198,12 @@ final class AppState: ObservableObject {
     /// Used only to keep already-configured installs out of first-run setup.
     let loadedSettingsPredateOnboardingCompletion: Bool
 
+    /// Whether the one-time reply-worthiness sweep of pre-gate pending drafts has
+    /// already run (item 80). Seeded from settings at launch; flipped to `true`
+    /// and persisted once the sweep completes so it never runs again. Not
+    /// `@Published` — it drives no UI, only the launch-time guard.
+    var hasRunPreGateDraftSweep: Bool = false
+
     // MARK: - Transcript Watched Folder (item 51)
 
     /// Whether the transcript watched folder is active. Off by default.
@@ -297,7 +303,8 @@ final class AppState: ObservableObject {
     /// reconnect. Injected for deterministic offline→online tests.
     let reachability: NetworkReachabilityMonitoring
     /// Messages the watcher passed over instead of drafting, newest first.
-    /// This rolling operational log is in-memory only.
+    /// This is the visible slice for the active account; recoverable skip records
+    /// are persisted across account transitions.
     @Published var skippedMessages: [SkippedMessage] = []
 
     var skippedMessageIDs: Set<String> = []
@@ -402,7 +409,6 @@ final class AppState: ObservableObject {
         self.pendingDraftCount = pendingState.drafts.count
         self.offlineQueuedDispatch = pendingState.offlineQueuedDispatch
         self.draftsWaitingForNetwork = pendingState.waitingForNetwork
-        self.activityEvents = persistence.loadActivityEvents()
         self.mailEmail = settings.mailEmail
         self.mailHost = settings.mailHost
         self.mailPort = settings.mailPort
@@ -424,6 +430,7 @@ final class AppState: ObservableObject {
         self.isManagedSignedIn = managedLaunch.hasCredentials
 
         self.voiceProfile = persistence.loadVoiceProfile()
+        restoreReviewPersistenceState()
 
         cleanupLegacyOAuthCredentials()
         self.isAccountConnected = !settings.mailEmail.isEmpty && !activePassword.isEmpty
