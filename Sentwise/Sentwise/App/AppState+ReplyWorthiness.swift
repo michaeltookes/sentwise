@@ -357,11 +357,20 @@ extension AppState {
     }
 
     private func hasPendingReplyWorthinessOverride(for entry: SkippedMessage, account: String) -> Bool {
-        let mailbox = entry.mailbox.imapName
-        let uidValidity = entry.message.uidValidity.map(String.init) ?? "?"
-        let identity = "\(account)|\(mailbox)|\(uidValidity)|\(entry.message.id)"
-        return pendingDrafts.contains {
-            $0.identity == identity && $0.replyWorthinessOverride == true
+        let account = account.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let mailbox = entry.mailbox.imapName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return pendingDrafts.contains { draft in
+            guard draft.replyWorthinessOverride == true,
+                  draft.sourceAccountEmail?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == account,
+                  draft.sourceMailbox?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == mailbox else {
+                return false
+            }
+            let matchesMessageID = draft.sourceMessageID.map { sourceMessageID in
+                guard let messageID = entry.message.messageID else { return false }
+                return !sourceMessageID.isEmpty && sourceMessageID == messageID
+            } ?? false
+            let matchesUID = draft.sourceUIDValidity == entry.message.uidValidity && draft.id == entry.message.id
+            return matchesMessageID || matchesUID
         }
     }
 }
