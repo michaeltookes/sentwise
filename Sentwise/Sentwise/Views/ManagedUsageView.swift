@@ -11,7 +11,19 @@ struct ManagedUsageView: View {
     @State private var showBuyMorePlaceholder = false
 
     var body: some View {
-        if let quota = appState.managedQuota {
+        // The refresh lives on the outer container, not inside the `if let`, so
+        // opening the pane fetches `/v1/me` even while the quota is still unknown
+        // (the exact case where the display is hidden and needs populating).
+        Group {
+            if let quota = appState.managedQuota {
+                usageContent(quota)
+            }
+        }
+        .task { await appState.refreshManagedQuota() }
+    }
+
+    @ViewBuilder
+    private func usageContent(_ quota: ManagedQuota) -> some View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(quota.usageSummary())
                     .font(.caption)
@@ -50,7 +62,5 @@ struct ManagedUsageView: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("managedUsageSection")
-            .task { await appState.refreshManagedQuota() }
-        }
     }
 }

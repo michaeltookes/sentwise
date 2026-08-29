@@ -78,16 +78,17 @@ final class ManagedQuotaRelay: ManagedQuotaReporting, @unchecked Sendable {
     private var handler: (@MainActor (ManagedQuota) -> Void)?
 
     func setHandler(_ handler: @escaping @MainActor (ManagedQuota) -> Void) {
-        lock.lock()
-        self.handler = handler
-        lock.unlock()
+        lock.withLock { self.handler = handler }
+    }
+
+    /// Synchronous snapshot of the handler. Kept out of the `async` function
+    /// because `NSLock.lock()` is unavailable from asynchronous contexts.
+    private func currentHandler() -> (@MainActor (ManagedQuota) -> Void)? {
+        lock.withLock { handler }
     }
 
     func reportQuota(_ quota: ManagedQuota) async {
-        lock.lock()
-        let handler = self.handler
-        lock.unlock()
-        guard let handler else { return }
+        guard let handler = currentHandler() else { return }
         await MainActor.run { handler(quota) }
     }
 }
