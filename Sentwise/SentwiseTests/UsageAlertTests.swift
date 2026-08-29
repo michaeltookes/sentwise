@@ -101,14 +101,15 @@ final class UsageAlertTests: XCTestCase {
     }
 
     func testAlertIdentifierIsStablePerThresholdAndWindow() {
-        let a = UsageAlert.make(threshold: .fifty, quota: quota(usedPercent: 50))
-        let b = UsageAlert.make(threshold: .fifty, quota: quota(usedPercent: 60))
-        XCTAssertEqual(a.identifier, b.identifier, "same threshold + window should share an id so re-posts replace")
+        let fifty = UsageAlert.make(threshold: .fifty, quota: quota(usedPercent: 50))
+        let fiftyLater = UsageAlert.make(threshold: .fifty, quota: quota(usedPercent: 60))
+        XCTAssertEqual(fifty.identifier, fiftyLater.identifier,
+                       "same threshold + window should share an id so re-posts replace")
 
         let differentThreshold = UsageAlert.make(threshold: .seventyFive, quota: quota(usedPercent: 75))
-        XCTAssertNotEqual(a.identifier, differentThreshold.identifier)
+        XCTAssertNotEqual(fifty.identifier, differentThreshold.identifier)
 
         let differentWindow = UsageAlert.make(threshold: .fifty, quota: quota(usedPercent: 50, resetsAt: nextWindow))
-        XCTAssertNotEqual(a.identifier, differentWindow.identifier)
+        XCTAssertNotEqual(fifty.identifier, differentWindow.identifier)
     }
 }

@@ -37,7 +37,10 @@ final class ManagedQuotaTests: XCTestCase {
     }
 
     func testDecodesQuotaWithFractionalSecondsResetsAt() throws {
-        let quota = try decode(#"{"unit":"drafts","used":1,"limit":10,"remaining":9,"resetsAt":"2025-09-01T00:00:00.500Z","enforcement":"soft"}"#)
+        let quota = try decode(#"""
+        {"unit":"drafts","used":1,"limit":10,"remaining":9,
+         "resetsAt":"2025-09-01T00:00:00.500Z","enforcement":"soft"}
+        """#)
         XCTAssertTrue(quota.hasKnownReset)
         XCTAssertEqual(quota.resetsAt, ManagedQuotaDate.date(from: "2025-09-01T00:00:00.500Z"))
     }

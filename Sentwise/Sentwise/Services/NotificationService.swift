@@ -187,11 +187,6 @@ final class UserNotificationService: NSObject, DraftNotifying {
     static let openActionIdentifier = "OPEN_DRAFT"
     static let closeActionIdentifier = "CLOSE_DRAFT"
 
-    /// The usage-threshold category (backlog item 56b). Its Open action routes to
-    /// Settings → AI Provider rather than Review Drafts.
-    static let usageCategoryIdentifier = "USAGE_ALERT"
-    static let openUsageActionIdentifier = "OPEN_USAGE_SETTINGS"
-
     init(center: UserNotificationCentering = SystemUserNotificationCenter()) {
         self.center = center
         super.init()
@@ -280,17 +275,9 @@ final class UserNotificationService: NSObject, DraftNotifying {
         center.removePendingNotificationRequests(withIdentifiers: [identity])
     }
 
-    func notifyUsageAlert(_ alert: UsageAlert) {
-        let content = UNMutableNotificationContent()
-        content.title = alert.title
-        content.body = alert.body
-        content.categoryIdentifier = Self.usageCategoryIdentifier
-        // Stable per threshold + window so a re-post replaces rather than stacks.
-        let request = UNNotificationRequest(
-            identifier: alert.identifier,
-            content: content,
-            trigger: nil
-        )
+    /// Adds a usage-alert request to the center. Internal so the usage path in the
+    /// `+Usage` extension can post without exposing `center` more broadly (56b).
+    func addUsageAlertRequest(_ request: UNNotificationRequest) {
         center.add(request) { error in
             if let error {
                 logger.error("Failed to post usage alert: \(error.localizedDescription)")
@@ -392,18 +379,6 @@ final class UserNotificationService: NSObject, DraftNotifying {
             options: []
         )
         return [open, close]
-    }
-
-    /// The usage alert's single action: **Open** brings the app forward and opens
-    /// Settings → AI Provider (backlog item 56b).
-    static func usageAlertActions() -> [UNNotificationAction] {
-        [
-            UNNotificationAction(
-                identifier: Self.openUsageActionIdentifier,
-                title: "Open",
-                options: [.foreground]
-            )
-        ]
     }
 
     private func registerCategory() {

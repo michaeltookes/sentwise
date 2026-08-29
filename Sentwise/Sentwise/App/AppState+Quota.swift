@@ -6,6 +6,19 @@ import Foundation
 /// `AppState` stays within length limits.
 extension AppState {
 
+    /// Wires the usage-metering callbacks (item 56b): a usage-alert Open routes to
+    /// Settings → AI Provider, and managed-quota reports (from the possibly
+    /// off-main LLM layer) hop onto the main actor to update published state and
+    /// fire alerts. Called once from `installExternalActionHandlers`.
+    func wireUsageMeteringHandlers() {
+        notifier.onOpenUsageSettings = { [weak self] in
+            self?.openSettingsHandler?(.ai)
+        }
+        managedQuotaRelay.setHandler { [weak self] quota in
+            self?.ingestManagedQuota(quota)
+        }
+    }
+
     /// Records the latest quota (from a `/v1/draft` response or a `/v1/me` fetch)
     /// into published state and fires any newly-crossed usage-threshold alerts.
     /// Idempotent per weekly window — a threshold fires once until the window

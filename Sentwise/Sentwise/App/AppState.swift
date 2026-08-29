@@ -352,10 +352,11 @@ final class AppState: ObservableObject {
     let notifier: DraftNotifying
     /// Bridges managed-quota reports from the LLM layer onto the main actor so the
     /// published quota and usage alerts update (backlog item 56b).
-    let managedQuotaRelay: ManagedQuotaRelay
+    let managedQuotaRelay = ManagedQuotaRelay()
     /// Persists which usage thresholds have fired for the current weekly window so
     /// alerts fire once per threshold and never re-fire across relaunches (56b).
-    let usageAlertStore: UsageAlertStateStoring
+    /// A `var` with a default so tests can substitute an in-memory store.
+    var usageAlertStore: UsageAlertStateStoring = UserDefaultsUsageAlertStore()
     /// Set by the menu-bar controller so a notification "open" action (or a
     /// menu click) can surface the review window.
     var openReviewHandler: (() -> Void)?
@@ -387,7 +388,6 @@ final class AppState: ObservableObject {
         llm: LLMProviding? = nil,
         managedAccount: ManagedAccountService? = nil,
         notifier: DraftNotifying = NullDraftNotifier(),
-        usageAlertStore: UsageAlertStateStoring = UserDefaultsUsageAlertStore(),
         reachability: NetworkReachabilityMonitoring = NetworkReachabilityMonitor()
     ) {
         self.persistence = persistence
@@ -396,12 +396,9 @@ final class AppState: ObservableObject {
         // Managed account (item 56a) + wire it as the LLM session provider.
         let managedAccount = managedAccount ?? ManagedAccountService(secrets: secrets)
         self.managedAccount = managedAccount
-        // Quota relay bridges the LLM layer's quota reports to the main actor
-        // (item 56b); wired to the default LLMService, then to AppState after init.
-        let quotaRelay = ManagedQuotaRelay()
-        self.managedQuotaRelay = quotaRelay
-        self.usageAlertStore = usageAlertStore
-        self.llm = llm ?? LLMService(managedSessionProvider: managedAccount, quotaReporter: quotaRelay)
+        // The quota relay (item 56b) bridges the LLM layer's quota reports to the
+        // main actor; wired to the default LLMService, then to AppState after init.
+        self.llm = llm ?? LLMService(managedSessionProvider: managedAccount, quotaReporter: managedQuotaRelay)
         self.notifier = notifier
         self.reachability = reachability
         self.isOnline = reachability.isOnline
@@ -480,14 +477,7 @@ final class AppState: ObservableObject {
         notifier.onAction = { [weak self] action, identity in
             await self?.handleNotificationAction(action, identity: identity)
         }
-        notifier.onOpenUsageSettings = { [weak self] in
-            self?.openSettingsHandler?(.ai)
-        }
-        // Bridge managed-quota reports (from the possibly off-main LLM layer) onto
-        // the main actor so the published quota and usage alerts update (item 56b).
-        managedQuotaRelay.setHandler { [weak self] quota in
-            self?.ingestManagedQuota(quota)
-        }
+        wireUsageMeteringHandlers()
         reachability.onChange = { [weak self] online in
             self?.handleReachabilityChange(online)
         }

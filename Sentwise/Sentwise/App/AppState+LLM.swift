@@ -247,6 +247,30 @@ extension AppState {
             return "Sign in to Sentwise AI first (Settings → AI)."
         case LLMError.managedTrialExpired(let message):
             return message
+        default:
+            // Metering copy (item 56b) then Keychain/generic, factored out to keep
+            // this switch's complexity low.
+            return managedMeteringMessage(for: error) ?? keychainOrGenericMessage(for: error)
+        }
+    }
+
+    /// Keychain and fallback copy, split out of `llmMessage` to keep it small.
+    private static func keychainOrGenericMessage(for error: Error) -> String {
+        switch error {
+        case KeychainError.unexpectedStatus(let status):
+            return "Keychain returned status \(status)."
+        case KeychainError.dataEncodingFailed:
+            return "Keychain could not encode the API key."
+        default:
+            return error.localizedDescription
+        }
+    }
+
+    /// Friendly copy for the managed metering errors (item 56b); `nil` for any
+    /// other error so `llmMessage` handles it. The quota-exceeded copy carries the
+    /// "buy more" CTA placeholder (56c) and the own-key valve (item 59).
+    private static func managedMeteringMessage(for error: Error) -> String? {
+        switch error {
         case LLMError.managedRateLimited(let retryAfter):
             if let retryAfter, retryAfter > 0 {
                 return "You're drafting faster than Sentwise allows — try again in "
@@ -254,22 +278,17 @@ extension AppState {
             }
             return "You're drafting faster than Sentwise allows — try again in a moment."
         case LLMError.managedQuotaExceeded(let resetsAt):
-            let base = "You've used all your weekly Sentwise AI drafts."
             let resetPhrase = resetsAt.map {
                 " Your allotment resets \(ManagedQuota.resetDescription($0))."
             } ?? ""
-            return base + resetPhrase
+            return "You've used all your weekly Sentwise AI drafts.\(resetPhrase)"
                 + " Buy more usage in Settings → AI, or use your own key for unlimited drafting."
         case LLMError.managedRequestTooLarge(let message):
             return message.isEmpty
                 ? "That transcript or thread is too large for a single draft. Trim it and try again."
                 : message
-        case KeychainError.unexpectedStatus(let status):
-            return "Keychain returned status \(status)."
-        case KeychainError.dataEncodingFailed:
-            return "Keychain could not encode the API key."
         default:
-            return error.localizedDescription
+            return nil
         }
     }
 

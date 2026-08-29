@@ -49,14 +49,15 @@ final class AppStateUsageQuotaTests: XCTestCase {
         secrets: SecretStore = InMemorySecretStore(),
         persistence: AppStateMemoryPersistence = AppStateMemoryPersistence()
     ) -> AppState {
-        AppState(
+        let appState = AppState(
             persistence: persistence,
             secrets: secrets,
             mailProvider: FakeAppMailProvider(result: .success(())),
             llm: llm,
-            notifier: notifier,
-            usageAlertStore: store
+            notifier: notifier
         )
+        appState.usageAlertStore = store
+        return appState
     }
 
     private func signedInFixture() -> (secrets: SecretStore, persistence: AppStateMemoryPersistence) {
@@ -79,9 +80,9 @@ final class AppStateUsageQuotaTests: XCTestCase {
 
     func testIngestUpdatesPublishedQuota() {
         let appState = makeAppState()
-        let q = quota(used: 12, limit: 50)
-        appState.ingestManagedQuota(q)
-        XCTAssertEqual(appState.managedQuota, q)
+        let value = quota(used: 12, limit: 50)
+        appState.ingestManagedQuota(value)
+        XCTAssertEqual(appState.managedQuota, value)
     }
 
     func testIngestFiresThresholdAlertOncePerWindow() {
