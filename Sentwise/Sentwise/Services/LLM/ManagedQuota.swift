@@ -135,18 +135,22 @@ struct ManagedQuota: Codable, Sendable, Equatable {
 
     /// The main usage line for the Settings pane, e.g.
     /// "12 of 50 drafts used this week · resets Monday, 5:00 PM".
-    func usageSummary(now: Date = Date(), calendar: Calendar = .current) -> String {
+    func usageSummary(calendar: Calendar = .current, locale: Locale = .current) -> String {
         let base = "\(used) of \(limit) \(unit) used this week"
         guard hasKnownReset else { return base }
-        return "\(base) · resets \(Self.resetDescription(resetsAt, calendar: calendar))"
+        return "\(base) · resets \(Self.resetDescription(resetsAt, calendar: calendar, locale: locale))"
     }
 
     /// A weekday + time description of a reset instant in the user's locale,
     /// e.g. "Monday, 5:00 PM".
-    static func resetDescription(_ date: Date, calendar: Calendar = .current) -> String {
+    static func resetDescription(
+        _ date: Date,
+        calendar: Calendar = .current,
+        locale: Locale = .current
+    ) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
-        formatter.locale = .current
+        formatter.locale = locale
         formatter.timeZone = calendar.timeZone
         formatter.setLocalizedDateFormatFromTemplate("EEEE h mm a")
         return formatter.string(from: date)

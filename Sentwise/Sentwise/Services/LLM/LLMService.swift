@@ -90,23 +90,19 @@ struct LLMService: LLMProviding {
     }
 
     /// Fetches the managed account's current usage allotment from `/v1/me`
-    /// (item 56b) and reports it to the sink. In Prowl hunt mode returns a fixed
-    /// stub with zero network. Returns `nil` for a non-managed setup or when the
-    /// Worker omits `quota` (older build).
+    /// (item 56b). In Prowl hunt mode returns a fixed stub with zero network.
+    /// Returns `nil` for a non-managed setup or when the Worker omits `quota`
+    /// (older build). The quota is returned to the caller (which ingests it) — the
+    /// relay is reserved for the draft path, where the response is otherwise
+    /// swallowed by the generators — so this does not double-report.
     func fetchManagedQuota() async throws -> ManagedQuota? {
         if isProwlHuntMode {
-            let stub = StubManagedInferenceClient.stubbedQuota
-            await quotaReporter?.reportQuota(stub)
-            return stub
+            return StubManagedInferenceClient.stubbedQuota
         }
         let client = ManagedInferenceClient(
             sessionProvider: managedSessionProvider,
             transport: transport
         )
-        let quota = try await client.fetchAccountQuota()
-        if let quota {
-            await quotaReporter?.reportQuota(quota)
-        }
-        return quota
+        return try await client.fetchAccountQuota()
     }
 }

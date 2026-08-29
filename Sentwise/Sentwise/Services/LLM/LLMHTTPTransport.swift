@@ -11,6 +11,15 @@ protocol LLMHTTPTransport: Sendable {
     func getJSON(_ url: URL, headers: [String: String]) async throws -> HTTPResponse
 }
 
+extension LLMHTTPTransport {
+    /// Default so POST-only adapters/doubles need not implement GET. The managed
+    /// `/v1/me` path is served by `URLSessionTransport`, which overrides this; a
+    /// double that reaches here surfaces the misuse instead of silently succeeding.
+    func getJSON(_ url: URL, headers: [String: String]) async throws -> HTTPResponse {
+        throw LLMError.transport("getJSON is not supported by \(type(of: self))")
+    }
+}
+
 extension URLSessionTransport: LLMHTTPTransport {
     func postJSON(_ url: URL, headers: [String: String], body: Data) async throws -> HTTPResponse {
         var request = URLRequest(url: url)

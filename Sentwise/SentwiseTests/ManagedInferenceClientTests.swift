@@ -36,8 +36,8 @@ final class ManagedInferenceClientTests: XCTestCase {
         )
     }
 
-    private func json(_ string: String, status: Int = 200) -> HTTPResponse {
-        HTTPResponse(statusCode: status, body: Data(string.utf8))
+    private func json(_ string: String, status: Int = 200, headers: [String: String] = [:]) -> HTTPResponse {
+        HTTPResponse(statusCode: status, body: Data(string.utf8), headers: headers)
     }
 
     func testSendsBearerTokenAndMapsResponse() async throws {
@@ -122,6 +122,139 @@ final class ManagedInferenceClientTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
+    }
+
+    // MARK: - Quota (item 56b)
+
+    func testDecodesQuotaFromDraftResponse() async throws {
+        let transport = FakeLLMTransport(response: json(#"""
+        {
+          "text": "Hi Marcus,",
+          "usage": {"inputTokens": 40, "outputTokens": 12},
+          "quota": {
+            "unit": "drafts", "used": 12, "limit": 50, "remaining": 38,
+            "resetsAt": "2025-09-01T00:00:00Z", "tokensUsed": 6000,
+            "tokenLimit": 250000, "enforcement": "soft", "extraPurchased": 0
+          }
+        }
+        """#))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+
+        let response = try await client.complete(sampleRequest())
+        let quota = try XCTUnwrap(response.quota)
+        XCTAssertEqual(quota.used, 12)
+        XCTAssertEqual(quota.limit, 50)
+        XCTAssertEqual(quota.remaining, 38)
+        XCTAssertEqual(quota.enforcement, .soft)
+    }
+
+    func testDraftResponseWithoutQuotaDecodesToNil() async throws {
+        let transport = FakeLLMTransport(response: json(#"{"text":"Hi","usage":{"inputTokens":1,"outputTokens":1}}"#))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+        let response = try await client.complete(sampleRequest())
+        XCTAssertNil(response.quota)
+        XCTAssertEqual(response.text, "Hi")
+    }
+
+    func testMaps429RateLimitedWithRetryAfterFromBody() async {
+        let transport = FakeLLMTransport(response: json(
+            #"{"error":{"type":"rate_limited","message":"Slow down.","retryAfterSeconds":9}}"#,
+            status: 429,
+            headers: ["Retry-After": "30"]
+        ))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+        do {
+            _ = try await client.complete(sampleRequest())
+            XCTFail("Expected rate-limited error")
+        } catch LLMError.managedRateLimited(let retryAfter) {
+            // Body's retryAfterSeconds wins over the header.
+            XCTAssertEqual(retryAfter, 9)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testMaps429RateLimitedFallsBackToRetryAfterHeader() async {
+        let transport = FakeLLMTransport(response: json(
+            #"{"error":{"type":"rate_limited","message":"Slow down."}}"#,
+            status: 429,
+            headers: ["Retry-After": "30"]
+        ))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+        do {
+            _ = try await client.complete(sampleRequest())
+            XCTFail("Expected rate-limited error")
+        } catch LLMError.managedRateLimited(let retryAfter) {
+            XCTAssertEqual(retryAfter, 30)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testMaps429QuotaExceededWithResetsAt() async {
+        let transport = FakeLLMTransport(response: json(
+            #"{"error":{"type":"quota_exceeded","message":"Out of drafts.","resetsAt":"2025-09-08T00:00:00Z"}}"#,
+            status: 429
+        ))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+        do {
+            _ = try await client.complete(sampleRequest())
+            XCTFail("Expected quota-exceeded error")
+        } catch LLMError.managedQuotaExceeded(let resetsAt) {
+            XCTAssertEqual(resetsAt, ManagedQuotaDate.date(from: "2025-09-08T00:00:00Z"))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testMaps413RequestTooLarge() async {
+        let transport = FakeLLMTransport(response: json(
+            #"{"error":{"type":"request_too_large","message":"Transcript too big."}}"#,
+            status: 413
+        ))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+        do {
+            _ = try await client.complete(sampleRequest())
+            XCTFail("Expected request-too-large error")
+        } catch LLMError.managedRequestTooLarge(let message) {
+            XCTAssertEqual(message, "Transcript too big.")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testFetchAccountQuotaUsesGetAndDecodesQuota() async throws {
+        let transport = FakeLLMTransport(response: json(#"""
+        {
+          "userId": "user_123",
+          "trial": {"active": true},
+          "quota": {"unit":"drafts","used":5,"limit":50,"remaining":45,
+                    "resetsAt":"2025-09-01T00:00:00Z","enforcement":"soft"}
+        }
+        """#))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(token: "tok-me"), transport: transport)
+
+        let quota = try await client.fetchAccountQuota(meEndpoint: ManagedInference.meEndpoint)
+
+        XCTAssertEqual(transport.lastMethod, "GET")
+        XCTAssertEqual(transport.lastURL, ManagedInference.meEndpoint)
+        XCTAssertEqual(transport.lastHeaders?["authorization"], "Bearer tok-me")
+        XCTAssertEqual(quota?.used, 5)
+        XCTAssertEqual(quota?.remaining, 45)
+    }
+
+    func testFetchAccountQuotaReturnsNilWhenOmitted() async throws {
+        let transport = FakeLLMTransport(response: json(#"{"userId":"user_123","trial":{"active":true}}"#))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+        let quota = try await client.fetchAccountQuota()
+        XCTAssertNil(quota)
+    }
+
+    func testStubClientReturnsStubbedQuota() async throws {
+        let response = try await StubManagedInferenceClient().complete(sampleRequest())
+        let quota = try XCTUnwrap(response.quota)
+        XCTAssertEqual(quota.limit, 50)
+        XCTAssertEqual(quota.unit, "drafts")
     }
 
     func testPropagatesNotSignedInFromSessionProviderWithoutCallingTransport() async {

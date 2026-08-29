@@ -186,6 +186,91 @@ keeps their provider. Fresh installs default to `.managed` directly. The
 migration is gated on the original schema version so it runs once
 (`AppState.migratedManagedInferenceSettings`).
 
+## Metering (56b) — app side
+
+The Worker meters a **weekly draft allotment** that resets weekly, then
+pay-per-use overage (the purchase flow is 56c). Under the hood it counts tokens
+with a per-request safety cap; the UI presents a friendly unit (**drafts**).
+Enforcement is **soft** while dogfooding — drafting is never blocked; the
+hard-block + real "buy more" ship with 56c. This repo implements only the
+app-side surfacing + alerts (service half lives in `sentwise-service`).
+
+### Quota model (`ManagedQuota`, `Services/LLM/ManagedQuota.swift`)
+
+A `Codable, Sendable, Equatable` value type decoded from the `quota` object on
+**both** `GET /v1/me` and every `POST /v1/draft` response:
+
+```
+{ "unit":"drafts", "used":Int, "limit":Int, "remaining":Int,
+  "resetsAt":ISO8601, "tokensUsed":Int, "tokenLimit":Int,
+  "enforcement":"soft"|"hard", "extraPurchased":Int }
+```
+
+`quota` is **optional** everywhere it's decoded, so an older Worker build that
+omits it still parses. Decoding is lenient: missing numbers default to 0,
+`remaining` falls back to `limit − used`, an unknown/absent `enforcement`
+defaults to `soft`, and `resetsAt` accepts the fractional-seconds ISO-8601
+variant (absent → `.distantPast`, treated as "reset unknown" by the display).
+
+### Refresh points & flow
+
+- **`/v1/draft`**: `ManagedInferenceClient` decodes `quota` into
+  `LLMResponse.quota`; `LLMService.complete` reports it to a
+  `ManagedQuotaReporting` sink.
+- **`/v1/me`**: `LLMService.fetchManagedQuota()` (via
+  `ManagedInferenceClient.fetchAccountQuota()`, an authenticated GET) is called
+  at **app launch** (`AppDelegate`), **sign-in**
+  (`finalizeManagedSignIn`), and when the **AI Provider settings pane opens**
+  (`ManagedUsageView.task`).
+- Both funnel through `AppState.ingestManagedQuota` (`AppState+Quota.swift`),
+  which mirrors the latest quota into the `@Published var managedQuota` and runs
+  the alert logic. The off-main → main hop is a `ManagedQuotaRelay`.
+
+### Settings display (`Views/ManagedUsageView.swift`)
+
+In the Sentwise AI section when signed in: **"N of M drafts used this week ·
+resets \<weekday, time\>"** with a `ProgressView`, a subdued "Extra usage
+purchased: X" line only when `extraPurchased > 0`, a **"Buy more usage"**
+placeholder (56c wires purchase) shown when at/over limit, and the
+**own-key valve** pointing at the BYO section below (item 59). Hidden gracefully
+when `managedQuota == nil`. AX ids: `managedUsageSection`, `managedUsageSummary`,
+`managedUsageProgress`, `managedExtraPurchased`, `buyMoreUsage`,
+`managedOwnKeyValve`.
+
+### Error mapping (`LLMError` + `AppState.llmMessage`)
+
+| Worker response | `LLMError` case | User copy |
+| --- | --- | --- |
+| `429` `rate_limited` (+`retryAfterSeconds`, `Retry-After` header) | `.managedRateLimited(retryAfter:)` | "You're drafting faster than Sentwise allows — try again in N seconds." |
+| `429` `quota_exceeded` (+`resetsAt`, hard mode only) | `.managedQuotaExceeded(resetsAt:)` | Explains the weekly reset, "Buy more usage in Settings → AI, or use your own key for unlimited drafting." |
+| `413` `request_too_large` | `.managedRequestTooLarge` | Suggests trimming the transcript/thread. |
+
+Body `retryAfterSeconds` takes precedence over the `Retry-After` header.
+`ResilienceClassifier` treats rate-limit as **transient** (retry after backoff)
+and quota-exceeded / too-large as **permanent**. Existing `402`/`trial_expired`
+and `401` handling is unchanged.
+
+### Usage alerts (50 / 75 / 100 %)
+
+`UsageAlertEvaluator` (`Services/UsageAlert.swift`) is pure decision logic: given
+the latest quota and the previously-persisted `UsageAlertState`, it returns the
+thresholds to fire **now**. A threshold fires **once per weekly window**; fired
+thresholds are persisted per `resetsAt` (`UserDefaultsUsageAlertStore`) so a
+relaunch never re-fires, and a changed `resetsAt` resets the fired set. Alerts
+post via `NotificationService.notifyUsageAlert` under a distinct `USAGE_ALERT`
+category whose **Open** action routes to Settings → AI Provider (not Review
+Drafts), respecting the existing notification-permission handling. The 100% copy
+in soft mode says drafting continues and points to buying extra usage / own key.
+Alerts are suppressed in Prowl hunt mode (the display value still updates).
+
+### Prowl hunt mode
+
+`StubManagedInferenceClient` returns a plausible fixed `quota`
+(`StubManagedInferenceClient.stubbedQuota`) with zero network, and
+`LLMService.fetchManagedQuota()` returns the same stub in hunt mode, so the pane
+renders deterministically. `ingestManagedQuota` skips alert scheduling under
+`ProwlHuntRuntime.current.isEnabled`, so hunts stay side-effect free.
+
 ## Prowl hunt mode
 
 `LLMService` returns a `StubManagedInferenceClient` (deterministic canned
