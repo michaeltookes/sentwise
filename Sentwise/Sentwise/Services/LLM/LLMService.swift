@@ -86,7 +86,7 @@ struct LLMService: LLMProviding {
             : nil
         let response = try await client(for: provider, apiKey: apiKey, baseURL: baseURL).complete(request)
         // Surface the latest allotment from the draft response (item 56b).
-        if provider == .managed, let quota = response.quota {
+        if provider == .managed, let quota = response.quota, let quotaAccountKey {
             await quotaReporter?.reportQuota(quota, accountKey: quotaAccountKey)
         }
         return response

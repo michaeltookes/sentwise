@@ -102,13 +102,13 @@ extension AppState {
 final class ManagedQuotaRelay: ManagedQuotaReporting, @unchecked Sendable {
     private let lock = NSLock()
     private var accountKeyProvider: (@MainActor () -> String?)?
-    private var handler: (@MainActor (ManagedQuota, String?) -> Void)?
+    private var handler: (@MainActor (ManagedQuota, String) -> Void)?
 
     func setAccountKeyProvider(_ provider: @escaping @MainActor () -> String?) {
         lock.withLock { self.accountKeyProvider = provider }
     }
 
-    func setHandler(_ handler: @escaping @MainActor (ManagedQuota, String?) -> Void) {
+    func setHandler(_ handler: @escaping @MainActor (ManagedQuota, String) -> Void) {
         lock.withLock { self.handler = handler }
     }
 
@@ -118,7 +118,7 @@ final class ManagedQuotaRelay: ManagedQuotaReporting, @unchecked Sendable {
         lock.withLock { accountKeyProvider }
     }
 
-    private func currentHandler() -> (@MainActor (ManagedQuota, String?) -> Void)? {
+    private func currentHandler() -> (@MainActor (ManagedQuota, String) -> Void)? {
         lock.withLock { handler }
     }
 
@@ -127,7 +127,7 @@ final class ManagedQuotaRelay: ManagedQuotaReporting, @unchecked Sendable {
         return await MainActor.run { provider() }
     }
 
-    func reportQuota(_ quota: ManagedQuota, accountKey: String?) async {
+    func reportQuota(_ quota: ManagedQuota, accountKey: String) async {
         guard let handler = currentHandler() else { return }
         await MainActor.run { handler(quota, accountKey) }
     }

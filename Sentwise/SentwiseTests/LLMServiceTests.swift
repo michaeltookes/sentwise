@@ -3,7 +3,7 @@ import XCTest
 
 private actor RecordingQuotaReporter: ManagedQuotaReporting {
     private var accountKey: String?
-    private var reportedAccountKeys: [String?] = []
+    private var reportedAccountKeys: [String] = []
 
     init(accountKey: String?) {
         self.accountKey = accountKey
@@ -17,11 +17,11 @@ private actor RecordingQuotaReporter: ManagedQuotaReporting {
         accountKey
     }
 
-    func reportQuota(_ quota: ManagedQuota, accountKey: String?) async {
+    func reportQuota(_ quota: ManagedQuota, accountKey: String) async {
         reportedAccountKeys.append(accountKey)
     }
 
-    func accountKeys() -> [String?] {
+    func accountKeys() -> [String] {
         reportedAccountKeys
     }
 }

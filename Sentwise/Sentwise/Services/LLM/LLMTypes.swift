@@ -221,7 +221,7 @@ protocol ManagedQuotaReporting: Sendable {
     /// cannot be applied to a different account after sign-out/sign-in.
     func currentQuotaReportAccountKey() async -> String?
 
-    func reportQuota(_ quota: ManagedQuota, accountKey: String?) async
+    func reportQuota(_ quota: ManagedQuota, accountKey: String) async
 }
 
 extension ManagedQuotaReporting {

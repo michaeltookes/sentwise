@@ -224,10 +224,10 @@ final class AppStateUsageQuotaTests: XCTestCase {
         XCTAssertTrue(thirdNotifier.usageAlerts.isEmpty, "switching back must preserve account A's fired thresholds")
     }
 
-    func testDraftQuotaReportForOldAccountIsIgnoredAfterAccountSwitch() async {
+    func testDraftQuotaReportForOldAccountIsIgnoredAfterAccountSwitch() async throws {
         let notifier = FakeDraftNotifier()
         let appState = makeSignedInAppState(email: "marcus@example.com", notifier: notifier)
-        let oldAccountKey = await appState.managedQuotaRelay.currentQuotaReportAccountKey()
+        let oldAccountKey = try XCTUnwrap(await appState.managedQuotaRelay.currentQuotaReportAccountKey())
 
         appState.managedAccountEmail = "priya@example.com"
         appState.ingestManagedQuota(quota(used: 20))
