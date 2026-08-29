@@ -23,6 +23,7 @@ struct PendingDraftsView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             tabBar
+            searchField
             Divider()
 
             if appState.notificationsBlocked {
@@ -86,25 +87,69 @@ struct PendingDraftsView: View {
         if appState.pendingDrafts.isEmpty {
             emptyState
         } else {
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(appState.pendingDrafts, id: \.identity) { draft in
-                        let isExpanded = selection.expandedDraftIdentity == draft.identity
-                        VStack(spacing: 0) {
-                            PendingDraftRow(draft: draft, isExpanded: isExpanded) {
-                                selection.toggleExpanded(draft.identity)
-                            }
-                            if isExpanded {
-                                PendingDraftCard(draft: draft)
-                                    .environmentObject(appState)
-                                    .padding(.top, 4)
+            let filtered = appState.pendingDrafts.filter {
+                ReviewDraftsFilter.matches($0, query: selection.searchQuery)
+            }
+            if filtered.isEmpty {
+                noMatchesState
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(filtered, id: \.identity) { draft in
+                            let isExpanded = selection.expandedDraftIdentity == draft.identity
+                            VStack(spacing: 0) {
+                                PendingDraftRow(draft: draft, isExpanded: isExpanded) {
+                                    selection.toggleExpanded(draft.identity)
+                                }
+                                if isExpanded {
+                                    PendingDraftCard(draft: draft)
+                                        .environmentObject(appState)
+                                        .padding(.top, 4)
+                                }
                             }
                         }
                     }
+                    .padding(12)
                 }
-                .padding(12)
             }
         }
+    }
+
+    /// The Review Drafts search field (item 76). A read-only-*visible* input that
+    /// filters whichever tab is active by sender and MIME-decoded subject as the
+    /// user types; the clear "x" restores the full list. Its AX id contains
+    /// "search", which the existing `.prowl/config.yml` `forbiddenSelectors`
+    /// already blocks, so Prowl hunts can see it but never type into it (item 76).
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("Search drafts", text: $selection.searchQuery)
+                .textFieldStyle(.plain)
+                .font(.callout)
+                .accessibilityIdentifier("reviewDraftsSearchField")
+                .accessibilityLabel("Search drafts")
+            if !selection.searchQuery.isEmpty {
+                Button {
+                    selection.searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("reviewDraftsSearchClear")
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 7)
+            .fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 7)
+            .stroke(Color.secondary.opacity(0.15)))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     private var header: some View {
@@ -129,9 +174,9 @@ struct PendingDraftsView: View {
     /// forbidden selector and never reaches an approve/deny/send/draft action.
     private var tabBar: some View {
         HStack(spacing: 6) {
-            tabButton(title: "Drafts", count: appState.pendingDrafts.count,
+            tabButton(title: "Drafts", badge: draftsBadge,
                       tab: .drafts, identifier: "reviewDraftsTab")
-            tabButton(title: "Skipped", count: appState.skippedMessages.count,
+            tabButton(title: "Skipped", badge: skippedBadge,
                       tab: .skipped, identifier: "reviewSkippedTab")
             Spacer()
         }
@@ -139,7 +184,30 @@ struct PendingDraftsView: View {
         .padding(.bottom, 8)
     }
 
-    private func tabButton(title: String, count: Int, tab: ReviewTab, identifier: String) -> some View {
+    /// Whether a search filter is currently active (non-empty after trimming).
+    private var isFiltering: Bool {
+        !ReviewDraftsFilter.normalized(selection.searchQuery).isEmpty
+    }
+
+    /// The Drafts tab badge: the total, or "N of M" while filtering (item 76).
+    private var draftsBadge: String? {
+        let total = appState.pendingDrafts.count
+        let filtered = appState.pendingDrafts.filter {
+            ReviewDraftsFilter.matches($0, query: selection.searchQuery)
+        }.count
+        return ReviewDraftsFilter.countLabel(filtered: filtered, total: total, isFiltering: isFiltering)
+    }
+
+    /// The Skipped tab badge: the total, or "N of M" while filtering (item 76).
+    private var skippedBadge: String? {
+        let total = appState.skippedMessages.count
+        let filtered = appState.skippedMessages.filter {
+            ReviewDraftsFilter.matches($0, query: selection.searchQuery)
+        }.count
+        return ReviewDraftsFilter.countLabel(filtered: filtered, total: total, isFiltering: isFiltering)
+    }
+
+    private func tabButton(title: String, badge: String?, tab: ReviewTab, identifier: String) -> some View {
         let isSelected = selection.selectedTab == tab
         return Button {
             selection.selectedTab = tab
@@ -147,8 +215,8 @@ struct PendingDraftsView: View {
             HStack(spacing: 5) {
                 Text(title)
                     .font(.subheadline.weight(isSelected ? .semibold : .regular))
-                if count > 0 {
-                    Text("\(count)")
+                if let badge {
+                    Text(badge)
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
@@ -183,6 +251,24 @@ struct PendingDraftsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+
+    /// Shown when a non-empty search yields no rows in the active tab (item 76) —
+    /// distinct from the "No drafts waiting" empty state so it's clear the list
+    /// isn't empty, the filter just matched nothing.
+    private var noMatchesState: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("No matches")
+                .foregroundStyle(.secondary)
+            Text("No drafts match “\(selection.searchQuery)”.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("reviewDraftsNoMatches")
+    }
 }
 
 final class ReviewWindowSelection: ObservableObject {
@@ -193,6 +279,12 @@ final class ReviewWindowSelection: ObservableObject {
     /// a single value, at most one row can be open at a time — the accordion
     /// behaviour is automatic.
     @Published var expandedDraftIdentity: String?
+
+    /// The Review Drafts search query (item 76). Filters whichever tab is active
+    /// by sender and MIME-decoded subject as the user types; empty restores the
+    /// full list. One field, shared across tabs, so it persists when the user
+    /// switches between Drafts and Skipped. Matching lives in `ReviewDraftsFilter`.
+    @Published var searchQuery: String = ""
 
     init(selectedTab: PendingDraftsView.ReviewTab = .drafts) {
         self.selectedTab = selectedTab

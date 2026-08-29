@@ -9,32 +9,40 @@ struct SkippedMessagesTab: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var selection: ReviewWindowSelection
 
+    @ViewBuilder
     var body: some View {
         if appState.skippedMessages.isEmpty {
             emptyState
         } else {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Messages the watcher passed over")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Clear") { appState.dismissAllSkippedMessages() }
-                        .buttonStyle(.link)
-                        .font(.caption)
-                }
-                ScrollView {
-                    LazyVStack(spacing: 6) {
-                        ForEach(appState.skippedMessages) { entry in
-                            SkippedMessageRow(entry: entry, selection: selection)
-                                .environmentObject(appState)
-                        }
-                    }
-                    .padding(.bottom, 4)
-                }
+            let filtered = appState.skippedMessages.filter {
+                ReviewDraftsFilter.matches($0, query: selection.searchQuery)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            if filtered.isEmpty {
+                noMatchesState
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Messages the watcher passed over")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Clear") { appState.dismissAllSkippedMessages() }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                    }
+                    ScrollView {
+                        LazyVStack(spacing: 6) {
+                            ForEach(filtered) { entry in
+                                SkippedMessageRow(entry: entry, selection: selection)
+                                    .environmentObject(appState)
+                            }
+                        }
+                        .padding(.bottom, 4)
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
         }
     }
 
@@ -50,6 +58,23 @@ struct SkippedMessagesTab: View {
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Shown when a non-empty search matches no skipped messages (item 76) —
+    /// distinct from the "Nothing skipped" empty state.
+    private var noMatchesState: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("No matches")
+                .foregroundStyle(.secondary)
+            Text("No skipped messages match “\(selection.searchQuery)”.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("reviewSkippedNoMatches")
     }
 }
 
