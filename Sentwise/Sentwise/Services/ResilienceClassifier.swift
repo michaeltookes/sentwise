@@ -77,7 +77,12 @@ enum ResilienceClassifier {
             return classifyHTTPStatus(status)
         case .missingAPIKey, .managedNotSignedIn, .managedTrialExpired:
             return .authentication
-        case .invalidResponse, .invalidBaseURL:
+        case .managedRateLimited:
+            // Rate limiting clears on its own — retry after backoff (item 56b).
+            return .transient
+        case .invalidResponse, .invalidBaseURL, .managedQuotaExceeded, .managedRequestTooLarge:
+            // Quota-exhausted (until the window resets) and too-large requests
+            // won't succeed on retry (item 56b).
             return .permanent
         }
     }

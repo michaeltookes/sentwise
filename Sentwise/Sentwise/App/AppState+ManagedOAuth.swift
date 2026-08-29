@@ -40,6 +40,8 @@ extension AppState {
         saveSettings()
         resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
         startTranscriptFolderWatchingIfEnabled()
+        // Pull the current weekly allotment now that we can authenticate (item 56b).
+        Task { await refreshManagedQuota() }
     }
 
     /// Starts Google sign-in: asks Clerk for the hosted URL and opens it in the

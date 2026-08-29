@@ -6,11 +6,13 @@ import Foundation
 @MainActor
 final class FakeDraftNotifier: DraftNotifying {
     var onAction: ((DraftNotificationAction, String) async -> Void)?
+    var onOpenUsageSettings: (() async -> Void)?
     private(set) var notificationDeliveryPrepared = false
     private(set) var authorizationRequested = false
     private(set) var notifiedDrafts: [Draft] = []
     private(set) var refreshedDrafts: [Draft] = []
     private(set) var removedIdentities: [String] = []
+    private(set) var usageAlerts: [UsageAlert] = []
     /// The status `currentAuthorizationStatus()` reports; tests set this to
     /// simulate notifications being off (item 78).
     var authorizationStatus: NotificationPermission = .authorized
@@ -50,8 +52,17 @@ final class FakeDraftNotifier: DraftNotifying {
         removedIdentities.append(identity)
     }
 
+    func notifyUsageAlert(_ alert: UsageAlert) {
+        usageAlerts.append(alert)
+    }
+
     /// Simulates the user acting on the notification for `identity`.
     func fireAction(_ action: DraftNotificationAction, identity: String) async {
         await onAction?(action, identity)
+    }
+
+    /// Simulates the user opening a usage-threshold alert.
+    func fireOpenUsageSettings() async {
+        await onOpenUsageSettings?()
     }
 }

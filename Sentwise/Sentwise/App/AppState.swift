@@ -114,6 +114,11 @@ final class AppState: ObservableObject {
     /// transient like the handle itself, so it is intentionally not persisted.
     var pendingManagedSignInEmail: String?
 
+    /// The managed account's latest usage allotment (backlog item 56b), refreshed
+    /// from `/v1/me` (sign-in, launch, Settings open) and after every managed
+    /// draft. `nil` until known — the UI hides the usage display gracefully.
+    @Published var managedQuota: ManagedQuota?
+
     // MARK: - Voice Profile
 
     /// The learned voice profile, or `nil` if none has been learned yet.
@@ -345,9 +350,18 @@ final class AppState: ObservableObject {
     let managedAccount: ManagedAccountService
     /// Posts draft-ready notifications and routes their actions back.
     let notifier: DraftNotifying
+    /// Bridges managed-quota reports from the LLM layer onto the main actor so the
+    /// published quota and usage alerts update (backlog item 56b).
+    let managedQuotaRelay: ManagedQuotaRelay
+    /// Persists which usage thresholds have fired for the current weekly window so
+    /// alerts fire once per threshold and never re-fire across relaunches (56b).
+    let usageAlertStore: UsageAlertStateStoring
     /// Set by the menu-bar controller so a notification "open" action (or a
     /// menu click) can surface the review window.
     var openReviewHandler: (() -> Void)?
+    /// Set by the menu-bar controller so a usage-alert "open" action (or the
+    /// managed pane's controls) can surface Settings on a given tab (item 56b).
+    var openSettingsHandler: ((SettingsTab) -> Void)?
     /// Set by the menu-bar controller so the app can surface the first-run
     /// onboarding window at launch or from the menu.
     var openOnboardingHandler: (() -> Void)?
@@ -373,6 +387,7 @@ final class AppState: ObservableObject {
         llm: LLMProviding? = nil,
         managedAccount: ManagedAccountService? = nil,
         notifier: DraftNotifying = NullDraftNotifier(),
+        usageAlertStore: UsageAlertStateStoring = UserDefaultsUsageAlertStore(),
         reachability: NetworkReachabilityMonitoring = NetworkReachabilityMonitor()
     ) {
         self.persistence = persistence
@@ -381,7 +396,12 @@ final class AppState: ObservableObject {
         // Managed account (item 56a) + wire it as the LLM session provider.
         let managedAccount = managedAccount ?? ManagedAccountService(secrets: secrets)
         self.managedAccount = managedAccount
-        self.llm = llm ?? LLMService(managedSessionProvider: managedAccount)
+        // Quota relay bridges the LLM layer's quota reports to the main actor
+        // (item 56b); wired to the default LLMService, then to AppState after init.
+        let quotaRelay = ManagedQuotaRelay()
+        self.managedQuotaRelay = quotaRelay
+        self.usageAlertStore = usageAlertStore
+        self.llm = llm ?? LLMService(managedSessionProvider: managedAccount, quotaReporter: quotaRelay)
         self.notifier = notifier
         self.reachability = reachability
         self.isOnline = reachability.isOnline
@@ -459,6 +479,14 @@ final class AppState: ObservableObject {
     private func installExternalActionHandlers() {
         notifier.onAction = { [weak self] action, identity in
             await self?.handleNotificationAction(action, identity: identity)
+        }
+        notifier.onOpenUsageSettings = { [weak self] in
+            self?.openSettingsHandler?(.ai)
+        }
+        // Bridge managed-quota reports (from the possibly off-main LLM layer) onto
+        // the main actor so the published quota and usage alerts update (item 56b).
+        managedQuotaRelay.setHandler { [weak self] quota in
+            self?.ingestManagedQuota(quota)
         }
         reachability.onChange = { [weak self] online in
             self?.handleReachabilityChange(online)

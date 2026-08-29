@@ -9,6 +9,9 @@ struct LLMService: LLMProviding {
     /// to an "unavailable" provider so a service built without an account wired
     /// in reports "not signed in" rather than crashing.
     let managedSessionProvider: ManagedSessionProviding
+    /// Receives the latest managed quota after each draft/`/v1/me` fetch so the
+    /// app can mirror it into observable state and drive usage alerts (item 56b).
+    let quotaReporter: ManagedQuotaReporting?
     /// When true, the managed provider returns a canned, zero-network response so
     /// Prowl accessibility hunts stay offline-safe (backlog 56a).
     let isProwlHuntMode: Bool
@@ -16,10 +19,12 @@ struct LLMService: LLMProviding {
     init(
         transport: LLMHTTPTransport = URLSessionTransport(),
         managedSessionProvider: ManagedSessionProviding = UnavailableManagedSessionProvider(),
+        quotaReporter: ManagedQuotaReporting? = nil,
         isProwlHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
     ) {
         self.transport = transport
         self.managedSessionProvider = managedSessionProvider
+        self.quotaReporter = quotaReporter
         self.isProwlHuntMode = isProwlHuntMode
     }
 
@@ -76,6 +81,32 @@ struct LLMService: LLMProviding {
         apiKey: String,
         baseURL: String?
     ) async throws -> LLMResponse {
-        try await client(for: provider, apiKey: apiKey, baseURL: baseURL).complete(request)
+        let response = try await client(for: provider, apiKey: apiKey, baseURL: baseURL).complete(request)
+        // Surface the latest allotment from the draft response (item 56b).
+        if let quota = response.quota {
+            await quotaReporter?.reportQuota(quota)
+        }
+        return response
+    }
+
+    /// Fetches the managed account's current usage allotment from `/v1/me`
+    /// (item 56b) and reports it to the sink. In Prowl hunt mode returns a fixed
+    /// stub with zero network. Returns `nil` for a non-managed setup or when the
+    /// Worker omits `quota` (older build).
+    func fetchManagedQuota() async throws -> ManagedQuota? {
+        if isProwlHuntMode {
+            let stub = StubManagedInferenceClient.stubbedQuota
+            await quotaReporter?.reportQuota(stub)
+            return stub
+        }
+        let client = ManagedInferenceClient(
+            sessionProvider: managedSessionProvider,
+            transport: transport
+        )
+        let quota = try await client.fetchAccountQuota()
+        if let quota {
+            await quotaReporter?.reportQuota(quota)
+        }
+        return quota
     }
 }

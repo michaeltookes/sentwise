@@ -171,6 +171,9 @@ final class FakeLLMTransport: LLMHTTPTransport, @unchecked Sendable {
     private(set) var lastURL: URL?
     private(set) var lastHeaders: [String: String]?
     private(set) var lastBody: Data?
+    /// The HTTP method of the last request ("POST" / "GET"), for tests that
+    /// exercise the `/v1/me` GET path (backlog item 56b).
+    private(set) var lastMethod: String?
 
     init(response: HTTPResponse) {
         self.response = response
@@ -183,9 +186,19 @@ final class FakeLLMTransport: LLMHTTPTransport, @unchecked Sendable {
     }
 
     func postJSON(_ url: URL, headers: [String: String], body: Data) async throws -> HTTPResponse {
+        lastMethod = "POST"
         lastURL = url
         lastHeaders = headers
         lastBody = body
+        if let error { throw error }
+        return response ?? HTTPResponse(statusCode: -1, body: Data())
+    }
+
+    func getJSON(_ url: URL, headers: [String: String]) async throws -> HTTPResponse {
+        lastMethod = "GET"
+        lastURL = url
+        lastHeaders = headers
+        lastBody = nil
         if let error { throw error }
         return response ?? HTTPResponse(statusCode: -1, body: Data())
     }

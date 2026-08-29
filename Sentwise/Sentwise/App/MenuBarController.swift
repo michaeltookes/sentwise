@@ -54,6 +54,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         appState.openReviewHandler = { [weak self] in self?.openReview() }
         // The app delegate (at first launch) or the menu opens onboarding.
         appState.openOnboardingHandler = { [weak self] in self?.openOnboarding() }
+        // A usage-threshold alert (item 56b) opens Settings → AI Provider.
+        appState.openSettingsHandler = { [weak self] tab in
+            self?.settingsWindowController.show(tab: tab)
+        }
     }
 
     deinit {

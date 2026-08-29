@@ -247,6 +247,23 @@ extension AppState {
             return "Sign in to Sentwise AI first (Settings → AI)."
         case LLMError.managedTrialExpired(let message):
             return message
+        case LLMError.managedRateLimited(let retryAfter):
+            if let retryAfter, retryAfter > 0 {
+                return "You're drafting faster than Sentwise allows — try again in "
+                    + "\(retryAfter) second\(retryAfter == 1 ? "" : "s")."
+            }
+            return "You're drafting faster than Sentwise allows — try again in a moment."
+        case LLMError.managedQuotaExceeded(let resetsAt):
+            let base = "You've used all your weekly Sentwise AI drafts."
+            let resetPhrase = resetsAt.map {
+                " Your allotment resets \(ManagedQuota.resetDescription($0))."
+            } ?? ""
+            return base + resetPhrase
+                + " Buy more usage in Settings → AI, or use your own key for unlimited drafting."
+        case LLMError.managedRequestTooLarge(let message):
+            return message.isEmpty
+                ? "That transcript or thread is too large for a single draft. Trim it and try again."
+                : message
         case KeychainError.unexpectedStatus(let status):
             return "Keychain returned status \(status)."
         case KeychainError.dataEncodingFailed:
