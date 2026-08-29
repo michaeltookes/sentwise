@@ -118,6 +118,9 @@ final class AppState: ObservableObject {
     /// from `/v1/me` (sign-in, launch, Settings open) and after every managed
     /// draft. `nil` until known — the UI hides the usage display gracefully.
     @Published var managedQuota: ManagedQuota?
+    /// Hashed account key the cached quota belongs to. Kept with the quota so
+    /// account switches never display another account's usage while refresh runs.
+    var managedQuotaAccountKey: String?
 
     // MARK: - Voice Profile
 

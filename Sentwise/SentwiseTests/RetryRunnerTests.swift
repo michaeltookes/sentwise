@@ -142,6 +142,17 @@ final class RetryRunnerTests: XCTestCase {
         XCTAssertEqual(sleeps.values, [1_000, 2_000])
     }
 
+    func testSleepsWithExplicitRetryDelayWhenProvided() async {
+        let sleeps = SleepRecorder()
+        let runner = runner(maxAttempts: 2, base: 1_000, max: 100_000, jitter: 0,
+                            recordedSleeps: { sleeps.record($0) })
+        _ = try? await runner.run(
+            classify: { _ in .retryAfter(30_000) },
+            operation: { () throws -> Int in throw TransientError() }
+        )
+        XCTAssertEqual(sleeps.values, [30_000])
+    }
+
     /// Thread-safe collector for the injected sleep closure.
     private final class SleepRecorder: @unchecked Sendable {
         private let lock = NSLock()

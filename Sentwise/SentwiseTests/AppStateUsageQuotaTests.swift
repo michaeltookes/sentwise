@@ -23,6 +23,63 @@ private final class QuotaLLMProvider: LLMProviding, @unchecked Sendable {
     }
 }
 
+/// An `LLMProviding` double that pauses `/v1/me` until the test resumes it,
+/// letting AppState mutate account state while a quota refresh is in flight.
+private final class BlockingQuotaLLMProvider: LLMProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<ManagedQuota?, Error>?
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var count = 0
+    private var didStartFetch = false
+
+    var fetchCount: Int { lock.withLock { count } }
+
+    func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
+    func complete(_ request: LLMRequest, provider: LLMProviderKind, apiKey: String, baseURL: String?) async throws -> LLMResponse {
+        LLMResponse(text: "")
+    }
+
+    func fetchManagedQuota() async throws -> ManagedQuota? {
+        let pendingWaiters: [CheckedContinuation<Void, Never>] = lock.withLock {
+            count += 1
+            didStartFetch = true
+            let pending = waiters
+            waiters.removeAll()
+            return pending
+        }
+        pendingWaiters.forEach { $0.resume() }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            lock.withLock {
+                self.continuation = continuation
+            }
+        }
+    }
+
+    func waitUntilFetchStarted() async {
+        if lock.withLock({ didStartFetch }) { return }
+        await withCheckedContinuation { continuation in
+            let shouldResumeNow = lock.withLock {
+                guard !didStartFetch else { return true }
+                waiters.append(continuation)
+                return false
+            }
+            if shouldResumeNow {
+                continuation.resume()
+            }
+        }
+    }
+
+    func completeFetch(with quota: ManagedQuota?) {
+        let pending = lock.withLock {
+            let pending = continuation
+            continuation = nil
+            return pending
+        }
+        pending?.resume(returning: quota)
+    }
+}
+
 /// AppState-level metering behavior (item 56b): mirroring quota into published
 /// state, once-per-window alert firing, window reset, and the `/v1/me` refresh.
 @MainActor
@@ -60,7 +117,10 @@ final class AppStateUsageQuotaTests: XCTestCase {
         return appState
     }
 
-    private func signedInFixture() -> (secrets: SecretStore, persistence: AppStateMemoryPersistence) {
+    private func signedInFixture(
+        email: String = "marcus@example.com",
+        provider: String = "managed"
+    ) -> (secrets: SecretStore, persistence: AppStateMemoryPersistence) {
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",
             .managedSessionID: "sess_X"
@@ -68,27 +128,45 @@ final class AppStateUsageQuotaTests: XCTestCase {
         let persistence = AppStateMemoryPersistence(settings: Settings(
             schemaVersion: Settings.currentSchemaVersion,
             pollIntervalSeconds: 300,
-            llmProvider: "managed",
+            llmProvider: provider,
             llmModel: "",
             llmVerifiedModel: "",
-            managedAccountEmail: "marcus@example.com"
+            managedAccountEmail: email
         ))
         return (secrets, persistence)
+    }
+
+    private func makeSignedInAppState(
+        email: String = "marcus@example.com",
+        provider: String = "managed",
+        notifier: FakeDraftNotifier = FakeDraftNotifier(),
+        store: UsageAlertStateStoring = InMemoryUsageAlertStore(),
+        llm: LLMProviding = FakeLLMProvider(result: .success(()))
+    ) -> AppState {
+        let fixture = signedInFixture(email: email, provider: provider)
+        return makeAppState(
+            notifier: notifier,
+            store: store,
+            llm: llm,
+            secrets: fixture.secrets,
+            persistence: fixture.persistence
+        )
     }
 
     // MARK: - Ingest
 
     func testIngestUpdatesPublishedQuota() {
-        let appState = makeAppState()
+        let appState = makeSignedInAppState()
         let value = quota(used: 12, limit: 50)
         appState.ingestManagedQuota(value)
         XCTAssertEqual(appState.managedQuota, value)
+        XCTAssertEqual(appState.managedQuotaAccountKey, ManagedUsageAccountKey.make(from: "marcus@example.com"))
     }
 
     func testIngestFiresThresholdAlertOncePerWindow() {
         let notifier = FakeDraftNotifier()
         let store = InMemoryUsageAlertStore()
-        let appState = makeAppState(notifier: notifier, store: store)
+        let appState = makeSignedInAppState(notifier: notifier, store: store)
 
         appState.ingestManagedQuota(quota(used: 55))
         XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.fifty])
@@ -104,7 +182,7 @@ final class AppStateUsageQuotaTests: XCTestCase {
 
     func testIngestResetsAlertsOnNewWindow() {
         let notifier = FakeDraftNotifier()
-        let appState = makeAppState(notifier: notifier)
+        let appState = makeSignedInAppState(notifier: notifier)
 
         appState.ingestManagedQuota(quota(used: 100))
         XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.fifty, .seventyFive, .hundred])
@@ -117,15 +195,28 @@ final class AppStateUsageQuotaTests: XCTestCase {
     func testIngestPersistsFiredStateSoRelaunchDoesNotRefire() {
         let store = InMemoryUsageAlertStore()
         let firstNotifier = FakeDraftNotifier()
-        let first = makeAppState(notifier: firstNotifier, store: store)
+        let first = makeSignedInAppState(notifier: firstNotifier, store: store)
         first.ingestManagedQuota(quota(used: 55))
         XCTAssertEqual(firstNotifier.usageAlerts.count, 1)
 
         // Simulate a relaunch: a fresh AppState sharing the persisted store.
         let secondNotifier = FakeDraftNotifier()
-        let second = makeAppState(notifier: secondNotifier, store: store)
+        let second = makeSignedInAppState(notifier: secondNotifier, store: store)
         second.ingestManagedQuota(quota(used: 60))
         XCTAssertTrue(secondNotifier.usageAlerts.isEmpty, "a relaunch must not re-fire an already-fired threshold")
+    }
+
+    func testIngestKeepsAlertStateSeparateByManagedAccount() {
+        let store = InMemoryUsageAlertStore()
+        let firstNotifier = FakeDraftNotifier()
+        let first = makeSignedInAppState(email: "marcus@example.com", notifier: firstNotifier, store: store)
+        first.ingestManagedQuota(quota(used: 55))
+        XCTAssertEqual(firstNotifier.usageAlerts.map(\.threshold), [.fifty])
+
+        let secondNotifier = FakeDraftNotifier()
+        let second = makeSignedInAppState(email: "priya@example.com", notifier: secondNotifier, store: store)
+        second.ingestManagedQuota(quota(used: 60))
+        XCTAssertEqual(secondNotifier.usageAlerts.map(\.threshold), [.fifty])
     }
 
     // MARK: - Refresh
@@ -149,6 +240,23 @@ final class AppStateUsageQuotaTests: XCTestCase {
         XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.fifty])
     }
 
+    func testRefreshManagedQuotaFetchesWhenSignedInButBYOProviderActive() async {
+        let fixture = signedInFixture(provider: "anthropic")
+        let llm = QuotaLLMProvider(quota: quota(used: 25))
+        let appState = makeAppState(
+            llm: llm,
+            secrets: fixture.secrets,
+            persistence: fixture.persistence
+        )
+        XCTAssertTrue(appState.isManagedSignedIn)
+        XCTAssertFalse(appState.isManagedProviderActive)
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(llm.fetchCount, 1)
+        XCTAssertEqual(appState.managedQuota?.used, 25)
+    }
+
     func testRefreshSkipsWhenNotSignedIn() async {
         let llm = QuotaLLMProvider(quota: quota(used: 50))
         let appState = makeAppState(llm: llm) // fresh install: managed but signed out
@@ -160,8 +268,37 @@ final class AppStateUsageQuotaTests: XCTestCase {
         XCTAssertNil(appState.managedQuota)
     }
 
+    func testSignOutClearsCachedManagedQuota() async {
+        let appState = makeSignedInAppState()
+        appState.ingestManagedQuota(quota(used: 55))
+        XCTAssertNotNil(appState.managedQuota)
+        XCTAssertNotNil(appState.managedQuotaAccountKey)
+
+        await appState.signOutManaged()
+
+        XCTAssertNil(appState.managedQuota)
+        XCTAssertNil(appState.managedQuotaAccountKey)
+    }
+
+    func testRefreshManagedQuotaIgnoresResultAfterSignOut() async {
+        let llm = BlockingQuotaLLMProvider()
+        let appState = makeSignedInAppState(llm: llm)
+
+        let refresh = Task { @MainActor in
+            await appState.refreshManagedQuota()
+        }
+        await llm.waitUntilFetchStarted()
+        await appState.signOutManaged()
+        llm.completeFetch(with: quota(used: 50))
+        await refresh.value
+
+        XCTAssertEqual(llm.fetchCount, 1)
+        XCTAssertNil(appState.managedQuota)
+        XCTAssertNil(appState.managedQuotaAccountKey)
+    }
+
     func testIsManagedQuotaExhausted() {
-        let appState = makeAppState()
+        let appState = makeSignedInAppState()
         XCTAssertFalse(appState.isManagedQuotaExhausted)
         appState.ingestManagedQuota(quota(used: 100))
         XCTAssertTrue(appState.isManagedQuotaExhausted)

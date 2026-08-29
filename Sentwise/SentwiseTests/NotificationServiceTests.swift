@@ -304,7 +304,7 @@ final class NotificationServiceTests: XCTestCase {
             unit: "drafts", used: 25, limit: 50, remaining: 25,
             resetsAt: ManagedQuotaDate.date(from: "2025-09-01T00:00:00Z")!, enforcement: .soft
         )
-        let alert = UsageAlert.make(threshold: .fifty, quota: quota)
+        let alert = UsageAlert.make(threshold: .fifty, quota: quota, accountKey: "acct-test")
 
         service.notifyUsageAlert(alert)
 

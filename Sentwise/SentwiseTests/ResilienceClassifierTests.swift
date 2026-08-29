@@ -93,6 +93,24 @@ final class ResilienceClassifierTests: XCTestCase {
         XCTAssertEqual(ResilienceClassifier.retryDecision(for: error), .stop)
     }
 
+    func testManagedRateLimitCarriesRetryAfterIntoRetryDecision() {
+        let error = LLMError.managedRateLimited(retryAfter: 30)
+        XCTAssertEqual(ResilienceClassifier.classify(error), .transient)
+        XCTAssertTrue(ResilienceClassifier.isRetryable(error))
+        XCTAssertEqual(ResilienceClassifier.retryDecision(for: error), .retryAfter(30_000_000_000))
+    }
+
+    func testManagedRateLimitWithoutRetryAfterUsesGenericRetry() {
+        XCTAssertEqual(
+            ResilienceClassifier.retryDecision(for: LLMError.managedRateLimited(retryAfter: nil)),
+            .retry
+        )
+        XCTAssertEqual(
+            ResilienceClassifier.retryDecision(for: LLMError.managedRateLimited(retryAfter: 0)),
+            .retry
+        )
+    }
+
     func testKeychainFailuresAreAuthentication() {
         let error = KeychainError.unexpectedStatus(-1)
         XCTAssertEqual(ResilienceClassifier.classify(error), .authentication)

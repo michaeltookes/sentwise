@@ -143,6 +143,7 @@ extension AppState {
     }
 
     private func applyManagedSignedOutState(clearEmailInput: Bool) {
+        clearManagedQuotaCache()
         isManagedSignedIn = false
         managedAccountEmail = ""
         if clearEmailInput {

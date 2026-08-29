@@ -23,6 +23,7 @@ extension AppState {
     /// the account, marks managed verified when it's the active provider, and
     /// resumes any watchers that a re-auth had paused.
     func finalizeManagedSignIn(email: String) {
+        clearManagedQuotaCache()
         managedAccountEmail = email
         managedEmailInput = email
         managedCodeInput = ""

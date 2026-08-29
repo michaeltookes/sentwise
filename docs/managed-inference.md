@@ -246,22 +246,24 @@ when `managedQuota == nil`. AX ids: `managedUsageSection`, `managedUsageSummary`
 | `413` `request_too_large` | `.managedRequestTooLarge` | Suggests trimming the transcript/thread. |
 
 Body `retryAfterSeconds` takes precedence over the `Retry-After` header.
-`ResilienceClassifier` treats rate-limit as **transient** (retry after backoff)
-and quota-exceeded / too-large as **permanent**. Existing `402`/`trial_expired`
-and `401` handling is unchanged.
+`ResilienceClassifier` treats rate-limit as **transient** and carries the parsed
+delay into `RetryRunner`, while quota-exceeded / too-large remain **permanent**.
+Existing `402`/`trial_expired` and `401` handling is unchanged.
 
 ### Usage alerts (50 / 75 / 100 %)
 
 `UsageAlertEvaluator` (`Services/UsageAlert.swift`) is pure decision logic: given
 the latest quota and the previously-persisted `UsageAlertState`, it returns the
-thresholds to fire **now**. A threshold fires **once per weekly window**; fired
-thresholds are persisted per `resetsAt` (`UserDefaultsUsageAlertStore`) so a
-relaunch never re-fires, and a changed `resetsAt` resets the fired set. Alerts
-post via `NotificationService.notifyUsageAlert` under a distinct `USAGE_ALERT`
-category whose **Open** action routes to Settings → AI Provider (not Review
-Drafts), respecting the existing notification-permission handling. The 100% copy
-in soft mode says drafting continues and points to buying extra usage / own key.
-Alerts are suppressed in Prowl hunt mode (the display value still updates).
+thresholds to fire **now**. A threshold fires **once per managed account and
+weekly window**; fired thresholds are persisted by hashed account key plus
+`resetsAt` (`UserDefaultsUsageAlertStore`) so a relaunch never re-fires for the
+same account, while an account change or changed `resetsAt` resets the fired set.
+Alerts post via `NotificationService.notifyUsageAlert` under a distinct
+`USAGE_ALERT` category whose **Open** action routes to Settings → AI Provider
+(not Review Drafts), respecting the existing notification-permission handling.
+The 100% copy in soft mode says drafting continues and points to buying extra
+usage / own key. Alerts are suppressed in Prowl hunt mode (the display value
+still updates).
 
 ### Prowl hunt mode
 
@@ -353,4 +355,3 @@ shell `env` (or `TEST_RUNNER_…`) does **not** propagate into a macOS app-hoste
 → `test-without-building -destination 'platform=macOS'`). Google/OpenRouter remain browser
 round-trips and are not automatable as live tests — they are covered by the deterministic hunt-mode
 fake and unit tests instead.
-

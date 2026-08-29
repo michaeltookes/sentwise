@@ -1,4 +1,20 @@
+import CryptoKit
 import Foundation
+
+/// Stable, privacy-preserving account key for managed-usage UI state. The raw
+/// account identifier is normalized then hashed so UserDefaults and notification
+/// identifiers do not store the email address.
+enum ManagedUsageAccountKey {
+    static let unknown = "acct-unknown"
+
+    static func make(from identifier: String) -> String {
+        let normalized = identifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return unknown }
+        let digest = SHA256.hash(data: Data(normalized.utf8))
+        let hex = digest.map { String(format: "%02x", $0) }.joined()
+        return "acct-\(hex)"
+    }
+}
 
 /// The weekly-allotment usage thresholds that fire a native alert (backlog item
 /// 56b): 50%, 75%, and 100% of the account's `limit`.
@@ -13,8 +29,8 @@ enum UsageAlertThreshold: Int, CaseIterable, Codable, Sendable, Comparable {
 }
 
 /// A ready-to-post usage-threshold notification (title/body/identity). Built by
-/// `UsageAlert.make(threshold:quota:)` so `NotificationService` stays decoupled
-/// from `ManagedQuota` and just delivers copy.
+/// `UsageAlert.make(threshold:quota:accountKey:)` so `NotificationService` stays
+/// decoupled from `ManagedQuota` and just delivers copy.
 struct UsageAlert: Equatable, Sendable {
     /// Stable per threshold + weekly window so re-posting replaces rather than
     /// stacks, and a relaunch never double-delivers.
@@ -26,10 +42,10 @@ struct UsageAlert: Equatable, Sendable {
     /// Builds the alert copy for crossing `threshold`. The 100% copy makes clear
     /// (soft mode) that drafting continues and points to buying extra usage or
     /// switching to an own key; the 50/75% copy is a plain heads-up.
-    static func make(threshold: UsageAlertThreshold, quota: ManagedQuota) -> UsageAlert {
+    static func make(threshold: UsageAlertThreshold, quota: ManagedQuota, accountKey: String) -> UsageAlert {
         let unit = quota.unit
         let window = ManagedQuotaDate.string(from: quota.resetsAt)
-        let identifier = "usage-alert-\(threshold.rawValue)-\(window)"
+        let identifier = "usage-alert-\(accountKey)-\(threshold.rawValue)-\(window)"
         let resetPhrase = quota.hasKnownReset
             ? " Your allotment resets \(ManagedQuota.resetDescription(quota.resetsAt))."
             : ""
@@ -61,16 +77,34 @@ struct UsageAlert: Equatable, Sendable {
     }
 }
 
-/// The persisted per-window alert state: which thresholds have already fired for
-/// the current weekly window, keyed by the window's `resetsAt`. When `resetsAt`
-/// changes (a new window), the fired set is reset so alerts fire again.
+/// The persisted per-account, per-window alert state: which thresholds have
+/// already fired for the signed-in managed account in the current weekly window.
+/// When either the account or `resetsAt` changes, the fired set is reset.
 struct UsageAlertState: Codable, Equatable, Sendable {
+    var accountKey: String
     var windowResetsAt: Date
     var firedThresholds: [Int]
 
-    init(windowResetsAt: Date, firedThresholds: [Int] = []) {
+    init(
+        accountKey: String = ManagedUsageAccountKey.unknown,
+        windowResetsAt: Date,
+        firedThresholds: [Int] = []
+    ) {
+        self.accountKey = accountKey
         self.windowResetsAt = windowResetsAt
         self.firedThresholds = firedThresholds
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case accountKey, windowResetsAt, firedThresholds
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        accountKey = try container.decodeIfPresent(String.self, forKey: .accountKey)
+            ?? ManagedUsageAccountKey.unknown
+        windowResetsAt = try container.decode(Date.self, forKey: .windowResetsAt)
+        firedThresholds = try container.decode([Int].self, forKey: .firedThresholds)
     }
 }
 
@@ -87,16 +121,19 @@ enum UsageAlertEvaluator {
         let newState: UsageAlertState
     }
 
-    static func evaluate(quota: ManagedQuota, previous: UsageAlertState?) -> Outcome {
+    static func evaluate(quota: ManagedQuota, previous: UsageAlertState?, accountKey: String) -> Outcome {
         // A window with no known reset or no limit can't drive stable per-window
         // alerts, so surface nothing and persist nothing meaningful.
         guard quota.hasKnownReset, quota.limit > 0 else {
-            return Outcome(fire: [], newState: previous ?? UsageAlertState(windowResetsAt: quota.resetsAt))
+            if let previous, previous.accountKey == accountKey {
+                return Outcome(fire: [], newState: previous)
+            }
+            return Outcome(fire: [], newState: UsageAlertState(accountKey: accountKey, windowResetsAt: quota.resetsAt))
         }
 
-        // Reset the fired set when the window rolled over.
+        // Reset the fired set when the account changes or the window rolls over.
         var fired: Set<Int>
-        if let previous, previous.windowResetsAt == quota.resetsAt {
+        if let previous, previous.accountKey == accountKey, previous.windowResetsAt == quota.resetsAt {
             fired = Set(previous.firedThresholds)
         } else {
             fired = []
@@ -112,6 +149,7 @@ enum UsageAlertEvaluator {
         }
 
         let newState = UsageAlertState(
+            accountKey: accountKey,
             windowResetsAt: quota.resetsAt,
             firedThresholds: fired.sorted()
         )

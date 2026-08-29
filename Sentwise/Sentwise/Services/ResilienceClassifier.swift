@@ -46,7 +46,10 @@ enum ResilienceClassifier {
     }
 
     static func retryDecision(for error: Error) -> RetryDecision {
-        isRetryable(error) ? .retry : .stop
+        if let retryAfterNanoseconds = managedRetryAfterNanoseconds(for: error) {
+            return .retryAfter(retryAfterNanoseconds)
+        }
+        return isRetryable(error) ? .retry : .stop
     }
 
     // MARK: - Mail
@@ -85,6 +88,16 @@ enum ResilienceClassifier {
             // won't succeed on retry (item 56b).
             return .permanent
         }
+    }
+
+    private static func managedRetryAfterNanoseconds(for error: Error) -> UInt64? {
+        guard case LLMError.managedRateLimited(let retryAfter) = error,
+              let retryAfter,
+              retryAfter > 0 else {
+            return nil
+        }
+        let seconds = min(UInt64(retryAfter), UInt64.max / 1_000_000_000)
+        return seconds * 1_000_000_000
     }
 
     /// HTTP status classification shared by LLM providers: 408/429 and 5xx are
