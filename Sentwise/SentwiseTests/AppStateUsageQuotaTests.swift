@@ -227,7 +227,8 @@ final class AppStateUsageQuotaTests: XCTestCase {
     func testDraftQuotaReportForOldAccountIsIgnoredAfterAccountSwitch() async throws {
         let notifier = FakeDraftNotifier()
         let appState = makeSignedInAppState(email: "marcus@example.com", notifier: notifier)
-        let oldAccountKey = try XCTUnwrap(await appState.managedQuotaRelay.currentQuotaReportAccountKey())
+        let currentAccountKey = await appState.managedQuotaRelay.currentQuotaReportAccountKey()
+        let oldAccountKey = try XCTUnwrap(currentAccountKey)
 
         appState.managedAccountEmail = "priya@example.com"
         appState.ingestManagedQuota(quota(used: 20))
