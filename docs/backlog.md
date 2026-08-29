@@ -129,16 +129,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
       - **Surfaced in the Setup Assistant (owner decision 2026-08-28):** to get real adoption, the ask is presented prominently as a step in onboarding (items 2/59) — **not** buried in Settings — with copy explaining why we ask and how it improves the user's drafts over time. It is a **prominent opt-in, NOT pre-enabled / not opt-out**: an explicit choice (e.g. "Help improve Sentwise" **Enable / Not now**) with nothing pre-selected, then mirrored by the Settings → Diagnostics toggle so the user can change their mind. Rationale for not pre-checking: it targets the product's own privacy differentiator, pre-ticked consent is invalid under EU ePrivacy/GDPR (Planet49), and privacy-aware users reflexively opt out of pre-enabled telemetry — a surfaced explicit choice converts better without the trust/legal risk.
     - Ties to items 17/18/19/20/21/34/35/58/66/67/68.
 
-76. **Search & filter the Review Drafts list**
-    Let the user find a specific draft (or skipped message) without scrolling the whole list.
-    *As Priya, I want to search and filter the Drafts and Skipped lists, so that I can find the message I'm looking for without scrolling past dozens of entries.*
-    - A search field on the Review Drafts window filters the visible tab (Drafts and Skipped) by sender name/address and subject as the user types; clearing it restores the full list.
-    - Match is case-insensitive and runs against the MIME-decoded subject (item 69), not the raw encoded-word header.
-    - Optional lightweight filters on the Drafts tab (e.g. flagged / needs-info vs. ready) if cheap; the primary requirement is text search.
-    - The counts on the tab labels reflect the filtered result (or show "N of M") so it's clear a filter is active.
-    - Empty-result state shows a clear "No matches" message rather than a blank pane.
-    - Prowl: the search field is open-and-assert forbidden (it's an input, not an action) and gets an AX identifier; no collision with existing forbidden selectors.
-
 30. **Slack approval channel** — *spec expanded 2026-08-20; deferred to post-launch (Medium) by the 2026-08-20 launch decision*
     Post each ready draft to Slack with Approve/Deny actions as a peer of the native macOS notification, so approval works from any device the user has Slack on.
     *As a Slack-native user, I want drafts posted to Slack with approve/deny actions, so that approval fits my existing workflow.*

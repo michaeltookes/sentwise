@@ -177,7 +177,18 @@ forbids (`Approve`, `Deny`, `Discard`, `Draft anyway`, `Clear`, `Dismiss`, …).
 | `id=reviewDraftsTab` | "Drafts (N)" tab of the review window | yes (read-only switch) |
 | `id=reviewSkippedTab` | "Skipped (N)" tab of the review window | yes (read-only switch) |
 | `id=pendingDraftRow` | A collapsed draft row in the Drafts list (item 82); clicking it expands/collapses that draft's detail inline | yes (read-only accordion toggle) |
+| `id=reviewDraftsSearchField` | Search field that filters the visible tab by sender/subject (item 76) | **no — open-and-assert only** (it's an input) |
 | `id=openReviewDraftsFromComposer` | "Open Review Drafts" button shown in the Follow-up composer after a draft (item 81) | yes (read-only; same `openReviewWindow` action) |
+
+The Review Drafts **search field** (item 76, `id=reviewDraftsSearchField`, accessible
+name "Search drafts") is an *input*, not a read-only view control, so a hunt may
+assert it is present but must never type into it. It needs no new forbid: its
+identifier and label both contain the substring **`Search`**, which the existing
+`"Search"` / `"search"` `forbiddenSelectors` entries (added for the mailbox-browse
+live search) already block. So `id=reviewDraftsSearchField` and its
+`name="Search drafts"` are both refused by hunts. The `reviewDraftsSearchClear`
+"x" button and the "No matches" empty states (`reviewDraftsNoMatches` /
+`reviewSkippedNoMatches`) are read-only affordances a hunt may assert.
 
 The Drafts list is now a collapsible list (item 82): each draft is a compact
 `pendingDraftRow` that expands to the full detail card on click, one at a time.
