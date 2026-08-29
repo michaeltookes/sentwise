@@ -80,7 +80,7 @@ extension AppState {
             let signedInEmail = pendingManagedSignInEmail
                 ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
             if llmProviderKind != .managed { selectLLMProvider(.managed) }
-            finalizeManagedSignIn(email: signedInEmail)
+            finalizeManagedSignIn(email: signedInEmail, accountID: "hunt-email:\(signedInEmail)")
             return
         }
 
@@ -92,8 +92,9 @@ extension AppState {
 
         managedBusyAction = .verifyCode
         defer { managedBusyAction = nil }
+        let result: ManagedAccountSignInResult
         do {
-            try await managedAccount.completeSignIn(code: code)
+            result = try await managedAccount.completeSignIn(code: code)
         } catch {
             managedError = Self.managedMessage(for: error)
             return
@@ -105,7 +106,7 @@ extension AppState {
         if llmProviderKind != .managed {
             selectLLMProvider(.managed)
         }
-        finalizeManagedSignIn(email: signedInEmail)
+        finalizeManagedSignIn(email: signedInEmail, accountID: result.accountIdentifier)
     }
 
     func resetManagedSignInFlow() {
@@ -146,6 +147,7 @@ extension AppState {
         clearManagedQuotaCache()
         isManagedSignedIn = false
         managedAccountEmail = ""
+        managedAccountID = ""
         if clearEmailInput {
             managedEmailInput = ""
         }
@@ -223,6 +225,18 @@ extension AppState {
             verifiedLLMModel: restore ? provider.defaultModel : settings.llmVerifiedModel,
             apiKey: apiKey
         )
+    }
+
+    func restoreManagedAccountLaunchIdentity(_ launch: ManagedLaunchState, settings: Settings) {
+        guard launch.hasCredentials else {
+            managedAccountEmail = ""
+            managedAccountID = ""
+            isManagedSignedIn = false
+            return
+        }
+        managedAccountEmail = settings.managedAccountEmail
+        managedAccountID = settings.managedAccountID
+        isManagedSignedIn = true
     }
 
     /// Writes the restored managed verification back to disk when launch changed

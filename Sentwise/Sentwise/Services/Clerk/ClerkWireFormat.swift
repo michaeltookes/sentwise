@@ -54,6 +54,42 @@ struct TokenEnvelope: Decodable {
     let jwt: String?
 }
 
+struct SessionJWTPayload: Decodable {
+    let sub: String?
+}
+
+enum ClerkJWT {
+    static func subject(from jwt: String) -> String? {
+        let parts = jwt.split(separator: ".")
+        guard parts.count >= 2,
+              let payload = base64URLData(from: parts[1]),
+              let decoded = try? JSONDecoder().decode(SessionJWTPayload.self, from: payload),
+              let subject = decoded.sub?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !subject.isEmpty
+        else {
+            return nil
+        }
+        return subject
+    }
+
+    private static func base64URLData(from encoded: Substring) -> Data? {
+        var base64 = String(encoded)
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        switch base64.count % 4 {
+        case 0:
+            break
+        case 2:
+            base64 += "=="
+        case 3:
+            base64 += "="
+        default:
+            return nil
+        }
+        return Data(base64Encoded: base64)
+    }
+}
+
 struct ErrorsEnvelope: Decodable {
     let errors: [ClerkAPIError]?
 }

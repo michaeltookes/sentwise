@@ -119,8 +119,10 @@ final class AppStateUsageQuotaTests: XCTestCase {
 
     private func signedInFixture(
         email: String = "marcus@example.com",
-        provider: String = "managed"
+        provider: String = "managed",
+        accountID: String? = nil
     ) -> (secrets: SecretStore, persistence: AppStateMemoryPersistence) {
+        let resolvedAccountID = accountID ?? "clerk-user:\(email.lowercased())"
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",
             .managedSessionID: "sess_X"
@@ -131,7 +133,8 @@ final class AppStateUsageQuotaTests: XCTestCase {
             llmProvider: provider,
             llmModel: "",
             llmVerifiedModel: "",
-            managedAccountEmail: email
+            managedAccountEmail: email,
+            managedAccountID: resolvedAccountID
         ))
         return (secrets, persistence)
     }
@@ -139,11 +142,12 @@ final class AppStateUsageQuotaTests: XCTestCase {
     private func makeSignedInAppState(
         email: String = "marcus@example.com",
         provider: String = "managed",
+        accountID: String? = nil,
         notifier: FakeDraftNotifier = FakeDraftNotifier(),
         store: UsageAlertStateStoring = InMemoryUsageAlertStore(),
         llm: LLMProviding = FakeLLMProvider(result: .success(()))
     ) -> AppState {
-        let fixture = signedInFixture(email: email, provider: provider)
+        let fixture = signedInFixture(email: email, provider: provider, accountID: accountID)
         return makeAppState(
             notifier: notifier,
             store: store,
@@ -160,7 +164,23 @@ final class AppStateUsageQuotaTests: XCTestCase {
         let value = quota(used: 12, limit: 50)
         appState.ingestManagedQuota(value)
         XCTAssertEqual(appState.managedQuota, value)
-        XCTAssertEqual(appState.managedQuotaAccountKey, ManagedUsageAccountKey.make(from: "marcus@example.com"))
+        XCTAssertEqual(appState.managedQuotaAccountKey, ManagedUsageAccountKey.make(from: "clerk-user:marcus@example.com"))
+    }
+
+    func testUsageAccountKeyFallsBackToStoredClerkSessionID() {
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_legacy"
+        ])
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed",
+            managedAccountEmail: "your Google account"
+        ))
+        let appState = makeAppState(secrets: secrets, persistence: persistence)
+
+        XCTAssertEqual(appState.currentManagedUsageAccountKey, ManagedUsageAccountKey.make(from: "clerk-session:sess_legacy"))
     }
 
     func testIngestFiresThresholdAlertOncePerWindow() {
@@ -231,11 +251,12 @@ final class AppStateUsageQuotaTests: XCTestCase {
         let oldAccountKey = try XCTUnwrap(currentAccountKey)
 
         appState.managedAccountEmail = "priya@example.com"
+        appState.managedAccountID = "clerk-user:priya@example.com"
         appState.ingestManagedQuota(quota(used: 20))
         await appState.managedQuotaRelay.reportQuota(quota(used: 75), accountKey: oldAccountKey)
 
         XCTAssertEqual(appState.managedQuota?.used, 20)
-        XCTAssertEqual(appState.managedQuotaAccountKey, ManagedUsageAccountKey.make(from: "priya@example.com"))
+        XCTAssertEqual(appState.managedQuotaAccountKey, ManagedUsageAccountKey.make(from: "clerk-user:priya@example.com"))
         XCTAssertTrue(notifier.usageAlerts.isEmpty)
     }
 

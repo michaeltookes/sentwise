@@ -22,9 +22,10 @@ extension AppState {
     /// Shared success path once a session is stored (email code or OAuth): records
     /// the account, marks managed verified when it's the active provider, and
     /// resumes any watchers that a re-auth had paused.
-    func finalizeManagedSignIn(email: String) {
+    func finalizeManagedSignIn(email: String, accountID: String) {
         clearManagedQuotaCache()
         managedAccountEmail = email
+        managedAccountID = accountID.trimmingCharacters(in: .whitespacesAndNewlines)
         managedEmailInput = email
         managedCodeInput = ""
         pendingManagedSignInEmail = nil
@@ -77,9 +78,9 @@ extension AppState {
         managedError = nil
         managedBusyAction = .oauthCallback
         defer { managedBusyAction = nil }
-        let identifier: String?
+        let result: ManagedAccountSignInResult
         do {
-            identifier = try await managedAccount.completeGoogleSignIn(rotatingTokenNonce: nonce)
+            result = try await managedAccount.completeGoogleSignIn(rotatingTokenNonce: nonce)
         } catch {
             managedError = Self.managedMessage(for: error)
             if managedSignInStage == .awaitingBrowser {
@@ -92,8 +93,8 @@ extension AppState {
         if llmProviderKind != .managed {
             selectLLMProvider(.managed)
         }
-        let email = identifier.flatMap { $0.isEmpty ? nil : $0 } ?? "your Google account"
-        finalizeManagedSignIn(email: email)
+        let email = result.displayIdentifier.flatMap { $0.isEmpty ? nil : $0 } ?? "your Google account"
+        finalizeManagedSignIn(email: email, accountID: result.accountIdentifier)
         logger.info("Managed Google sign-in completed")
     }
 }

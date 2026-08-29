@@ -121,7 +121,7 @@ struct ClerkOAuthHandle: Sendable, Equatable {
 }
 
 /// A completed sign-in: the created session plus the latest client token, and
-/// the account identifier (email) when Clerk includes it — used by the OAuth
+/// the display identifier (email) when Clerk includes it — used by the OAuth
 /// path, where the app doesn't otherwise know the email the user chose.
 struct ClerkVerifiedSession: Sendable, Equatable {
     let sessionId: String
@@ -129,10 +129,12 @@ struct ClerkVerifiedSession: Sendable, Equatable {
     var identifier: String?
 }
 
-/// A freshly minted, short-lived session JWT plus the latest client token.
+/// A freshly minted, short-lived session JWT plus the latest client token and
+/// Clerk user id (`sub`) when it can be decoded from the JWT payload.
 struct ClerkMintedToken: Sendable, Equatable {
     let jwt: String
     let clientToken: String
+    let userID: String?
 }
 
 enum ClerkError: Error, Equatable, Sendable {
@@ -415,7 +417,7 @@ struct ClerkClient: Sendable {
         guard let jwt = decoded?.jwt, !jwt.isEmpty else {
             throw ClerkError.malformedResponse("session token jwt missing", clientToken: response.clientToken)
         }
-        return ClerkMintedToken(jwt: jwt, clientToken: response.clientToken ?? clientToken)
+        return ClerkMintedToken(jwt: jwt, clientToken: response.clientToken ?? clientToken, userID: ClerkJWT.subject(from: jwt))
     }
 
     // MARK: - Internals

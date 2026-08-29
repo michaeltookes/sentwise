@@ -98,7 +98,9 @@ final class AppState: ObservableObject {
     // MARK: - Managed inference account (item 56a)
 
     /// Signed-in managed account email, for "Connected as …".
-    @Published var managedAccountEmail: String
+    @Published var managedAccountEmail: String = ""
+    /// Stable non-display account id used for quota/usage-alert scoping.
+    var managedAccountID = ""
     /// Whether a managed account is signed in (device + session tokens stored).
     @Published var isManagedSignedIn: Bool = false
     /// Stage of the email-code sign-in flow.
@@ -446,10 +448,9 @@ final class AppState: ObservableObject {
         self.verifiedLLMModel = managedLaunch.verifiedLLMModel
         self.llmAPIKey = managedLaunch.apiKey
         self.isOpenRouterProvisioning = secrets.hasValue(for: .openRouterPKCEVerifier)
-        self.managedAccountEmail = managedLaunch.hasCredentials ? settings.managedAccountEmail : ""
-        self.isManagedSignedIn = managedLaunch.hasCredentials
 
         self.voiceProfile = persistence.loadVoiceProfile()
+        restoreManagedAccountLaunchIdentity(managedLaunch, settings: settings)
         restoreReviewPersistenceState()
 
         cleanupLegacyOAuthCredentials()

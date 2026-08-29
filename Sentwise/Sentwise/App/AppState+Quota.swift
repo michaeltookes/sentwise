@@ -24,7 +24,16 @@ extension AppState {
     }
 
     var currentManagedUsageAccountKey: String {
-        ManagedUsageAccountKey.make(from: managedAccountEmail)
+        let accountID = managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !accountID.isEmpty {
+            return ManagedUsageAccountKey.make(from: accountID)
+        }
+        let sessionID = ((try? secrets.value(for: .managedSessionID)) ?? nil)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let sessionID, !sessionID.isEmpty {
+            return ManagedUsageAccountKey.make(from: "clerk-session:\(sessionID)")
+        }
+        return ManagedUsageAccountKey.make(from: "display:\(managedAccountEmail)")
     }
 
     func clearManagedQuotaCache() {

@@ -36,16 +36,17 @@ final class ManagedAccountServiceTests: XCTestCase {
             ),
             clerkReply(#"{"response":{"id":"sia_1"}}"#, clientToken: "client_B"),
             clerkReply(#"{"response":{"id":"sia_1","status":"complete","created_session_id":"sess_1"}}"#, clientToken: "client_C"),
-            clerkReply(#"{"jwt":"first.jwt"}"#, clientToken: "client_D"),
+            clerkReply(#"{"jwt":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1c2VyX2VtYWlsIn0.signature"}"#, clientToken: "client_D"),
             clerkReply(#"{"jwt":"second.jwt"}"#, clientToken: "client_E")
         ])
         let account = service(transport, secrets: secrets)
 
         try await account.startSignIn(email: "marcus@example.com")
-        try await account.completeSignIn(code: "123456")
+        let result = try await account.completeSignIn(code: "123456")
 
         let signedIn = await account.isSignedIn
         XCTAssertTrue(signedIn)
+        XCTAssertEqual(result.accountIdentifier, "clerk-user:user_email")
         // Device token + session id persisted; the latest rotated token is stored.
         XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_D")
         XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_1")

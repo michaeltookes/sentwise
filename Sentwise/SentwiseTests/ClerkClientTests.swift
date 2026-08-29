@@ -261,6 +261,17 @@ final class ClerkClientTests: XCTestCase {
         XCTAssertEqual(tokenRequest.headers["authorization"], "Bearer client_C")
     }
 
+    func testMintSessionTokenExtractsUserIDFromJWTSubject() async throws {
+        let jwt = "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1c2VyXzEyMyJ9.signature"
+        let transport = FakeClerkTransport([
+            clerkResponse(#"{"jwt":""# + jwt + #""}"#, clientToken: "client_D")
+        ])
+
+        let minted = try await client(transport).mintSessionToken(sessionId: "sess_7", clientToken: "client_C")
+
+        XCTAssertEqual(minted.userID, "user_123")
+    }
+
     func testMintSessionTokenMalformedResponseCarriesRotatedClientToken() async {
         let transport = FakeClerkTransport([
             clerkResponse(#"{"unexpected":"shape"}"#, clientToken: "client_D")
