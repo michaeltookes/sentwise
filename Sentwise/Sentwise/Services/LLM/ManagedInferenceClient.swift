@@ -146,8 +146,12 @@ struct ManagedInferenceClient: LLMClient {
             throw Self.mapError(status: response.statusCode, body: response.body, headers: response)
         }
 
-        let decoded = try? JSONDecoder().decode(AccountStatusBody.self, from: response.body)
-        return decoded?.quota
+        do {
+            let decoded = try JSONDecoder().decode(AccountStatusBody.self, from: response.body)
+            return decoded.quota
+        } catch {
+            throw LLMError.invalidResponse("Unexpected account status response shape. (\(error))")
+        }
     }
 
     // MARK: - Wire format

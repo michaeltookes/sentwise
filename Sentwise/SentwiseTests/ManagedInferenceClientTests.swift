@@ -250,6 +250,20 @@ final class ManagedInferenceClientTests: XCTestCase {
         XCTAssertNil(quota)
     }
 
+    func testFetchAccountQuotaRejectsMalformedStatusBody() async {
+        let transport = FakeLLMTransport(response: json(#"{"userId":"user_123","quota":"not-an-object"}"#))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+
+        do {
+            _ = try await client.fetchAccountQuota()
+            XCTFail("Expected invalid account status body")
+        } catch LLMError.invalidResponse(let message) {
+            XCTAssertTrue(message.contains("Unexpected account status response shape"))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testStubClientReturnsStubbedQuota() async throws {
         let response = try await StubManagedInferenceClient().complete(sampleRequest())
         let quota = try XCTUnwrap(response.quota)

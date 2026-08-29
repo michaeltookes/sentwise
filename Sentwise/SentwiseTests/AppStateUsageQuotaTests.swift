@@ -239,6 +239,29 @@ final class AppStateUsageQuotaTests: XCTestCase {
         XCTAssertTrue(notifier.usageAlerts.isEmpty)
     }
 
+    func testIngestRejectsOlderQuotaWindowForSameAccount() {
+        let notifier = FakeDraftNotifier()
+        let appState = makeSignedInAppState(notifier: notifier)
+
+        appState.ingestManagedQuota(quota(used: 10, resetsAt: nextWindow))
+        appState.ingestManagedQuota(quota(used: 90, resetsAt: window))
+
+        XCTAssertEqual(appState.managedQuota?.used, 10)
+        XCTAssertEqual(appState.managedQuota?.resetsAt, nextWindow)
+        XCTAssertTrue(notifier.usageAlerts.isEmpty)
+    }
+
+    func testIngestRejectsLowerUsageSnapshotInSameWindow() {
+        let notifier = FakeDraftNotifier()
+        let appState = makeSignedInAppState(notifier: notifier)
+
+        appState.ingestManagedQuota(quota(used: 80))
+        appState.ingestManagedQuota(quota(used: 55))
+
+        XCTAssertEqual(appState.managedQuota?.used, 80)
+        XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.fifty, .seventyFive])
+    }
+
     // MARK: - Refresh
 
     func testRefreshManagedQuotaFetchesAndIngestsWhenSignedIn() async {

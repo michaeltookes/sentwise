@@ -43,6 +43,7 @@ extension AppState {
         guard ProwlHuntRuntime.current.isEnabled
             || (isManagedSignedIn && accountKey == currentManagedUsageAccountKey)
         else { return }
+        guard shouldAcceptManagedQuota(quota, for: accountKey) else { return }
 
         managedQuotaAccountKey = accountKey
         managedQuota = quota
@@ -55,6 +56,19 @@ extension AppState {
         for threshold in outcome.fire {
             notifier.notifyUsageAlert(UsageAlert.make(threshold: threshold, quota: quota, accountKey: accountKey))
         }
+    }
+
+    private func shouldAcceptManagedQuota(_ quota: ManagedQuota, for accountKey: String) -> Bool {
+        guard managedQuotaAccountKey == accountKey, let current = managedQuota else {
+            return true
+        }
+        if quota.resetsAt < current.resetsAt {
+            return false
+        }
+        if quota.resetsAt == current.resetsAt, quota.used < current.used {
+            return false
+        }
+        return true
     }
 
     /// Refreshes the quota from `/v1/me`. Called at launch, on sign-in, and when
