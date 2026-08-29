@@ -3,9 +3,9 @@ import XCTest
 
 /// In-memory usage-alert state store for AppState metering tests (item 56b).
 private final class InMemoryUsageAlertStore: UsageAlertStateStoring, @unchecked Sendable {
-    var state: UsageAlertState?
-    func loadState() -> UsageAlertState? { state }
-    func save(_ state: UsageAlertState) { self.state = state }
+    var statesByAccount: [String: UsageAlertState] = [:]
+    func loadState(for accountKey: String) -> UsageAlertState? { statesByAccount[accountKey] }
+    func save(_ state: UsageAlertState) { statesByAccount[state.accountKey] = state }
 }
 
 /// An `LLMProviding` double whose `/v1/me` fetch returns a fixed quota (item 56b).
@@ -217,6 +217,25 @@ final class AppStateUsageQuotaTests: XCTestCase {
         let second = makeSignedInAppState(email: "priya@example.com", notifier: secondNotifier, store: store)
         second.ingestManagedQuota(quota(used: 60))
         XCTAssertEqual(secondNotifier.usageAlerts.map(\.threshold), [.fifty])
+
+        let thirdNotifier = FakeDraftNotifier()
+        let third = makeSignedInAppState(email: "marcus@example.com", notifier: thirdNotifier, store: store)
+        third.ingestManagedQuota(quota(used: 60))
+        XCTAssertTrue(thirdNotifier.usageAlerts.isEmpty, "switching back must preserve account A's fired thresholds")
+    }
+
+    func testDraftQuotaReportForOldAccountIsIgnoredAfterAccountSwitch() async {
+        let notifier = FakeDraftNotifier()
+        let appState = makeSignedInAppState(email: "marcus@example.com", notifier: notifier)
+        let oldAccountKey = await appState.managedQuotaRelay.currentQuotaReportAccountKey()
+
+        appState.managedAccountEmail = "priya@example.com"
+        appState.ingestManagedQuota(quota(used: 20))
+        await appState.managedQuotaRelay.reportQuota(quota(used: 75), accountKey: oldAccountKey)
+
+        XCTAssertEqual(appState.managedQuota?.used, 20)
+        XCTAssertEqual(appState.managedQuotaAccountKey, ManagedUsageAccountKey.make(from: "priya@example.com"))
+        XCTAssertTrue(notifier.usageAlerts.isEmpty)
     }
 
     // MARK: - Refresh

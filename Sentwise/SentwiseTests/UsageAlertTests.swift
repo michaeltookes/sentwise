@@ -156,4 +156,19 @@ final class UsageAlertTests: XCTestCase {
         let differentAccount = UsageAlert.make(threshold: .fifty, quota: quota(usedPercent: 50), accountKey: accountB)
         XCTAssertNotEqual(fifty.identifier, differentAccount.identifier)
     }
+
+    // MARK: - Store
+
+    func testUserDefaultsStorePreservesStateForMultipleAccounts() throws {
+        let suiteName = "UsageAlertTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = UserDefaultsUsageAlertStore(defaults: defaults, key: "usage-alert-test")
+
+        store.save(UsageAlertState(accountKey: accountA, windowResetsAt: window, firedThresholds: [50]))
+        store.save(UsageAlertState(accountKey: accountB, windowResetsAt: window, firedThresholds: [50, 75]))
+
+        XCTAssertEqual(store.loadState(for: accountA)?.firedThresholds, [50])
+        XCTAssertEqual(store.loadState(for: accountB)?.firedThresholds, [50, 75])
+    }
 }

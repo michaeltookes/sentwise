@@ -14,8 +14,12 @@ extension AppState {
         notifier.onOpenUsageSettings = { [weak self] in
             self?.openSettingsHandler?(.ai)
         }
-        managedQuotaRelay.setHandler { [weak self] quota in
-            self?.ingestManagedQuota(quota)
+        managedQuotaRelay.setAccountKeyProvider { [weak self] in
+            guard let self, self.isManagedSignedIn else { return nil }
+            return self.currentManagedUsageAccountKey
+        }
+        managedQuotaRelay.setHandler { [weak self] quota, accountKey in
+            self?.ingestManagedQuota(quota, accountKey: accountKey)
         }
     }
 
@@ -45,7 +49,7 @@ extension AppState {
 
         guard !ProwlHuntRuntime.current.isEnabled else { return }
 
-        let previous = usageAlertStore.loadState()
+        let previous = usageAlertStore.loadState(for: accountKey)
         let outcome = UsageAlertEvaluator.evaluate(quota: quota, previous: previous, accountKey: accountKey)
         usageAlertStore.save(outcome.newState)
         for threshold in outcome.fire {
@@ -97,20 +101,34 @@ extension AppState {
 /// finishes initializing.
 final class ManagedQuotaRelay: ManagedQuotaReporting, @unchecked Sendable {
     private let lock = NSLock()
-    private var handler: (@MainActor (ManagedQuota) -> Void)?
+    private var accountKeyProvider: (@MainActor () -> String?)?
+    private var handler: (@MainActor (ManagedQuota, String?) -> Void)?
 
-    func setHandler(_ handler: @escaping @MainActor (ManagedQuota) -> Void) {
+    func setAccountKeyProvider(_ provider: @escaping @MainActor () -> String?) {
+        lock.withLock { self.accountKeyProvider = provider }
+    }
+
+    func setHandler(_ handler: @escaping @MainActor (ManagedQuota, String?) -> Void) {
         lock.withLock { self.handler = handler }
     }
 
-    /// Synchronous snapshot of the handler. Kept out of the `async` function
-    /// because `NSLock.lock()` is unavailable from asynchronous contexts.
-    private func currentHandler() -> (@MainActor (ManagedQuota) -> Void)? {
+    /// Synchronous snapshots of closures. Kept out of `async` functions because
+    /// `NSLock.lock()` is unavailable from asynchronous contexts.
+    private func currentAccountKeyProvider() -> (@MainActor () -> String?)? {
+        lock.withLock { accountKeyProvider }
+    }
+
+    private func currentHandler() -> (@MainActor (ManagedQuota, String?) -> Void)? {
         lock.withLock { handler }
     }
 
-    func reportQuota(_ quota: ManagedQuota) async {
+    func currentQuotaReportAccountKey() async -> String? {
+        guard let provider = currentAccountKeyProvider() else { return nil }
+        return await MainActor.run { provider() }
+    }
+
+    func reportQuota(_ quota: ManagedQuota, accountKey: String?) async {
         guard let handler = currentHandler() else { return }
-        await MainActor.run { handler(quota) }
+        await MainActor.run { handler(quota, accountKey) }
     }
 }

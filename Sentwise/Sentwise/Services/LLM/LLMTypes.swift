@@ -217,7 +217,15 @@ struct LLMResponse: Equatable, Sendable {
 /// small `Sendable` seam so `LLMService` can report a quota from any isolation
 /// context without depending on `AppState` directly.
 protocol ManagedQuotaReporting: Sendable {
-    func reportQuota(_ quota: ManagedQuota) async
+    /// Captures the managed account key at request start so a late draft response
+    /// cannot be applied to a different account after sign-out/sign-in.
+    func currentQuotaReportAccountKey() async -> String?
+
+    func reportQuota(_ quota: ManagedQuota, accountKey: String?) async
+}
+
+extension ManagedQuotaReporting {
+    func currentQuotaReportAccountKey() async -> String? { nil }
 }
 
 /// Errors surfaced by an `LLMClient`.

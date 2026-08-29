@@ -157,17 +157,23 @@ enum UsageAlertEvaluator {
     }
 }
 
-/// Persistence seam for the per-window alert state (backlog item 56b). Backed by
-/// `UserDefaults` in production; injectable so the idempotence logic is testable
-/// without touching disk.
+/// Persistence seam for the per-account, per-window alert state (backlog item
+/// 56b). Backed by `UserDefaults` in production; injectable so the idempotence
+/// logic is testable without touching disk.
 protocol UsageAlertStateStoring: AnyObject, Sendable {
-    func loadState() -> UsageAlertState?
+    func loadState(for accountKey: String) -> UsageAlertState?
     func save(_ state: UsageAlertState)
+}
+
+private struct UsageAlertStateCollection: Codable, Equatable, Sendable {
+    var statesByAccount: [String: UsageAlertState]
 }
 
 /// `UserDefaults`-backed alert state store. This is ephemeral per-window UI
 /// bookkeeping (not the versioned `Settings` schema), so it lives in defaults
-/// under a single JSON key rather than forcing a settings migration.
+/// under a single JSON key rather than forcing a settings migration. The JSON
+/// value is a map by hashed account key so switching accounts preserves each
+/// account's alert history.
 final class UserDefaultsUsageAlertStore: UsageAlertStateStoring, @unchecked Sendable {
     static let defaultsKey = "com.tookes.Sentwise.usageAlertState"
 
@@ -179,13 +185,26 @@ final class UserDefaultsUsageAlertStore: UsageAlertStateStoring, @unchecked Send
         self.key = key
     }
 
-    func loadState() -> UsageAlertState? {
-        guard let data = defaults.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(UsageAlertState.self, from: data)
+    func loadState(for accountKey: String) -> UsageAlertState? {
+        loadStates()[accountKey]
     }
 
     func save(_ state: UsageAlertState) {
-        guard let data = try? JSONEncoder().encode(state) else { return }
+        var states = loadStates()
+        states[state.accountKey] = state
+        let collection = UsageAlertStateCollection(statesByAccount: states)
+        guard let data = try? JSONEncoder().encode(collection) else { return }
         defaults.set(data, forKey: key)
+    }
+
+    private func loadStates() -> [String: UsageAlertState] {
+        guard let data = defaults.data(forKey: key) else { return [:] }
+        if let collection = try? JSONDecoder().decode(UsageAlertStateCollection.self, from: data) {
+            return collection.statesByAccount
+        }
+        if let legacy = try? JSONDecoder().decode(UsageAlertState.self, from: data) {
+            return [legacy.accountKey: legacy]
+        }
+        return [:]
     }
 }

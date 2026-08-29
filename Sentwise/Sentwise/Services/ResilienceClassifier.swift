@@ -81,7 +81,8 @@ enum ResilienceClassifier {
         case .missingAPIKey, .managedNotSignedIn, .managedTrialExpired:
             return .authentication
         case .managedRateLimited:
-            // Rate limiting clears on its own — retry after backoff (item 56b).
+            // Rate limiting clears on its own; retryDecision carries Retry-After
+            // when the server supplies it (item 56b).
             return .transient
         case .invalidResponse, .invalidBaseURL, .managedQuotaExceeded, .managedRequestTooLarge:
             // Quota-exhausted (until the window resets) and too-large requests
