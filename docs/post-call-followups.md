@@ -56,6 +56,10 @@ it does not thread, and its recipients come from you. The Drafts tab is a
 collapsible list: each draft is a compact row (sender, subject, and a status
 chip), and clicking one expands its full detail inline while collapsing any other
 open row — so the list scrolls smoothly and you read one draft at a time. A
+**search field** above the list filters the visible tab by sender and subject as
+you type (matching the decoded subject, not the raw header); the tab label shows
+"N of M" while a filter is active, and clearing the field restores the full list.
+A
 follow-up that still needs recipients shows an **Add recipients** chip on its
 row; expand it and the follow-up detail shows an editable **To** field in place
 of the incoming-message column. Edit the recipients there; the draft can't be
