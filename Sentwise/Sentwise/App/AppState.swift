@@ -116,13 +116,12 @@ final class AppState: ObservableObject {
     /// transient like the handle itself, so it is intentionally not persisted.
     var pendingManagedSignInEmail: String?
 
-    /// The managed account's latest usage allotment (backlog item 56b), refreshed
-    /// from `/v1/me` (sign-in, launch, Settings open) and after every managed
-    /// draft. `nil` until known — the UI hides the usage display gracefully.
+    /// Latest managed-account usage allotment; `nil` until known.
     @Published var managedQuota: ManagedQuota?
-    /// Hashed account key the cached quota belongs to. Kept with the quota so
-    /// account switches never display another account's usage while refresh runs.
+    /// Hashed account key the cached quota belongs to.
     var managedQuotaAccountKey: String?
+    /// Old -> new account-key aliases created during stable-ID backfill.
+    var managedQuotaAccountKeyAliases: [String: String] = [:]
 
     // MARK: - Voice Profile
 

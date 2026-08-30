@@ -371,6 +371,46 @@ final class AppStateUsageQuotaTests: XCTestCase {
         XCTAssertEqual(store.loadState(for: newAccountKey)?.firedThresholds, [50, 75])
     }
 
+    func testDraftQuotaReportCapturedBeforeStableIDBackfillIsTranslated() async throws {
+        let oldAccountKey = ManagedUsageAccountKey.make(from: "clerk-session:sess_legacy")
+        let notifier = FakeDraftNotifier()
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_legacy"
+        ])
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: 18,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed",
+            managedAccountEmail: "your Google account"
+        ))
+        let llm = QuotaLLMProvider(status: ManagedAccountStatus(
+            userID: "user_123",
+            quota: quota(used: 20)
+        ))
+        let appState = makeAppState(
+            notifier: notifier,
+            llm: llm,
+            secrets: secrets,
+            persistence: persistence
+        )
+
+        let capturedKey = try XCTUnwrap(await appState.managedQuotaRelay.currentQuotaReportAccountKey())
+        XCTAssertEqual(capturedKey, oldAccountKey)
+
+        await appState.refreshManagedQuota()
+
+        let newAccountKey = ManagedUsageAccountKey.make(from: "clerk-user:user_123")
+        XCTAssertEqual(appState.managedQuotaAccountKey, newAccountKey)
+        XCTAssertEqual(appState.managedQuota?.used, 20)
+
+        await appState.managedQuotaRelay.reportQuota(quota(used: 80), accountKey: capturedKey)
+
+        XCTAssertEqual(appState.managedQuotaAccountKey, newAccountKey)
+        XCTAssertEqual(appState.managedQuota?.used, 80)
+        XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.fifty, .seventyFive])
+    }
+
     func testRefreshSkipsWhenNotSignedIn() async {
         let llm = QuotaLLMProvider(quota: quota(used: 50))
         let appState = makeAppState(llm: llm) // fresh install: managed but signed out

@@ -42,6 +42,7 @@ extension AppState {
     func clearManagedQuotaCache() {
         managedQuota = nil
         managedQuotaAccountKey = nil
+        managedQuotaAccountKeyAliases.removeAll()
     }
 
     /// Records the latest quota (from a `/v1/draft` response or a `/v1/me` fetch)
@@ -51,7 +52,7 @@ extension AppState {
     /// Prowl hunt mode so hunts stay side-effect free; the display value still
     /// updates so the pane renders deterministically.
     func ingestManagedQuota(_ quota: ManagedQuota, accountKey explicitAccountKey: String? = nil) {
-        let accountKey = explicitAccountKey ?? currentManagedUsageAccountKey
+        let accountKey = resolvedManagedQuotaAccountKey(explicitAccountKey ?? currentManagedUsageAccountKey)
         guard ProwlHuntRuntime.current.isEnabled
             || (isManagedSignedIn && accountKey == currentManagedUsageAccountKey)
         else { return }
@@ -81,6 +82,10 @@ extension AppState {
             return false
         }
         return true
+    }
+
+    private func resolvedManagedQuotaAccountKey(_ accountKey: String) -> String {
+        managedQuotaAccountKeyAliases[accountKey] ?? accountKey
     }
 
     /// Refreshes the quota from `/v1/me`. Called at launch, on sign-in, and when
@@ -135,6 +140,7 @@ extension AppState {
 
         managedAccountID = stableAccountID
         let newAccountKey = currentManagedUsageAccountKey
+        managedQuotaAccountKeyAliases[previousAccountKey] = newAccountKey
         usageAlertStore.migrateState(from: previousAccountKey, to: newAccountKey)
         if managedQuotaAccountKey == previousAccountKey {
             managedQuotaAccountKey = newAccountKey
