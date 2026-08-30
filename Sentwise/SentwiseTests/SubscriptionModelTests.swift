@@ -144,6 +144,17 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertEqual(model.secondaryText?.contains("your own AI key") ?? false, true)
     }
 
+    func testLapsedPaidPlanNamesThePlanNotTheTrial() {
+        // Post-56c: a former Individual subscriber whose plan lapsed must not be
+        // told their "trial" ended.
+        let sub = ManagedSubscription(plan: .individual, status: .lapsed)
+        let model = SubscriptionPaneModel.make(from: status(subscription: sub))
+        XCTAssertEqual(model.planText, "Individual — lapsed")
+        XCTAssertTrue(model.isProblemState)
+        XCTAssertFalse(model.planText.contains("Trial"))
+        XCTAssertEqual(model.secondaryText?.contains("Individual plan has lapsed") ?? false, true)
+    }
+
     func testPastDueIsProblemStateWithPlanName() {
         let sub = ManagedSubscription(plan: .individual, status: .pastDue)
         let model = SubscriptionPaneModel.make(from: status(subscription: sub))

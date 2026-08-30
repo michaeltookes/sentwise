@@ -54,10 +54,16 @@ struct SubscriptionPaneModel: Equatable {
                 isProblemState: true
             )
         case .lapsed:
+            // A lapsed *trial* reads "Trial ended"; a lapsed paid plan (post-56c)
+            // must not — name the plan so a former subscriber isn't told their
+            // "trial" ended.
+            if effective.plan == .trial || effective.plan == .unknown {
+                return trialModel(days: 0)
+            }
             return SubscriptionPaneModel(
-                planText: "Trial ended",
-                secondaryText: "Your free trial has ended, so managed drafting is paused until you choose a plan. "
-                    + "Drafting with your own AI key still works.",
+                planText: "\(effective.plan.displayName) — lapsed",
+                secondaryText: "Your \(effective.plan.displayName) plan has lapsed, so managed drafting is paused "
+                    + "until you renew. Drafting with your own AI key still works.",
                 isProblemState: true
             )
         case .unknown:
