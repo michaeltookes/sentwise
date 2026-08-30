@@ -121,6 +121,16 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 ## Medium Priority
 
+85. **Answer "Needs your input" in place and re-draft**
+    When the model returns a `NEEDS_INFO` outcome (item 13), the Review Drafts card shows the summary and the specific missing facts — but the only affordance is **Dismiss**. The user has just been asked a precise question and has nowhere to answer it, so the draft is abandoned exactly when the assistant is one fact away from a send-ready reply.
+    *As Marcus, I want to answer the assistant's clarifying question right on the card and get a re-drafted reply that uses my answer, so that a "needs info" draft is a 10-second detour instead of a dead end I have to finish by hand.*
+    - The needs-info card (`DraftNeedsInfoView` / `PendingDraftCard`) gains an **answer area**: one text field per `missing` bullet (pre-labelled with the question) plus a free-text "anything else" field; **Re-draft with my answers** is enabled once at least one field is non-empty. Dismiss stays.
+    - Answers are attached to the draft (`Draft.userContext` or similar, Codable so it survives relaunch and the pending queue) and injected into the generator prompt on regenerate as a clearly delimited "Facts supplied by the user" block that the model must treat as authoritative; the existing `regeneratePendingDraft` path is reused rather than a new pipeline. Works for both inbox replies and post-call follow-ups.
+    - If the re-draft still returns `NEEDS_INFO`, the card shows the *new* questions with the previous answers preserved (never lost) so the user can add to them; a second failure surfaces a "write it yourself" escape with the answers copied into the reply body.
+    - Answers are local-only data (never logged; leave the machine only inside the stateless drafting call, same as mail content) and are cleared with the draft. In Prowl hunt mode the flow works against the stubbed provider with deterministic output.
+    - Approval-signal capture (item 83) records "answered-then-approved" as its own outcome so the Analytics window (item 84) can show how often the loop rescues a draft.
+    - Tests: prompt-block injection, Codable round-trip of answers, re-draft keeps answers on a second `NEEDS_INFO`, UI enable/disable state; Prowl hunt-safe AX identifiers on the fields and buttons.
+
 84. **Analytics / usage-insights window in Settings**
     A dedicated Settings → **Analytics** surface where the user monitors how they're using Sentwise: current **quota** (weekly allotment remaining), **overage** count (how many times they bought extra usage this month), and **drafting-quality insights** — drafts approved **in one shot vs. edited vs. denied** over time. Proposed by the owner 2026-08-29 while scoping metering.
     *As Marcus, I want one place to see my usage, my overage, and how often I accept vs. rewrite Sentwise's drafts, so that I can judge whether the tool is earning its keep and manage my usage.*
