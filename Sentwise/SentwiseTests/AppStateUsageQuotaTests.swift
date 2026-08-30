@@ -395,7 +395,8 @@ final class AppStateUsageQuotaTests: XCTestCase {
             persistence: persistence
         )
 
-        let capturedKey = try XCTUnwrap(await appState.managedQuotaRelay.currentQuotaReportAccountKey())
+        let currentAccountKey = await appState.managedQuotaRelay.currentQuotaReportAccountKey()
+        let capturedKey = try XCTUnwrap(currentAccountKey)
         XCTAssertEqual(capturedKey, oldAccountKey)
 
         await appState.refreshManagedQuota()
