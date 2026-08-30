@@ -127,79 +127,88 @@ struct WorkspaceAuthGuidance: Equatable {
     /// `.none`, so a caller can render "no guidance block" uniformly.
     static func make(for failure: WorkspaceAuthFailure, isCustomDomain: Bool) -> WorkspaceAuthGuidance? {
         switch failure {
-        case .none:
-            return nil
-        case .appPasswordRejectedWorkspace:
-            return WorkspaceAuthGuidance(
-                headline: "Your app password was rejected",
-                explanation: "This can mean a typo — or, on a company Google Workspace "
-                    + "account, that your admin has turned off app passwords. That's an "
-                    + "account policy, not a problem with Sentwise.",
-                options: [
-                    "Double-check the 16-character app password for typos, and that "
-                        + "2-Step Verification is still on for your account.",
-                    "Ask your Workspace admin to allow app passwords for your account — "
-                        + "copy the message below to send them.",
-                    "Meanwhile, connect a personal Google account (or another mailbox) so "
-                        + "you can keep using Sentwise."
-                ],
-                showsAskAdmin: true,
-                supportURL: URL(string: "https://support.google.com/accounts/answer/185833")
-            )
-        case .imapDisabled:
-            if isCustomDomain {
-                return WorkspaceAuthGuidance(
-                    headline: "IMAP access is turned off",
-                    explanation: "Your Google Workspace admin has disabled IMAP for your "
-                        + "account, so no IMAP mail app can connect. That's an admin "
-                        + "policy, not a problem with Sentwise.",
-                    options: [
-                        "Ask your Workspace admin to enable IMAP access for your account — "
-                            + "copy the message below to send them.",
-                        "Meanwhile, connect a personal Google account (or another mailbox) so "
-                            + "you can keep using Sentwise."
-                    ],
-                    showsAskAdmin: true,
-                    supportURL: URL(string: "https://support.google.com/a/answer/105694")
-                )
-            }
+        case .none: return nil
+        case .appPasswordRejectedWorkspace: return appPasswordRejected()
+        case .imapDisabled: return imapDisabled(isCustomDomain: isCustomDomain)
+        case .webLoginRequired: return webLoginRequired(isCustomDomain: isCustomDomain)
+        }
+    }
+
+    /// A personal-account fallback offered by every class, so a blocked user is
+    /// never stranded while an admin change is pending.
+    private static let personalFallbackOption =
+        "Meanwhile, connect a personal Google account (or another mailbox) so you can "
+        + "keep using Sentwise."
+
+    private static func appPasswordRejected() -> WorkspaceAuthGuidance {
+        WorkspaceAuthGuidance(
+            headline: "Your app password was rejected",
+            explanation: "This can mean a typo — or, on a company Google Workspace account, "
+                + "that your admin has turned off app passwords. That's an account policy, "
+                + "not a problem with Sentwise.",
+            options: [
+                "Double-check the 16-character app password for typos, and that 2-Step "
+                    + "Verification is still on for your account.",
+                "Ask your Workspace admin to allow app passwords for your account — copy the "
+                    + "message below to send them.",
+                personalFallbackOption
+            ],
+            showsAskAdmin: true,
+            supportURL: URL(string: "https://support.google.com/accounts/answer/185833")
+        )
+    }
+
+    private static func imapDisabled(isCustomDomain: Bool) -> WorkspaceAuthGuidance {
+        if isCustomDomain {
             return WorkspaceAuthGuidance(
                 headline: "IMAP access is turned off",
-                explanation: "IMAP is turned off for this account, so Sentwise can't connect. "
-                    + "You can turn it back on yourself in Gmail settings.",
+                explanation: "Your Google Workspace admin has disabled IMAP for your account, "
+                    + "so no IMAP mail app can connect. That's an admin policy, not a problem "
+                    + "with Sentwise.",
                 options: [
-                    "In Gmail on the web, open Settings → See all settings → "
-                        + "Forwarding and POP/IMAP → Enable IMAP, then Save Changes.",
-                    "Then run Test Connection again."
+                    "Ask your Workspace admin to enable IMAP access for your account — copy "
+                        + "the message below to send them.",
+                    personalFallbackOption
                 ],
-                showsAskAdmin: false,
-                supportURL: URL(string: "https://support.google.com/mail/answer/7126229")
-            )
-        case .webLoginRequired:
-            var options = [
-                "Sign in to this account once at https://accounts.google.com in your "
-                    + "browser, then run Test Connection again."
-            ]
-            if isCustomDomain {
-                options.append(
-                    "If it keeps failing on a Workspace account, ask your admin whether a "
-                        + "security-key or advanced-protection policy is blocking app "
-                        + "passwords — copy the message below to send them."
-                )
-            }
-            options.append(
-                "Or connect a personal Google account (or another mailbox) so you can keep "
-                    + "using Sentwise meanwhile."
-            )
-            return WorkspaceAuthGuidance(
-                headline: "Google needs you to sign in on the web first",
-                explanation: "Google blocked this sign-in and wants you to confirm it in a "
-                    + "browser — usually a new-device check or a Workspace security policy. "
-                    + "That's Google's check, not a problem with Sentwise.",
-                options: options,
-                showsAskAdmin: isCustomDomain,
-                supportURL: URL(string: "https://support.google.com/mail/accounts/answer/78754")
+                showsAskAdmin: true,
+                supportURL: URL(string: "https://support.google.com/a/answer/105694")
             )
         }
+        return WorkspaceAuthGuidance(
+            headline: "IMAP access is turned off",
+            explanation: "IMAP is turned off for this account, so Sentwise can't connect. "
+                + "You can turn it back on yourself in Gmail settings.",
+            options: [
+                "In Gmail on the web, open Settings → See all settings → Forwarding and "
+                    + "POP/IMAP → Enable IMAP, then Save Changes.",
+                "Then run Test Connection again."
+            ],
+            showsAskAdmin: false,
+            supportURL: URL(string: "https://support.google.com/mail/answer/7126229")
+        )
+    }
+
+    private static func webLoginRequired(isCustomDomain: Bool) -> WorkspaceAuthGuidance {
+        var options = [
+            "Sign in to this account once at https://accounts.google.com in your browser, "
+                + "then run Test Connection again."
+        ]
+        if isCustomDomain {
+            options.append(
+                "If it keeps failing on a Workspace account, ask your admin whether a "
+                    + "security-key or advanced-protection policy is blocking app passwords — "
+                    + "copy the message below to send them."
+            )
+        }
+        options.append(personalFallbackOption)
+        return WorkspaceAuthGuidance(
+            headline: "Google needs you to sign in on the web first",
+            explanation: "Google blocked this sign-in and wants you to confirm it in a "
+                + "browser — usually a new-device check or a Workspace security policy. "
+                + "That's Google's check, not a problem with Sentwise.",
+            options: options,
+            showsAskAdmin: isCustomDomain,
+            supportURL: URL(string: "https://support.google.com/mail/accounts/answer/78754")
+        )
     }
 }

@@ -11,13 +11,6 @@ final class AppState: ObservableObject {
 
     // MARK: - Watch State
 
-    /// High-level state of the inbox watcher.
-    enum WatchStatus: Equatable {
-        case idle
-        case watching
-        case paused
-    }
-
     /// Current watcher status. Drives the menu-bar status line.
     @Published var watchStatus: WatchStatus = .idle
 
@@ -132,21 +125,15 @@ final class AppState: ObservableObject {
 
     // MARK: - Workspace app-password guidance (item 75)
 
-    /// The Google Workspace / Gmail policy failure classified from the last
-    /// connection attempt, driving the targeted guidance block. `.none` when the
-    /// last failure wasn't a recognized policy failure (or there was none).
+    /// The Google Workspace / Gmail policy failure from the last connect attempt.
     @Published var workspaceAuthFailure: WorkspaceAuthFailure = .none
-    /// Whether the address that hit `workspaceAuthFailure` was a custom (Workspace)
-    /// domain, so the guidance can frame it as an admin policy vs. a personal one.
-    /// Captured at classification time so it's correct regardless of which connect
-    /// form (main vs. add-account) produced the failure.
+    /// Whether that failure's address was a custom (Workspace) domain, captured at
+    /// classify time so guidance frames it as admin- vs. personal-policy.
     var workspaceAuthIsCustomDomain: Bool = false
-    /// Whether the signed-in managed account has already registered interest in a
-    /// revived "Sign in with Google" path, so the capture button isn't re-offered.
+    /// Whether this account already registered "Sign in with Google" interest.
     @Published var googleOAuthInterestRegistered: Bool = false
     /// Whether an interest-registration request is in flight.
     @Published var isRegisteringGoogleOAuthInterest: Bool = false
-    /// A user-facing message describing the last interest-registration error, if any.
     @Published var googleOAuthInterestError: String?
 
     // MARK: - Voice Profile
@@ -387,12 +374,9 @@ final class AppState: ObservableObject {
     /// alerts fire once per threshold and never re-fire across relaunches (56b).
     /// A `var` with a default so tests can substitute an in-memory store.
     var usageAlertStore: UsageAlertStateStoring = UserDefaultsUsageAlertStore()
-    /// Records "notify me when sign-in with Google is available" demand against the
-    /// managed service (item 75). Injected in `init` from the managed account +
-    /// transport; a `var` so tests can substitute a fake.
-    var googleOAuthInterestClient: GoogleOAuthInterestRegistering
-    /// Durable local record of which accounts registered interest, so the capture
-    /// button isn't re-offered (item 75). Injectable so the state machine is tested.
+    /// Registers "Sign in with Google" interest via the managed service (item 75).
+    let googleOAuthInterestClient: GoogleOAuthInterestRegistering
+    /// Durable local "already registered" record so the button isn't re-offered.
     var googleOAuthInterestStore: GoogleOAuthInterestStoring = UserDefaultsGoogleOAuthInterestStore()
     /// Set by the menu-bar controller so a notification "open" action (or a
     /// menu click) can surface the review window.
@@ -436,8 +420,7 @@ final class AppState: ObservableObject {
         self.managedAccount = managedAccount
         // Interest capture (item 75) authenticates with the same account session as
         // drafting; default to the production client unless a test injects a fake.
-        self.googleOAuthInterestClient = googleOAuthInterestClient
-            ?? GoogleOAuthInterestClient(sessionProvider: managedAccount, transport: URLSessionTransport())
+        self.googleOAuthInterestClient = googleOAuthInterestClient ?? Self.makeDefaultInterestClient(managedAccount: managedAccount)
         // The quota relay (item 56b) bridges the LLM layer's quota reports to the
         // main actor; wired to the default LLMService, then to AppState after init.
         self.llm = llm ?? LLMService(managedSessionProvider: managedAccount, quotaReporter: managedQuotaRelay)
@@ -508,21 +491,6 @@ final class AppState: ObservableObject {
         )
 
         installExternalActionHandlers()
-        refreshGoogleOAuthInterestState()
-    }
-
-    /// Wires the notification-action and reachability-change callbacks. Called
-    /// once from `init`; reachability monitoring itself is started later by the
-    /// app (not here) so headless/test construction never spins up a real
-    /// `NWPathMonitor`.
-    private func installExternalActionHandlers() {
-        notifier.onAction = { [weak self] action, identity in
-            await self?.handleNotificationAction(action, identity: identity)
-        }
-        wireUsageMeteringHandlers()
-        reachability.onChange = { [weak self] online in
-            self?.handleReachabilityChange(online)
-        }
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
