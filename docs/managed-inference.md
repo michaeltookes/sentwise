@@ -367,6 +367,76 @@ renders deterministically. Delete is a zero-network no-op
 and the `"delete"`/`"Delete"` forbidden selectors in `.prowl/config.yml` already
 block activating the destructive controls while the pane is still walkable.
 
+## Workspace app-password guidance (item 75)
+
+The flagship ICP works on a company **Google Workspace** account, and many
+Workspace admins turn off app passwords, disable IMAP, or enforce a
+security-key/web-login policy — each makes the IMAP + app-password path (item 32)
+fail with a message users read as "Sentwise is broken". `WorkspaceAuthFailure`
+(`App/WorkspaceAuthFailure.swift`) is a **pure classifier** over the server text in
+`MailError.authenticationFailed`, the address's domain, and the IMAP host. It
+extends the item-43 `CredentialGuidance` pattern rather than forking it:
+`CredentialGuidance` explains how to *get* the credential; `WorkspaceAuthFailure`
+explains why a correct-looking credential is being *rejected by policy*.
+
+Classification (case-insensitive, **Google host only** — detected via
+`EmailProviderKind.forHost == .gmail`; any other host → `.none`):
+
+| Class | Server text it matches | Domain rule |
+| --- | --- | --- |
+| `appPasswordRejectedWorkspace` | `[AUTHENTICATIONFAILED] Invalid credentials` | **custom domain only** — indistinguishable from a typo, so consumer `gmail.com`/`googlemail.com` fall back to `.none` (the item-43 typo/2-Step guidance) |
+| `imapDisabled` | `IMAP access is disabled`, or `[UNAVAILABLE]` mentioning IMAP | any Google host (admin policy on Workspace, or the user's own Gmail setting) |
+| `webLoginRequired` | `Web login required`, or the `support.google.com/mail/accounts/answer/78754` URL | any Google host |
+| `.none` | anything else, or a non-Google host | — |
+
+`WorkspaceAuthGuidance.make(for:isCustomDomain:)` renders the connect-screen copy:
+a plain-language headline, one line making clear it's an account/admin policy (not
+a Sentwise bug), concrete options (ask the admin to allow app passwords / enable
+IMAP; use a personal account meanwhile), a **copyable one-line "Ask your admin"
+message** (fixed wording naming both levers + Google's article
+`support.google.com/accounts/answer/185833`), and a Google support link. `imapDisabled`
+and `webLoginRequired` frame admin-vs-personal from `isCustomDomain`; a personal
+account gets self-serve "enable IMAP in Gmail settings" copy and no admin ask.
+
+Surfaced by `WorkspaceAuthGuidanceView` in both onboarding
+(`OnboardingAccountStep`) and Settings (`EmailAccountSettingsView`), wherever
+`CredentialGuidance` renders today. `AppState.classifyWorkspaceAuthFailure` runs on
+a failed connect and, for a recognized class, records a metadata-only activity
+entry (`ActivityEventKind.workspaceAuthGuidance`, `detail` = the class name only —
+never the email, server text, or credential) so the maintainer can see how often
+launch users hit it while dogfooding. **AX ids** for Prowl: `workspaceGuidance`,
+`askAdminCopy`, `oauthInterestButton`, `oauthInterestConfirmation`.
+
+## "Sign in with Google" interest capture (item 75)
+
+When an IMAP connect fails on a Google host because a Workspace admin has disabled
+app passwords or IMAP (see [Workspace app-password guidance](#workspace-app-password-guidance-item-75)),
+the guidance block offers **"Notify me when Sign in with Google is available"** — a
+demand signal for reviving the parked bundled-OAuth + CASA path (item 3).
+
+- **Client:** `Services/GoogleOAuthInterest.swift` → `GoogleOAuthInterestClient`
+  calls `POST /v1/interest` with body `{"topic":"google-oauth"}` under a fresh
+  Clerk session token (Bearer), exactly like `POST /v1/draft`. Expects **`204 No
+  Content`** on success; **`401`** (unauth) maps to `LLMError.managedNotSignedIn`
+  and invalidates the session; other non-2xx statuses reuse
+  `ManagedInferenceClient.mapError` (same error-envelope shape as the other
+  routes). Endpoint: `ManagedInference.interestEndpoint` (`…/v1/interest`, honoring
+  the `SENTWISE_INFERENCE_URL` override).
+- **Consent:** clicking the button is an explicit user action — consent — but
+  nothing is ever sent without the click, matching the opt-in telemetry rule. The
+  button is **hidden unless a managed account is signed in** (`isManagedSignedIn`;
+  the per-account demand signal needs an account, and mailbox connect can precede
+  sign-in only in edge flows).
+- **Don't re-offer:** on success the confirmation ("You're on the list") is
+  persisted locally per hashed managed account
+  (`UserDefaultsGoogleOAuthInterestStore`, keyed by `ManagedUsageAccountKey`, never
+  the email), so the button isn't shown again. `AppState.refreshGoogleOAuthInterestState`
+  recomputes it at launch and on sign-in.
+- **Prowl hunt mode:** `AppState.registerGoogleOAuthInterest(isHuntMode:)` is a
+  no-op stub — it never touches the network. The guidance block itself renders from
+  injected state with zero network (a pure `WorkspaceAuthFailure` classification),
+  so hunts never reach a live call.
+
 ## Prowl hunt mode
 
 `LLMService` returns a `StubManagedInferenceClient` (deterministic canned
