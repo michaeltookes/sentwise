@@ -21,6 +21,9 @@ enum ManagedInference {
 
     static var draftEndpoint: URL { baseURL.appendingPathComponent("v1/draft") }
     static var meEndpoint: URL { baseURL.appendingPathComponent("v1/me") }
+    /// Demand-capture endpoint for "notify me when sign-in with Google is
+    /// available" (backlog item 75). `POST /v1/interest` with `{"topic":…}`.
+    static var interestEndpoint: URL { baseURL.appendingPathComponent("v1/interest") }
 }
 
 /// Supplies a fresh, short-lived account session token for authenticating

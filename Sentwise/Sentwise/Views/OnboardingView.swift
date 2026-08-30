@@ -225,6 +225,8 @@ private struct OnboardingAccountStep: View {
                 OnboardingError(message: error)
             }
 
+            WorkspaceAuthGuidanceView()
+
             Text(AppState.privacyStatement)
                 .font(.caption)
                 .foregroundStyle(.secondary)

@@ -155,6 +155,11 @@ enum ActivityEventKind: String, Codable, Equatable, CaseIterable {
     /// A mail or LLM authentication failure that won't be retried and needs the
     /// user to re-enter their credentials (item 27).
     case authFailed
+    /// A Google Workspace / Gmail policy blocked the IMAP sign-in and targeted
+    /// guidance was shown (item 75). `detail` carries the PII-free failure class
+    /// name only (never the email, server text, or credential) so the maintainer
+    /// can see how often launch users hit this while dogfooding.
+    case workspaceAuthGuidance
 
     /// A short label for the event row.
     var headline: String {
@@ -172,6 +177,7 @@ enum ActivityEventKind: String, Codable, Equatable, CaseIterable {
         case .resumedOnline: return "Back online"
         case .retryExhausted: return "Gave up after retries"
         case .authFailed: return "Sign-in failed"
+        case .workspaceAuthGuidance: return "Workspace sign-in blocked"
         }
     }
 
@@ -191,13 +197,14 @@ enum ActivityEventKind: String, Codable, Equatable, CaseIterable {
         case .resumedOnline: return "wifi"
         case .retryExhausted: return "arrow.clockwise.circle"
         case .authFailed: return "person.crop.circle.badge.exclamationmark"
+        case .workspaceAuthGuidance: return "building.2.crop.circle.badge.exclamationmark"
         }
     }
 
     /// Whether rows should render the free-form failure diagnostic.
     var showsFailureDetail: Bool {
         switch self {
-        case .sendFailed, .saveFailed, .retryExhausted, .authFailed: return true
+        case .sendFailed, .saveFailed, .retryExhausted, .authFailed, .workspaceAuthGuidance: return true
         default: return false
         }
     }

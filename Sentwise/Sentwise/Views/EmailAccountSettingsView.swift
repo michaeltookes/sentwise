@@ -143,6 +143,8 @@ struct EmailAccountSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+
+            WorkspaceAuthGuidanceView()
         }
     }
 
@@ -310,6 +312,7 @@ struct EmailAccountSettingsView: View {
     private func beginAddingAccount() {
         newAccountForm.resetForNewAccount()
         appState.connectionError = nil
+        appState.clearWorkspaceAuthGuidance()
         isAddingAccount = true
         isMailEmailFocused = true
     }
@@ -317,6 +320,7 @@ struct EmailAccountSettingsView: View {
     private func cancelAddingAccount() {
         isAddingAccount = false
         appState.connectionError = nil
+        appState.clearWorkspaceAuthGuidance()
         newAccountForm.resetForNewAccount()
     }
 

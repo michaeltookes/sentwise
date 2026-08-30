@@ -37,6 +37,7 @@ extension AppState {
     /// success, adopts it as the active account.
     func testConnection(with credentials: MailAccountCredentials) async {
         connectionError = nil
+        clearWorkspaceAuthGuidance()
         let email = credentials.email.trimmingCharacters(in: .whitespacesAndNewlines)
         let host = credentials.host.trimmingCharacters(in: .whitespacesAndNewlines)
         let credentials = MailAccountCredentials(
@@ -62,6 +63,7 @@ extension AppState {
             try await mailProvider.verifyConnection(credentials)
         } catch {
             connectionError = Self.message(for: error)
+            classifyWorkspaceAuthFailure(error, credentials: credentials)
             return
         }
 
@@ -100,6 +102,7 @@ extension AppState {
     /// Disconnects the mailbox by clearing the stored app password.
     func disconnectMail() {
         connectionError = nil
+        clearWorkspaceAuthGuidance()
         guard !isConnecting else {
             logger.info("Disconnect skipped while a connection test is running")
             return

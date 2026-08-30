@@ -41,6 +41,9 @@ extension AppState {
             resetDraftPreviewForLLMChange()
         }
         saveSettings()
+        // Reflect this account's prior "notify me about Sign in with Google" choice
+        // so the item-75 capture button isn't re-offered after a click (item 75).
+        refreshGoogleOAuthInterestState()
         resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
         startTranscriptFolderWatchingIfEnabled()
         // Pull the current weekly allotment now that we can authenticate (item 56b).
