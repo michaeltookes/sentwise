@@ -165,6 +165,30 @@ protocol UsageAlertStateStoring: AnyObject, Sendable {
     func save(_ state: UsageAlertState)
 }
 
+extension UsageAlertStateStoring {
+    /// Preserves fired-threshold history when an upgraded signed-in account moves
+    /// from a legacy session-scoped key to its stable Clerk-user key.
+    func migrateState(from oldAccountKey: String, to newAccountKey: String) {
+        guard oldAccountKey != newAccountKey,
+              var oldState = loadState(for: oldAccountKey)
+        else { return }
+
+        oldState.accountKey = newAccountKey
+        guard let existing = loadState(for: newAccountKey) else {
+            save(oldState)
+            return
+        }
+
+        if existing.windowResetsAt == oldState.windowResetsAt {
+            var merged = existing
+            merged.firedThresholds = Array(Set(existing.firedThresholds + oldState.firedThresholds)).sorted()
+            save(merged)
+        } else if oldState.windowResetsAt > existing.windowResetsAt {
+            save(oldState)
+        }
+    }
+}
+
 private struct UsageAlertStateCollection: Codable, Equatable, Sendable {
     var statesByAccount: [String: UsageAlertState]
 }

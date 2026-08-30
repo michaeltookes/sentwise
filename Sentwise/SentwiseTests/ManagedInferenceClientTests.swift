@@ -243,6 +243,23 @@ final class ManagedInferenceClientTests: XCTestCase {
         XCTAssertEqual(quota?.remaining, 45)
     }
 
+    func testFetchAccountStatusDecodesUserIDAndQuota() async throws {
+        let transport = FakeLLMTransport(response: json(#"""
+        {
+          "userId": " user_123 ",
+          "quota": {"unit":"drafts","used":5,"limit":50,"remaining":45,
+                    "resetsAt":"2025-09-01T00:00:00Z","enforcement":"soft"}
+        }
+        """#))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+
+        let status = try await client.fetchAccountStatus()
+
+        XCTAssertEqual(status.userID, "user_123")
+        XCTAssertEqual(status.stableAccountIdentifier, "clerk-user:user_123")
+        XCTAssertEqual(status.quota?.used, 5)
+    }
+
     func testFetchAccountQuotaReturnsNilWhenOmitted() async throws {
         let transport = FakeLLMTransport(response: json(#"{"userId":"user_123","trial":{"active":true}}"#))
         let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)

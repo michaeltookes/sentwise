@@ -10,16 +10,29 @@ private final class InMemoryUsageAlertStore: UsageAlertStateStoring, @unchecked 
 
 /// An `LLMProviding` double whose `/v1/me` fetch returns a fixed quota (item 56b).
 private final class QuotaLLMProvider: LLMProviding, @unchecked Sendable {
-    var quota: ManagedQuota?
+    var status: ManagedAccountStatus?
+    var quota: ManagedQuota? {
+        get { status?.quota }
+        set { status = ManagedAccountStatus(userID: status?.userID, quota: newValue) }
+    }
     private(set) var fetchCount = 0
-    init(quota: ManagedQuota?) { self.quota = quota }
+    init(quota: ManagedQuota?) {
+        self.status = ManagedAccountStatus(quota: quota)
+    }
+    init(status: ManagedAccountStatus?) {
+        self.status = status
+    }
     func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
     func complete(_ request: LLMRequest, provider: LLMProviderKind, apiKey: String, baseURL: String?) async throws -> LLMResponse {
         LLMResponse(text: "")
     }
+    func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? {
+        fetchCount += 1
+        return status
+    }
     func fetchManagedQuota() async throws -> ManagedQuota? {
         fetchCount += 1
-        return quota
+        return status?.quota
     }
 }
 
@@ -319,6 +332,43 @@ final class AppStateUsageQuotaTests: XCTestCase {
 
         XCTAssertEqual(llm.fetchCount, 1)
         XCTAssertEqual(appState.managedQuota?.used, 25)
+    }
+
+    func testRefreshManagedQuotaBackfillsStableAccountIDAndMigratesAlertState() async {
+        let oldAccountKey = ManagedUsageAccountKey.make(from: "clerk-session:sess_legacy")
+        let store = InMemoryUsageAlertStore()
+        store.save(UsageAlertState(accountKey: oldAccountKey, windowResetsAt: window, firedThresholds: [50]))
+        let notifier = FakeDraftNotifier()
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_legacy"
+        ])
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: 18,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed",
+            managedAccountEmail: "your Google account"
+        ))
+        let llm = QuotaLLMProvider(status: ManagedAccountStatus(
+            userID: " user_123 ",
+            quota: quota(used: 80)
+        ))
+        let appState = makeAppState(
+            notifier: notifier,
+            store: store,
+            llm: llm,
+            secrets: secrets,
+            persistence: persistence
+        )
+
+        await appState.refreshManagedQuota()
+
+        let newAccountKey = ManagedUsageAccountKey.make(from: "clerk-user:user_123")
+        XCTAssertEqual(appState.managedAccountID, "clerk-user:user_123")
+        XCTAssertEqual(persistence.loadSettings().managedAccountID, "clerk-user:user_123")
+        XCTAssertEqual(appState.managedQuotaAccountKey, newAccountKey)
+        XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.seventyFive])
+        XCTAssertEqual(store.loadState(for: newAccountKey)?.firedThresholds, [50, 75])
     }
 
     func testRefreshSkipsWhenNotSignedIn() async {

@@ -288,15 +288,25 @@ protocol LLMProviding: Sendable {
         baseURL: String?
     ) async throws -> LLMResponse
 
-    /// Fetches the managed account's current usage allotment from `/v1/me`
-    /// (backlog item 56b). Returns `nil` when the provider has no managed-quota
-    /// concept, when the Worker omits `quota` (older build), or when not signed
-    /// in. Providers other than the managed one need not implement it — the
-    /// default returns `nil`.
+    /// Fetches the managed account's current status from `/v1/me` (backlog item
+    /// 56b). Returns `nil` when the provider has no managed-account concept or
+    /// when not signed in. Providers other than the managed one need not
+    /// implement it — the default adapts `fetchManagedQuota()`.
+    func fetchManagedAccountStatus() async throws -> ManagedAccountStatus?
+
+    /// Fetches the managed account's current usage allotment from `/v1/me`.
+    /// Retained for quota-only tests and call sites.
     func fetchManagedQuota() async throws -> ManagedQuota?
 }
 
 extension LLMProviding {
+    /// Default: adapt quota-only providers into an account status without a user
+    /// id. `LLMService` overrides this to hit `/v1/me` directly.
+    func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? {
+        guard let quota = try await fetchManagedQuota() else { return nil }
+        return ManagedAccountStatus(quota: quota)
+    }
+
     /// Default: no managed quota. Only `LLMService` overrides this to hit `/v1/me`.
     func fetchManagedQuota() async throws -> ManagedQuota? { nil }
 

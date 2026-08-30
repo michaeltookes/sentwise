@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let quotaLogger = Logger(subsystem: "com.tookes.Sentwise", category: "ManagedQuota")
 
 /// Managed-inference usage metering on `AppState` (backlog item 56b): mirroring
 /// the latest quota into published state, refreshing it from `/v1/me`, and firing
@@ -94,16 +97,57 @@ extension AppState {
             // The reporter path already routes the fetched quota through
             // `ingestManagedQuota`; still ingest the return value directly so an
             // injected LLM double without a wired relay updates state too.
-            if let quota = try await llm.fetchManagedQuota() {
+            if let status = try await llm.fetchManagedAccountStatus() {
                 guard ProwlHuntRuntime.current.isEnabled
                     || (isManagedSignedIn && accountKey == currentManagedUsageAccountKey)
                 else { return }
-                ingestManagedQuota(quota, accountKey: accountKey)
+                let resolvedAccountKey = backfillManagedAccountIDIfNeeded(
+                    from: status,
+                    replacing: accountKey
+                )
+                if let quota = status.quota {
+                    ingestManagedQuota(quota, accountKey: resolvedAccountKey)
+                }
             }
         } catch {
             // Metering is best-effort surfacing, never a blocking failure; a
             // managed 401 is reconciled by the normal draft/test paths.
             await reconcileManagedAccountState(after: error, provider: .managed)
+        }
+    }
+
+    @discardableResult
+    private func backfillManagedAccountIDIfNeeded(
+        from status: ManagedAccountStatus,
+        replacing previousAccountKey: String
+    ) -> String {
+        guard let stableAccountID = status.stableAccountIdentifier else {
+            return previousAccountKey
+        }
+
+        let currentID = managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if currentID == stableAccountID {
+            return currentManagedUsageAccountKey
+        }
+        guard currentID.isEmpty || currentID.hasPrefix("clerk-session:") else {
+            return previousAccountKey
+        }
+
+        managedAccountID = stableAccountID
+        let newAccountKey = currentManagedUsageAccountKey
+        usageAlertStore.migrateState(from: previousAccountKey, to: newAccountKey)
+        if managedQuotaAccountKey == previousAccountKey {
+            managedQuotaAccountKey = newAccountKey
+        }
+        persistManagedAccountIDBackfill()
+        return newAccountKey
+    }
+
+    private func persistManagedAccountIDBackfill() {
+        do {
+            try persistSettingsSync(buildSettings())
+        } catch {
+            quotaLogger.error("Failed to persist managed account id backfill: \(error.localizedDescription)")
         }
     }
 

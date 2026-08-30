@@ -122,10 +122,11 @@ struct ManagedInferenceClient: LLMClient {
         return try Self.parse(response.body)
     }
 
-    /// Fetches the account's current usage allotment from `GET /v1/me` (backlog
-    /// item 56b). Returns `nil` when the Worker omits `quota` (older build).
+    /// Fetches the account's current status from `GET /v1/me` (backlog item 56b).
+    /// `quota` is optional when the Worker omits it (older build), but `userId`
+    /// is consumed when present to backfill stable local account identity.
     /// Throws the same mapped `LLMError`s as `complete` on failure.
-    func fetchAccountQuota(meEndpoint: URL = ManagedInference.meEndpoint) async throws -> ManagedQuota? {
+    func fetchAccountStatus(meEndpoint: URL = ManagedInference.meEndpoint) async throws -> ManagedAccountStatus {
         let session = try await sessionProvider.currentManagedSession()
         let headers = [
             "authorization": "Bearer \(session.jwt)",
@@ -148,10 +149,16 @@ struct ManagedInferenceClient: LLMClient {
 
         do {
             let decoded = try JSONDecoder().decode(AccountStatusBody.self, from: response.body)
-            return decoded.quota
+            return ManagedAccountStatus(userID: decoded.userId, quota: decoded.quota)
         } catch {
             throw LLMError.invalidResponse("Unexpected account status response shape. (\(error))")
         }
+    }
+
+    /// Fetches only the account's current usage allotment from `GET /v1/me`.
+    /// Retained for call sites and tests that do not need the account identity.
+    func fetchAccountQuota(meEndpoint: URL = ManagedInference.meEndpoint) async throws -> ManagedQuota? {
+        try await fetchAccountStatus(meEndpoint: meEndpoint).quota
     }
 
     // MARK: - Wire format
@@ -306,9 +313,10 @@ private struct ResponseBody: Decodable {
     }
 }
 
-/// `GET /v1/me` shape — only the `quota` block is consumed here; trial/account
-/// fields are ignored for now (item 56b).
+/// `GET /v1/me` shape. `userId` identifies the authenticated Clerk user, and
+/// `quota` remains optional so older Worker builds still decode.
 private struct AccountStatusBody: Decodable {
+    let userId: String?
     let quota: ManagedQuota?
 }
 

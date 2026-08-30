@@ -157,6 +157,29 @@ struct ManagedQuota: Codable, Sendable, Equatable {
     }
 }
 
+/// The account status returned by `GET /v1/me`. `quota` is optional for older
+/// Worker builds, but `userID` lets upgraded app sessions backfill a stable
+/// account identity before usage alerts are evaluated.
+struct ManagedAccountStatus: Sendable, Equatable {
+    let userID: String?
+    let quota: ManagedQuota?
+
+    init(userID: String? = nil, quota: ManagedQuota? = nil) {
+        let normalizedUserID = userID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let normalizedUserID, !normalizedUserID.isEmpty {
+            self.userID = normalizedUserID
+        } else {
+            self.userID = nil
+        }
+        self.quota = quota
+    }
+
+    var stableAccountIdentifier: String? {
+        guard let userID else { return nil }
+        return "clerk-user:\(userID)"
+    }
+}
+
 /// Shared ISO-8601 parsing for `resetsAt`, tolerating an optional fractional
 /// seconds component (the Worker may or may not include milliseconds).
 enum ManagedQuotaDate {

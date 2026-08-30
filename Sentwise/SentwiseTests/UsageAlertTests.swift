@@ -171,4 +171,20 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(store.loadState(for: accountA)?.firedThresholds, [50])
         XCTAssertEqual(store.loadState(for: accountB)?.firedThresholds, [50, 75])
     }
+
+    func testStoreMigrationMergesSessionStateIntoStableAccountState() throws {
+        let suiteName = "UsageAlertTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = UserDefaultsUsageAlertStore(defaults: defaults, key: "usage-alert-test")
+        let sessionKey = "acct-session"
+        let stableKey = "acct-stable"
+
+        store.save(UsageAlertState(accountKey: sessionKey, windowResetsAt: window, firedThresholds: [50]))
+        store.save(UsageAlertState(accountKey: stableKey, windowResetsAt: window, firedThresholds: [75]))
+
+        store.migrateState(from: sessionKey, to: stableKey)
+
+        XCTAssertEqual(store.loadState(for: stableKey)?.firedThresholds, [50, 75])
+    }
 }
