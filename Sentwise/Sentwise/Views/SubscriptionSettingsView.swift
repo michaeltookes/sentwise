@@ -72,7 +72,7 @@ struct SubscriptionSettingsView: View {
     private var signedInContent: some View {
         Section("Account") {
             LabeledContent("Email") {
-                Text(appState.managedAccountEmail)
+                Text(appState.managedAccountDisplayEmail)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("subscriptionAccountEmail")
             }

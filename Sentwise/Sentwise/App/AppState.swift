@@ -493,14 +493,8 @@ final class AppState: ObservableObject {
         }
     }
 
-    // MARK: - Launch at Login
-
-    /// Updates the launch-at-login preference via `SMAppService`.
     func setLaunchAtLogin(_ enabled: Bool) {
         LoginItemManager.shared.setEnabled(enabled)
-        // Re-read the authoritative status so the UI reflects reality even if
-        // the system rejected the change.
         launchAtLogin = LoginItemManager.shared.isEnabled
     }
-
 }

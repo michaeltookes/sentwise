@@ -135,6 +135,15 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertEqual(model.planText, "Trial — 1 day left")
     }
 
+    func testTrialingWithoutEndDateStaysActive() {
+        let sub = ManagedSubscription(plan: .trial, status: .trialing)
+        let model = SubscriptionPaneModel.make(from: status(subscription: sub))
+        XCTAssertEqual(model.planText, "Trial")
+        XCTAssertNil(model.secondaryText)
+        XCTAssertFalse(model.isProblemState)
+        XCTAssertFalse(model.showsOwnKeyFallback)
+    }
+
     func testLapsedShowsTrialEndedAndProblemState() {
         let sub = ManagedSubscription(plan: .trial, status: .lapsed)
         let model = SubscriptionPaneModel.make(from: status(subscription: sub))

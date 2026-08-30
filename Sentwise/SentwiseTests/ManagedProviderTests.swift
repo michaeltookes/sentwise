@@ -42,6 +42,21 @@ final class ManagedProviderTests: XCTestCase {
         XCTAssertEqual(AppState.managedMessage(for: LLMError.managedNotSignedIn), "Sign-in didn't stick. Please try again.")
     }
 
+    func testManagedMessagePreservesHTTPFailureMessage() {
+        let message = AppState.managedMessage(for: LLMError.http(
+            status: 403,
+            message: "Only the account owner can delete this account."
+        ))
+
+        XCTAssertEqual(message, "Only the account owner can delete this account.")
+    }
+
+    func testManagedMessageHasHTTPFallbackWhenMessageIsBlank() {
+        let message = AppState.managedMessage(for: LLMError.http(status: 500, message: " "))
+
+        XCTAssertEqual(message, "Sentwise account service returned HTTP 500. Please try again.")
+    }
+
     // MARK: - Settings migration (14 -> 15)
 
     private func migrate(_ settings: Settings, secrets: SecretStore) -> Settings {

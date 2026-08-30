@@ -38,7 +38,7 @@ struct SubscriptionPaneModel: Equatable {
                 isProblemState: false
             )
         case .trialing:
-            return trialModel(days: trialDays)
+            return activeTrialModel(days: trialDays)
         case .pastDue:
             return SubscriptionPaneModel(
                 planText: effective.plan.displayName,
@@ -124,6 +124,13 @@ struct SubscriptionPaneModel: Equatable {
             secondaryText: nil,
             isProblemState: false
         )
+    }
+
+    private static func activeTrialModel(days: Int?) -> SubscriptionPaneModel {
+        guard let days else {
+            return SubscriptionPaneModel(planText: "Trial", secondaryText: nil, isProblemState: false)
+        }
+        return trialModel(days: days)
     }
 
     private static func renewalLine(

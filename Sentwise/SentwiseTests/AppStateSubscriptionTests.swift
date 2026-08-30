@@ -124,6 +124,19 @@ final class AppStateSubscriptionTests: XCTestCase {
         XCTAssertEqual(appState.managedAccountStatus?.email, "marcus@example.com")
     }
 
+    func testDisplayEmailPrefersLatestStatusEmailOverPersistedPlaceholder() async {
+        let llm = DeletableLLMProvider()
+        llm.statusToReturn = ManagedAccountStatus(userID: "user_123", email: "marcus@example.com")
+        let (appState, _) = makeSignedInAppState(email: "your Google account", llm: llm)
+
+        XCTAssertEqual(appState.managedAccountDisplayEmail, "your Google account")
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.managedAccountEmail, "your Google account")
+        XCTAssertEqual(appState.managedAccountDisplayEmail, "marcus@example.com")
+    }
+
     // MARK: - Usage-alert routing (item 73)
 
     func testUsageAlertOpenRoutesToSubscriptionTab() async {
