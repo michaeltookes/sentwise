@@ -196,6 +196,7 @@ struct DeleteAccountSheet: View {
 
             HStack {
                 Button("Cancel") { dismiss() }
+                    .disabled(isDeleting)
                     .accessibilityIdentifier("deleteAccountCancel")
                 Spacer()
                 Button(role: .destructive) {
@@ -214,6 +215,7 @@ struct DeleteAccountSheet: View {
         }
         .padding(20)
         .frame(width: 440)
+        .interactiveDismissDisabled(isDeleting)
     }
 
     private func performDelete() async {
