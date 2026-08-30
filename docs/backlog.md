@@ -112,14 +112,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - **Feedback inbox live:** the `feedback@sentwise.ai` address wired into the app's "Report a Problem" (item 36) must be a real, monitored mailbox before launch (Google Workspace setup) — the app ships the address regardless, but a stranger's feedback must actually reach the maintainer.
     - Launch checklist recorded in `docs/` and ticked; this item closes when the public link goes out.
 
-75. **Google Workspace accounts where app passwords are disabled**
-    The primary ICP works on a company Google Workspace account, and many Workspace admins disable app passwords (or enforce security keys), which makes the IMAP + app-password path (item 32) fail outright — exactly the user we're launching for. Today this surfaces as a generic authentication error.
-    *As Marcus on a company Workspace account, I want Sentwise to tell me plainly when my admin has disabled app passwords and what my options are, so that I don't conclude the app is broken.*
-    - Detect the Workspace-specific IMAP failure modes (app passwords disabled, IMAP disabled by admin, 2-Step Verification not enrolled) and show targeted guidance in onboarding/Settings instead of a generic error, reusing the item 43 `CredentialGuidance` pattern.
-    - Offer the user a one-line "Ask your admin" message to forward, and a **"notify me when sign-in-with-Google is available"** capture so demand for reviving the bundled OAuth client + CASA path (parked item 3) is measured, not guessed.
-    - Record the failure class in activity history (no credentials) so the maintainer can see how often launch users hit it.
-    - Decision checkpoint recorded after launch: if a meaningful share of sign-ups hit this, un-park item 3.
-
 ## Medium Priority
 
 85. **Answer "Needs your input" in place and re-draft**
