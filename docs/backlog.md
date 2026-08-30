@@ -96,11 +96,12 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 73. **Account & subscription pane in Settings**
     With an account behind the app (item 56), the user needs one place to see and manage it; today Settings has no notion of an account at all.
     *As Marcus, I want to see my plan, trial days left, and usage, and fix billing or sign out without hunting, so that the subscription never feels like a black box.*
-    - Sign in / sign out; shows account email, plan (Trial / Individual), trial days remaining or renewal date.
-    - Usage this period vs. allowance (from item 56b) with the "switch to your own key for unlimited" link into the item 59 power path.
-    - "Manage billing" opens the MoR customer portal; lapsed/past-due state explained with a clear call to action; the app degrades gracefully (BYO-key still works, managed drafting pauses with a reason shown).
-    - **Delete account** (server-side data removal incl. usage counters; local data untouched unless the user also chooses to reset) — required for a credible privacy posture.
-    - Lives as a toolbar tab in the native Settings window (item 65); Prowl hunt-safe AX identifiers, disabled/stubbed in hunt mode.
+    App side delivered on branch `account-pane` (Subscription tab in the native Settings window). Kept open because "Manage billing" is a stub until checkout (56c) ships.
+    - ✅ Sign in / sign out; shows account email, plan (Trial / Individual), trial days remaining or renewal date. (`account-pane`)
+    - ✅ Usage this period vs. allowance (from item 56b) with the "switch to your own key for unlimited" link into the item 59 power path. (`account-pane`)
+    - ⬜ "Manage billing" wires to the Paddle (MoR) customer portal in **56c** — the button/plumbing exists but is disabled with "Billing management arrives with checkout" until `subscription.manageBillingUrl` is non-null; lapsed/past-due/canceled states already explain the pause and offer the own-key fallback. (app-side degrade ✅ on `account-pane`)
+    - ✅ **Delete account** (server-side data removal incl. usage counters via `DELETE /v1/me`; local data untouched — separate reset action); DELETE-gated confirmation sheet. (`account-pane`)
+    - ✅ Lives as a toolbar tab in the native Settings window (item 65); Prowl hunt-safe AX identifiers, stubbed status + no-op delete in hunt mode. (`account-pane`)
 
 74. **Launch readiness: clean-Mac verification, security pass, and the 1.0 release**
     The last item to close before inviting the public. Every release so far was tested on the maintainer's own configured Mac; a stranger's experience — Gatekeeper, fresh Keychain, no prior Application Support, TCC prompts — has never been observed.
