@@ -261,6 +261,32 @@ the `label="AI"` toolbar tab). In the fixture, managed inference is the active
 provider but not signed in, so all the sign-in controls render immediately; after a
 faked sign-in the AI tab's Status row shows `activeProviderBadge`.
 
+### Subscription pane controls (item 73)
+
+The Settings → **Subscription** tab (`label="Subscription"` toolbar tab) is the
+Sentwise-account home. In hunt mode the account status is stubbed
+(`StubManagedInferenceClient.stubbedAccountStatus` — active Individual plan, no
+billing URL, zero network) and delete is a no-op. The destructive controls are
+walkable but their activation is already blocked by the `"delete"`/`"Delete"`
+forbidden selectors (delete) and `"Sign out"` is safe/harmless in hunt mode.
+
+| Identifier | Control | Clickable in hunts |
+|---|---|---|
+| `id=subscriptionTab` | Root of the Subscription pane | assert-only |
+| `id=subscriptionAccountEmail` | Signed-in account email | assert-only |
+| `id=subscriptionPlan` | Plan line ("Trial — N days left" / plan name) | assert-only |
+| `id=subscriptionPlanDetail` | Renewal / lapsed explanation line | assert-only |
+| `id=subscriptionOwnKeyFallback` | "Use your own AI key instead" (problem states) | assert-only |
+| `id=manageBilling` | "Manage billing" (disabled until 56c) | assert-only |
+| `id=manageBillingUnavailable` | "Billing management arrives with checkout." caption | assert-only |
+| `id=subscriptionSignOut` | "Sign out" of the Sentwise account | assert-only |
+| `id=deleteAccount` | "Delete account" (opens the confirm sheet) | no (forbidden: "delete") |
+| `id=deleteAccountConfirmField` | Type-DELETE confirm field | no (forbidden: "delete") |
+| `id=deleteAccountConfirm` | Confirm-delete button | no (forbidden: "delete") |
+| `id=deleteAccountCancel` | Cancel the delete sheet | assert-only |
+| `id=openSubscriptionFromAI` | AI-tab link that switches to Subscription | assert / click |
+| `id=accountDeletedConfirmation` | "Your Sentwise account was deleted." note | assert-only |
+
 Window presence checks use `waitForSelector` with the exact AX label each
 window sets via `setAccessibilityLabel` (`label=` is a step selector; it is
 not recognized inside `assert`, so rely on `waitForSelector` failing the hunt
