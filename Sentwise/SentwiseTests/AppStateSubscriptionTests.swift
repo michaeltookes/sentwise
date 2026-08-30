@@ -152,6 +152,32 @@ final class AppStateSubscriptionTests: XCTestCase {
         XCTAssertNotNil((try? secrets.value(for: .managedClientToken)) ?? nil)
     }
 
+    func testDeleteAccountAuthFailureReconcilesInvalidatedCredentials() async throws {
+        let llm = DeletableLLMProvider()
+        llm.deleteError = LLMError.managedNotSignedIn
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        let managedAccount = ManagedAccountService(secrets: secrets)
+        let (appState, _) = makeSignedInAppState(
+            llm: llm,
+            secrets: secrets,
+            managedAccount: managedAccount
+        )
+        try await managedAccount.invalidateStoredCredentialsForDeletedAccount()
+        XCTAssertTrue(appState.isManagedSignedIn)
+
+        let ok = await appState.deleteManagedAccount(isHuntMode: false)
+
+        XCTAssertFalse(ok)
+        XCTAssertEqual(llm.deleteCount, 1)
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertEqual(appState.managedError, "Sign-in didn't stick. Please try again.")
+        XCTAssertFalse(appState.didDeleteManagedAccount)
+        XCTAssertEqual(try secrets.value(for: .managedCredentialsInvalidated), "1")
+    }
+
     func testDeleteAccountHuntModeIsNoOp() async {
         let llm = DeletableLLMProvider()
         let (appState, secrets) = makeSignedInAppState(llm: llm)

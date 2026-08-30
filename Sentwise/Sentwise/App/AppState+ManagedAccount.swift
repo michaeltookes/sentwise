@@ -166,6 +166,7 @@ extension AppState {
         do {
             try await llm.deleteManagedAccount()
         } catch {
+            await reconcileManagedAccountState(after: error, provider: .managed)
             managedError = Self.managedMessage(for: error)
             return false
         }
