@@ -25,7 +25,7 @@ extension AppState {
     /// Which managed-account action is currently in flight, so only the pressed
     /// button shows a spinner while all of them disable. `nil` = idle.
     enum ManagedBusyAction: Equatable {
-        case emailCode, verifyCode, google, oauthCallback, signOut
+        case emailCode, verifyCode, google, oauthCallback, signOut, deleteAccount
     }
 
     /// True while any managed action is running (drives button disabling).
@@ -40,6 +40,7 @@ extension AppState {
     /// `isHuntMode` is injectable so unit tests can exercise the fake path.
     func startManagedSignIn(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
         managedError = nil
+        didDeleteManagedAccount = false
         let email = managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard email.contains("@"), email.count >= 3 else {
             managedError = "Enter your email address."
@@ -143,6 +144,40 @@ extension AppState {
         saveSettings()
     }
 
+    /// Deletes the Sentwise account server-side (`DELETE /v1/me`, item 73), then
+    /// clears the managed credentials locally with sign-out semantics. Returns
+    /// `true` when the account was deleted. Local mail, voice profile, drafts, and
+    /// settings on this Mac are untouched. On failure the account is kept and
+    /// `managedError` carries the mapped message. In Prowl hunt mode this is a
+    /// deterministic, zero-network no-op that reports success without tearing down
+    /// the signed-in fixture (so the hunt can keep walking). `isHuntMode` is
+    /// injectable for unit tests.
+    @discardableResult
+    func deleteManagedAccount(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async -> Bool {
+        managedError = nil
+        if isHuntMode {
+            // Offline no-op: the confirm button "works" without teardown.
+            return true
+        }
+
+        managedBusyAction = .deleteAccount
+        defer { managedBusyAction = nil }
+        do {
+            try await llm.deleteManagedAccount()
+        } catch {
+            managedError = Self.managedMessage(for: error)
+            return false
+        }
+
+        // Deleted server-side: clear the managed credentials locally (sign-out
+        // semantics). Best-effort — the server record is already gone.
+        try? await managedAccount.signOut()
+        applyManagedSignedOutState(clearEmailInput: true)
+        didDeleteManagedAccount = true
+        saveSettings()
+        return true
+    }
+
     private func applyManagedSignedOutState(clearEmailInput: Bool) {
         clearManagedQuotaCache()
         isManagedSignedIn = false
@@ -181,6 +216,8 @@ extension AppState {
             return "Unexpected response from sign-in. Please try again."
         case LLMError.managedNotSignedIn:
             return "Sign-in didn't stick. Please try again."
+        case LLMError.managedAccountDeletionFailed(let message):
+            return message
         case KeychainError.unexpectedStatus(let status):
             return "Couldn't update Sentwise AI credentials in Keychain. Keychain returned status \(status)."
         case KeychainError.dataEncodingFailed:

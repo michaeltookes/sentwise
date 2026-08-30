@@ -282,7 +282,7 @@ extension AppState {
                 " Your allotment resets \(ManagedQuota.resetDescription($0))."
             } ?? ""
             return "You've used all your weekly Sentwise AI drafts.\(resetPhrase)"
-                + " Buy more usage in Settings → AI, or use your own key for unlimited drafting."
+                + " Buy more usage in Settings → Subscription, or use your own key for unlimited drafting."
         case LLMError.managedRequestTooLarge(let message):
             return message.isEmpty
                 ? "That transcript or thread is too large for a single draft. Trim it and try again."

@@ -13,6 +13,7 @@ enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     case general = "General"
     case account = "Account"
     case ai = "AI"
+    case subscription = "Subscription"
     case rules = "Rules"
     case about = "About"
 
@@ -24,6 +25,7 @@ enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
         case .general: return "gearshape"
         case .account: return "envelope"
         case .ai: return "sparkles"
+        case .subscription: return "person.crop.circle"
         case .rules: return "line.3.horizontal.decrease.circle"
         case .about: return "info.circle"
         }
@@ -50,6 +52,8 @@ struct SettingsContentView: View {
                 EmailAccountSettingsView()
             case .ai:
                 AIProviderSettingsView()
+            case .subscription:
+                SubscriptionSettingsView()
             case .rules:
                 SenderRulesSettingsView()
             case .about:

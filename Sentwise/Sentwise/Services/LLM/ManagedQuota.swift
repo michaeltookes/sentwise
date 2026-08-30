@@ -157,21 +157,163 @@ struct ManagedQuota: Codable, Sendable, Equatable {
     }
 }
 
-/// The account status returned by `GET /v1/me`. `quota` is optional for older
-/// Worker builds, but `userID` lets upgraded app sessions backfill a stable
-/// account identity before usage alerts are evaluated.
-struct ManagedAccountStatus: Sendable, Equatable {
-    let userID: String?
-    let quota: ManagedQuota?
+/// The trial block on `GET /v1/me` (backlog item 73). All fields are optional so
+/// an older Worker (or a Worker that omits the block entirely) still decodes.
+/// Dates are ISO-8601 strings parsed leniently via `ManagedQuotaDate`.
+struct ManagedTrial: Codable, Sendable, Equatable {
+    /// When the trial began (nil when the Worker omits it).
+    let startedAt: Date?
+    /// When the trial ends — the source for the "N days left" display.
+    let endsAt: Date?
+    /// Whether the trial is still active per the server.
+    let active: Bool?
 
-    init(userID: String? = nil, quota: ManagedQuota? = nil) {
-        let normalizedUserID = userID?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let normalizedUserID, !normalizedUserID.isEmpty {
-            self.userID = normalizedUserID
-        } else {
-            self.userID = nil
-        }
+    init(startedAt: Date? = nil, endsAt: Date? = nil, active: Bool? = nil) {
+        self.startedAt = startedAt
+        self.endsAt = endsAt
+        self.active = active
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case startedAt, endsAt, active
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        startedAt = Self.parseDate((try? container.decodeIfPresent(String.self, forKey: .startedAt)) ?? nil)
+        endsAt = Self.parseDate((try? container.decodeIfPresent(String.self, forKey: .endsAt)) ?? nil)
+        active = (try? container.decodeIfPresent(Bool.self, forKey: .active)) ?? nil
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(startedAt.map(ManagedQuotaDate.string(from:)), forKey: .startedAt)
+        try container.encodeIfPresent(endsAt.map(ManagedQuotaDate.string(from:)), forKey: .endsAt)
+        try container.encodeIfPresent(active, forKey: .active)
+    }
+
+    private static func parseDate(_ string: String?) -> Date? {
+        guard let string else { return nil }
+        return ManagedQuotaDate.date(from: string)
+    }
+}
+
+/// The subscription block on `GET /v1/me` (backlog item 73). Until checkout ships
+/// (56c) the Worker derives this from the trial (`plan: "trial"`,
+/// `status: "trialing"|"lapsed"`, `manageBillingUrl: null`). Both enums fall back
+/// to `.unknown` for unrecognised raw values so a new server-side plan/status
+/// never fails decoding.
+struct ManagedSubscription: Codable, Sendable, Equatable {
+
+    /// The subscription plan. `.unknown` is the decode fallback for any raw value
+    /// this app version doesn't recognise.
+    enum Plan: String, Codable, Sendable, Equatable {
+        case trial
+        case individual
+        case team
+        /// The wire value `"none"` — signed in but not on any plan.
+        case noPlan = "none"
+        case unknown
+    }
+
+    /// The subscription lifecycle status. `.unknown` is the decode fallback.
+    enum Status: String, Codable, Sendable, Equatable {
+        case trialing
+        case active
+        case pastDue = "past_due"
+        case canceled
+        case lapsed
+        case unknown
+    }
+
+    let plan: Plan
+    let status: Status
+    /// Next renewal instant when `status == .active`; nil otherwise.
+    let renewsAt: Date?
+    /// The merchant-of-record billing-portal URL (nil until 56c wires checkout).
+    let manageBillingURL: String?
+
+    init(plan: Plan, status: Status, renewsAt: Date? = nil, manageBillingURL: String? = nil) {
+        self.plan = plan
+        self.status = status
+        self.renewsAt = renewsAt
+        self.manageBillingURL = manageBillingURL
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case plan, status, renewsAt
+        case manageBillingURL = "manageBillingUrl"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let planRaw = (try? container.decodeIfPresent(String.self, forKey: .plan)) ?? nil
+        plan = planRaw.flatMap(Plan.init(rawValue:)) ?? .unknown
+        let statusRaw = (try? container.decodeIfPresent(String.self, forKey: .status)) ?? nil
+        status = statusRaw.flatMap(Status.init(rawValue:)) ?? .unknown
+        let renewsRaw = (try? container.decodeIfPresent(String.self, forKey: .renewsAt)) ?? nil
+        renewsAt = renewsRaw.flatMap(ManagedQuotaDate.date(from:))
+        let billingRaw = ((try? container.decodeIfPresent(String.self, forKey: .manageBillingURL)) ?? nil)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        manageBillingURL = (billingRaw?.isEmpty == false) ? billingRaw : nil
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(plan.rawValue, forKey: .plan)
+        try container.encode(status.rawValue, forKey: .status)
+        try container.encodeIfPresent(renewsAt.map(ManagedQuotaDate.string(from:)), forKey: .renewsAt)
+        try container.encodeIfPresent(manageBillingURL, forKey: .manageBillingURL)
+    }
+}
+
+/// The account status returned by `GET /v1/me`. `quota`, `trial`, and
+/// `subscription` are all optional for older Worker builds, but `userID` lets
+/// upgraded app sessions backfill a stable account identity before usage alerts
+/// are evaluated. Extended in item 73 with `email`, `trial`, and `subscription`
+/// to drive the Account & subscription pane.
+struct ManagedAccountStatus: Codable, Sendable, Equatable {
+    let userID: String?
+    let email: String?
+    let trial: ManagedTrial?
+    let quota: ManagedQuota?
+    let subscription: ManagedSubscription?
+
+    init(
+        userID: String? = nil,
+        email: String? = nil,
+        trial: ManagedTrial? = nil,
+        quota: ManagedQuota? = nil,
+        subscription: ManagedSubscription? = nil
+    ) {
+        self.userID = Self.normalized(userID)
+        self.email = Self.normalized(email)
+        self.trial = trial
         self.quota = quota
+        self.subscription = subscription
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case userID = "userId"
+        case email, trial, quota, subscription
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // `decodeIfPresent` (not `try?`) so a present-but-malformed `quota`
+        // (wrong JSON type) still surfaces as a decode failure, while an omitted
+        // trial/subscription/quota simply decodes to nil (older Worker builds).
+        userID = Self.normalized(try container.decodeIfPresent(String.self, forKey: .userID))
+        email = Self.normalized(try container.decodeIfPresent(String.self, forKey: .email))
+        trial = try container.decodeIfPresent(ManagedTrial.self, forKey: .trial)
+        quota = try container.decodeIfPresent(ManagedQuota.self, forKey: .quota)
+        subscription = try container.decodeIfPresent(ManagedSubscription.self, forKey: .subscription)
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty { return trimmed }
+        return nil
     }
 
     var stableAccountIdentifier: String? {

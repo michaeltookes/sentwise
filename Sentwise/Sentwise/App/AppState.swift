@@ -116,6 +116,13 @@ final class AppState: ObservableObject {
     /// transient like the handle itself, so it is intentionally not persisted.
     var pendingManagedSignInEmail: String?
 
+    /// Latest full managed-account status from `/v1/me` (email, trial,
+    /// subscription, quota) driving the Subscription pane (item 73); `nil` until
+    /// known or when signed out.
+    @Published var managedAccountStatus: ManagedAccountStatus?
+    /// True briefly after a successful account deletion so the signed-out
+    /// Subscription pane can confirm it (item 73). Cleared on the next sign-in.
+    @Published var didDeleteManagedAccount: Bool = false
     /// Latest managed-account usage allotment; `nil` until known.
     @Published var managedQuota: ManagedQuota?
     /// Hashed account key the cached quota belongs to.

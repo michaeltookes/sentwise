@@ -9,6 +9,9 @@ protocol LLMHTTPTransport: Sendable {
     /// Sends an authenticated GET (e.g. the managed `/v1/me` account/quota fetch,
     /// backlog item 56b). Bodyless — auth and content-type ride in `headers`.
     func getJSON(_ url: URL, headers: [String: String]) async throws -> HTTPResponse
+    /// Sends an authenticated, bodyless DELETE (e.g. the managed `DELETE /v1/me`
+    /// account deletion, backlog item 73). Auth/content-type ride in `headers`.
+    func deleteJSON(_ url: URL, headers: [String: String]) async throws -> HTTPResponse
 }
 
 extension LLMHTTPTransport {
@@ -17,6 +20,14 @@ extension LLMHTTPTransport {
     /// double that reaches here surfaces the misuse instead of silently succeeding.
     func getJSON(_ url: URL, headers: [String: String]) async throws -> HTTPResponse {
         throw LLMError.transport("getJSON is not supported by \(type(of: self))")
+    }
+
+    /// Default so POST-only adapters/doubles need not implement DELETE. The
+    /// managed `DELETE /v1/me` path is served by `URLSessionTransport`, which
+    /// overrides this; a double that reaches here surfaces the misuse instead of
+    /// silently succeeding.
+    func deleteJSON(_ url: URL, headers: [String: String]) async throws -> HTTPResponse {
+        throw LLMError.transport("deleteJSON is not supported by \(type(of: self))")
     }
 }
 
@@ -41,6 +52,22 @@ extension URLSessionTransport: LLMHTTPTransport {
     func getJSON(_ url: URL, headers: [String: String]) async throws -> HTTPResponse {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        for (field, value) in headers {
+            request.setValue(value, forHTTPHeaderField: field)
+        }
+
+        let (data, response) = try await session.data(for: request)
+        let http = response as? HTTPURLResponse
+        return HTTPResponse(
+            statusCode: http?.statusCode ?? -1,
+            body: data,
+            headers: URLSessionTransport.headerFields(from: http)
+        )
+    }
+
+    func deleteJSON(_ url: URL, headers: [String: String]) async throws -> HTTPResponse {
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
         for (field, value) in headers {
             request.setValue(value, forHTTPHeaderField: field)
         }
