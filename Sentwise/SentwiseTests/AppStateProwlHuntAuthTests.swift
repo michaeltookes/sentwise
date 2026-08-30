@@ -42,6 +42,7 @@ final class AppStateProwlHuntAuthTests: XCTestCase {
 
         XCTAssertTrue(appState.isManagedSignedIn)
         XCTAssertEqual(appState.managedAccountEmail, "hunt.fixture@sentwise.invalid")
+        XCTAssertEqual(appState.managedAccountID, "hunt-email:hunt.fixture@sentwise.invalid")
         XCTAssertEqual(appState.managedSignInStage, .idle)
         XCTAssertTrue(appState.isManagedProviderActive)
         XCTAssertTrue(appState.isLLMConnected)
@@ -84,6 +85,7 @@ final class AppStateProwlHuntAuthTests: XCTestCase {
 
         XCTAssertTrue(appState.isManagedSignedIn)
         XCTAssertEqual(appState.managedAccountEmail, AppState.huntFixtureGoogleEmail)
+        XCTAssertEqual(appState.managedAccountID, "hunt-google")
         XCTAssertTrue(appState.isManagedProviderActive)
         XCTAssertTrue(appState.isLLMConnected)
         XCTAssertEqual(appState.managedSignInStage, .idle)

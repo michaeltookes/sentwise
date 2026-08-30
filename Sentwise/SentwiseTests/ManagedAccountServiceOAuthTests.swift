@@ -18,6 +18,7 @@ final class ManagedAccountServiceOAuthTests: XCTestCase {
     private let emailStartResponse =
         #"{"response":{"id":"email_1","supported_first_factors":[{"strategy":"email_code","email_address_id":"ema_1"}]}}"#
     private let emailPrepareResponse = #"{"response":{"id":"email_1"}}"#
+    private let oauthUserJWT = "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1c2VyX29hdXRoIn0.signature"
 
     func testStartGoogleSignInReturnsURLAndPersistsClientToken() async throws {
         let secrets = InMemorySecretStore()
@@ -38,14 +39,15 @@ final class ManagedAccountServiceOAuthTests: XCTestCase {
                 #"{"response":{"id":"sia_1","status":"complete","created_session_id":"sess_1","identifier":"marcus@example.com"}}"#,
                 clientToken: "client_B"
             ),
-            clerkReply(#"{"jwt":"jwt.value"}"#, clientToken: "client_C")
+            clerkReply(#"{"jwt":""# + oauthUserJWT + #""}"#, clientToken: "client_C")
         ])
         let service = ManagedAccountService(secrets: secrets, clerk: makeClerk(transport))
 
         _ = try await service.startGoogleSignIn(redirectURL: "sentwise://oauth-callback")
-        let email = try await service.completeGoogleSignIn(rotatingTokenNonce: "nonce_1")
+        let result = try await service.completeGoogleSignIn(rotatingTokenNonce: "nonce_1")
 
-        XCTAssertEqual(email, "marcus@example.com")
+        XCTAssertEqual(result.displayIdentifier, "marcus@example.com")
+        XCTAssertEqual(result.accountIdentifier, "clerk-user:user_oauth")
         let signedIn = await service.isSignedIn
         XCTAssertTrue(signedIn)
         XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_1")
@@ -69,9 +71,10 @@ final class ManagedAccountServiceOAuthTests: XCTestCase {
         ])
         let relaunchedService = ManagedAccountService(secrets: secrets, clerk: makeClerk(callbackTransport))
 
-        let email = try await relaunchedService.completeGoogleSignIn(rotatingTokenNonce: "nonce_1")
+        let result = try await relaunchedService.completeGoogleSignIn(rotatingTokenNonce: "nonce_1")
 
-        XCTAssertEqual(email, "marcus@example.com")
+        XCTAssertEqual(result.displayIdentifier, "marcus@example.com")
+        XCTAssertEqual(result.accountIdentifier, "clerk-session:sess_1")
         let signedIn = await relaunchedService.isSignedIn
         XCTAssertTrue(signedIn)
         XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_1")

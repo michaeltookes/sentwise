@@ -24,6 +24,8 @@ struct AIProviderSettingsView: View {
                             .accessibilityIdentifier("useManagedInference")
                             .accessibilityLabel("Use Sentwise AI")
                     }
+                    // Weekly usage allotment + own-key valve (item 56b).
+                    ManagedUsageView()
                     Button("Sign out", role: .destructive) {
                         Task { await appState.signOutManaged() }
                     }

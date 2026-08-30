@@ -116,6 +116,10 @@ protocol DraftNotifying: AnyObject {
     /// completed until this async handler returns.
     var onAction: ((DraftNotificationAction, String) async -> Void)? { get set }
 
+    /// Called on the main actor when the user opens a usage-threshold alert
+    /// (backlog item 56b) — routed to Settings → AI Provider.
+    var onOpenUsageSettings: (() async -> Void)? { get set }
+
     /// Registers delegate/category state needed to deliver and route notifications.
     func prepareNotificationDelivery()
 
@@ -136,6 +140,11 @@ protocol DraftNotifying: AnyObject {
 
     /// Removes any delivered/pending notification for the given draft identity.
     func removeNotification(identity: String)
+
+    /// Posts a weekly-usage threshold alert (backlog item 56b). Its Open action
+    /// routes to Settings → AI Provider (via `onOpenUsageSettings`), distinct from
+    /// the draft-ready category which opens Review Drafts.
+    func notifyUsageAlert(_ alert: UsageAlert)
 }
 
 /// A no-op notifier used as the default (and in tests) so constructing an
@@ -144,6 +153,7 @@ protocol DraftNotifying: AnyObject {
 @MainActor
 final class NullDraftNotifier: DraftNotifying {
     var onAction: ((DraftNotificationAction, String) async -> Void)?
+    var onOpenUsageSettings: (() async -> Void)?
     nonisolated init() {}
     func prepareNotificationDelivery() {}
     func requestAuthorization() async {}
@@ -151,6 +161,7 @@ final class NullDraftNotifier: DraftNotifying {
     func notify(for draft: Draft, sendBehavior: SendBehavior) {}
     func refreshNotification(for draft: Draft, sendBehavior: SendBehavior) {}
     func removeNotification(identity: String) {}
+    func notifyUsageAlert(_ alert: UsageAlert) {}
 }
 
 /// `DraftNotifying` backed by `UNUserNotificationCenter`.
@@ -165,6 +176,7 @@ final class NullDraftNotifier: DraftNotifying {
 final class UserNotificationService: NSObject, DraftNotifying {
 
     var onAction: ((DraftNotificationAction, String) async -> Void)?
+    var onOpenUsageSettings: (() async -> Void)?
 
     private let center: UserNotificationCentering
     private var notificationRefreshGenerations: [String: Int] = [:]
@@ -261,6 +273,16 @@ final class UserNotificationService: NSObject, DraftNotifying {
         advanceNotificationRefreshGeneration(identity: identity)
         center.removeDeliveredNotifications(withIdentifiers: [identity])
         center.removePendingNotificationRequests(withIdentifiers: [identity])
+    }
+
+    /// Adds a usage-alert request to the center. Internal so the usage path in the
+    /// `+Usage` extension can post without exposing `center` more broadly (56b).
+    func addUsageAlertRequest(_ request: UNNotificationRequest) {
+        center.add(request) { error in
+            if let error {
+                logger.error("Failed to post usage alert: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Helpers
@@ -360,13 +382,19 @@ final class UserNotificationService: NSObject, DraftNotifying {
     }
 
     private func registerCategory() {
-        let category = UNNotificationCategory(
+        let draftCategory = UNNotificationCategory(
             identifier: Self.categoryIdentifier,
             actions: Self.openCloseActions(),
             intentIdentifiers: [],
             options: []
         )
-        center.setNotificationCategories([category])
+        let usageCategory = UNNotificationCategory(
+            identifier: Self.usageCategoryIdentifier,
+            actions: Self.usageAlertActions(),
+            intentIdentifiers: [],
+            options: []
+        )
+        center.setNotificationCategories([draftCategory, usageCategory])
     }
 
     /// A single-line preview of the reply body for the notification.
@@ -435,10 +463,20 @@ extension UserNotificationService: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        let category = response.notification.request.content.categoryIdentifier
         let identity = response.notification.request.content.userInfo[draftIdentityUserInfoKey] as? String
         let actionIdentifier = response.actionIdentifier
         Task { @MainActor in
             defer { completionHandler() }
+            // Usage-threshold alert (item 56b): Open (or a body tap) routes to
+            // Settings → AI Provider; Close/dismiss is a no-op.
+            if category == Self.usageCategoryIdentifier {
+                if actionIdentifier == Self.openUsageActionIdentifier
+                    || actionIdentifier == UNNotificationDefaultActionIdentifier {
+                    await onOpenUsageSettings?()
+                }
+                return
+            }
             guard let identity, let action = Self.action(for: actionIdentifier) else { return }
             await onAction?(action, identity)
         }

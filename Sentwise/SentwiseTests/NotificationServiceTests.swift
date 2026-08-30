@@ -111,19 +111,27 @@ final class NotificationServiceTests: XCTestCase {
         XCTAssertTrue(open.options.contains(.foreground))
     }
 
-    func testPrepareNotificationDeliveryRegistersSingleOpenCloseCategory() throws {
+    func testPrepareNotificationDeliveryRegistersDraftAndUsageCategories() throws {
         let center = FakeUserNotificationCenter()
         let service = UserNotificationService(center: center)
 
         service.prepareNotificationDelivery()
 
         XCTAssertTrue(center.delegate === service)
-        XCTAssertEqual(center.categories.count, 1)
-        let category = try XCTUnwrap(center.categories.first)
-        XCTAssertEqual(category.identifier, UserNotificationService.categoryIdentifier)
-        XCTAssertEqual(category.actions.map(\.identifier), [
+        // The draft-ready category (item 79) plus the usage-alert category (56b).
+        XCTAssertEqual(center.categories.count, 2)
+        let draft = try XCTUnwrap(
+            center.categories.first { $0.identifier == UserNotificationService.categoryIdentifier }
+        )
+        XCTAssertEqual(draft.actions.map(\.identifier), [
             UserNotificationService.openActionIdentifier,
             UserNotificationService.closeActionIdentifier
+        ])
+        let usage = try XCTUnwrap(
+            center.categories.first { $0.identifier == UserNotificationService.usageCategoryIdentifier }
+        )
+        XCTAssertEqual(usage.actions.map(\.identifier), [
+            UserNotificationService.openUsageActionIdentifier
         ])
     }
 
@@ -135,7 +143,8 @@ final class NotificationServiceTests: XCTestCase {
 
         XCTAssertTrue(center.delegate === service)
         XCTAssertEqual(center.authorizationRequestCount, 1)
-        XCTAssertEqual(center.categories.count, 1)
+        // Draft-ready + usage-alert categories (item 56b).
+        XCTAssertEqual(center.categories.count, 2)
     }
 
     func testEveryDraftVariantUsesTheOpenCloseCategory() {
@@ -286,6 +295,24 @@ final class NotificationServiceTests: XCTestCase {
         XCTAssertTrue(center.addedRequests.isEmpty)
         XCTAssertEqual(center.removedDeliveredIdentifiers, [draft.identity])
         XCTAssertEqual(center.removedPendingIdentifiers, [draft.identity])
+    }
+
+    func testNotifyUsageAlertPostsUsageCategoryRequest() throws {
+        let center = FakeUserNotificationCenter()
+        let service = UserNotificationService(center: center)
+        let quota = ManagedQuota(
+            unit: "drafts", used: 25, limit: 50, remaining: 25,
+            resetsAt: ManagedQuotaDate.date(from: "2025-09-01T00:00:00Z")!, enforcement: .soft
+        )
+        let alert = UsageAlert.make(threshold: .fifty, quota: quota, accountKey: "acct-test")
+
+        service.notifyUsageAlert(alert)
+
+        let request = try XCTUnwrap(center.addedRequests.first)
+        XCTAssertEqual(request.identifier, alert.identifier)
+        XCTAssertEqual(request.content.categoryIdentifier, UserNotificationService.usageCategoryIdentifier)
+        XCTAssertEqual(request.content.title, alert.title)
+        XCTAssertEqual(request.content.body, alert.body)
     }
 
     private func drainNotificationRefreshTasks() async {

@@ -3,6 +3,14 @@ import os
 
 private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "ManagedAccountService")
 
+/// The non-secret account identity AppState persists after a successful managed
+/// sign-in. `displayIdentifier` is for UI copy; `accountIdentifier` is for
+/// quota/alert scoping and never falls back to display text.
+struct ManagedAccountSignInResult: Sendable, Equatable {
+    let displayIdentifier: String?
+    let accountIdentifier: String
+}
+
 /// Orchestrates the managed-inference account (backlog 56a): the Clerk email-code
 /// sign-in, secure storage of the device/session credentials, and on-demand
 /// minting of the short-lived session tokens the `sentwise-service` proxy verifies.
@@ -83,7 +91,8 @@ actor ManagedAccountService: ManagedSessionProviding {
     /// Completes sign-in with the OTP code. On success stores the session id and
     /// the latest device token, then verifies the credentials end-to-end by
     /// minting one session token.
-    func completeSignIn(code: String) async throws {
+    @discardableResult
+    func completeSignIn(code: String) async throws -> ManagedAccountSignInResult {
         guard let pending = pendingSignIn else {
             throw ClerkError.malformedResponse("no sign-in in progress")
         }
@@ -117,7 +126,20 @@ actor ManagedAccountService: ManagedSessionProviding {
         guard isPendingSignIn(pending) else {
             throw ClerkError.malformedResponse("no sign-in in progress")
         }
+        let result = ManagedAccountSignInResult(
+            displayIdentifier: verified.identifier,
+            accountIdentifier: Self.accountIdentifier(userID: minted.userID, sessionID: verified.sessionId)
+        )
         try finalizeVerifiedSession(sessionID: verified.sessionId, clientToken: minted.clientToken)
+        return result
+    }
+
+    static func accountIdentifier(userID: String?, sessionID: String) -> String {
+        let normalizedUserID = userID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let normalizedUserID, !normalizedUserID.isEmpty {
+            return "clerk-user:\(normalizedUserID)"
+        }
+        return "clerk-session:\(sessionID)"
     }
 
     /// Cancels any in-progress email-code or browser-based sign-in. Rotated client

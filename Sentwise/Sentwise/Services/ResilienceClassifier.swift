@@ -46,7 +46,10 @@ enum ResilienceClassifier {
     }
 
     static func retryDecision(for error: Error) -> RetryDecision {
-        isRetryable(error) ? .retry : .stop
+        if let retryAfterNanoseconds = managedRetryAfterNanoseconds(for: error) {
+            return .retryAfter(retryAfterNanoseconds)
+        }
+        return isRetryable(error) ? .retry : .stop
     }
 
     // MARK: - Mail
@@ -77,9 +80,25 @@ enum ResilienceClassifier {
             return classifyHTTPStatus(status)
         case .missingAPIKey, .managedNotSignedIn, .managedTrialExpired:
             return .authentication
-        case .invalidResponse, .invalidBaseURL:
+        case .managedRateLimited:
+            // Rate limiting clears on its own; retryDecision carries Retry-After
+            // when the server supplies it (item 56b).
+            return .transient
+        case .invalidResponse, .invalidBaseURL, .managedQuotaExceeded, .managedRequestTooLarge:
+            // Quota-exhausted (until the window resets) and too-large requests
+            // won't succeed on retry (item 56b).
             return .permanent
         }
+    }
+
+    private static func managedRetryAfterNanoseconds(for error: Error) -> UInt64? {
+        guard case LLMError.managedRateLimited(let retryAfter) = error,
+              let retryAfter,
+              retryAfter > 0 else {
+            return nil
+        }
+        let seconds = min(UInt64(retryAfter), UInt64.max / 1_000_000_000)
+        return seconds * 1_000_000_000
     }
 
     /// HTTP status classification shared by LLM providers: 408/429 and 5xx are

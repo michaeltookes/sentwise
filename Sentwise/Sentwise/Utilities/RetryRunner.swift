@@ -42,6 +42,9 @@ struct RetryPolicy: Equatable {
 enum RetryDecision: Equatable {
     /// The error is transient; try again (subject to the attempt budget).
     case retry
+    /// The error is transient, but the retry loop should wait for this explicit
+    /// delay instead of its generic backoff schedule.
+    case retryAfter(UInt64)
     /// The error is terminal; stop and rethrow it now.
     case stop
 }
@@ -86,11 +89,12 @@ struct RetryRunner {
             } catch {
                 attempt += 1
                 let isLastAttempt = attempt >= policy.maxAttempts
-                if isLastAttempt || classify(error) == .stop {
+                let decision = classify(error)
+                if isLastAttempt || decision == .stop {
                     throw error
                 }
                 try Task.checkCancellation()
-                try await sleep(backoffNanoseconds(forRetryIndex: attempt - 1))
+                try await sleep(delayNanoseconds(for: decision, retryIndex: attempt - 1))
             }
         }
     }
@@ -104,5 +108,16 @@ struct RetryRunner {
         // Equal jitter: center the delay and offset by up to +/- spread/2.
         let jittered = capped - spread / 2 + randomUnitInterval() * spread
         return UInt64(max(0, jittered))
+    }
+
+    private func delayNanoseconds(for decision: RetryDecision, retryIndex: Int) -> UInt64 {
+        switch decision {
+        case .retry:
+            return backoffNanoseconds(forRetryIndex: retryIndex)
+        case .retryAfter(let nanoseconds):
+            return nanoseconds
+        case .stop:
+            return 0
+        }
     }
 }

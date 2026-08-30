@@ -48,6 +48,7 @@ final class ManagedProviderAppStateTests: XCTestCase {
         XCTAssertEqual(appState.managedEmailInput, "marcus@example.com")
         XCTAssertTrue(appState.isManagedSignedIn)
         XCTAssertTrue(appState.isLLMConnected)
+        XCTAssertEqual(appState.managedAccountID, "clerk-session:sess_1")
         XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_D")
         XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_1")
     }
@@ -111,6 +112,7 @@ final class ManagedProviderAppStateTests: XCTestCase {
         XCTAssertFalse(appState.isManagedSignedIn)
         XCTAssertFalse(appState.isLLMConnected)
         XCTAssertEqual(appState.managedAccountEmail, "")
+        XCTAssertEqual(appState.managedAccountID, "")
         XCTAssertEqual(appState.verifiedLLMModel, "")
         XCTAssertNotNil(appState.managedError)
         XCTAssertNil(try secrets.value(for: .managedClientToken))

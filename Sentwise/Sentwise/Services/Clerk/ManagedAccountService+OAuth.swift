@@ -30,10 +30,10 @@ extension ManagedAccountService {
     }
 
     /// Completes a Google sign-in from the browser redirect's rotating-token
-    /// nonce. Returns the account email when Clerk includes it, so the UI can show
-    /// "Connected as …". Mirrors `completeSignIn`'s mint-and-persist tail.
+    /// nonce. Returns UI display identity plus a non-display quota-scope identity.
+    /// Mirrors `completeSignIn`'s mint-and-persist tail.
     @discardableResult
-    func completeGoogleSignIn(rotatingTokenNonce: String) async throws -> String? {
+    func completeGoogleSignIn(rotatingTokenNonce: String) async throws -> ManagedAccountSignInResult {
         guard let pending = pendingOAuthSignInHandle() else {
             throw ClerkError.malformedResponse("no oauth sign-in in progress")
         }
@@ -61,7 +61,11 @@ extension ManagedAccountService {
             throw ClerkError.malformedResponse("no oauth sign-in in progress")
         }
         updatePendingOAuthSignIn(pending, clientToken: minted.clientToken)
+        let result = ManagedAccountSignInResult(
+            displayIdentifier: verified.identifier,
+            accountIdentifier: Self.accountIdentifier(userID: minted.userID, sessionID: verified.sessionId)
+        )
         try finalizeVerifiedSession(sessionID: verified.sessionId, clientToken: minted.clientToken)
-        return verified.identifier
+        return result
     }
 }

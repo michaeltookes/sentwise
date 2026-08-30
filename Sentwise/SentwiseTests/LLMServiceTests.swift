@@ -1,6 +1,31 @@
 import XCTest
 @testable import Sentwise
 
+private actor RecordingQuotaReporter: ManagedQuotaReporting {
+    private var accountKey: String?
+    private var reportedAccountKeys: [String] = []
+
+    init(accountKey: String?) {
+        self.accountKey = accountKey
+    }
+
+    func setAccountKey(_ accountKey: String?) {
+        self.accountKey = accountKey
+    }
+
+    func currentQuotaReportAccountKey() async -> String? {
+        accountKey
+    }
+
+    func reportQuota(_ quota: ManagedQuota, accountKey: String) async {
+        reportedAccountKeys.append(accountKey)
+    }
+
+    func accountKeys() -> [String] {
+        reportedAccountKeys
+    }
+}
+
 final class LLMServiceTests: XCTestCase {
 
     func testTestConnectionSendsMinimalRequestWithChosenModel() async throws {
@@ -129,5 +154,44 @@ final class LLMServiceTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? LLMError, .http(status: 401, message: "bad key"))
         }
+    }
+
+    func testManagedCompletionReportsQuotaWithRequestStartAccountKey() async throws {
+        let reporter = RecordingQuotaReporter(accountKey: "acct-a")
+        let transport = ManagedProviderSuspendedLLMTransport()
+        let service = LLMService(
+            transport: transport,
+            managedSessionProvider: FixedSessionProvider(token: "tok-managed"),
+            quotaReporter: reporter
+        )
+
+        let completion = Task {
+            try await service.complete(
+                LLMRequest(messages: [LLMMessage(role: .user, content: "Draft")], model: "claude-sonnet-4-6"),
+                provider: .managed,
+                apiKey: "",
+                baseURL: nil
+            )
+        }
+        await fulfillment(of: [transport.didStartRequest], timeout: 1)
+        await reporter.setAccountKey("acct-b")
+        transport.complete(with: .success(HTTPResponse(
+            statusCode: 200,
+            body: Data(#"""
+            {
+              "text": "Hi",
+              "usage": {"inputTokens": 1, "outputTokens": 1},
+              "quota": {
+                "unit": "drafts", "used": 10, "limit": 50, "remaining": 40,
+                "resetsAt": "2025-09-01T00:00:00Z", "enforcement": "soft"
+              }
+            }
+            """#.utf8)
+        )))
+
+        _ = try await completion.value
+
+        let accountKeys = await reporter.accountKeys()
+        XCTAssertEqual(accountKeys, ["acct-a"])
     }
 }

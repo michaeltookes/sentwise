@@ -173,6 +173,14 @@ final class SettingsWindowController: NSObject, NSToolbarDelegate, NSWindowDeleg
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Shows Settings and selects `tab` (backlog item 56b — a usage alert opens
+    /// the AI Provider pane). Creates the window if needed, then switches tabs.
+    func show(tab: SettingsTab) {
+        show()
+        window?.toolbar?.selectedItemIdentifier = tab.toolbarItemIdentifier
+        updateContent(for: tab)
+    }
+
     private func updateContent(for tab: SettingsTab) {
         guard tab != selectedTab else {
             window?.title = tab.rawValue

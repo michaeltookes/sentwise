@@ -76,6 +76,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState.startReachabilityMonitoring()
         }
 
+        // Pull the managed usage allotment at launch so the AI Provider pane and
+        // usage alerts reflect the current window (item 56b).
+        if runtime.allowsStartupSideEffects {
+            Task { await appState.refreshManagedQuota() }
+        }
+
         // One-time sweep of pre-gate pending drafts (item 80): re-evaluate drafts
         // enqueued before the reply-worthiness gate shipped and move now-skippable
         // junk to the skip log. Offline/synchronous; guarded so a single run ever.

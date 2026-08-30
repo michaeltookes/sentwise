@@ -194,12 +194,38 @@ struct LLMResponse: Equatable, Sendable {
     let text: String
     let inputTokens: Int?
     let outputTokens: Int?
+    /// The account's usage allotment after this request (backlog item 56b). Only
+    /// the managed provider populates it (from the `/v1/draft` response); other
+    /// providers and older Worker builds leave it `nil`.
+    let quota: ManagedQuota?
 
-    init(text: String, inputTokens: Int? = nil, outputTokens: Int? = nil) {
+    init(
+        text: String,
+        inputTokens: Int? = nil,
+        outputTokens: Int? = nil,
+        quota: ManagedQuota? = nil
+    ) {
         self.text = text
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
+        self.quota = quota
     }
+}
+
+/// A sink that receives the latest managed-inference quota so the app can mirror
+/// it into observable state and drive usage alerts (backlog item 56b). Kept as a
+/// small `Sendable` seam so `LLMService` can report a quota from any isolation
+/// context without depending on `AppState` directly.
+protocol ManagedQuotaReporting: Sendable {
+    /// Captures the managed account key at request start so a late draft response
+    /// cannot be applied to a different account after sign-out/sign-in.
+    func currentQuotaReportAccountKey() async -> String?
+
+    func reportQuota(_ quota: ManagedQuota, accountKey: String) async
+}
+
+extension ManagedQuotaReporting {
+    func currentQuotaReportAccountKey() async -> String? { nil }
 }
 
 /// Errors surfaced by an `LLMClient`.
@@ -221,6 +247,15 @@ enum LLMError: Error, Equatable, Sendable {
     /// The managed-inference trial (or subscription) has lapsed. Carries the
     /// server's plain, user-facing message.
     case managedTrialExpired(String)
+    /// The account is drafting faster than the managed rate limit allows (backlog
+    /// item 56b). Carries the server's suggested back-off in seconds when known.
+    case managedRateLimited(retryAfter: Int?)
+    /// The weekly draft allotment is exhausted and enforcement is `hard` (backlog
+    /// item 56b). Carries the window reset instant when the server provides it.
+    case managedQuotaExceeded(resetsAt: Date?)
+    /// The request (transcript/thread) exceeds the managed per-request token
+    /// safety cap (backlog item 56b). Carries the server's plain message.
+    case managedRequestTooLarge(String)
 }
 
 /// A single-provider adapter: turns an `LLMRequest` into a completion by calling
@@ -252,9 +287,29 @@ protocol LLMProviding: Sendable {
         apiKey: String,
         baseURL: String?
     ) async throws -> LLMResponse
+
+    /// Fetches the managed account's current status from `/v1/me` (backlog item
+    /// 56b). Returns `nil` when the provider has no managed-account concept or
+    /// when not signed in. Providers other than the managed one need not
+    /// implement it — the default adapts `fetchManagedQuota()`.
+    func fetchManagedAccountStatus() async throws -> ManagedAccountStatus?
+
+    /// Fetches the managed account's current usage allotment from `/v1/me`.
+    /// Retained for quota-only tests and call sites.
+    func fetchManagedQuota() async throws -> ManagedQuota?
 }
 
 extension LLMProviding {
+    /// Default: adapt quota-only providers into an account status without a user
+    /// id. `LLMService` overrides this to hit `/v1/me` directly.
+    func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? {
+        guard let quota = try await fetchManagedQuota() else { return nil }
+        return ManagedAccountStatus(quota: quota)
+    }
+
+    /// Default: no managed quota. Only `LLMService` overrides this to hit `/v1/me`.
+    func fetchManagedQuota() async throws -> ManagedQuota? { nil }
+
     /// Convenience for callers that don't override the endpoint (e.g. the
     /// Anthropic path and existing tests): forwards with the provider default.
     func testConnection(provider: LLMProviderKind, apiKey: String, model: String) async throws {

@@ -41,6 +41,27 @@ final class ManagedInferenceLiveTests: XCTestCase {
         XCTAssertNotNil(object["trial"] as? [String: Any])
     }
 
+    /// Verifies the `/v1/me` quota block's shape when the deployed Worker returns
+    /// one. Tolerates its absence so the app half can land before the service half
+    /// (item 56b) — an older Worker build simply omits `quota`.
+    func testLiveMeQuotaShapeWhenPresent() async throws {
+        let (token, baseURL) = try liveConfig()
+        let client = ManagedInferenceClient(
+            sessionProvider: EnvSessionProvider(token: token),
+            transport: URLSessionTransport()
+        )
+
+        let quota = try await client.fetchAccountQuota(meEndpoint: baseURL.appendingPathComponent("v1/me"))
+        guard let quota else {
+            throw XCTSkip("Deployed Worker does not return a quota block yet (service half of 56b not live).")
+        }
+
+        XCTAssertFalse(quota.unit.isEmpty, "quota.unit should be a user-facing unit")
+        XCTAssertGreaterThanOrEqual(quota.used, 0)
+        XCTAssertGreaterThan(quota.limit, 0, "a live account should carry a positive weekly limit")
+        XCTAssertTrue(quota.hasKnownReset, "quota.resetsAt should be a valid ISO-8601 instant")
+    }
+
     func testLiveDraftReturnsText() async throws {
         let (token, baseURL) = try liveConfig()
         let client = ManagedInferenceClient(

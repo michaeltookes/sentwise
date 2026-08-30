@@ -86,6 +86,7 @@ extension AppState {
             llmBaseURL: llmBaseURL.trimmingCharacters(in: .whitespacesAndNewlines),
             llmVerifiedModel: verifiedLLMModel,
             managedAccountEmail: managedAccountEmail,
+            managedAccountID: managedAccountID,
             signaturePolicy: signaturePolicyOverride ?? signaturePolicy.rawValue,
             signatureText: signatureTextOverride ?? signatureText,
             sendBehavior: sendBehavior.rawValue,

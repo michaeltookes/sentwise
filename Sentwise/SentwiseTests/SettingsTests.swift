@@ -156,12 +156,16 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(decoded.llmVerifiedModel, "")
     }
 
-    func testCurrentSchemaVersionIsEighteen() {
-        XCTAssertEqual(Settings.currentSchemaVersion, 18)
+    func testCurrentSchemaVersionIsNineteen() {
+        XCTAssertEqual(Settings.currentSchemaVersion, 19)
     }
 
     func testPreGateDraftSweepSchemaVersionIsEighteen() {
         XCTAssertEqual(Settings.preGateDraftSweepSchemaVersion, 18)
+    }
+
+    func testManagedAccountIDSchemaVersionIsNineteen() {
+        XCTAssertEqual(Settings.managedAccountIDSchemaVersion, 19)
     }
 
     func testSignatureSchemaVersionIsSixteen() {
@@ -208,6 +212,26 @@ final class SettingsTests: XCTestCase {
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(Settings.self, from: data)
         XCTAssertTrue(decoded.hasRunPreGateDraftSweep)
+    }
+
+    func testManagedAccountIDRoundTripsThroughCodable() throws {
+        let original = Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            managedAccountEmail: "your Google account",
+            managedAccountID: "clerk-user:user_123"
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Settings.self, from: data)
+        XCTAssertEqual(decoded.managedAccountEmail, "your Google account")
+        XCTAssertEqual(decoded.managedAccountID, "clerk-user:user_123")
+    }
+
+    func testLegacyFileWithoutManagedAccountIDDecodesEmpty() throws {
+        let legacy = #"{"schemaVersion":18,"pollIntervalSeconds":300,"managedAccountEmail":"your Google account"}"#
+        let decoded = try JSONDecoder().decode(Settings.self, from: Data(legacy.utf8))
+        XCTAssertEqual(decoded.managedAccountEmail, "your Google account")
+        XCTAssertEqual(decoded.managedAccountID, "")
     }
 
     func testLegacyFileWithoutSignatureKeysDecodesToDefaults() throws {

@@ -19,7 +19,7 @@ enum SendBehavior: String, CaseIterable, Equatable {
 struct Settings: Codable, Equatable {
 
     /// The current settings schema version.
-    static let currentSchemaVersion = 18
+    static let currentSchemaVersion = 19
 
     /// Schema version that introduced the persisted onboarding completion flag.
     static let onboardingCompletionSchemaVersion = 6
@@ -76,6 +76,11 @@ struct Settings: Codable, Equatable {
     /// The terminal launch migration stamps this version.
     static let preGateDraftSweepSchemaVersion = 18
 
+    /// Schema version that introduced a stable, non-display managed account id for
+    /// quota/usage-alert scoping. Purely additive: older files decode it as empty
+    /// and fall back to the stored Clerk session id until the next sign-in writes it.
+    static let managedAccountIDSchemaVersion = 19
+
     /// The default auto-send undo window, in seconds (item 23). Zero disables it.
     static let defaultSendDelaySeconds = 10
 
@@ -128,6 +133,10 @@ struct Settings: Codable, Equatable {
     /// "Connected as …" display. Non-secret; the device/session tokens live in the
     /// Keychain. Empty when not signed in.
     var managedAccountEmail: String
+    /// Stable non-display identifier for the signed-in managed account, used only
+    /// to scope quota and usage-alert state. Empty on older settings until refreshed
+    /// by a new sign-in; the app falls back to the stored Clerk session id.
+    var managedAccountID: String
 
     /// How a signature is applied to generated drafts (raw value of
     /// `SignaturePolicy`, item 24). Stored as a string so an unknown/future value
@@ -201,6 +210,7 @@ struct Settings: Codable, Equatable {
         llmBaseURL: String = "",
         llmVerifiedModel: String = "",
         managedAccountEmail: String = "",
+        managedAccountID: String = "",
         signaturePolicy: String = SignaturePolicy.default.rawValue,
         signatureText: String = "",
         sendBehavior: String = SendBehavior.default.rawValue,
@@ -227,6 +237,7 @@ struct Settings: Codable, Equatable {
         self.llmBaseURL = llmBaseURL
         self.llmVerifiedModel = llmVerifiedModel
         self.managedAccountEmail = managedAccountEmail
+        self.managedAccountID = managedAccountID
         self.signaturePolicy = signaturePolicy
         self.signatureText = signatureText
         self.sendBehavior = sendBehavior
@@ -250,7 +261,8 @@ struct Settings: Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case schemaVersion, pollIntervalSeconds, mailEmail, mailHost, mailHostGuidanceEmail
         case mailHostGuidancePendingEmail, mailPort, savedAccounts
-        case llmProvider, llmModel, llmBaseURL, llmVerifiedModel, managedAccountEmail
+        case llmProvider, llmModel, llmBaseURL, llmVerifiedModel
+        case managedAccountEmail, managedAccountID
         case signaturePolicy, signatureText
         case sendBehavior, sendDelaySeconds, onboardingCompleted
         case senderAllowlist, senderBlocklist, verboseDiagnosticLogging
@@ -274,6 +286,7 @@ struct Settings: Codable, Equatable {
         llmBaseURL = try container.decodeIfPresent(String.self, forKey: .llmBaseURL) ?? ""
         llmVerifiedModel = try container.decodeIfPresent(String.self, forKey: .llmVerifiedModel) ?? ""
         managedAccountEmail = try container.decodeIfPresent(String.self, forKey: .managedAccountEmail) ?? ""
+        managedAccountID = try container.decodeIfPresent(String.self, forKey: .managedAccountID) ?? ""
         signaturePolicy =
             try container.decodeIfPresent(String.self, forKey: .signaturePolicy) ?? SignaturePolicy.default.rawValue
         signatureText = try container.decodeIfPresent(String.self, forKey: .signatureText) ?? ""
@@ -305,6 +318,7 @@ struct Settings: Codable, Equatable {
         copy.mailPort = min(max(mailPort, 1), 65535)
         copy.sendDelaySeconds = min(max(sendDelaySeconds, 0), Settings.maxSendDelaySeconds)
         copy.llmBaseURL = llmBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.managedAccountID = managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.signatureText = signatureText.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasStoredGuidanceHost = !copy.mailHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if copy.mailHost.isEmpty && copy.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

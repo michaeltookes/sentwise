@@ -98,7 +98,9 @@ final class AppState: ObservableObject {
     // MARK: - Managed inference account (item 56a)
 
     /// Signed-in managed account email, for "Connected as …".
-    @Published var managedAccountEmail: String
+    @Published var managedAccountEmail: String = ""
+    /// Stable non-display account id used for quota/usage-alert scoping.
+    var managedAccountID = ""
     /// Whether a managed account is signed in (device + session tokens stored).
     @Published var isManagedSignedIn: Bool = false
     /// Stage of the email-code sign-in flow.
@@ -113,6 +115,13 @@ final class AppState: ObservableObject {
     /// Email address tied to the current Clerk pending sign-in handle. This is
     /// transient like the handle itself, so it is intentionally not persisted.
     var pendingManagedSignInEmail: String?
+
+    /// Latest managed-account usage allotment; `nil` until known.
+    @Published var managedQuota: ManagedQuota?
+    /// Hashed account key the cached quota belongs to.
+    var managedQuotaAccountKey: String?
+    /// Old -> new account-key aliases created during stable-ID backfill.
+    var managedQuotaAccountKeyAliases: [String: String] = [:]
 
     // MARK: - Voice Profile
 
@@ -345,9 +354,19 @@ final class AppState: ObservableObject {
     let managedAccount: ManagedAccountService
     /// Posts draft-ready notifications and routes their actions back.
     let notifier: DraftNotifying
+    /// Bridges managed-quota reports from the LLM layer onto the main actor so the
+    /// published quota and usage alerts update (backlog item 56b).
+    let managedQuotaRelay = ManagedQuotaRelay()
+    /// Persists which usage thresholds have fired for the current weekly window so
+    /// alerts fire once per threshold and never re-fire across relaunches (56b).
+    /// A `var` with a default so tests can substitute an in-memory store.
+    var usageAlertStore: UsageAlertStateStoring = UserDefaultsUsageAlertStore()
     /// Set by the menu-bar controller so a notification "open" action (or a
     /// menu click) can surface the review window.
     var openReviewHandler: (() -> Void)?
+    /// Set by the menu-bar controller so a usage-alert "open" action (or the
+    /// managed pane's controls) can surface Settings on a given tab (item 56b).
+    var openSettingsHandler: ((SettingsTab) -> Void)?
     /// Set by the menu-bar controller so the app can surface the first-run
     /// onboarding window at launch or from the menu.
     var openOnboardingHandler: (() -> Void)?
@@ -381,7 +400,9 @@ final class AppState: ObservableObject {
         // Managed account (item 56a) + wire it as the LLM session provider.
         let managedAccount = managedAccount ?? ManagedAccountService(secrets: secrets)
         self.managedAccount = managedAccount
-        self.llm = llm ?? LLMService(managedSessionProvider: managedAccount)
+        // The quota relay (item 56b) bridges the LLM layer's quota reports to the
+        // main actor; wired to the default LLMService, then to AppState after init.
+        self.llm = llm ?? LLMService(managedSessionProvider: managedAccount, quotaReporter: managedQuotaRelay)
         self.notifier = notifier
         self.reachability = reachability
         self.isOnline = reachability.isOnline
@@ -426,10 +447,9 @@ final class AppState: ObservableObject {
         self.verifiedLLMModel = managedLaunch.verifiedLLMModel
         self.llmAPIKey = managedLaunch.apiKey
         self.isOpenRouterProvisioning = secrets.hasValue(for: .openRouterPKCEVerifier)
-        self.managedAccountEmail = managedLaunch.hasCredentials ? settings.managedAccountEmail : ""
-        self.isManagedSignedIn = managedLaunch.hasCredentials
 
         self.voiceProfile = persistence.loadVoiceProfile()
+        restoreManagedAccountLaunchIdentity(managedLaunch, settings: settings)
         restoreReviewPersistenceState()
 
         cleanupLegacyOAuthCredentials()
@@ -460,6 +480,7 @@ final class AppState: ObservableObject {
         notifier.onAction = { [weak self] action, identity in
             await self?.handleNotificationAction(action, identity: identity)
         }
+        wireUsageMeteringHandlers()
         reachability.onChange = { [weak self] online in
             self?.handleReachabilityChange(online)
         }

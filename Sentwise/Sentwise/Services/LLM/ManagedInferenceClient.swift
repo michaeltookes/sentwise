@@ -117,9 +117,48 @@ struct ManagedInferenceClient: LLMClient {
             await sessionProvider.invalidateSession(matching: session.credentialIdentity)
         }
         guard response.isSuccess else {
-            throw Self.mapError(status: response.statusCode, body: response.body)
+            throw Self.mapError(status: response.statusCode, body: response.body, headers: response)
         }
         return try Self.parse(response.body)
+    }
+
+    /// Fetches the account's current status from `GET /v1/me` (backlog item 56b).
+    /// `quota` is optional when the Worker omits it (older build), but `userId`
+    /// is consumed when present to backfill stable local account identity.
+    /// Throws the same mapped `LLMError`s as `complete` on failure.
+    func fetchAccountStatus(meEndpoint: URL = ManagedInference.meEndpoint) async throws -> ManagedAccountStatus {
+        let session = try await sessionProvider.currentManagedSession()
+        let headers = [
+            "authorization": "Bearer \(session.jwt)",
+            "content-type": "application/json"
+        ]
+
+        let response: HTTPResponse
+        do {
+            response = try await transport.getJSON(meEndpoint, headers: headers)
+        } catch {
+            throw LLMError.transport(String(describing: error))
+        }
+
+        if response.statusCode == 401 {
+            await sessionProvider.invalidateSession(matching: session.credentialIdentity)
+        }
+        guard response.isSuccess else {
+            throw Self.mapError(status: response.statusCode, body: response.body, headers: response)
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(AccountStatusBody.self, from: response.body)
+            return ManagedAccountStatus(userID: decoded.userId, quota: decoded.quota)
+        } catch {
+            throw LLMError.invalidResponse("Unexpected account status response shape. (\(error))")
+        }
+    }
+
+    /// Fetches only the account's current usage allotment from `GET /v1/me`.
+    /// Retained for call sites and tests that do not need the account identity.
+    func fetchAccountQuota(meEndpoint: URL = ManagedInference.meEndpoint) async throws -> ManagedQuota? {
+        try await fetchAccountStatus(meEndpoint: meEndpoint).quota
     }
 
     // MARK: - Wire format
@@ -149,14 +188,17 @@ struct ManagedInferenceClient: LLMClient {
         return LLMResponse(
             text: decoded.text,
             inputTokens: decoded.usage?.inputTokens,
-            outputTokens: decoded.usage?.outputTokens
+            outputTokens: decoded.usage?.outputTokens,
+            quota: decoded.quota
         )
     }
 
     /// Maps a structured Worker error into a clear, user-facing `LLMError`. The
     /// Worker's messages are already user-safe (no raw upstream detail), so we
-    /// surface them directly; only the transport-level shape is translated.
-    private static func mapError(status: Int, body: Data) -> LLMError {
+    /// surface them directly; only the transport-level shape is translated. The
+    /// full response is passed so metering errors can read the `Retry-After`
+    /// header (backlog item 56b) in addition to the body.
+    static func mapError(status: Int, body: Data, headers response: HTTPResponse) -> LLMError {
         let decoded = try? JSONDecoder().decode(ErrorBody.self, from: body)
         let type = decoded?.error?.type ?? ""
         let message = decoded?.error?.message
@@ -166,12 +208,44 @@ struct ManagedInferenceClient: LLMClient {
             return .managedNotSignedIn
         case 402:
             return .managedTrialExpired(message ?? "Your Sentwise AI trial has ended.")
+        case 429 where type == "quota_exceeded":
+            return .managedQuotaExceeded(resetsAt: decoded?.error?.resolvedResetsAt)
+        case 429:
+            // Both "rate_limited" and any other 429 back off; prefer the body's
+            // retryAfterSeconds, falling back to the Retry-After header.
+            return .managedRateLimited(
+                retryAfter: decoded?.error?.retryAfterSeconds ?? Self.retryAfterHeaderSeconds(response)
+            )
+        case 413:
+            return .managedRequestTooLarge(
+                message ?? "That transcript or thread is too large for one draft."
+            )
         default:
             if type == "trial_expired" {
                 return .managedTrialExpired(message ?? "Your Sentwise AI trial has ended.")
             }
+            if type == "quota_exceeded" {
+                return .managedQuotaExceeded(resetsAt: decoded?.error?.resolvedResetsAt)
+            }
+            if type == "rate_limited" {
+                return .managedRateLimited(
+                    retryAfter: decoded?.error?.retryAfterSeconds ?? Self.retryAfterHeaderSeconds(response)
+                )
+            }
+            if type == "request_too_large" {
+                return .managedRequestTooLarge(
+                    message ?? "That transcript or thread is too large for one draft."
+                )
+            }
             return .http(status: status, message: message ?? "The drafting service returned an error.")
         }
+    }
+
+    /// Parses the `Retry-After` header (delta-seconds form) into an `Int`.
+    private static func retryAfterHeaderSeconds(_ response: HTTPResponse) -> Int? {
+        guard let raw = response.headerValue("Retry-After")?
+            .trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        return Int(raw)
     }
 }
 
@@ -183,7 +257,25 @@ struct StubManagedInferenceClient: LLMClient {
         LLMResponse(
             text: "This is a canned Sentwise AI response for offline Prowl hunts.",
             inputTokens: 0,
-            outputTokens: 0
+            outputTokens: 0,
+            quota: Self.stubbedQuota
+        )
+    }
+
+    /// A plausible, fixed quota surfaced in Prowl hunt mode (backlog item 56b) so
+    /// the usage display renders deterministically with zero network. Halfway
+    /// through the week, soft enforcement, resets at a fixed instant.
+    static var stubbedQuota: ManagedQuota {
+        ManagedQuota(
+            unit: "drafts",
+            used: 25,
+            limit: 50,
+            remaining: 25,
+            resetsAt: Date(timeIntervalSince1970: 1_756_512_000), // fixed, deterministic
+            tokensUsed: 125_000,
+            tokenLimit: 250_000,
+            enforcement: .soft,
+            extraPurchased: 0
         )
     }
 }
@@ -212,6 +304,8 @@ private struct RequestBody: Encodable {
 private struct ResponseBody: Decodable {
     let text: String
     let usage: Usage?
+    /// Optional so older Worker builds (no metering) still decode (item 56b).
+    let quota: ManagedQuota?
 
     struct Usage: Decodable {
         let inputTokens: Int?
@@ -219,10 +313,27 @@ private struct ResponseBody: Decodable {
     }
 }
 
+/// `GET /v1/me` shape. `userId` identifies the authenticated Clerk user, and
+/// `quota` remains optional so older Worker builds still decode.
+private struct AccountStatusBody: Decodable {
+    let userId: String?
+    let quota: ManagedQuota?
+}
+
 private struct ErrorBody: Decodable {
     let error: Detail?
     struct Detail: Decodable {
         let type: String?
         let message: String?
+        /// Present on `429 rate_limited` (item 56b).
+        let retryAfterSeconds: Int?
+        /// Present on `429 quota_exceeded` (item 56b) — the window reset instant.
+        let resetsAt: String?
+
+        /// The parsed `resetsAt`, tolerating the fractional-seconds variant.
+        var resolvedResetsAt: Date? {
+            guard let resetsAt else { return nil }
+            return ManagedQuotaDate.date(from: resetsAt)
+        }
     }
 }
