@@ -62,6 +62,29 @@ final class ManagedInferenceLiveTests: XCTestCase {
         XCTAssertTrue(quota.hasKnownReset, "quota.resetsAt should be a valid ISO-8601 instant")
     }
 
+    /// Verifies the `/v1/me` subscription block's shape when the deployed Worker
+    /// returns one (item 73). Tolerates its absence so the app half can land
+    /// before the service half — an older Worker build simply omits `subscription`.
+    func testLiveMeSubscriptionShapeWhenPresent() async throws {
+        let (token, baseURL) = try liveConfig()
+        let client = ManagedInferenceClient(
+            sessionProvider: EnvSessionProvider(token: token),
+            transport: URLSessionTransport()
+        )
+
+        let status = try await client.fetchAccountStatus(meEndpoint: baseURL.appendingPathComponent("v1/me"))
+        guard let subscription = status.subscription else {
+            throw XCTSkip("Deployed Worker does not return a subscription block yet (service half of 73 not live).")
+        }
+
+        // Enums decode with an `.unknown` fallback, so any raw value is tolerated;
+        // assert only that the block is structurally present and self-consistent.
+        if subscription.status == .active {
+            XCTAssertNotNil(subscription.renewsAt, "an active subscription should carry renewsAt")
+        }
+        XCTAssertNotNil(status.userID, "a live account should carry a userId")
+    }
+
     func testLiveDraftReturnsText() async throws {
         let (token, baseURL) = try liveConfig()
         let client = ManagedInferenceClient(

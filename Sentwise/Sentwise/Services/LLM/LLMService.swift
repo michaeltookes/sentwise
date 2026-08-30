@@ -99,7 +99,7 @@ struct LLMService: LLMProviding {
     /// the generators — so this does not double-report.
     func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? {
         if isProwlHuntMode {
-            return ManagedAccountStatus(quota: StubManagedInferenceClient.stubbedQuota)
+            return StubManagedInferenceClient.stubbedAccountStatus
         }
         let client = ManagedInferenceClient(
             sessionProvider: managedSessionProvider,
@@ -111,5 +111,17 @@ struct LLMService: LLMProviding {
     /// Fetches only the managed account's current usage allotment from `/v1/me`.
     func fetchManagedQuota() async throws -> ManagedQuota? {
         try await fetchManagedAccountStatus()?.quota
+    }
+
+    /// Deletes the managed account via `DELETE /v1/me` (item 73). In Prowl hunt
+    /// mode this is a deterministic, zero-network no-op so the confirm flow can be
+    /// walked without touching a real account.
+    func deleteManagedAccount() async throws {
+        if isProwlHuntMode { return }
+        let client = ManagedInferenceClient(
+            sessionProvider: managedSessionProvider,
+            transport: transport
+        )
+        try await client.deleteAccount()
     }
 }

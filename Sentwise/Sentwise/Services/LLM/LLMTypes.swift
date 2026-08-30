@@ -256,6 +256,10 @@ enum LLMError: Error, Equatable, Sendable {
     /// The request (transcript/thread) exceeds the managed per-request token
     /// safety cap (backlog item 56b). Carries the server's plain message.
     case managedRequestTooLarge(String)
+    /// `DELETE /v1/me` failed server-side (backlog item 73, `502
+    /// account_deletion_failed`). Carries the server's plain, user-facing
+    /// message; the account is kept and the user can retry.
+    case managedAccountDeletionFailed(String)
 }
 
 /// A single-provider adapter: turns an `LLMRequest` into a completion by calling
@@ -297,6 +301,11 @@ protocol LLMProviding: Sendable {
     /// Fetches the managed account's current usage allotment from `/v1/me`.
     /// Retained for quota-only tests and call sites.
     func fetchManagedQuota() async throws -> ManagedQuota?
+
+    /// Deletes the managed account server-side via `DELETE /v1/me` (backlog item
+    /// 73). Throws `LLMError` on failure. Providers without a managed-account
+    /// concept get the default, which reports "not signed in".
+    func deleteManagedAccount() async throws
 }
 
 extension LLMProviding {
@@ -309,6 +318,12 @@ extension LLMProviding {
 
     /// Default: no managed quota. Only `LLMService` overrides this to hit `/v1/me`.
     func fetchManagedQuota() async throws -> ManagedQuota? { nil }
+
+    /// Default: no managed account to delete. Only `LLMService` overrides this to
+    /// hit `DELETE /v1/me`.
+    func deleteManagedAccount() async throws {
+        throw LLMError.managedNotSignedIn
+    }
 
     /// Convenience for callers that don't override the endpoint (e.g. the
     /// Anthropic path and existing tests): forwards with the provider default.

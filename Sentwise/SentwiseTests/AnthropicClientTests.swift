@@ -202,4 +202,13 @@ final class FakeLLMTransport: LLMHTTPTransport, @unchecked Sendable {
         if let error { throw error }
         return response ?? HTTPResponse(statusCode: -1, body: Data())
     }
+
+    func deleteJSON(_ url: URL, headers: [String: String]) async throws -> HTTPResponse {
+        lastMethod = "DELETE"
+        lastURL = url
+        lastHeaders = headers
+        lastBody = nil
+        if let error { throw error }
+        return response ?? HTTPResponse(statusCode: -1, body: Data())
+    }
 }

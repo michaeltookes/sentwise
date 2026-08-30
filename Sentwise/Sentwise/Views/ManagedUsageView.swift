@@ -1,25 +1,28 @@
 import SwiftUI
 
-/// The managed-inference weekly-usage display for the Settings → AI Provider pane
-/// (backlog item 56b): "N of M drafts used this week · resets <weekday, time>"
-/// with a progress bar, a subdued extra-usage line when the user has bought more,
-/// a "buy more usage" placeholder (56c wires the purchase), and the own-key valve
-/// pointing at the BYO section below (item 59). Hidden gracefully when the quota
-/// is unknown. Refreshes from `/v1/me` when the pane appears.
+/// The managed-inference weekly-usage display for the Settings → Subscription
+/// pane (backlog items 56b, 73): "N of M drafts used this week · resets
+/// <weekday, time>" with a progress bar, a subdued extra-usage line when the user
+/// has bought more, a "buy more usage" placeholder (56c wires the purchase), and
+/// the own-key valve linking to the AI tab's BYO section (item 59). Hidden
+/// gracefully when the quota is unknown. The `/v1/me` refresh is owned by the
+/// enclosing Subscription pane's `.task`, so this view does not fetch itself
+/// (avoids a double fetch on tab open).
 struct ManagedUsageView: View {
     @EnvironmentObject var appState: AppState
     @State private var showBuyMorePlaceholder = false
 
     var body: some View {
-        // The refresh lives on the outer container, not inside the `if let`, so
-        // opening the pane fetches `/v1/me` even while the quota is still unknown
-        // (the exact case where the display is hidden and needs populating).
         Group {
             if let quota = appState.managedQuota {
                 usageContent(quota)
+            } else {
+                Text("Usage will appear once your first draft is counted.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("managedUsageUnknown")
             }
         }
-        .task { await appState.refreshManagedQuota() }
     }
 
     @ViewBuilder
@@ -55,10 +58,13 @@ struct ManagedUsageView: View {
                     }
                 }
 
-                Text("Need more? Use your own key for unlimited drafting — set it up under \u{201C}Use your own AI\u{201D} below.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("managedOwnKeyValve")
+                Button("Need more? Use your own key for unlimited drafting.") {
+                    appState.openSettingsHandler?(.ai)
+                }
+                .buttonStyle(.link)
+                .font(.caption2)
+                .accessibilityIdentifier("managedOwnKeyValve")
+                .accessibilityLabel("Use your own AI key for unlimited drafting")
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("managedUsageSection")

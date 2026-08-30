@@ -84,9 +84,10 @@ enum ResilienceClassifier {
             // Rate limiting clears on its own; retryDecision carries Retry-After
             // when the server supplies it (item 56b).
             return .transient
-        case .invalidResponse, .invalidBaseURL, .managedQuotaExceeded, .managedRequestTooLarge:
-            // Quota-exhausted (until the window resets) and too-large requests
-            // won't succeed on retry (item 56b).
+        case .invalidResponse, .invalidBaseURL, .managedQuotaExceeded, .managedRequestTooLarge,
+             .managedAccountDeletionFailed:
+            // Quota-exhausted (until the window resets), too-large requests, and a
+            // failed account deletion (item 73) won't succeed on a blind retry.
             return .permanent
         }
     }

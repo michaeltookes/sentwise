@@ -24,6 +24,7 @@ extension AppState {
     /// resumes any watchers that a re-auth had paused.
     func finalizeManagedSignIn(email: String, accountID: String) {
         clearManagedQuotaCache()
+        didDeleteManagedAccount = false
         managedAccountEmail = email
         managedAccountID = accountID.trimmingCharacters(in: .whitespacesAndNewlines)
         managedEmailInput = email

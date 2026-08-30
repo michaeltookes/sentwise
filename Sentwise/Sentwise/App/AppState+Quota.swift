@@ -14,8 +14,10 @@ extension AppState {
     /// off-main LLM layer) hop onto the main actor to update published state and
     /// fire alerts. Called once from `installExternalActionHandlers`.
     func wireUsageMeteringHandlers() {
+        // A usage-alert "Open" now routes to the Subscription tab, where the usage
+        // bar and plan live (item 73; usage moved there from the AI tab).
         notifier.onOpenUsageSettings = { [weak self] in
-            self?.openSettingsHandler?(.ai)
+            self?.openSettingsHandler?(.subscription)
         }
         managedQuotaRelay.setAccountKeyProvider { [weak self] in
             guard let self, self.isManagedSignedIn else { return nil }
@@ -41,6 +43,7 @@ extension AppState {
 
     func clearManagedQuotaCache() {
         managedQuota = nil
+        managedAccountStatus = nil
         managedQuotaAccountKey = nil
         managedQuotaAccountKeyAliases.removeAll()
     }
@@ -106,6 +109,10 @@ extension AppState {
                 guard ProwlHuntRuntime.current.isEnabled
                     || (isManagedSignedIn && accountKey == currentManagedUsageAccountKey)
                 else { return }
+                // Mirror the full status (email/trial/subscription) for the
+                // Subscription pane (item 73), even when `quota` is absent on an
+                // older Worker build.
+                managedAccountStatus = status
                 let resolvedAccountKey = backfillManagedAccountIDIfNeeded(
                     from: status,
                     replacing: accountKey

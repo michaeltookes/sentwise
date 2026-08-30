@@ -14,9 +14,6 @@ struct AIProviderSettingsView: View {
                     .foregroundStyle(.secondary)
 
                 if appState.isManagedSignedIn {
-                    LabeledContent("Account") {
-                        Text(appState.managedAccountEmail).foregroundStyle(.secondary)
-                    }
                     if appState.isManagedProviderActive {
                         LabeledContent("Status") { ActiveProviderBadge() }
                     } else {
@@ -24,14 +21,14 @@ struct AIProviderSettingsView: View {
                             .accessibilityIdentifier("useManagedInference")
                             .accessibilityLabel("Use Sentwise AI")
                     }
-                    // Weekly usage allotment + own-key valve (item 56b).
-                    ManagedUsageView()
-                    Button("Sign out", role: .destructive) {
-                        Task { await appState.signOutManaged() }
+                    // Account, plan, usage, billing, sign out, and delete live in
+                    // the Subscription tab (item 73) — link there, don't duplicate.
+                    Button("Account, usage, and plan details are under Subscription") {
+                        appState.openSettingsHandler?(.subscription)
                     }
-                    .disabled(appState.isManagedBusy)
-                    .accessibilityIdentifier("managedSignOutButton")
-                    .accessibilityLabel("Sign out of Sentwise AI")
+                    .buttonStyle(.link)
+                    .accessibilityIdentifier("openSubscriptionFromAI")
+                    .accessibilityLabel("Open the Subscription tab")
                 } else {
                     if !appState.isManagedProviderActive {
                         Button("Use Sentwise AI") { appState.selectLLMProvider(.managed) }

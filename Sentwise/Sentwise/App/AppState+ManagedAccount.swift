@@ -25,7 +25,7 @@ extension AppState {
     /// Which managed-account action is currently in flight, so only the pressed
     /// button shows a spinner while all of them disable. `nil` = idle.
     enum ManagedBusyAction: Equatable {
-        case emailCode, verifyCode, google, oauthCallback, signOut
+        case emailCode, verifyCode, google, oauthCallback, signOut, deleteAccount
     }
 
     /// True while any managed action is running (drives button disabling).
@@ -40,6 +40,7 @@ extension AppState {
     /// `isHuntMode` is injectable so unit tests can exercise the fake path.
     func startManagedSignIn(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
         managedError = nil
+        didDeleteManagedAccount = false
         let email = managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard email.contains("@"), email.count >= 3 else {
             managedError = "Enter your email address."
@@ -143,6 +144,52 @@ extension AppState {
         saveSettings()
     }
 
+    /// Deletes the Sentwise account server-side (`DELETE /v1/me`, item 73), then
+    /// clears or durably invalidates the managed credentials locally. Returns
+    /// `true` when the account was deleted and local credentials cannot restore it.
+    /// Local mail, voice profile, drafts, and settings on this Mac are untouched.
+    /// On failure the account is kept and `managedError` carries the mapped message.
+    /// In Prowl hunt mode this is a
+    /// deterministic, zero-network no-op that reports success without tearing down
+    /// the signed-in fixture (so the hunt can keep walking). `isHuntMode` is
+    /// injectable for unit tests.
+    @discardableResult
+    func deleteManagedAccount(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async -> Bool {
+        managedError = nil
+        if isHuntMode {
+            // Offline no-op: the confirm button "works" without teardown.
+            return true
+        }
+
+        managedBusyAction = .deleteAccount
+        defer { managedBusyAction = nil }
+        do {
+            try await llm.deleteManagedAccount()
+        } catch {
+            await reconcileManagedAccountState(after: error, provider: .managed)
+            managedError = Self.managedMessage(for: error)
+            return false
+        }
+
+        // Deleted server-side: either remove local credentials or leave a durable
+        // invalidation marker so a later launch cannot restore the deleted account.
+        do {
+            try await managedAccount.signOut()
+        } catch {
+            do {
+                try await managedAccount.invalidateStoredCredentialsForDeletedAccount()
+            } catch {
+                managedError = "Your account was deleted, but Sentwise couldn't clear local credentials. "
+                    + Self.managedMessage(for: error)
+                return false
+            }
+        }
+        applyManagedSignedOutState(clearEmailInput: true)
+        didDeleteManagedAccount = true
+        saveSettings()
+        return true
+    }
+
     private func applyManagedSignedOutState(clearEmailInput: Bool) {
         clearManagedQuotaCache()
         isManagedSignedIn = false
@@ -161,11 +208,22 @@ extension AppState {
         }
     }
 
+    var managedAccountDisplayEmail: String {
+        managedAccountStatus?.email ?? managedAccountEmail
+    }
+
     // MARK: - Error mapping
 
     static func managedMessage(for error: Error) -> String {
+        managedClerkMessage(for: error)
+            ?? managedLLMMessage(for: error)
+            ?? managedKeychainMessage(for: error)
+            ?? error.localizedDescription
+    }
+
+    private static func managedClerkMessage(for error: Error) -> String? {
         switch error {
-        case ClerkError.transport, LLMError.transport:
+        case ClerkError.transport:
             return "Couldn't reach Sentwise sign-in. Check your connection and try again."
         case ClerkError.http(_, let message, _):
             return message ?? "Sign-in failed. Please try again."
@@ -179,14 +237,38 @@ extension AppState {
             return "This account can't sign in with an email code."
         case ClerkError.malformedResponse:
             return "Unexpected response from sign-in. Please try again."
+        default:
+            return nil
+        }
+    }
+
+    private static func managedLLMMessage(for error: Error) -> String? {
+        switch error {
+        case LLMError.transport:
+            return "Couldn't reach Sentwise sign-in. Check your connection and try again."
         case LLMError.managedNotSignedIn:
             return "Sign-in didn't stick. Please try again."
+        case LLMError.managedAccountDeletionFailed(let message):
+            return message
+        case LLMError.http(let status, let message):
+            let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+            return "Sentwise account service returned HTTP \(status). Please try again."
+        default:
+            return nil
+        }
+    }
+
+    private static func managedKeychainMessage(for error: Error) -> String? {
+        switch error {
         case KeychainError.unexpectedStatus(let status):
             return "Couldn't update Sentwise AI credentials in Keychain. Keychain returned status \(status)."
         case KeychainError.dataEncodingFailed:
             return "Couldn't update Sentwise AI credentials in Keychain."
         default:
-            return error.localizedDescription
+            return nil
         }
     }
 

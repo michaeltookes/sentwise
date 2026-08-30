@@ -273,6 +273,100 @@ still updates).
 renders deterministically. `ingestManagedQuota` skips alert scheduling under
 `ProwlHuntRuntime.current.isEnabled`, so hunts stay side-effect free.
 
+## Account & subscription (item 73)
+
+The **Subscription** tab of Settings (`SettingsTab.subscription`, after "AI") is
+the Sentwise-account home: account email, plan / trial / renewal, weekly usage
+(reused from `ManagedUsageView`), a manage-billing entry point, sign-out, and a
+guarded delete-account flow. It is distinct from the **Account** tab, which is
+the *mailbox* (IMAP) account. The AI tab keeps only a one-line
+"Account, usage, and plan details are under Subscription" link
+(`openSubscriptionFromAI`) that switches tabs via `openSettingsHandler`; the
+usage bar is never rendered in two places.
+
+### Status shape (`GET /v1/me`)
+
+`ManagedAccountStatus` (`Services/LLM/ManagedQuota.swift`) is `Codable` and
+decoded directly by `ManagedInferenceClient.fetchAccountStatus`. It carries
+`userId`, `email`, `trial`, `quota` (56b), and `subscription`:
+
+```
+{ "userId": String,
+  "email": String,
+  "trial": { "startedAt": ISO8601, "endsAt": ISO8601, "active": Bool },
+  "quota": { …56b… },
+  "subscription": { "plan": "trial"|"individual"|"team"|"none",
+                    "status": "trialing"|"active"|"past_due"|"canceled"|"lapsed",
+                    "renewsAt": ISO8601|null,
+                    "manageBillingUrl": String|null } }
+```
+
+`trial`, `quota`, and `subscription` are each **optional** when decoding, so an
+older Worker that omits any of them still parses. A present-but-malformed `quota`
+(wrong JSON type) still fails decoding — only omitted blocks decode to nil.
+`ManagedSubscription.Plan` and `.Status` both fall back to `.unknown` for any
+unrecognised raw value, so a new server-side plan/status never breaks decoding.
+Dates parse leniently via `ManagedQuotaDate` (fractional-seconds tolerant).
+
+### Derivation (pre-56c)
+
+Until checkout (56c) ships, the Worker derives `subscription` from the trial
+(`plan: "trial"`, `status: "trialing"|"lapsed"`, `manageBillingUrl: null`). When
+the whole `subscription` block is absent (older Worker), the app derives an
+effective `(plan, status)` from the `trial` block in `SubscriptionPaneModel`
+(`Views/SubscriptionPresentation.swift`): an active trial → trialing, otherwise
+lapsed. `SubscriptionPaneModel` is the pure, testable mapping from status → the
+plan line, an optional detail/explanation line, and an `isProblemState` flag
+(past-due / canceled / lapsed) that surfaces the "use your own AI key" fallback.
+Trial days remaining round up (any time left reads as ≥ "1 day left") and clamp
+at 0 ("Trial ended").
+
+### Manage billing (stub until 56c)
+
+The "Manage billing" button (`manageBilling`) opens
+`subscription.manageBillingUrl` when present; while it is `null` (pre-56c) the
+button is disabled with the caption "Billing management arrives with checkout."
+Lapsed / past-due / canceled states render an explanatory line and a link to the
+AI tab's "Use your own AI" section, because managed drafting pauses in those
+states while own-key drafting still works.
+
+### Delete account (`DELETE /v1/me`)
+
+`ManagedInferenceClient.deleteAccount` (exposed through
+`LLMProviding.deleteManagedAccount` / `LLMService`) sends an authenticated
+`DELETE /v1/me`. `204` → success (the Worker removed the Clerk user and
+server-side usage counters); `401` → `LLMError.managedNotSignedIn`; `502
+account_deletion_failed` → `LLMError.managedAccountDeletionFailed` (kept account,
+retryable). The pane's confirmation sheet (`DeleteAccountSheet`) states exactly
+what is removed (Sentwise account + server-side usage counters) and what is not
+(mail, voice profile, drafts, and settings on this Mac), and gates the action
+behind typing `DELETE`. On `204`, `AppState.deleteManagedAccount` clears the
+managed credentials locally (`ManagedAccountService.signOut` semantics), resets
+to the managed-signed-out state, and flips `didDeleteManagedAccount` for the
+brief signed-out confirmation. Local data is untouched. On failure the account is
+kept and the mapped message is shown.
+
+### Refresh points
+
+`AppState.managedAccountStatus` (`@Published`) is populated by
+`refreshManagedQuota`, which now mirrors the **full** status (email/trial/
+subscription/quota) from a single `/v1/me` fetch. It runs at **launch**
+(`AppDelegate`), on **sign-in** (`finalizeManagedSignIn`), and on **tab open**
+(the Subscription pane's outer-container `.task`, not inside an `if let`, so it
+runs even while the status is unknown). `ManagedUsageView` no longer fetches
+itself, avoiding a double `/v1/me` on tab open. A usage-threshold alert's Open
+action now routes to the Subscription tab (usage moved there from AI).
+
+### Prowl hunt mode
+
+`StubManagedInferenceClient.stubbedAccountStatus` returns a fixed active
+Individual status (no billing URL) with zero network, and
+`LLMService.fetchManagedAccountStatus()` returns it in hunt mode so the pane
+renders deterministically. Delete is a zero-network no-op
+(`AppState.deleteManagedAccount(isHuntMode:)` returns success without teardown),
+and the `"delete"`/`"Delete"` forbidden selectors in `.prowl/config.yml` already
+block activating the destructive controls while the pane is still walkable.
+
 ## Prowl hunt mode
 
 `LLMService` returns a `StubManagedInferenceClient` (deterministic canned

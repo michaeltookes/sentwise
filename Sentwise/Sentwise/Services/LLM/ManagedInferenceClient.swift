@@ -148,8 +148,7 @@ struct ManagedInferenceClient: LLMClient {
         }
 
         do {
-            let decoded = try JSONDecoder().decode(AccountStatusBody.self, from: response.body)
-            return ManagedAccountStatus(userID: decoded.userId, quota: decoded.quota)
+            return try JSONDecoder().decode(ManagedAccountStatus.self, from: response.body)
         } catch {
             throw LLMError.invalidResponse("Unexpected account status response shape. (\(error))")
         }
@@ -159,6 +158,35 @@ struct ManagedInferenceClient: LLMClient {
     /// Retained for call sites and tests that do not need the account identity.
     func fetchAccountQuota(meEndpoint: URL = ManagedInference.meEndpoint) async throws -> ManagedQuota? {
         try await fetchAccountStatus(meEndpoint: meEndpoint).quota
+    }
+
+    /// Deletes the account server-side via `DELETE /v1/me` (backlog item 73). On
+    /// success the Worker removes the Clerk user and server-side usage counters
+    /// and returns `204`. Local mail, voice profile, drafts, and settings are
+    /// untouched — the caller clears the managed credentials locally afterwards.
+    /// Throws `LLMError.managedNotSignedIn` on `401` and
+    /// `LLMError.managedAccountDeletionFailed` on `502 account_deletion_failed`.
+    func deleteAccount(meEndpoint: URL = ManagedInference.meEndpoint) async throws {
+        let session = try await sessionProvider.currentManagedSession()
+        let headers = [
+            "authorization": "Bearer \(session.jwt)",
+            "content-type": "application/json"
+        ]
+
+        let response: HTTPResponse
+        do {
+            response = try await transport.deleteJSON(meEndpoint, headers: headers)
+        } catch {
+            throw LLMError.transport(String(describing: error))
+        }
+
+        if response.statusCode == 401 {
+            await sessionProvider.invalidateSession(matching: session.credentialIdentity)
+        }
+        guard response.isSuccess else {
+            throw Self.mapDeleteError(status: response.statusCode, body: response.body)
+        }
+        // 204 No Content — nothing to parse.
     }
 
     // MARK: - Wire format
@@ -241,6 +269,26 @@ struct ManagedInferenceClient: LLMClient {
         }
     }
 
+    /// Maps a `DELETE /v1/me` failure into a clear `LLMError` (backlog item 73).
+    /// `401` is "not signed in"; `502 account_deletion_failed` (or any body of
+    /// that type) surfaces the server's plain message; anything else falls back
+    /// to a generic HTTP error.
+    static func mapDeleteError(status: Int, body: Data) -> LLMError {
+        let decoded = try? JSONDecoder().decode(ErrorBody.self, from: body)
+        let type = decoded?.error?.type ?? ""
+        let message = decoded?.error?.message
+
+        if status == 401 {
+            return .managedNotSignedIn
+        }
+        if type == "account_deletion_failed" {
+            return .managedAccountDeletionFailed(
+                message ?? "We couldn't delete your account. Please try again."
+            )
+        }
+        return .http(status: status, message: message ?? "The account service returned an error.")
+    }
+
     /// Parses the `Retry-After` header (delta-seconds form) into an `Int`.
     private static func retryAfterHeaderSeconds(_ response: HTTPResponse) -> Int? {
         guard let raw = response.headerValue("Retry-After")?
@@ -278,6 +326,25 @@ struct StubManagedInferenceClient: LLMClient {
             extraPurchased: 0
         )
     }
+
+    /// A plausible, fixed account status surfaced in Prowl hunt mode (backlog
+    /// item 73) so the Subscription pane renders its plan/usage rows
+    /// deterministically with zero network. An active Individual plan with no
+    /// billing URL keeps "Manage billing" deterministically disabled.
+    static var stubbedAccountStatus: ManagedAccountStatus {
+        ManagedAccountStatus(
+            userID: "hunt-user",
+            email: "hunt@sentwise.ai",
+            trial: nil,
+            quota: stubbedQuota,
+            subscription: ManagedSubscription(
+                plan: .individual,
+                status: .active,
+                renewsAt: Date(timeIntervalSince1970: 1_756_512_000), // fixed, deterministic
+                manageBillingURL: nil
+            )
+        )
+    }
 }
 
 // MARK: - Wire-format DTOs (file-private)
@@ -311,13 +378,6 @@ private struct ResponseBody: Decodable {
         let inputTokens: Int?
         let outputTokens: Int?
     }
-}
-
-/// `GET /v1/me` shape. `userId` identifies the authenticated Clerk user, and
-/// `quota` remains optional so older Worker builds still decode.
-private struct AccountStatusBody: Decodable {
-    let userId: String?
-    let quota: ManagedQuota?
 }
 
 private struct ErrorBody: Decodable {

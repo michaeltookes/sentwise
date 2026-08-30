@@ -288,6 +288,93 @@ final class ManagedInferenceClientTests: XCTestCase {
         XCTAssertEqual(quota.unit, "drafts")
     }
 
+    // MARK: - Delete account (item 73)
+
+    func testDeleteAccountUsesDeleteAndBearerOn204() async throws {
+        let transport = FakeLLMTransport(response: HTTPResponse(statusCode: 204, body: Data()))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(token: "tok-del"), transport: transport)
+
+        try await client.deleteAccount()
+
+        XCTAssertEqual(transport.lastMethod, "DELETE")
+        XCTAssertEqual(transport.lastURL, ManagedInference.meEndpoint)
+        XCTAssertEqual(transport.lastHeaders?["authorization"], "Bearer tok-del")
+    }
+
+    func testDeleteAccountMaps401ToNotSignedInAndInvalidates() async {
+        let sessionProvider = RecordingSessionProvider()
+        let transport = FakeLLMTransport(response: json(
+            #"{"error":{"type":"unauthenticated","message":"Sign in."}}"#,
+            status: 401
+        ))
+        let client = ManagedInferenceClient(sessionProvider: sessionProvider, transport: transport)
+
+        do {
+            try await client.deleteAccount()
+            XCTFail("Expected not-signed-in error")
+        } catch LLMError.managedNotSignedIn {
+            let invalidated = await sessionProvider.didInvalidate
+            XCTAssertTrue(invalidated)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testDeleteAccountMaps502ToAccountDeletionFailed() async {
+        let transport = FakeLLMTransport(response: json(
+            #"{"error":{"type":"account_deletion_failed","message":"We couldn't delete your account."}}"#,
+            status: 502
+        ))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+
+        do {
+            try await client.deleteAccount()
+            XCTFail("Expected account-deletion-failed error")
+        } catch LLMError.managedAccountDeletionFailed(let message) {
+            XCTAssertEqual(message, "We couldn't delete your account.")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testDeleteAccountNotSignedInSkipsTransport() async {
+        let transport = FakeLLMTransport(response: HTTPResponse(statusCode: 204, body: Data()))
+        let client = ManagedInferenceClient(
+            sessionProvider: StubSessionProvider(error: LLMError.managedNotSignedIn),
+            transport: transport
+        )
+
+        do {
+            try await client.deleteAccount()
+            XCTFail("Expected not-signed-in error")
+        } catch LLMError.managedNotSignedIn {
+            XCTAssertNil(transport.lastURL, "transport must not be called when not signed in")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testFetchAccountStatusDecodesTrialAndSubscription() async throws {
+        let transport = FakeLLMTransport(response: json(#"""
+        {
+          "userId": "user_9",
+          "email": "marcus@example.com",
+          "trial": {"startedAt":"2026-08-01T00:00:00Z","endsAt":"2026-08-15T00:00:00Z","active":true},
+          "subscription": {"plan":"trial","status":"trialing","manageBillingUrl":null}
+        }
+        """#))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+
+        let status = try await client.fetchAccountStatus()
+
+        XCTAssertEqual(status.email, "marcus@example.com")
+        XCTAssertEqual(status.trial?.active, true)
+        XCTAssertEqual(status.subscription?.plan, .trial)
+        XCTAssertEqual(status.subscription?.status, .trialing)
+        XCTAssertNil(status.subscription?.manageBillingURL)
+        XCTAssertNil(status.quota)
+    }
+
     func testPropagatesNotSignedInFromSessionProviderWithoutCallingTransport() async {
         let transport = FakeLLMTransport(response: json("{}"))
         let client = ManagedInferenceClient(
