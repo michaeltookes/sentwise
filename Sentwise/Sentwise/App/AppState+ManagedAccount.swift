@@ -145,10 +145,11 @@ extension AppState {
     }
 
     /// Deletes the Sentwise account server-side (`DELETE /v1/me`, item 73), then
-    /// clears the managed credentials locally with sign-out semantics. Returns
-    /// `true` when the account was deleted. Local mail, voice profile, drafts, and
-    /// settings on this Mac are untouched. On failure the account is kept and
-    /// `managedError` carries the mapped message. In Prowl hunt mode this is a
+    /// clears or durably invalidates the managed credentials locally. Returns
+    /// `true` when the account was deleted and local credentials cannot restore it.
+    /// Local mail, voice profile, drafts, and settings on this Mac are untouched.
+    /// On failure the account is kept and `managedError` carries the mapped message.
+    /// In Prowl hunt mode this is a
     /// deterministic, zero-network no-op that reports success without tearing down
     /// the signed-in fixture (so the hunt can keep walking). `isHuntMode` is
     /// injectable for unit tests.
@@ -169,9 +170,19 @@ extension AppState {
             return false
         }
 
-        // Deleted server-side: clear the managed credentials locally (sign-out
-        // semantics). Best-effort — the server record is already gone.
-        try? await managedAccount.signOut()
+        // Deleted server-side: either remove local credentials or leave a durable
+        // invalidation marker so a later launch cannot restore the deleted account.
+        do {
+            try await managedAccount.signOut()
+        } catch {
+            do {
+                try await managedAccount.invalidateStoredCredentialsForDeletedAccount()
+            } catch {
+                managedError = "Your account was deleted, but Sentwise couldn't clear local credentials. "
+                    + Self.managedMessage(for: error)
+                return false
+            }
+        }
         applyManagedSignedOutState(clearEmailInput: true)
         didDeleteManagedAccount = true
         saveSettings()

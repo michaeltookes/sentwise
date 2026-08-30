@@ -254,6 +254,20 @@ actor ManagedAccountService: ManagedSessionProviding {
         await invalidateSession()
     }
 
+    func invalidateStoredCredentialsForDeletedAccount() throws {
+        let wasSignedIn = isSignedIn
+        pendingSignIn = nil
+        pendingOAuthSignIn = nil
+        reauthenticationClientToken = nil
+        try secrets.set(Self.invalidatedCredentialsMarkerValue, for: .managedCredentialsInvalidated)
+        areStoredCredentialsInvalidated = true
+        clearReauthenticationClientTokenBestEffort(context: "after deleted-account cleanup")
+        clearPendingOAuthSignInIDBestEffort(context: "after deleted-account cleanup")
+        if wasSignedIn {
+            authenticationGeneration &+= 1
+        }
+    }
+
     private func mintCurrentManagedSession() async throws -> ManagedSessionToken {
         while true {
             guard !areStoredCredentialsInvalidated,

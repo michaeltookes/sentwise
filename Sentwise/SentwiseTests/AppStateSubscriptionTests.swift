@@ -32,9 +32,11 @@ final class AppStateSubscriptionTests: XCTestCase {
     private func makeSignedInAppState(
         email: String = "marcus@example.com",
         llm: LLMProviding,
-        notifier: FakeDraftNotifier = FakeDraftNotifier()
+        notifier: FakeDraftNotifier = FakeDraftNotifier(),
+        secrets: SecretStore? = nil,
+        managedAccount: ManagedAccountService? = nil
     ) -> (AppState, SecretStore) {
-        let secrets = InMemorySecretStore(seed: [
+        let resolvedSecrets = secrets ?? InMemorySecretStore(seed: [
             .managedClientToken: "client_X",
             .managedSessionID: "sess_X"
         ])
@@ -49,12 +51,13 @@ final class AppStateSubscriptionTests: XCTestCase {
         ))
         let appState = AppState(
             persistence: persistence,
-            secrets: secrets,
+            secrets: resolvedSecrets,
             mailProvider: FakeAppMailProvider(result: .success(())),
             llm: llm,
+            managedAccount: managedAccount,
             notifier: notifier
         )
-        return (appState, secrets)
+        return (appState, resolvedSecrets)
     }
 
     // MARK: - Delete flow
@@ -75,6 +78,64 @@ final class AppStateSubscriptionTests: XCTestCase {
         // Credentials removed from the Keychain (sign-out semantics).
         XCTAssertNil((try? secrets.value(for: .managedClientToken)) ?? nil)
         XCTAssertNil((try? secrets.value(for: .managedSessionID)) ?? nil)
+    }
+
+    func testDeleteAccountInvalidatesCredentialsWhenCleanupFails() async throws {
+        let llm = DeletableLLMProvider()
+        let secrets = ManagedAccountFailingSecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        secrets.failOnRemoveKeys = [.managedClientToken, .managedSessionID]
+        let managedAccount = ManagedAccountService(secrets: secrets)
+        let (appState, _) = makeSignedInAppState(
+            llm: llm,
+            secrets: secrets,
+            managedAccount: managedAccount
+        )
+
+        let ok = await appState.deleteManagedAccount(isHuntMode: false)
+
+        XCTAssertTrue(ok)
+        XCTAssertEqual(llm.deleteCount, 1)
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertTrue(appState.didDeleteManagedAccount)
+        XCTAssertNil(appState.managedError)
+        XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_X")
+        XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_X")
+        XCTAssertNotNil(try secrets.value(for: .managedCredentialsInvalidated))
+        let isSignedIn = await managedAccount.isSignedIn
+        XCTAssertFalse(isSignedIn)
+        let relaunchedAccount = ManagedAccountService(secrets: secrets)
+        let isRelaunchedSignedIn = await relaunchedAccount.isSignedIn
+        XCTAssertFalse(isRelaunchedSignedIn)
+    }
+
+    func testDeleteAccountReportsCleanupFailureWhenCredentialsCannotBeInvalidated() async throws {
+        let llm = DeletableLLMProvider()
+        let secrets = ManagedAccountFailingSecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        secrets.failOnRemoveKeys = [.managedClientToken, .managedSessionID]
+        secrets.failOnSetKeys = [.managedCredentialsInvalidated]
+        let managedAccount = ManagedAccountService(secrets: secrets)
+        let (appState, _) = makeSignedInAppState(
+            llm: llm,
+            secrets: secrets,
+            managedAccount: managedAccount
+        )
+
+        let ok = await appState.deleteManagedAccount(isHuntMode: false)
+
+        XCTAssertFalse(ok)
+        XCTAssertEqual(llm.deleteCount, 1)
+        XCTAssertTrue(appState.isManagedSignedIn)
+        XCTAssertFalse(appState.didDeleteManagedAccount)
+        XCTAssertTrue(appState.managedError?.hasPrefix(
+            "Your account was deleted, but Sentwise couldn't clear local credentials."
+        ) == true)
+        XCTAssertNil(try secrets.value(for: .managedCredentialsInvalidated))
     }
 
     func testDeleteAccountFailureKeepsAccountAndShowsMessage() async {
