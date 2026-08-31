@@ -124,6 +124,31 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
         XCTAssertFalse(appState.canOfferGoogleOAuthInterest)
     }
 
+    func testBlockedOnboardingUserCanRegisterInterestBeforeMailboxConnects() async {
+        let client = RecordingGoogleOAuthInterestClient()
+        let store = InMemoryGoogleOAuthInterestStore()
+        let appState = makeAppState(provider: FakeAppMailProvider(result: .success(())), interestClient: client)
+        appState.googleOAuthInterestStore = store
+        appState.workspaceAuthFailure = .appPasswordRejectedWorkspace
+        appState.workspaceAuthIsCustomDomain = true
+        appState.selectLLMProvider(.anthropic)
+        appState.managedEmailInput = "marcus@example.com"
+
+        await appState.startManagedSignIn(isHuntMode: true)
+        appState.managedCodeInput = "424242"
+        await appState.verifyManagedCode(activatesManagedProvider: false, isHuntMode: true)
+
+        XCTAssertFalse(appState.isAccountConnected)
+        XCTAssertEqual(appState.llmProviderKind, .anthropic)
+        XCTAssertTrue(appState.canOfferGoogleOAuthInterest)
+        XCTAssertFalse(appState.canOfferGoogleOAuthInterestSignIn)
+
+        await appState.registerGoogleOAuthInterest(isHuntMode: false)
+
+        XCTAssertEqual(client.callCount, 1)
+        XCTAssertTrue(appState.googleOAuthInterestRegistered)
+    }
+
     func testRegisteringInterestPostsOnceAndPersistsConfirmation() async {
         let client = RecordingGoogleOAuthInterestClient()
         let store = InMemoryGoogleOAuthInterestStore()
@@ -243,6 +268,45 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
 
         XCTAssertTrue(store.isRegistered(accountKey: stableKey))
         XCTAssertTrue(store.isRegistered(accountKey: legacyKey))
+        XCTAssertTrue(appState.googleOAuthInterestRegistered)
+    }
+
+    func testRegisteringInterestSurvivesManagedStatusBackfillWhileRequestIsSuspended() async {
+        let client = SuspendingGoogleOAuthInterestClient()
+        let store = InMemoryGoogleOAuthInterestStore()
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_legacy",
+            .managedSessionID: "sess_legacy"
+        ])
+        let appState = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: secrets,
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: ManagedStatusLLMProvider(status: ManagedAccountStatus(userID: "user_123")),
+            googleOAuthInterestClient: client
+        )
+        appState.googleOAuthInterestStore = store
+        appState.isManagedSignedIn = true
+        appState.managedAccountEmail = "your Google account"
+        appState.managedAccountID = ""
+        appState.refreshGoogleOAuthInterestState()
+        let legacyKey = appState.currentManagedUsageAccountKey
+
+        let registration = Task {
+            await appState.registerGoogleOAuthInterest(isHuntMode: false)
+        }
+        await fulfillment(of: [client.didStart], timeout: 1)
+
+        await appState.refreshManagedQuota()
+        let stableKey = appState.currentManagedUsageAccountKey
+        XCTAssertFalse(store.isRegistered(accountKey: stableKey))
+
+        client.succeed()
+        await registration.value
+
+        XCTAssertEqual(appState.managedAccountID, "clerk-user:user_123")
+        XCTAssertTrue(store.isRegistered(accountKey: legacyKey))
+        XCTAssertTrue(store.isRegistered(accountKey: stableKey))
         XCTAssertTrue(appState.googleOAuthInterestRegistered)
     }
 
@@ -386,5 +450,30 @@ final class SuspendingGoogleOAuthInterestClient: GoogleOAuthInterestRegistering,
         continuation = nil
         lock.unlock()
         pending?.resume()
+    }
+}
+
+/// An `LLMProviding` double whose managed-account status fetch returns a fixed
+/// status, so AppState can exercise `/v1/me` account-ID backfill in isolation.
+private final class ManagedStatusLLMProvider: LLMProviding, @unchecked Sendable {
+    let status: ManagedAccountStatus?
+
+    init(status: ManagedAccountStatus?) {
+        self.status = status
+    }
+
+    func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
+
+    func complete(
+        _ request: LLMRequest,
+        provider: LLMProviderKind,
+        apiKey: String,
+        baseURL: String?
+    ) async throws -> LLMResponse {
+        LLMResponse(text: "")
+    }
+
+    func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? {
+        status
     }
 }

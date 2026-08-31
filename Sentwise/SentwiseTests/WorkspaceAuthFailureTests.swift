@@ -16,6 +16,7 @@ final class WorkspaceAuthFailureTests: XCTestCase {
     private let imapDisabledText =
         "[ALERT] Please log in via your web browser. IMAP access is disabled for your domain."
     private let unavailableImapText = "[UNAVAILABLE] IMAP service is unavailable for this account."
+    private let unavailableDisabledImapText = "[UNAVAILABLE] IMAP access has been disabled for this account."
     private let webLoginText =
         "[ALERT] Web login required: https://support.google.com/mail/accounts/answer/78754"
 
@@ -72,14 +73,22 @@ final class WorkspaceAuthFailureTests: XCTestCase {
         }
     }
 
-    func testUnavailableImapTextClassifiesAsImapDisabled() {
+    func testUnavailableImapTextNeedsExplicitDisabledAccessText() {
+        XCTAssertEqual(
+            WorkspaceAuthFailure.classify(
+                serverText: unavailableDisabledImapText,
+                emailDomain: "acme.com",
+                imapHost: googleHost
+            ),
+            .imapDisabled
+        )
         XCTAssertEqual(
             WorkspaceAuthFailure.classify(
                 serverText: unavailableImapText,
                 emailDomain: "acme.com",
                 imapHost: googleHost
             ),
-            .imapDisabled
+            .none
         )
     }
 

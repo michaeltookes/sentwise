@@ -19,8 +19,8 @@ enum WorkspaceAuthFailure: Equatable {
     /// covers both. Consumer gmail.com/googlemail.com addresses are deliberately
     /// excluded — they get the existing typo/2-Step guidance instead.
     case appPasswordRejectedWorkspace
-    /// IMAP access is turned off for the account (admin policy on Workspace, or the
-    /// user's own Gmail setting on a consumer account).
+    /// IMAP access is turned off by policy. Personal Gmail keeps IMAP enabled, so
+    /// this is primarily a Workspace-admin path for current Google accounts.
     case imapDisabled
     /// Google blocked the sign-in and wants a web login first (new-device check or
     /// a security-key / advanced-protection policy).
@@ -51,8 +51,9 @@ enum WorkspaceAuthFailure: Equatable {
     ///   disabled app passwords), so it is only treated as
     ///   `.appPasswordRejectedWorkspace` for a **custom domain**; a consumer
     ///   gmail.com/googlemail.com address returns `.none` (existing guidance).
-    /// - `IMAP access is disabled` / `[UNAVAILABLE]`-class IMAP text and the
-    ///   web-login markers are unambiguous, so they classify on any Google host.
+    /// - Explicit `IMAP access is disabled` text and the web-login markers are
+    ///   unambiguous, so they classify on any Google host. Generic
+    ///   `[UNAVAILABLE]` IMAP text is treated as transient and left unclassified.
     static func classify(serverText: String, emailDomain: String?, imapHost: String) -> WorkspaceAuthFailure {
         guard isGoogleHost(imapHost) else { return .none }
 
@@ -63,8 +64,7 @@ enum WorkspaceAuthFailure: Equatable {
             return .webLoginRequired
         }
 
-        if text.contains("imap access is disabled")
-            || (text.contains("[unavailable]") && text.contains("imap")) {
+        if mentionsDisabledIMAPAccess(text) {
             return .imapDisabled
         }
 
@@ -76,6 +76,12 @@ enum WorkspaceAuthFailure: Equatable {
         }
 
         return .none
+    }
+
+    private static func mentionsDisabledIMAPAccess(_ text: String) -> Bool {
+        text.contains("imap access is disabled")
+            || text.contains("imap access has been disabled")
+            || text.contains("imap access disabled")
     }
 
     /// Whether the configured IMAP host is one of Google's IMAP endpoints. Reuses
