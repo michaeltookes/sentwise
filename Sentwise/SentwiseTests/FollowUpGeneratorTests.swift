@@ -41,6 +41,31 @@ final class FollowUpGeneratorTests: XCTestCase {
         XCTAssertTrue(request.messages.first?.content.contains("labels each speaker") ?? false)
     }
 
+    func testInjectsUserSuppliedFactsBlockForFollowUps() async throws {
+        // The answer-in-place facts mechanism (item 85) is generator-agnostic: a
+        // follow-up re-draft carrying facts injects the same authoritative block.
+        let recorder = RequestRecorder()
+        let transcript = ParsedTranscript(text: "Marcus: Let's ship soon.", hasSpeakerLabels: true)
+        let facts = UserSuppliedFacts(
+            answers: [.init(question: "Ship date?", response: "Aug 6")],
+            additional: "Loop in Priya."
+        )
+
+        _ = try await FollowUpGenerator().makeFollowUp(
+            transcript: transcript,
+            voiceProfile: nil,
+            model: "m",
+            userSuppliedFacts: facts,
+            complete: recorder.complete
+        )
+
+        let content = try XCTUnwrap(recorder.requests.first?.messages.first?.content)
+        XCTAssertTrue(content.contains("Facts supplied by the user (authoritative"))
+        XCTAssertTrue(content.contains("Ship date?: Aug 6"))
+        XCTAssertTrue(content.contains("Loop in Priya."))
+        XCTAssertTrue(content.contains("do NOT ask the user for them again"))
+    }
+
     func testUnlabeledTranscriptGetsUnlabeledSpeakerGuidance() async throws {
         let recorder = RequestRecorder()
         let transcript = ParsedTranscript(text: "We agreed to ship Friday.", hasSpeakerLabels: false)

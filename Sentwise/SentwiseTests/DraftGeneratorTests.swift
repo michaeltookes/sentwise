@@ -83,6 +83,47 @@ final class DraftGeneratorTests: XCTestCase {
         XCTAssertTrue(prompt.contains("do NOT"), "must forbid fabricating missing facts")
     }
 
+    func testInjectsUserSuppliedFactsBlockIntoPrompt() async throws {
+        var captured: LLMRequest?
+        let facts = UserSuppliedFacts(
+            answers: [.init(question: "Which Thursday?", response: "Aug 6")],
+            additional: "Book the corner table."
+        )
+
+        _ = try await DraftGenerator().makeDraft(
+            replyingTo: context(),
+            voiceProfile: nil,
+            model: "m",
+            userSuppliedFacts: facts
+        ) { request in
+            captured = request
+            return LLMResponse(text: "See you Aug 6.")
+        }
+
+        let user = try XCTUnwrap(captured?.messages.first?.content)
+        XCTAssertTrue(user.contains("Facts supplied by the user (authoritative"))
+        XCTAssertTrue(user.contains(UserFactsPrompt.openingFence))
+        XCTAssertTrue(user.contains("Which Thursday?: Aug 6"))
+        XCTAssertTrue(user.contains("Book the corner table."))
+        XCTAssertTrue(user.contains("do NOT ask the user for them again"))
+    }
+
+    func testOmitsFactsBlockWhenNoneSupplied() async throws {
+        var captured: LLMRequest?
+
+        _ = try await DraftGenerator().makeDraft(
+            replyingTo: context(),
+            voiceProfile: nil,
+            model: "m",
+            userSuppliedFacts: UserSuppliedFacts()
+        ) { request in
+            captured = request
+            return LLMResponse(text: "ok")
+        }
+
+        XCTAssertFalse(try XCTUnwrap(captured?.messages.first?.content).contains("Facts supplied by the user"))
+    }
+
     func testEmptyReplyThrows() async {
         let generator = DraftGenerator()
 
