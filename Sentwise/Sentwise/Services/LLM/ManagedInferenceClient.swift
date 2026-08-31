@@ -316,11 +316,30 @@ struct ManagedInferenceClient: LLMClient {
 struct StubManagedInferenceClient: LLMClient {
     func complete(_ request: LLMRequest) async throws -> LLMResponse {
         LLMResponse(
-            text: "This is a canned Sentwise AI response for offline Prowl hunts.",
+            text: Self.stubbedText(for: request),
             inputTokens: 0,
             outputTokens: 0,
             quota: Self.stubbedQuota
         )
+    }
+
+    /// Deterministic offline text so the item-85 answer→re-draft loop is walkable
+    /// without a network: a reply request with no user-supplied facts comes back
+    /// `NEEDS_INFO`; once the user's facts are present in the prompt, the same
+    /// request drafts a normal reply. Non-reply requests (e.g. transcript
+    /// follow-ups, connection tests) keep the plain canned response.
+    static func stubbedText(for request: LLMRequest) -> String {
+        let isReplyRequest = (request.system ?? "").contains(DraftGenerator.needsInfoSentinel)
+        let carriesUserFacts = request.messages.contains {
+            $0.content.contains(UserFactsPrompt.openingFence)
+        }
+        guard isReplyRequest, !carriesUserFacts else {
+            return "This is a canned Sentwise AI response for offline Prowl hunts."
+        }
+        return """
+        \(DraftGenerator.needsInfoSentinel) I need one detail only you have to finish this reply.
+        - The detail Sentwise is missing
+        """
     }
 
     /// A plausible, fixed quota surfaced in Prowl hunt mode (backlog item 56b) so

@@ -37,7 +37,7 @@ struct PendingDraftCard: View {
     private var approvalNeedsBody: Bool { draft.notReplyWorthy != nil && !hasEditedReplyBody }
 
     private var replyColumnTitle: String {
-        draft.needsInfo != nil ? "Can't draft this one" : (draft.notReplyWorthy != nil ? "Write a reply" : "Proposed reply")
+        draft.needsInfo != nil ? "Answer to re-draft" : (draft.notReplyWorthy != nil ? "Write a reply" : "Proposed reply")
     }
 
     private var replySubjectDisplayText: String {
@@ -152,11 +152,12 @@ struct PendingDraftCard: View {
             Text(replyColumnTitle)
                 .font(.caption).bold()
                 .foregroundStyle(.secondary)
-            if let needsInfo = draft.needsInfo {
+            if draft.needsInfo != nil {
                 ScrollView {
-                    DraftNeedsInfoView(needsInfo: needsInfo)
+                    DraftNeedsInfoAnswerView(draft: draft)
+                        .environmentObject(appState)
                 }
-                .frame(maxHeight: 180)
+                .frame(maxHeight: 260)
             } else {
                 if let notReplyWorthy = draft.notReplyWorthy {
                     ScrollView {
