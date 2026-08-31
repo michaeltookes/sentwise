@@ -242,7 +242,35 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
         await registration.value
 
         XCTAssertTrue(store.isRegistered(accountKey: stableKey))
-        XCTAssertFalse(store.isRegistered(accountKey: legacyKey))
+        XCTAssertTrue(store.isRegistered(accountKey: legacyKey))
+        XCTAssertTrue(appState.googleOAuthInterestRegistered)
+    }
+
+    func testRegisteringInterestResolvesChainedStableIDAliases() async {
+        let client = SuspendingGoogleOAuthInterestClient()
+        let store = InMemoryGoogleOAuthInterestStore()
+        let appState = makeAppState(provider: FakeAppMailProvider(result: .success(())), interestClient: client)
+        appState.googleOAuthInterestStore = store
+        appState.isManagedSignedIn = true
+        appState.managedAccountID = "clerk-session:sess_legacy"
+        let originalKey = appState.currentManagedUsageAccountKey
+
+        let registration = Task {
+            await appState.registerGoogleOAuthInterest(isHuntMode: false)
+        }
+        await fulfillment(of: [client.didStart], timeout: 1)
+
+        let intermediateKey = ManagedUsageAccountKey.make(from: "clerk-user:user_1")
+        appState.managedAccountID = "clerk-user:user_2"
+        let stableKey = appState.currentManagedUsageAccountKey
+        appState.managedQuotaAccountKeyAliases[originalKey] = intermediateKey
+        appState.managedQuotaAccountKeyAliases[intermediateKey] = stableKey
+
+        client.succeed()
+        await registration.value
+
+        XCTAssertTrue(store.isRegistered(accountKey: originalKey))
+        XCTAssertTrue(store.isRegistered(accountKey: stableKey))
         XCTAssertTrue(appState.googleOAuthInterestRegistered)
     }
 
@@ -262,6 +290,26 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
         XCTAssertFalse(appState.canOfferGoogleOAuthInterest)
         XCTAssertTrue(appState.canOfferGoogleOAuthInterestSignIn)
         XCTAssertNotNil(appState.managedError)
+    }
+
+    func testManagedSignOutClearsInterestConfirmationForPreviousAccount() async {
+        let store = InMemoryGoogleOAuthInterestStore()
+        store.markRegistered(accountKey: ManagedUsageAccountKey.make(from: "acct-1"))
+        let appState = makeAppState(provider: FakeAppMailProvider(result: .success(())))
+        appState.googleOAuthInterestStore = store
+        appState.isManagedSignedIn = true
+        appState.managedAccountEmail = "marcus@example.com"
+        appState.managedAccountID = "acct-1"
+        appState.googleOAuthInterestError = "offline"
+        appState.refreshGoogleOAuthInterestState()
+        XCTAssertTrue(appState.googleOAuthInterestRegistered)
+
+        await appState.signOutManaged()
+
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertFalse(appState.googleOAuthInterestRegistered)
+        XCTAssertNil(appState.googleOAuthInterestError)
+        XCTAssertTrue(appState.canOfferGoogleOAuthInterestSignIn)
     }
 
     func testInterestErrorLeavesButtonOffered() async {

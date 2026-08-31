@@ -205,6 +205,8 @@ extension AppState {
         managedCodeInput = ""
         pendingManagedSignInEmail = nil
         managedSignInStage = .idle
+        googleOAuthInterestRegistered = false
+        googleOAuthInterestError = nil
         if llmProviderKind == .managed {
             verifiedLLMModel = ""
             refreshLLMConnectionStatus()

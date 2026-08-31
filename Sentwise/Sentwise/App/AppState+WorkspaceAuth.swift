@@ -128,9 +128,11 @@ extension AppState {
     }
 
     private func markGoogleOAuthInterestRegisteredLocally(accountKey: String) {
-        let resolvedAccountKey = managedQuotaAccountKeyAliases[accountKey] ?? accountKey
-        googleOAuthInterestStore.markRegistered(accountKey: resolvedAccountKey)
-        guard isCurrentGoogleOAuthInterestAccount(resolvedAccountKey) else { return }
+        let accountKeys = googleOAuthInterestRegistrationKeys(for: accountKey)
+        for accountKey in accountKeys {
+            googleOAuthInterestStore.markRegistered(accountKey: accountKey)
+        }
+        guard accountKeys.contains(currentGoogleOAuthInterestAccountKey) else { return }
         googleOAuthInterestRegistered = true
     }
 
@@ -140,5 +142,30 @@ extension AppState {
 
     private var currentGoogleOAuthInterestAccountKey: String {
         currentManagedUsageAccountKey
+    }
+
+    private func googleOAuthInterestRegistrationKeys(for accountKey: String) -> Set<String> {
+        var keys = Set([accountKey])
+        let resolvedAccountKey = resolvedGoogleOAuthInterestAccountKey(accountKey)
+        keys.insert(resolvedAccountKey)
+
+        guard isManagedSignedIn else { return keys }
+        let currentAccountKey = currentGoogleOAuthInterestAccountKey
+        if resolvedGoogleOAuthInterestAccountKey(currentAccountKey) == resolvedAccountKey {
+            keys.insert(currentAccountKey)
+        }
+        return keys
+    }
+
+    private func resolvedGoogleOAuthInterestAccountKey(_ accountKey: String) -> String {
+        var seen = Set<String>()
+        var current = accountKey
+        while let next = managedQuotaAccountKeyAliases[current],
+              next != current,
+              !seen.contains(current) {
+            seen.insert(current)
+            current = next
+        }
+        return current
     }
 }
