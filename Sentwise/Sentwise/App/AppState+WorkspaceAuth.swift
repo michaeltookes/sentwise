@@ -73,6 +73,13 @@ extension AppState {
         isManagedSignedIn && !googleOAuthInterestRegistered
     }
 
+    /// Whether Workspace guidance should expose managed-account sign-in first, so a
+    /// blocked onboarding user can still register the account-scoped demand signal
+    /// before a mailbox connection succeeds.
+    var canOfferGoogleOAuthInterestSignIn: Bool {
+        !isManagedSignedIn && !googleOAuthInterestRegistered
+    }
+
     /// Recomputes `googleOAuthInterestRegistered` for the current managed account.
     /// Called at launch and after sign-in so the button reflects this account's
     /// prior choice rather than another account's.
@@ -93,6 +100,7 @@ extension AppState {
     /// persisted locally so the button isn't re-offered.
     func registerGoogleOAuthInterest(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
         guard canOfferGoogleOAuthInterest else { return }
+        let accountKey = currentGoogleOAuthInterestAccountKey
         if isHuntMode { return }
 
         googleOAuthInterestError = nil
@@ -101,19 +109,28 @@ extension AppState {
 
         do {
             try await googleOAuthInterestClient.registerInterest(topic: Self.googleOAuthInterestTopic)
-            markGoogleOAuthInterestRegisteredLocally()
+            markGoogleOAuthInterestRegisteredLocally(accountKey: accountKey)
         } catch {
+            guard isCurrentGoogleOAuthInterestAccount(accountKey) else {
+                logger.error("Interest registration failed for stale account: \(error.localizedDescription)")
+                return
+            }
             googleOAuthInterestError = Self.message(for: error)
             logger.error("Interest registration failed: \(error.localizedDescription)")
         }
     }
 
-    private func markGoogleOAuthInterestRegisteredLocally() {
-        googleOAuthInterestStore.markRegistered(accountKey: currentGoogleOAuthInterestAccountKey)
+    private func markGoogleOAuthInterestRegisteredLocally(accountKey: String) {
+        googleOAuthInterestStore.markRegistered(accountKey: accountKey)
+        guard isCurrentGoogleOAuthInterestAccount(accountKey) else { return }
         googleOAuthInterestRegistered = true
     }
 
+    private func isCurrentGoogleOAuthInterestAccount(_ accountKey: String) -> Bool {
+        isManagedSignedIn && currentGoogleOAuthInterestAccountKey == accountKey
+    }
+
     private var currentGoogleOAuthInterestAccountKey: String {
-        ManagedUsageAccountKey.make(from: managedAccountID)
+        currentManagedUsageAccountKey
     }
 }

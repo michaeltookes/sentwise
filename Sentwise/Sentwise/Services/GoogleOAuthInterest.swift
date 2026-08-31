@@ -78,6 +78,17 @@ protocol GoogleOAuthInterestStoring: AnyObject, Sendable {
     func markRegistered(accountKey: String)
 }
 
+extension GoogleOAuthInterestStoring {
+    /// Preserves the local confirmation when an upgraded signed-in account moves
+    /// from a legacy session/display fallback key to its stable Clerk-user key.
+    func migrateRegistration(from oldAccountKey: String, to newAccountKey: String) {
+        guard oldAccountKey != newAccountKey, isRegistered(accountKey: oldAccountKey) else {
+            return
+        }
+        markRegistered(accountKey: newAccountKey)
+    }
+}
+
 /// A `UserDefaults`-backed interest store. Persistence is intentionally light —
 /// this is a per-viewer "don't re-offer" flag, not shared or reconstructable
 /// state — so it follows the `UserDefaultsUsageAlertStore` pattern rather than a

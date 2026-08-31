@@ -72,22 +72,30 @@ struct ManagedSignInControls: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openURL) private var openURL
 
+    let showsGoogleOption: Bool
+
+    init(showsGoogleOption: Bool = true) {
+        self.showsGoogleOption = showsGoogleOption
+    }
+
     private var isHuntMode: Bool { ProwlHuntRuntime.current.isEnabled }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if appState.managedSignInStage == .idle {
-                Button {
-                    Task {
-                        await appState.startManagedGoogleSignIn { openURL($0) }
+                if showsGoogleOption {
+                    Button {
+                        Task {
+                            await appState.startManagedGoogleSignIn { openURL($0) }
+                        }
+                    } label: {
+                        signInLabel(busy: appState.managedBusyAction == .google, title: "Continue with Google")
                     }
-                } label: {
-                    signInLabel(busy: appState.managedBusyAction == .google, title: "Continue with Google")
-                }
-                .disabled(appState.isManagedBusy)
-                .accessibilityIdentifier("managedGoogleSignInButton")
+                    .disabled(appState.isManagedBusy)
+                    .accessibilityIdentifier("managedGoogleSignInButton")
 
-                Text("or use your email").font(.caption).foregroundStyle(.secondary)
+                    Text("or use your email").font(.caption).foregroundStyle(.secondary)
+                }
 
                 TextField("Email address", text: $appState.managedEmailInput)
                     .textContentType(.username)

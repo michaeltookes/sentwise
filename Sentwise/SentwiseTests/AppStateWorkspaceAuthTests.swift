@@ -108,8 +108,20 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
         appState.isManagedSignedIn = false
 
         XCTAssertFalse(appState.canOfferGoogleOAuthInterest)
+        XCTAssertTrue(appState.canOfferGoogleOAuthInterestSignIn)
         await appState.registerGoogleOAuthInterest(isHuntMode: false)
         XCTAssertEqual(client.callCount, 0, "signed-out clicks never reach the network")
+    }
+
+    func testWorkspaceGuidanceCanOfferManagedSignInBeforeMailboxConnects() {
+        let appState = makeAppState(provider: FakeAppMailProvider(result: .success(())))
+        appState.workspaceAuthFailure = .appPasswordRejectedWorkspace
+        appState.workspaceAuthIsCustomDomain = true
+        appState.isManagedSignedIn = false
+
+        XCTAssertNotNil(appState.workspaceAuthGuidance)
+        XCTAssertTrue(appState.canOfferGoogleOAuthInterestSignIn)
+        XCTAssertFalse(appState.canOfferGoogleOAuthInterest)
     }
 
     func testRegisteringInterestPostsOnceAndPersistsConfirmation() async {
@@ -135,6 +147,65 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
         await appState.registerGoogleOAuthInterest(isHuntMode: false)
         XCTAssertEqual(client.callCount, 1)
         XCTAssertTrue(store.isRegistered(accountKey: ManagedUsageAccountKey.make(from: "acct-1")))
+    }
+
+    func testRegisteringInterestUsesFallbackSessionKeyWhenStableAccountIDIsMissing() async {
+        let client = RecordingGoogleOAuthInterestClient()
+        let store = InMemoryGoogleOAuthInterestStore()
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_legacy",
+            .managedSessionID: "sess_legacy"
+        ])
+        let appState = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: secrets,
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: FakeLLMProvider(result: .success(())),
+            googleOAuthInterestClient: client
+        )
+        appState.googleOAuthInterestStore = store
+        appState.isManagedSignedIn = true
+        appState.managedAccountEmail = "your Google account"
+        appState.managedAccountID = ""
+        appState.refreshGoogleOAuthInterestState()
+
+        await appState.registerGoogleOAuthInterest(isHuntMode: false)
+
+        XCTAssertEqual(client.callCount, 1)
+        XCTAssertTrue(store.isRegistered(
+            accountKey: ManagedUsageAccountKey.make(from: "clerk-session:sess_legacy")
+        ))
+        XCTAssertFalse(store.isRegistered(accountKey: ManagedUsageAccountKey.unknown))
+    }
+
+    func testRegisteringInterestMarksCapturedAccountIfAccountChangesWhileRequestIsSuspended() async {
+        let client = SuspendingGoogleOAuthInterestClient()
+        let store = InMemoryGoogleOAuthInterestStore()
+        let appState = makeAppState(provider: FakeAppMailProvider(result: .success(())), interestClient: client)
+        appState.googleOAuthInterestStore = store
+        appState.isManagedSignedIn = true
+        appState.managedAccountEmail = "marcus@example.com"
+        appState.managedAccountID = "acct-1"
+        appState.refreshGoogleOAuthInterestState()
+        let oldKey = appState.currentManagedUsageAccountKey
+
+        let registration = Task {
+            await appState.registerGoogleOAuthInterest(isHuntMode: false)
+        }
+        await fulfillment(of: [client.didStart], timeout: 1)
+        XCTAssertTrue(appState.isRegisteringGoogleOAuthInterest)
+
+        appState.managedAccountEmail = "priya@example.com"
+        appState.managedAccountID = "acct-2"
+        appState.refreshGoogleOAuthInterestState()
+        let newKey = appState.currentManagedUsageAccountKey
+
+        client.succeed()
+        await registration.value
+
+        XCTAssertTrue(store.isRegistered(accountKey: oldKey))
+        XCTAssertFalse(store.isRegistered(accountKey: newKey))
+        XCTAssertFalse(appState.googleOAuthInterestRegistered)
     }
 
     func testInterestErrorLeavesButtonOffered() async {
@@ -178,5 +249,38 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
 
         XCTAssertTrue(appState.googleOAuthInterestRegistered)
         XCTAssertFalse(appState.canOfferGoogleOAuthInterest)
+    }
+}
+
+/// A recording interest client that suspends until the test completes it, so the
+/// AppState race around account switches can be exercised deterministically.
+final class SuspendingGoogleOAuthInterestClient: GoogleOAuthInterestRegistering, @unchecked Sendable {
+    let didStart = XCTestExpectation(description: "interest registration started")
+
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var _callCount = 0
+    private var _lastTopic: String?
+
+    var callCount: Int { lock.lock(); defer { lock.unlock() }; return _callCount }
+    var lastTopic: String? { lock.lock(); defer { lock.unlock() }; return _lastTopic }
+
+    func registerInterest(topic: String) async throws {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            _callCount += 1
+            _lastTopic = topic
+            self.continuation = continuation
+            lock.unlock()
+            didStart.fulfill()
+        }
+    }
+
+    func succeed() {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        pending?.resume()
     }
 }

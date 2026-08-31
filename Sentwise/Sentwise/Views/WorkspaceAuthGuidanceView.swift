@@ -123,6 +123,17 @@ struct WorkspaceAuthGuidanceView: View {
                 }
             }
             .padding(.top, 2)
+        } else if appState.canOfferGoogleOAuthInterestSignIn {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Sign in to your Sentwise account to be notified when the mailbox connection path is available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ManagedSignInControls(showsGoogleOption: false)
+                ManagedAccountErrorMessage()
+            }
+            .padding(.top, 2)
+            .accessibilityIdentifier("oauthInterestSignIn")
         }
     }
 }

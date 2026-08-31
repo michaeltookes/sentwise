@@ -371,6 +371,39 @@ final class AppStateUsageQuotaTests: XCTestCase {
         XCTAssertEqual(store.loadState(for: newAccountKey)?.firedThresholds, [50, 75])
     }
 
+    func testRefreshManagedQuotaBackfillMigratesGoogleOAuthInterestConfirmation() async {
+        let oldAccountKey = ManagedUsageAccountKey.make(from: "clerk-session:sess_legacy")
+        let interestStore = InMemoryGoogleOAuthInterestStore()
+        interestStore.markRegistered(accountKey: oldAccountKey)
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_legacy"
+        ])
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: 18,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed",
+            managedAccountEmail: "your Google account"
+        ))
+        let llm = QuotaLLMProvider(status: ManagedAccountStatus(userID: "user_123"))
+        let appState = makeAppState(
+            llm: llm,
+            secrets: secrets,
+            persistence: persistence
+        )
+        appState.googleOAuthInterestStore = interestStore
+        appState.refreshGoogleOAuthInterestState()
+        XCTAssertTrue(appState.googleOAuthInterestRegistered)
+
+        await appState.refreshManagedQuota()
+
+        let newAccountKey = ManagedUsageAccountKey.make(from: "clerk-user:user_123")
+        XCTAssertEqual(appState.managedAccountID, "clerk-user:user_123")
+        XCTAssertTrue(interestStore.isRegistered(accountKey: newAccountKey))
+        XCTAssertTrue(appState.googleOAuthInterestRegistered)
+        XCTAssertFalse(appState.canOfferGoogleOAuthInterest)
+    }
+
     func testDraftQuotaReportCapturedBeforeStableIDBackfillIsTranslated() async throws {
         let oldAccountKey = ManagedUsageAccountKey.make(from: "clerk-session:sess_legacy")
         let notifier = FakeDraftNotifier()
