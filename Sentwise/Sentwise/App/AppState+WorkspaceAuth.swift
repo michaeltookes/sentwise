@@ -70,7 +70,7 @@ extension AppState {
     /// account is signed in (mailbox connect can precede sign-in in edge flows, and
     /// the demand signal is per Sentwise account) and it hasn't been registered yet.
     var canOfferGoogleOAuthInterest: Bool {
-        isManagedSignedIn && !googleOAuthInterestRegistered
+        isManagedSignedIn && !googleOAuthInterestRegistered && !isRegisteringGoogleOAuthInterest
     }
 
     /// Whether Workspace guidance should expose managed-account sign-in first, so a

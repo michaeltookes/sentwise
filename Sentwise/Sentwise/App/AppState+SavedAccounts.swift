@@ -364,6 +364,7 @@ extension AppState {
         savedAccounts = nextSettings.savedAccounts
 
         if shouldClearCurrentAccount {
+            clearWorkspaceAuthGuidance()
             goOfflineAfterRemovingActiveAccount()
         }
         logger.info("Saved account removed")
