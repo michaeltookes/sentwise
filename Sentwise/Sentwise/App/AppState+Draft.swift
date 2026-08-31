@@ -114,10 +114,7 @@ extension AppState {
         let outcome: DraftOutcome
         do {
             outcome = try await makeReplyOutcome(
-                context: context,
-                llmConfiguration: llmConfiguration,
-                userSuppliedFacts: userSuppliedFacts
-            )
+                context: context, llmConfiguration: llmConfiguration, userSuppliedFacts: userSuppliedFacts)
         } catch {
             await reconcileManagedAccountState(after: error, provider: llmConfiguration.provider)
             throw error
@@ -127,7 +124,6 @@ extension AppState {
             llmConfiguration: llmConfiguration,
             requireWatching: requireWatching
         ) else { return nil }
-        let initialBody = finalizedDraftBody(Self.body(from: outcome))
         let draft = Draft(
             id: message.id,
             sourceUIDValidity: message.uidValidity,
@@ -141,7 +137,7 @@ extension AppState {
             sourceMessageID: message.messageID,
             incomingBody: Self.truncatedIncomingBody(incomingText),
             replySubject: Self.replySubject(for: message.subject),
-            body: initialBody,
+            body: finalizedDraftBody(Self.body(from: outcome)),
             model: llmConfiguration.model,
             generatedAt: Date(),
             needsInfo: Self.needsInfo(from: outcome),

@@ -155,13 +155,13 @@ struct Draft: Codable, Identifiable, Equatable {
     /// the draft so they persist through the pending queue and a relaunch, and are
     /// re-injected into the generator prompt on every re-draft. `nil` until the
     /// user answers. Local-only: never logged or written to the activity history.
-    var userSuppliedFacts: UserSuppliedFacts? = nil
+    var userSuppliedFacts: UserSuppliedFacts?
 
     /// How many times an answered re-draft still came back `NEEDS_INFO` (item 85).
     /// Drives the escape hatch: after the second failed round the card offers
     /// "write it yourself". `nil`/`0` for a draft the user hasn't re-drafted with
     /// answers, or one whose re-draft produced a usable reply.
-    var answeredRedraftCount: Int? = nil
+    var answeredRedraftCount: Int?
 
     /// User-supplied recipients for an authored follow-up that has no inbound
     /// source message (item 51). When non-`nil` this draft is an *authored*
@@ -251,7 +251,9 @@ struct Draft: Codable, Identifiable, Equatable {
         offlineQueuedDispatch: OfflineQueuedDraftDispatch? = nil,
         authoredRecipients: [MailAddress]? = nil,
         replyWorthinessOverride: Bool = false,
-        replyWorthinessOverrideSource: DraftReplyWorthinessOverrideSource? = nil
+        replyWorthinessOverrideSource: DraftReplyWorthinessOverrideSource? = nil,
+        userSuppliedFacts: UserSuppliedFacts? = nil,
+        answeredRedraftCount: Int? = nil
     ) {
         self.id = id
         self.sourceUIDValidity = sourceUIDValidity
@@ -276,6 +278,8 @@ struct Draft: Codable, Identifiable, Equatable {
         self.replyWorthinessOverrideSource = replyWorthinessOverrideSource
         self.offlineQueuedDispatch = offlineQueuedDispatch
         self.authoredRecipients = authoredRecipients
+        self.userSuppliedFacts = userSuppliedFacts
+        self.answeredRedraftCount = answeredRedraftCount
     }
 
     /// A stable identity across the pending queue and notifications, scoped by

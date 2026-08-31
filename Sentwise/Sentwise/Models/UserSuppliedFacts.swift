@@ -13,11 +13,6 @@ struct UserSuppliedFacts: Codable, Equatable {
     struct Answer: Codable, Equatable {
         var question: String
         var response: String
-
-        init(question: String, response: String) {
-            self.question = question
-            self.response = response
-        }
     }
 
     /// Answers keyed to the questions the model asked, in question order.

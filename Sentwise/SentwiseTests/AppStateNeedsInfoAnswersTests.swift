@@ -195,7 +195,7 @@ final class AppStateNeedsInfoAnswersTests: XCTestCase {
         await appState.redraftPendingDraftWithAnswers(first, round: round("What is the budget?", "$50k-secret"))
 
         let encoded = try JSONEncoder().encode(appState.activityEvents)
-        let text = String(decoding: encoded, as: UTF8.self)
+        let text = try XCTUnwrap(String(data: encoded, encoding: .utf8))
         XCTAssertFalse(text.contains("$50k-secret"), "supplied facts must never be written to the activity log")
     }
 }
