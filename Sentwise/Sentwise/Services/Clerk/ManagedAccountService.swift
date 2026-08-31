@@ -288,7 +288,8 @@ actor ManagedAccountService: ManagedSessionProviding {
                     try persistClientToken(minted.clientToken)
                     return ManagedSessionToken(
                         jwt: minted.jwt,
-                        credentialIdentity: credentialIdentity(generation: generation, sessionID: sessionID)
+                        credentialIdentity: credentialIdentity(generation: generation, sessionID: sessionID),
+                        accountKey: ManagedUsageAccountKey.make(from: "clerk-session:\(sessionID)")
                     )
                 case .rotated:
                     continue

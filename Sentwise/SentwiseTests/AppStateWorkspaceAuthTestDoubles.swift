@@ -7,14 +7,14 @@ final class SuspendingGoogleOAuthInterestClient: GoogleOAuthInterestRegistering,
     let didStart = XCTestExpectation(description: "interest registration started")
 
     private let lock = NSLock()
-    private var continuation: CheckedContinuation<Void, Never>?
+    private var continuation: CheckedContinuation<GoogleOAuthInterestRegistration, Never>?
     private var _callCount = 0
     private var _lastTopic: String?
 
     var callCount: Int { lock.lock(); defer { lock.unlock() }; return _callCount }
     var lastTopic: String? { lock.lock(); defer { lock.unlock() }; return _lastTopic }
 
-    func registerInterest(topic: String) async throws {
+    func registerInterest(topic: String) async throws -> GoogleOAuthInterestRegistration {
         await withCheckedContinuation { continuation in
             lock.lock()
             _callCount += 1
@@ -25,12 +25,12 @@ final class SuspendingGoogleOAuthInterestClient: GoogleOAuthInterestRegistering,
         }
     }
 
-    func succeed() {
+    func succeed(accountKey: String? = nil) {
         lock.lock()
         let pending = continuation
         continuation = nil
         lock.unlock()
-        pending?.resume()
+        pending?.resume(returning: GoogleOAuthInterestRegistration(accountKey: accountKey))
     }
 }
 

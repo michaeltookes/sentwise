@@ -36,6 +36,16 @@ struct ManagedSessionToken: Sendable, Equatable {
     /// cannot track identities leave this nil and fall back to unconditional
     /// invalidation.
     let credentialIdentity: String?
+    /// Hashed account key for the session that minted this JWT, when available.
+    /// Callers that persist account-scoped UI state use this instead of assuming
+    /// the currently displayed account still matches after an async mint.
+    let accountKey: String?
+
+    init(jwt: String, credentialIdentity: String? = nil, accountKey: String? = nil) {
+        self.jwt = jwt
+        self.credentialIdentity = credentialIdentity
+        self.accountKey = accountKey
+    }
 }
 
 protocol ManagedSessionProviding: Sendable {
@@ -60,7 +70,7 @@ protocol ManagedSessionProviding: Sendable {
 
 extension ManagedSessionProviding {
     func currentManagedSession() async throws -> ManagedSessionToken {
-        ManagedSessionToken(jwt: try await currentSessionToken(), credentialIdentity: nil)
+        ManagedSessionToken(jwt: try await currentSessionToken())
     }
 
     func invalidateSession() async {}

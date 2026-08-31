@@ -108,22 +108,23 @@ extension AppState {
         defer { isRegisteringGoogleOAuthInterest = false }
 
         do {
-            try await googleOAuthInterestClient.registerInterest(topic: Self.googleOAuthInterestTopic)
-            markGoogleOAuthInterestRegisteredLocally(accountKey: accountKey)
+            let registration = try await googleOAuthInterestClient.registerInterest(topic: Self.googleOAuthInterestTopic)
+            markGoogleOAuthInterestRegisteredLocally(accountKey: registration.accountKey ?? accountKey)
         } catch {
-            let wasCurrentAccount = isCurrentGoogleOAuthInterestAccount(accountKey)
-            let signedOut = await reconcileManagedAccountState(after: error, provider: .managed)
+            let failure = googleOAuthInterestFailure(from: error, fallbackAccountKey: accountKey)
+            let wasCurrentAccount = isCurrentGoogleOAuthInterestAccount(failure.accountKey)
+            let signedOut = await reconcileManagedAccountState(after: failure.error, provider: .managed)
             guard wasCurrentAccount || signedOut else {
-                logger.error("Interest registration failed for stale account: \(error.localizedDescription)")
+                logger.error("Interest registration failed for stale account: \(failure.error.localizedDescription)")
                 return
             }
-            let message = Self.managedMessage(for: error)
+            let message = Self.managedMessage(for: failure.error)
             if signedOut {
                 managedError = message
             } else {
                 googleOAuthInterestError = message
             }
-            logger.error("Interest registration failed: \(error.localizedDescription)")
+            logger.error("Interest registration failed: \(failure.error.localizedDescription)")
         }
     }
 
@@ -137,11 +138,24 @@ extension AppState {
     }
 
     private func isCurrentGoogleOAuthInterestAccount(_ accountKey: String) -> Bool {
-        isManagedSignedIn && currentGoogleOAuthInterestAccountKey == accountKey
+        guard isManagedSignedIn else { return false }
+        let resolvedAccountKey = resolvedGoogleOAuthInterestAccountKey(accountKey)
+        if resolvedGoogleOAuthInterestAccountKey(currentGoogleOAuthInterestAccountKey) == resolvedAccountKey {
+            return true
+        }
+        guard let sessionAccountKey = currentGoogleOAuthInterestSessionAccountKey else { return false }
+        return resolvedGoogleOAuthInterestAccountKey(sessionAccountKey) == resolvedAccountKey
     }
 
     private var currentGoogleOAuthInterestAccountKey: String {
         currentManagedUsageAccountKey
+    }
+
+    private var currentGoogleOAuthInterestSessionAccountKey: String? {
+        let sessionID = ((try? secrets.value(for: .managedSessionID)) ?? nil)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let sessionID, !sessionID.isEmpty else { return nil }
+        return ManagedUsageAccountKey.make(from: "clerk-session:\(sessionID)")
     }
 
     private func googleOAuthInterestRegistrationKeys(for accountKey: String) -> Set<String> {
@@ -151,10 +165,22 @@ extension AppState {
 
         guard isManagedSignedIn else { return keys }
         let currentAccountKey = currentGoogleOAuthInterestAccountKey
-        if resolvedGoogleOAuthInterestAccountKey(currentAccountKey) == resolvedAccountKey {
+        let currentSessionAccountKey = currentGoogleOAuthInterestSessionAccountKey
+        if resolvedGoogleOAuthInterestAccountKey(currentAccountKey) == resolvedAccountKey
+            || currentSessionAccountKey.map({ resolvedGoogleOAuthInterestAccountKey($0) }) == resolvedAccountKey {
             keys.insert(currentAccountKey)
         }
         return keys
+    }
+
+    private func googleOAuthInterestFailure(
+        from error: Error,
+        fallbackAccountKey: String
+    ) -> (error: Error, accountKey: String) {
+        guard let failure = error as? GoogleOAuthInterestRegistrationFailure else {
+            return (error, fallbackAccountKey)
+        }
+        return (failure.underlying, failure.accountKey ?? fallbackAccountKey)
     }
 
     private func resolvedGoogleOAuthInterestAccountKey(_ accountKey: String) -> String {

@@ -93,6 +93,34 @@ final class AppStateAccountReviewFeedbackTests: XCTestCase {
         XCTAssertEqual(savedSettings.mailPort, att.port)
     }
 
+    func testSwitchWithoutStoredSecretClearsStaleWorkspaceGuidance() async {
+        let gmail = SavedMailAccount(email: "me@gmail.com", host: "imap.gmail.com", port: 993)
+        let orphan = SavedMailAccount(email: "ghost@att.net", host: "imap.mail.att.net", port: 993)
+        let settings = Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            mailEmail: gmail.email,
+            mailHost: gmail.host,
+            mailPort: gmail.port,
+            savedAccounts: [gmail, orphan]
+        )
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: gmail.email): "gmail-pw"
+        ])
+        let (app, _) = makeAppState(settings: settings, secrets: secrets)
+        app.isAccountConnected = true
+        app.workspaceAuthFailure = .appPasswordRejectedWorkspace
+        app.workspaceAuthIsCustomDomain = true
+        XCTAssertNotNil(app.workspaceAuthGuidance)
+
+        await app.switchToSavedAccount(orphan)
+
+        XCTAssertEqual(app.workspaceAuthFailure, .none)
+        XCTAssertNil(app.workspaceAuthGuidance)
+        XCTAssertNotNil(app.connectionError)
+        XCTAssertEqual(app.mailEmail, gmail.email)
+    }
+
     func testDisconnectDuringPendingSwitchDoesNotRemoveOutgoingAccountCredentials() async {
         let gmail = SavedMailAccount(email: "me@gmail.com", host: "imap.gmail.com", port: 993)
         let att = SavedMailAccount(email: "me@att.net", host: "imap.mail.att.net", port: 993)

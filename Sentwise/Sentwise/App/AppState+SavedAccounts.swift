@@ -265,6 +265,7 @@ extension AppState {
     /// are retained — only the *active* pointer moves. Pending drafts are left
     /// untouched; they stay scoped to their originating account by identity.
     func switchToSavedAccount(_ account: SavedMailAccount) async {
+        clearWorkspaceAuthGuidance()
         guard !isActiveAccount(account) else { return }
 
         guard let password = storedMailPassword(forEmail: account.email), !password.isEmpty else {

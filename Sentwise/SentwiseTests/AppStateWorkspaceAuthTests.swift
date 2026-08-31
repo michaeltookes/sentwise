@@ -233,6 +233,45 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
         XCTAssertFalse(appState.googleOAuthInterestRegistered)
     }
 
+    func testRegisteringInterestUsesAuthenticatedSessionAccountIfAccountChangesBeforePostCompletes() async throws {
+        let client = SuspendingGoogleOAuthInterestClient()
+        let store = InMemoryGoogleOAuthInterestStore()
+        let secrets = InMemorySecretStore(seed: [.managedSessionID: "sess-old"])
+        let appState = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: secrets,
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: FakeLLMProvider(result: .success(())),
+            googleOAuthInterestClient: client
+        )
+        appState.googleOAuthInterestStore = store
+        appState.isManagedSignedIn = true
+        appState.managedAccountEmail = "marcus@example.com"
+        appState.managedAccountID = "acct-1"
+        appState.refreshGoogleOAuthInterestState()
+        let oldKey = appState.currentManagedUsageAccountKey
+
+        let registration = Task {
+            await appState.registerGoogleOAuthInterest(isHuntMode: false)
+        }
+        await fulfillment(of: [client.didStart], timeout: 1)
+
+        try secrets.set("sess-new", for: .managedSessionID)
+        appState.managedAccountEmail = "priya@example.com"
+        appState.managedAccountID = "acct-2"
+        appState.refreshGoogleOAuthInterestState()
+        let newStableKey = appState.currentManagedUsageAccountKey
+        let newSessionKey = ManagedUsageAccountKey.make(from: "clerk-session:sess-new")
+
+        client.succeed(accountKey: newSessionKey)
+        await registration.value
+
+        XCTAssertFalse(store.isRegistered(accountKey: oldKey))
+        XCTAssertTrue(store.isRegistered(accountKey: newSessionKey))
+        XCTAssertTrue(store.isRegistered(accountKey: newStableKey))
+        XCTAssertTrue(appState.googleOAuthInterestRegistered)
+    }
+
     func testRegisteringInterestSurvivesStableIDBackfillWhileRequestIsSuspended() async {
         let client = SuspendingGoogleOAuthInterestClient()
         let store = InMemoryGoogleOAuthInterestStore()

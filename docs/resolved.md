@@ -11,6 +11,7 @@ Completed backlog items, most recent first. Item numbers are the stable IDs from
 **Review follow-up 2026-08-31**: Updated personal-Gmail `.imapDisabled` guidance for Google's current IMAP behavior: because personal Gmail no longer exposes an IMAP enable/disable toggle, Sentwise now points users to browser sign-in, 2-Step Verification, and a fresh app-password retry instead of the retired Gmail Settings path.
 **Review follow-up 2026-08-31**: Tightened `.imapDisabled` classification so generic `[UNAVAILABLE]` responses that merely mention IMAP stay on the normal transient connection-failure path unless Google explicitly says IMAP access is disabled; this keeps service/backend unavailable errors from showing admin-policy guidance.
 **Review follow-up 2026-08-31**: Interest-registration failures now reuse the managed account-service error formatter before assigning inline or sign-out errors, preserving managed session retry guidance, server HTTP messages, and malformed-response copy instead of showing Swift enum fallback text.
+**Review follow-up 2026-08-31**: Bound `/v1/interest` local confirmations to the managed session that actually authenticated the POST, so a sign-out/sign-in during an async Clerk token mint cannot mark the wrong account locally. Saved-account switches now clear Workspace-auth guidance before password lookup or reconnection, including missing-password early exits.
 
 ### ~~76: Search & filter the Review Drafts list~~
 **Resolved**: 2026-08-28 (branch search-filter-drafts)

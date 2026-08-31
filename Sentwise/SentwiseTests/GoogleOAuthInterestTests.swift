@@ -16,12 +16,13 @@ final class GoogleOAuthInterestTests: XCTestCase {
     func testRegisterInterestPostsTopicWithBearerTokenTo204() async throws {
         let transport = FakeLLMTransport(response: HTTPResponse(statusCode: 204, body: Data()))
         let client = GoogleOAuthInterestClient(
-            sessionProvider: FixedSessionProvider(token: "tok-abc"),
+            sessionProvider: FixedSessionProvider(token: "tok-abc", accountKey: "acct-session"),
             transport: transport
         )
 
-        try await client.registerInterest(topic: "google-oauth")
+        let registration = try await client.registerInterest(topic: "google-oauth")
 
+        XCTAssertEqual(registration.accountKey, "acct-session")
         XCTAssertEqual(transport.lastMethod, "POST")
         XCTAssertEqual(transport.lastURL, ManagedInference.interestEndpoint)
         XCTAssertEqual(transport.lastHeaders?["authorization"], "Bearer tok-abc")
@@ -36,19 +37,21 @@ final class GoogleOAuthInterestTests: XCTestCase {
             #"{"error":{"type":"unauthorized","message":"Sign in first."}}"#, status: 401
         ))
         let client = GoogleOAuthInterestClient(
-            sessionProvider: FixedSessionProvider(token: "tok"),
+            sessionProvider: FixedSessionProvider(token: "tok", accountKey: "acct-session"),
             transport: transport
         )
 
         do {
             try await client.registerInterest(topic: "google-oauth")
             XCTFail("expected an error on 401")
-        } catch let error as LLMError {
-            guard case .managedNotSignedIn = error else {
-                return XCTFail("expected managedNotSignedIn, got \(error)")
+        } catch let error as GoogleOAuthInterestRegistrationFailure {
+            guard let underlying = error.underlying as? LLMError,
+                  case .managedNotSignedIn = underlying else {
+                return XCTFail("expected managedNotSignedIn, got \(error.underlying)")
             }
+            XCTAssertEqual(error.accountKey, "acct-session")
         } catch {
-            XCTFail("expected LLMError, got \(error)")
+            XCTFail("expected registration failure, got \(error)")
         }
     }
 
@@ -57,19 +60,21 @@ final class GoogleOAuthInterestTests: XCTestCase {
             #"{"error":{"type":"server_error","message":"boom"}}"#, status: 500
         ))
         let client = GoogleOAuthInterestClient(
-            sessionProvider: FixedSessionProvider(token: "tok"),
+            sessionProvider: FixedSessionProvider(token: "tok", accountKey: "acct-session"),
             transport: transport
         )
 
         do {
             try await client.registerInterest(topic: "google-oauth")
             XCTFail("expected an error on 500")
-        } catch let error as LLMError {
-            guard case .http = error else {
-                return XCTFail("expected http error, got \(error)")
+        } catch let error as GoogleOAuthInterestRegistrationFailure {
+            guard let underlying = error.underlying as? LLMError,
+                  case .http = underlying else {
+                return XCTFail("expected http error, got \(error.underlying)")
             }
+            XCTAssertEqual(error.accountKey, "acct-session")
         } catch {
-            XCTFail("expected LLMError, got \(error)")
+            XCTFail("expected registration failure, got \(error)")
         }
     }
 
@@ -125,11 +130,12 @@ final class RecordingGoogleOAuthInterestClient: GoogleOAuthInterestRegistering, 
     var callCount: Int { lock.lock(); defer { lock.unlock() }; return _callCount }
     var lastTopic: String? { lock.lock(); defer { lock.unlock() }; return _lastTopic }
 
-    func registerInterest(topic: String) async throws {
+    func registerInterest(topic: String) async throws -> GoogleOAuthInterestRegistration {
         lock.lock()
         _callCount += 1
         _lastTopic = topic
         lock.unlock()
         if let error { throw error }
+        return GoogleOAuthInterestRegistration(accountKey: nil)
     }
 }
