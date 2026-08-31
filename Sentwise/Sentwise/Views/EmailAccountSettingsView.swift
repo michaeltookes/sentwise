@@ -292,13 +292,17 @@ struct EmailAccountSettingsView: View {
     // MARK: - Actions
 
     private func connect() async {
+        let didConnect: Bool
         if isAddingAccount {
             newAccountForm.commitEmailEditFromUser()
-            await appState.testConnection(with: newAccountForm.credentials)
+            let credentials = newAccountForm.credentials
+            didConnect = await appState.testConnection(with: credentials) {
+                isAddingAccount && newAccountForm.credentials == $0
+            }
         } else {
-            await appState.testConnection()
+            didConnect = await appState.testConnection()
         }
-        if appState.connectionError == nil && appState.isAccountConnected {
+        if didConnect && appState.isAccountConnected {
             isAddingAccount = false
             newAccountForm.resetForNewAccount()
         }
