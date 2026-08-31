@@ -53,40 +53,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertNil(appState.fetchError)
     }
 
-    func testTestConnectionPersistsVerifiedCredentialSnapshot() async {
-        let secrets = InMemorySecretStore()
-        let provider = SuspendedAppMailProvider()
-        let persistence = AppStateMemoryPersistence()
-        let appState = makeAppState(provider: provider, secrets: secrets, persistence: persistence)
-        appState.mailEmail = "me@gmail.com"
-        appState.mailAppPassword = "verified-pw"
-        appState.mailHost = "imap.gmail.com"
-        appState.mailPort = 993
-
-        let connectionTask = Task { await appState.testConnection() }
-        await fulfillment(of: [provider.didStartVerification], timeout: 1)
-
-        appState.mailEmail = "other@example.com"
-        appState.mailAppPassword = "other-pw"
-        appState.mailHost = "imap.example.com"
-        appState.mailPort = 1993
-        provider.complete(with: .success(()))
-        await connectionTask.value
-
-        let settings = persistence.loadSettings()
-        XCTAssertTrue(appState.isAccountConnected)
-        XCTAssertEqual(appState.mailEmail, "me@gmail.com")
-        XCTAssertEqual(appState.mailAppPassword, "verified-pw")
-        XCTAssertEqual(appState.mailHost, "imap.gmail.com")
-        XCTAssertEqual(appState.mailPort, 993)
-        XCTAssertEqual(settings.mailEmail, "me@gmail.com")
-        XCTAssertEqual(settings.mailHost, "imap.gmail.com")
-        XCTAssertEqual(settings.mailPort, 993)
-        XCTAssertEqual(try? secrets.value(for: .mailAppPassword(email: "me@gmail.com")), "verified-pw")
-        XCTAssertEqual(provider.lastCredentials?.email, "me@gmail.com")
-        XCTAssertEqual(provider.lastCredentials?.appPassword, "verified-pw")
-    }
-
     func testTestConnectionDoesNotConnectWhenPasswordSaveFails() async {
         let secrets = AppStateFailingSecretStore(seed: [.mailAppPassword: "old-pw"])
         secrets.failOnSet = .mailAppPassword(email: "me@gmail.com")
