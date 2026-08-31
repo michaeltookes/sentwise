@@ -396,7 +396,8 @@ IMAP; use a personal account meanwhile), a **copyable one-line "Ask your admin"
 message** (fixed wording naming both levers + Google's article
 `support.google.com/accounts/answer/185833`), and a Google support link. `imapDisabled`
 and `webLoginRequired` frame admin-vs-personal from `isCustomDomain`; a personal
-account gets self-serve "enable IMAP in Gmail settings" copy and no admin ask.
+Gmail account gets account/security/app-password troubleshooting and no admin ask,
+because Gmail no longer exposes a personal-account IMAP enable/disable toggle.
 
 Surfaced by `WorkspaceAuthGuidanceView` in both onboarding
 (`OnboardingAccountStep`) and Settings (`EmailAccountSettingsView`), wherever

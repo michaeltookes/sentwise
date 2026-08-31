@@ -200,8 +200,11 @@ final class WorkspaceAuthFailureTests: XCTestCase {
 
         let personal = try XCTUnwrap(WorkspaceAuthGuidance.make(for: .imapDisabled, isCustomDomain: false))
         XCTAssertFalse(personal.showsAskAdmin, "a personal account has no admin to ask")
-        XCTAssertTrue(personal.options.contains { $0.lowercased().contains("enable imap") },
-                      "personal guidance walks the user through enabling IMAP themselves")
+        XCTAssertTrue(personal.explanation.lowercased().contains("keeps imap turned on"))
+        XCTAssertTrue(personal.options.contains { $0.lowercased().contains("fresh app password") },
+                      "personal guidance points to account/security troubleshooting")
+        XCTAssertFalse(personal.options.contains { $0.lowercased().contains("enable imap") },
+                       "personal Gmail no longer exposes an IMAP enable toggle")
     }
 
     func testWebLoginGuidanceOnlyOffersAdminAskForCustomDomain() throws {

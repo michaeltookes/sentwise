@@ -176,15 +176,17 @@ struct WorkspaceAuthGuidance: Equatable {
         }
         return WorkspaceAuthGuidance(
             headline: "IMAP access is turned off",
-            explanation: "IMAP is turned off for this account, so Sentwise can't connect. "
-                + "You can turn it back on yourself in Gmail settings.",
+            explanation: "Personal Gmail keeps IMAP turned on now, so this usually means "
+                + "Google rejected the current connection path or account security state, "
+                + "not that there's a Gmail setting you can switch back on.",
             options: [
-                "In Gmail on the web, open Settings → See all settings → Forwarding and "
-                    + "POP/IMAP → Enable IMAP, then Save Changes.",
-                "Then run Test Connection again."
+                "Sign in to this Google Account in your browser, confirm 2-Step Verification "
+                    + "is still on, then create a fresh app password for Sentwise.",
+                "Update the app password in Sentwise and run Test Connection again.",
+                personalFallbackOption
             ],
             showsAskAdmin: false,
-            supportURL: URL(string: "https://support.google.com/mail/answer/7126229")
+            supportURL: URL(string: "https://support.google.com/mail/answer/75726")
         )
     }
 
