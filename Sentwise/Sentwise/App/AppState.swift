@@ -127,8 +127,8 @@ final class AppState: ObservableObject {
 
     /// The Google Workspace / Gmail policy failure from the last connect attempt.
     @Published var workspaceAuthFailure: WorkspaceAuthFailure = .none
-    /// Whether that failure's address was a custom (Workspace) domain, captured at
-    /// classify time so guidance frames it as admin- vs. personal-policy.
+    /// Account owner and domain class for the current Workspace guidance.
+    var workspaceAuthFailureAccountID: String?
     var workspaceAuthIsCustomDomain: Bool = false
     /// Whether this account already registered "Sign in with Google" interest.
     @Published var googleOAuthInterestRegistered: Bool = false

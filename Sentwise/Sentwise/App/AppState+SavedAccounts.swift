@@ -314,6 +314,7 @@ extension AppState {
         }
         let wasCurrentAccount = SavedMailAccount.normalizedEmail(mailEmail) == account.id
         let shouldClearCurrentAccount = isActiveAccount(account) || wasCurrentAccount
+        let ownsWorkspaceGuidance = workspaceAuthFailureAccountID == account.id
         let accountKey = SecretKey.mailAppPassword(email: account.email)
         let previousAccountPassword: String?
         let previousLegacyPassword: String?
@@ -363,8 +364,8 @@ extension AppState {
 
         savedAccounts = nextSettings.savedAccounts
 
+        if shouldClearCurrentAccount || ownsWorkspaceGuidance { clearWorkspaceAuthGuidance() }
         if shouldClearCurrentAccount {
-            clearWorkspaceAuthGuidance()
             goOfflineAfterRemovingActiveAccount()
         }
         logger.info("Saved account removed")

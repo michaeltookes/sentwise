@@ -21,6 +21,7 @@ extension AppState {
     /// lingers past the failure it described.
     func clearWorkspaceAuthGuidance() {
         workspaceAuthFailure = .none
+        workspaceAuthFailureAccountID = nil
         workspaceAuthIsCustomDomain = false
     }
 
@@ -41,6 +42,7 @@ extension AppState {
             imapHost: credentials.host
         )
         workspaceAuthFailure = failure
+        workspaceAuthFailureAccountID = failure == .none ? nil : SavedMailAccount.normalizedEmail(credentials.email)
         workspaceAuthIsCustomDomain = failure != .none
             && !WorkspaceAuthFailure.isConsumerGoogleDomain(domain)
 
