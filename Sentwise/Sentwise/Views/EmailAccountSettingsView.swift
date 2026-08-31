@@ -55,6 +55,9 @@ struct EmailAccountSettingsView: View {
             Text("This forgets \(account.email) and deletes its saved password from your Keychain. "
                  + "Your mail is not affected.")
         }
+        .onDisappear {
+            abandonAddingAccountIfNeeded()
+        }
     }
 
     // MARK: - Saved accounts
@@ -318,6 +321,11 @@ struct EmailAccountSettingsView: View {
     }
 
     private func cancelAddingAccount() {
+        abandonAddingAccountIfNeeded()
+    }
+
+    private func abandonAddingAccountIfNeeded() {
+        guard isAddingAccount else { return }
         isAddingAccount = false
         appState.connectionError = nil
         appState.clearWorkspaceAuthGuidance()
