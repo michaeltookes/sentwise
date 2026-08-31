@@ -121,6 +121,32 @@ final class AppStateAccountReviewFeedbackTests: XCTestCase {
         XCTAssertEqual(app.mailEmail, gmail.email)
     }
 
+    func testCredentialEditsClearStaleWorkspaceGuidance() {
+        let (app, _) = makeAppState(settings: .default, secrets: InMemorySecretStore())
+
+        func seedGuidance() {
+            app.workspaceAuthFailure = .appPasswordRejectedWorkspace
+            app.workspaceAuthIsCustomDomain = true
+            XCTAssertNotNil(app.workspaceAuthGuidance)
+        }
+
+        seedGuidance()
+        app.updateMailEmailFromUser("me@gmail.com")
+        XCTAssertEqual(app.workspaceAuthFailure, .none)
+
+        seedGuidance()
+        app.updateMailHostFromUser("imap.example.com")
+        XCTAssertEqual(app.workspaceAuthFailure, .none)
+
+        seedGuidance()
+        app.updateMailAppPasswordFromUser("new password")
+        XCTAssertEqual(app.workspaceAuthFailure, .none)
+
+        seedGuidance()
+        app.updateMailPortFromUser(994)
+        XCTAssertEqual(app.workspaceAuthFailure, .none)
+    }
+
     func testDisconnectDuringPendingSwitchDoesNotRemoveOutgoingAccountCredentials() async {
         let gmail = SavedMailAccount(email: "me@gmail.com", host: "imap.gmail.com", port: 993)
         let att = SavedMailAccount(email: "me@att.net", host: "imap.mail.att.net", port: 993)

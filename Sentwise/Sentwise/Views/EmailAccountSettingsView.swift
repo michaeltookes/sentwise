@@ -347,7 +347,11 @@ struct EmailAccountSettingsView: View {
             get: { isAddingAccount ? newAccountForm.host : appState.mailHost },
             set: {
                 if isAddingAccount {
+                    let changed = newAccountForm.host != $0
                     newAccountForm.updateHostFromUser($0)
+                    if changed {
+                        appState.clearWorkspaceAuthGuidance()
+                    }
                 } else {
                     appState.updateMailHostFromUser($0)
                 }
@@ -360,9 +364,13 @@ struct EmailAccountSettingsView: View {
             get: { isAddingAccount ? newAccountForm.port : appState.mailPort },
             set: {
                 if isAddingAccount {
+                    let changed = newAccountForm.port != $0
                     newAccountForm.port = $0
+                    if changed {
+                        appState.clearWorkspaceAuthGuidance()
+                    }
                 } else {
-                    appState.mailPort = $0
+                    appState.updateMailPortFromUser($0)
                 }
             }
         )
@@ -373,9 +381,13 @@ struct EmailAccountSettingsView: View {
             get: { isAddingAccount ? newAccountForm.appPassword : appState.mailAppPassword },
             set: {
                 if isAddingAccount {
+                    let changed = newAccountForm.appPassword != $0
                     newAccountForm.appPassword = $0
+                    if changed {
+                        appState.clearWorkspaceAuthGuidance()
+                    }
                 } else {
-                    appState.mailAppPassword = $0
+                    appState.updateMailAppPasswordFromUser($0)
                 }
             }
         )
@@ -386,7 +398,11 @@ struct EmailAccountSettingsView: View {
             get: { isAddingAccount ? newAccountForm.email : appState.mailEmail },
             set: {
                 if isAddingAccount {
+                    let changed = newAccountForm.email != $0
                     newAccountForm.updateEmailFromUser($0)
+                    if changed {
+                        appState.clearWorkspaceAuthGuidance()
+                    }
                 } else {
                     appState.updateMailEmailFromUser($0)
                 }
