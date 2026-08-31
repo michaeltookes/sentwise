@@ -105,9 +105,9 @@ final class AppState: ObservableObject {
     /// Email and OTP code typed into the managed sign-in form.
     @Published var managedEmailInput: String = ""
     @Published var managedCodeInput: String = ""
-    /// Email address tied to the current Clerk pending sign-in handle. This is
-    /// transient like the handle itself, so it is intentionally not persisted.
+    /// Email tied to the current Clerk pending sign-in handle; transient, not persisted.
     var pendingManagedSignInEmail: String?
+    var pendingManagedSignInActivatesProvider = true
 
     /// Latest full managed-account status from `/v1/me` (email, trial,
     /// subscription, quota) driving the Subscription pane (item 73); `nil` until

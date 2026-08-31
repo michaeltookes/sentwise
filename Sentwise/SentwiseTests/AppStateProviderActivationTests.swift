@@ -323,9 +323,9 @@ final class AppStateProviderActivationTests: XCTestCase {
         let appState = makeAppState(provider: "anthropic", secrets: secrets)
 
         appState.managedEmailInput = "marcus@example.com"
-        await appState.startManagedSignIn(isHuntMode: true)
+        await appState.startManagedSignIn(activatesManagedProvider: false, isHuntMode: true)
         appState.managedCodeInput = "123456"
-        await appState.verifyManagedCode(activatesManagedProvider: false, isHuntMode: true)
+        await appState.verifyManagedCode(isHuntMode: true)
 
         XCTAssertTrue(appState.isManagedSignedIn)
         XCTAssertEqual(appState.managedAccountEmail, "marcus@example.com")

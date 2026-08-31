@@ -134,9 +134,9 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
         appState.selectLLMProvider(.anthropic)
         appState.managedEmailInput = "marcus@example.com"
 
-        await appState.startManagedSignIn(isHuntMode: true)
+        await appState.startManagedSignIn(activatesManagedProvider: false, isHuntMode: true)
         appState.managedCodeInput = "424242"
-        await appState.verifyManagedCode(activatesManagedProvider: false, isHuntMode: true)
+        await appState.verifyManagedCode(isHuntMode: true)
 
         XCTAssertFalse(appState.isAccountConnected)
         XCTAssertEqual(appState.llmProviderKind, .anthropic)

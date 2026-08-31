@@ -88,7 +88,10 @@ struct ManagedSignInControls: View {
                 if showsGoogleOption {
                     Button {
                         Task {
-                            await appState.startManagedGoogleSignIn { openURL($0) }
+                            await appState.startManagedGoogleSignIn(
+                                openURL: { _ = openURL($0) },
+                                activatesManagedProvider: activatesManagedProvider
+                            )
                         }
                     } label: {
                         signInLabel(busy: appState.managedBusyAction == .google, title: "Continue with Google")
@@ -105,7 +108,7 @@ struct ManagedSignInControls: View {
                     .disabled(appState.isManagedBusy)
                     .accessibilityIdentifier("managedEmailField")
                 Button {
-                    Task { await appState.startManagedSignIn() }
+                    Task { await appState.startManagedSignIn(activatesManagedProvider: activatesManagedProvider) }
                 } label: {
                     signInLabel(busy: appState.managedBusyAction == .emailCode, title: "Send sign-in code")
                 }
@@ -119,7 +122,7 @@ struct ManagedSignInControls: View {
                     .accessibilityIdentifier("managedCodeField")
                 HStack {
                     Button {
-                        Task { await appState.verifyManagedCode(activatesManagedProvider: activatesManagedProvider) }
+                        Task { await appState.verifyManagedCode() }
                     } label: {
                         signInLabel(busy: appState.managedBusyAction == .verifyCode, title: "Verify & connect")
                     }

@@ -38,7 +38,10 @@ extension AppState {
     /// fully-offline fake: it advances to the code-entry stage without any network
     /// or Clerk call, so hunts can drive the sign-in UI end-to-end (item 70).
     /// `isHuntMode` is injectable so unit tests can exercise the fake path.
-    func startManagedSignIn(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
+    func startManagedSignIn(
+        activatesManagedProvider: Bool = true,
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
+    ) async {
         managedError = nil
         didDeleteManagedAccount = false
         let email = managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -50,6 +53,7 @@ extension AppState {
         if isHuntMode {
             // Deterministic offline fake: advance to code entry, no network.
             pendingManagedSignInEmail = email
+            pendingManagedSignInActivatesProvider = activatesManagedProvider
             managedEmailInput = email
             managedSignInStage = .codeSent
             return
@@ -61,9 +65,11 @@ extension AppState {
         do {
             try await managedAccount.startSignIn(email: email)
             pendingManagedSignInEmail = email
+            pendingManagedSignInActivatesProvider = activatesManagedProvider
             managedEmailInput = email
             managedSignInStage = .codeSent
         } catch {
+            pendingManagedSignInActivatesProvider = true
             managedError = Self.managedMessage(for: error)
         }
     }
@@ -74,11 +80,9 @@ extension AppState {
     /// In Prowl hunt mode this is a deterministic, fully-offline fake: any non-empty
     /// code completes to the signed-in fixture account without any network or Clerk
     /// call (item 70). `isHuntMode` is injectable so unit tests can exercise it.
-    func verifyManagedCode(
-        activatesManagedProvider: Bool = true,
-        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
-    ) async {
+    func verifyManagedCode(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
         managedError = nil
+        let activatesManagedProvider = pendingManagedSignInActivatesProvider
         if isHuntMode {
             // Deterministic offline fake: the button completes to the fixture account.
             // This avoids macOS TextField commit timing making Prowl hunts flaky.
@@ -119,6 +123,7 @@ extension AppState {
         managedSignInStage = .idle
         managedCodeInput = ""
         managedError = nil
+        pendingManagedSignInActivatesProvider = true
     }
 
     func cancelManagedSignInFlow() async {
@@ -204,6 +209,7 @@ extension AppState {
         }
         managedCodeInput = ""
         pendingManagedSignInEmail = nil
+        pendingManagedSignInActivatesProvider = true
         managedSignInStage = .idle
         googleOAuthInterestRegistered = false
         googleOAuthInterestError = nil
