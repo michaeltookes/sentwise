@@ -41,4 +41,42 @@ final class AppStateWorkspaceAuthSessionTests: XCTestCase {
         XCTAssertTrue(store.isRegistered(accountKey: capturedStableKey))
         XCTAssertFalse(appState.googleOAuthInterestRegistered)
     }
+
+    func testRegistrationPreservesBackfilledStableKeyAfterSignOut() async throws {
+        let client = SuspendingGoogleOAuthInterestClient()
+        let store = InMemoryGoogleOAuthInterestStore()
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_legacy",
+            .managedSessionID: "sess_legacy"
+        ])
+        let appState = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: secrets,
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: ManagedStatusLLMProvider(status: ManagedAccountStatus(userID: "user_123")),
+            googleOAuthInterestClient: client
+        )
+        appState.googleOAuthInterestStore = store
+        appState.isManagedSignedIn = true
+        appState.managedAccountEmail = "your Google account"
+        appState.managedAccountID = ""
+        appState.refreshGoogleOAuthInterestState()
+        let legacyKey = appState.currentManagedUsageAccountKey
+
+        let registration = Task {
+            await appState.registerGoogleOAuthInterest(isHuntMode: false)
+        }
+        await fulfillment(of: [client.didStart], timeout: 1)
+
+        await appState.refreshManagedQuota()
+        let stableKey = appState.currentManagedUsageAccountKey
+        await appState.signOutManaged()
+
+        client.succeed()
+        await registration.value
+
+        XCTAssertTrue(store.isRegistered(accountKey: legacyKey))
+        XCTAssertTrue(store.isRegistered(accountKey: stableKey))
+        XCTAssertFalse(appState.googleOAuthInterestRegistered)
+    }
 }
