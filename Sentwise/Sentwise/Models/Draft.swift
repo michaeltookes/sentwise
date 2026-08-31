@@ -151,6 +151,18 @@ struct Draft: Codable, Identifiable, Equatable {
     /// automatically repeat a send whose post-send persistence failed.
     var offlineQueuedDispatch: OfflineQueuedDraftDispatch?
 
+    /// Facts the user typed to answer a `NEEDS_INFO` draft (item 85). Carried on
+    /// the draft so they persist through the pending queue and a relaunch, and are
+    /// re-injected into the generator prompt on every re-draft. `nil` until the
+    /// user answers. Local-only: never logged or written to the activity history.
+    var userSuppliedFacts: UserSuppliedFacts? = nil
+
+    /// How many times an answered re-draft still came back `NEEDS_INFO` (item 85).
+    /// Drives the escape hatch: after the second failed round the card offers
+    /// "write it yourself". `nil`/`0` for a draft the user hasn't re-drafted with
+    /// answers, or one whose re-draft produced a usable reply.
+    var answeredRedraftCount: Int? = nil
+
     /// User-supplied recipients for an authored follow-up that has no inbound
     /// source message (item 51). When non-`nil` this draft is an *authored*
     /// follow-up rather than a reply: dispatch sends to these addresses and does
@@ -183,6 +195,24 @@ struct Draft: Codable, Identifiable, Equatable {
     var wasEdited: Bool {
         guard let originalBody else { return false }
         return originalBody != body
+    }
+
+    /// Whether the user answered a `NEEDS_INFO` prompt on this draft (item 85):
+    /// the draft carries at least one non-blank supplied fact. Item 83's
+    /// approval-signal capture consumes this to record an "answered-then-approved"
+    /// outcome once that capture exists.
+    var wasAnswered: Bool {
+        guard let userSuppliedFacts else { return false }
+        return !userSuppliedFacts.isEmpty
+    }
+
+    /// How many answered re-drafts still returned `NEEDS_INFO` (item 85).
+    var answeredRedraftFailures: Int { answeredRedraftCount ?? 0 }
+
+    /// Whether the card should surface the "write it yourself" escape: the user
+    /// has answered and re-drafted at least twice and the model still needs input.
+    var shouldOfferWriteItYourself: Bool {
+        needsInfo != nil && answeredRedraftFailures >= 2
     }
 
     /// Applies a user edit to the reply body (item 19), capturing the assistant's
