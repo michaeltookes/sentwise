@@ -55,6 +55,9 @@ struct EmailAccountSettingsView: View {
             Text("This forgets \(account.email) and deletes its saved password from your Keychain. "
                  + "Your mail is not affected.")
         }
+        .onDisappear {
+            abandonAddingAccountIfNeeded()
+        }
     }
 
     // MARK: - Saved accounts
@@ -143,6 +146,8 @@ struct EmailAccountSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+
+            WorkspaceAuthGuidanceView()
         }
     }
 
@@ -287,13 +292,17 @@ struct EmailAccountSettingsView: View {
     // MARK: - Actions
 
     private func connect() async {
+        let didConnect: Bool
         if isAddingAccount {
             newAccountForm.commitEmailEditFromUser()
-            await appState.testConnection(with: newAccountForm.credentials)
+            let credentials = newAccountForm.credentials
+            didConnect = await appState.testConnection(with: credentials) {
+                isAddingAccount && newAccountForm.credentials == $0
+            }
         } else {
-            await appState.testConnection()
+            didConnect = await appState.testConnection()
         }
-        if appState.connectionError == nil && appState.isAccountConnected {
+        if didConnect && appState.isAccountConnected {
             isAddingAccount = false
             newAccountForm.resetForNewAccount()
         }
@@ -310,13 +319,20 @@ struct EmailAccountSettingsView: View {
     private func beginAddingAccount() {
         newAccountForm.resetForNewAccount()
         appState.connectionError = nil
+        appState.clearWorkspaceAuthGuidance()
         isAddingAccount = true
         isMailEmailFocused = true
     }
 
     private func cancelAddingAccount() {
+        abandonAddingAccountIfNeeded()
+    }
+
+    private func abandonAddingAccountIfNeeded() {
+        guard isAddingAccount else { return }
         isAddingAccount = false
         appState.connectionError = nil
+        appState.clearWorkspaceAuthGuidance()
         newAccountForm.resetForNewAccount()
     }
 
@@ -343,7 +359,11 @@ struct EmailAccountSettingsView: View {
             get: { isAddingAccount ? newAccountForm.host : appState.mailHost },
             set: {
                 if isAddingAccount {
+                    let changed = newAccountForm.host != $0
                     newAccountForm.updateHostFromUser($0)
+                    if changed {
+                        appState.clearWorkspaceAuthGuidance()
+                    }
                 } else {
                     appState.updateMailHostFromUser($0)
                 }
@@ -356,9 +376,13 @@ struct EmailAccountSettingsView: View {
             get: { isAddingAccount ? newAccountForm.port : appState.mailPort },
             set: {
                 if isAddingAccount {
+                    let changed = newAccountForm.port != $0
                     newAccountForm.port = $0
+                    if changed {
+                        appState.clearWorkspaceAuthGuidance()
+                    }
                 } else {
-                    appState.mailPort = $0
+                    appState.updateMailPortFromUser($0)
                 }
             }
         )
@@ -369,9 +393,13 @@ struct EmailAccountSettingsView: View {
             get: { isAddingAccount ? newAccountForm.appPassword : appState.mailAppPassword },
             set: {
                 if isAddingAccount {
+                    let changed = newAccountForm.appPassword != $0
                     newAccountForm.appPassword = $0
+                    if changed {
+                        appState.clearWorkspaceAuthGuidance()
+                    }
                 } else {
-                    appState.mailAppPassword = $0
+                    appState.updateMailAppPasswordFromUser($0)
                 }
             }
         )
@@ -382,7 +410,11 @@ struct EmailAccountSettingsView: View {
             get: { isAddingAccount ? newAccountForm.email : appState.mailEmail },
             set: {
                 if isAddingAccount {
+                    let changed = newAccountForm.email != $0
                     newAccountForm.updateEmailFromUser($0)
+                    if changed {
+                        appState.clearWorkspaceAuthGuidance()
+                    }
                 } else {
                     appState.updateMailEmailFromUser($0)
                 }

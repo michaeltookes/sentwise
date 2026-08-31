@@ -32,7 +32,11 @@ extension AppState {
         let hasHostAssociatedWithTrackedEmail = trackedDomain != nil && !host.isEmpty
         let hasHostEnteredBeforeEmail = mailHostExplicitlyEditedBeforeEmail && !host.isEmpty
 
+        let changed = mailEmail != email
         mailEmail = email
+        if changed {
+            clearWorkspaceAuthGuidance()
+        }
 
         if hasHostEnteredBeforeEmail {
             guard let currentDomain = Self.normalizedEmailDomainForHostTracking(email) else {
@@ -88,7 +92,11 @@ extension AppState {
     /// Routes Advanced host-field edits through explicit tracking, so a
     /// provider host typed for a custom domain is not treated as a stale default.
     func updateMailHostFromUser(_ host: String) {
+        let changed = mailHost != host
         mailHost = host
+        if changed {
+            clearWorkspaceAuthGuidance()
+        }
         let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedEmail = Self.normalizedEmailForHostTracking(mailEmail)
         let hasCompletedEmailDomain = Self.normalizedEmailDomainForHostTracking(mailEmail) != nil
@@ -96,6 +104,18 @@ extension AppState {
             email: normalizedHost.isEmpty || !hasCompletedEmailDomain ? nil : normalizedEmail,
             pending: !normalizedHost.isEmpty && !hasCompletedEmailDomain
         )
+    }
+
+    func updateMailAppPasswordFromUser(_ appPassword: String) {
+        guard mailAppPassword != appPassword else { return }
+        mailAppPassword = appPassword
+        clearWorkspaceAuthGuidance()
+    }
+
+    func updateMailPortFromUser(_ port: Int) {
+        guard mailPort != port else { return }
+        mailPort = port
+        clearWorkspaceAuthGuidance()
     }
 
     private func isMailHostReplaceableBySuggestion(

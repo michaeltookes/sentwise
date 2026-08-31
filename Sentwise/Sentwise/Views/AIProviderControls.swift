@@ -72,22 +72,35 @@ struct ManagedSignInControls: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openURL) private var openURL
 
+    let showsGoogleOption: Bool
+    let activatesManagedProvider: Bool
+
+    init(showsGoogleOption: Bool = true, activatesManagedProvider: Bool = true) {
+        self.showsGoogleOption = showsGoogleOption
+        self.activatesManagedProvider = activatesManagedProvider
+    }
+
     private var isHuntMode: Bool { ProwlHuntRuntime.current.isEnabled }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if appState.managedSignInStage == .idle {
-                Button {
-                    Task {
-                        await appState.startManagedGoogleSignIn { openURL($0) }
+                if showsGoogleOption {
+                    Button {
+                        Task {
+                            await appState.startManagedGoogleSignIn(
+                                openURL: { _ = openURL($0) },
+                                activatesManagedProvider: activatesManagedProvider
+                            )
+                        }
+                    } label: {
+                        signInLabel(busy: appState.managedBusyAction == .google, title: "Continue with Google")
                     }
-                } label: {
-                    signInLabel(busy: appState.managedBusyAction == .google, title: "Continue with Google")
-                }
-                .disabled(appState.isManagedBusy)
-                .accessibilityIdentifier("managedGoogleSignInButton")
+                    .disabled(appState.isManagedBusy)
+                    .accessibilityIdentifier("managedGoogleSignInButton")
 
-                Text("or use your email").font(.caption).foregroundStyle(.secondary)
+                    Text("or use your email").font(.caption).foregroundStyle(.secondary)
+                }
 
                 TextField("Email address", text: $appState.managedEmailInput)
                     .textContentType(.username)
@@ -95,7 +108,7 @@ struct ManagedSignInControls: View {
                     .disabled(appState.isManagedBusy)
                     .accessibilityIdentifier("managedEmailField")
                 Button {
-                    Task { await appState.startManagedSignIn() }
+                    Task { await appState.startManagedSignIn(activatesManagedProvider: activatesManagedProvider) }
                 } label: {
                     signInLabel(busy: appState.managedBusyAction == .emailCode, title: "Send sign-in code")
                 }

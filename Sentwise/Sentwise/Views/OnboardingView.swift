@@ -194,7 +194,7 @@ private struct OnboardingAccountStep: View {
                             appState.commitMailEmailEditFromUser()
                         }
                     }
-                SecureField("App password", text: $appState.mailAppPassword)
+                SecureField("App password", text: mailAppPasswordBinding)
                     .textFieldStyle(.roundedBorder)
 
                 Button {
@@ -216,7 +216,7 @@ private struct OnboardingAccountStep: View {
                 DisclosureGroup("Advanced (IMAP server)") {
                     TextField("IMAP host", text: mailHostBinding)
                         .textFieldStyle(.roundedBorder)
-                    TextField("Port", value: $appState.mailPort, format: .number)
+                    TextField("Port", value: mailPortBinding, format: .number)
                         .textFieldStyle(.roundedBorder)
                 }
             }
@@ -224,6 +224,8 @@ private struct OnboardingAccountStep: View {
             if let error = appState.connectionError {
                 OnboardingError(message: error)
             }
+
+            WorkspaceAuthGuidanceView()
 
             Text(AppState.privacyStatement)
                 .font(.caption)
@@ -243,6 +245,20 @@ private struct OnboardingAccountStep: View {
         Binding(
             get: { appState.mailEmail },
             set: { appState.updateMailEmailFromUser($0) }
+        )
+    }
+
+    private var mailAppPasswordBinding: Binding<String> {
+        Binding(
+            get: { appState.mailAppPassword },
+            set: { appState.updateMailAppPasswordFromUser($0) }
+        )
+    }
+
+    private var mailPortBinding: Binding<Int> {
+        Binding(
+            get: { appState.mailPort },
+            set: { appState.updateMailPortFromUser($0) }
         )
     }
 }

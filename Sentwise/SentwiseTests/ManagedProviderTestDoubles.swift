@@ -6,7 +6,18 @@ import XCTest
 /// A `ManagedSessionProviding` double for LLMService routing tests.
 struct FixedSessionProvider: ManagedSessionProviding {
     let token: String
+    let accountKey: String?
+
+    init(token: String, accountKey: String? = nil) {
+        self.token = token
+        self.accountKey = accountKey
+    }
+
     func currentSessionToken() async throws -> String { token }
+
+    func currentManagedSession() async throws -> ManagedSessionToken {
+        ManagedSessionToken(jwt: token, accountKey: accountKey)
+    }
 }
 
 enum ManagedProviderSecretError: Error {

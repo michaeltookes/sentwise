@@ -38,7 +38,10 @@ extension AppState {
     /// fully-offline fake: it advances to the code-entry stage without any network
     /// or Clerk call, so hunts can drive the sign-in UI end-to-end (item 70).
     /// `isHuntMode` is injectable so unit tests can exercise the fake path.
-    func startManagedSignIn(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
+    func startManagedSignIn(
+        activatesManagedProvider: Bool = true,
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
+    ) async {
         managedError = nil
         didDeleteManagedAccount = false
         let email = managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -50,6 +53,7 @@ extension AppState {
         if isHuntMode {
             // Deterministic offline fake: advance to code entry, no network.
             pendingManagedSignInEmail = email
+            pendingManagedSignInActivatesProvider = activatesManagedProvider
             managedEmailInput = email
             managedSignInStage = .codeSent
             return
@@ -61,26 +65,30 @@ extension AppState {
         do {
             try await managedAccount.startSignIn(email: email)
             pendingManagedSignInEmail = email
+            pendingManagedSignInActivatesProvider = activatesManagedProvider
             managedEmailInput = email
             managedSignInStage = .codeSent
         } catch {
+            pendingManagedSignInActivatesProvider = true
             managedError = Self.managedMessage(for: error)
         }
     }
 
-    /// Verifies the code in `managedCodeInput`, completing sign-in. On success the
-    /// managed provider becomes the connected provider and drafting is enabled.
+    /// Verifies the code in `managedCodeInput`, completing sign-in. By default the
+    /// managed provider becomes the connected provider and drafting is enabled; the
+    /// Workspace guidance can sign in only to scope notification-interest capture.
     /// In Prowl hunt mode this is a deterministic, fully-offline fake: any non-empty
     /// code completes to the signed-in fixture account without any network or Clerk
     /// call (item 70). `isHuntMode` is injectable so unit tests can exercise it.
     func verifyManagedCode(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
         managedError = nil
+        let activatesManagedProvider = pendingManagedSignInActivatesProvider
         if isHuntMode {
             // Deterministic offline fake: the button completes to the fixture account.
             // This avoids macOS TextField commit timing making Prowl hunts flaky.
             let signedInEmail = pendingManagedSignInEmail
                 ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
-            if llmProviderKind != .managed { selectLLMProvider(.managed) }
+            if activatesManagedProvider, llmProviderKind != .managed { selectLLMProvider(.managed) }
             finalizeManagedSignIn(email: signedInEmail, accountID: "hunt-email:\(signedInEmail)")
             return
         }
@@ -104,7 +112,7 @@ extension AppState {
         // Sign-in succeeded: record the account tied to the pending Clerk flow.
         let signedInEmail = pendingManagedSignInEmail
             ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        if llmProviderKind != .managed {
+        if activatesManagedProvider, llmProviderKind != .managed {
             selectLLMProvider(.managed)
         }
         finalizeManagedSignIn(email: signedInEmail, accountID: result.accountIdentifier)
@@ -115,6 +123,7 @@ extension AppState {
         managedSignInStage = .idle
         managedCodeInput = ""
         managedError = nil
+        pendingManagedSignInActivatesProvider = true
     }
 
     func cancelManagedSignInFlow() async {
@@ -200,7 +209,10 @@ extension AppState {
         }
         managedCodeInput = ""
         pendingManagedSignInEmail = nil
+        pendingManagedSignInActivatesProvider = true
         managedSignInStage = .idle
+        googleOAuthInterestRegistered = false
+        googleOAuthInterestError = nil
         if llmProviderKind == .managed {
             verifiedLLMModel = ""
             refreshLLMConnectionStatus()
@@ -256,6 +268,8 @@ extension AppState {
                 return trimmed
             }
             return "Sentwise account service returned HTTP \(status). Please try again."
+        case LLMError.invalidResponse(let detail):
+            return "Unexpected response from Sentwise account service. Please try again. (\(detail))"
         default:
             return nil
         }

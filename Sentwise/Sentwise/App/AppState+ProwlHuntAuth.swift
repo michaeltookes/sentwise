@@ -24,7 +24,7 @@ extension AppState {
     /// and the account is connected.
     func completeManagedGoogleSignInForHunt(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) {
         guard isHuntMode else { return }
-        if llmProviderKind != .managed { selectLLMProvider(.managed) }
+        if pendingManagedSignInActivatesProvider, llmProviderKind != .managed { selectLLMProvider(.managed) }
         finalizeManagedSignIn(email: Self.huntFixtureGoogleEmail, accountID: "hunt-google")
     }
 

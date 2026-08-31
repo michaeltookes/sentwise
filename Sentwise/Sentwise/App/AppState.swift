@@ -11,13 +11,6 @@ final class AppState: ObservableObject {
 
     // MARK: - Watch State
 
-    /// High-level state of the inbox watcher.
-    enum WatchStatus: Equatable {
-        case idle
-        case watching
-        case paused
-    }
-
     /// Current watcher status. Drives the menu-bar status line.
     @Published var watchStatus: WatchStatus = .idle
 
@@ -112,9 +105,9 @@ final class AppState: ObservableObject {
     /// Email and OTP code typed into the managed sign-in form.
     @Published var managedEmailInput: String = ""
     @Published var managedCodeInput: String = ""
-    /// Email address tied to the current Clerk pending sign-in handle. This is
-    /// transient like the handle itself, so it is intentionally not persisted.
+    /// Email tied to the current Clerk pending sign-in handle; transient, not persisted.
     var pendingManagedSignInEmail: String?
+    var pendingManagedSignInActivatesProvider = true
 
     /// Latest full managed-account status from `/v1/me` (email, trial,
     /// subscription, quota) driving the Subscription pane (item 73); `nil` until
@@ -129,6 +122,19 @@ final class AppState: ObservableObject {
     var managedQuotaAccountKey: String?
     /// Old -> new account-key aliases created during stable-ID backfill.
     var managedQuotaAccountKeyAliases: [String: String] = [:]
+
+    // MARK: - Workspace app-password guidance (item 75)
+
+    /// The Google Workspace / Gmail policy failure from the last connect attempt.
+    @Published var workspaceAuthFailure: WorkspaceAuthFailure = .none
+    /// Account owner and domain class for the current Workspace guidance.
+    var workspaceAuthFailureAccountID: String?
+    var workspaceAuthIsCustomDomain: Bool = false
+    /// Whether this account already registered "Sign in with Google" interest.
+    @Published var googleOAuthInterestRegistered: Bool = false
+    /// Whether an interest-registration request is in flight.
+    @Published var isRegisteringGoogleOAuthInterest: Bool = false
+    @Published var googleOAuthInterestError: String?
 
     // MARK: - Voice Profile
 
@@ -368,6 +374,10 @@ final class AppState: ObservableObject {
     /// alerts fire once per threshold and never re-fire across relaunches (56b).
     /// A `var` with a default so tests can substitute an in-memory store.
     var usageAlertStore: UsageAlertStateStoring = UserDefaultsUsageAlertStore()
+    /// Registers "Sign in with Google" interest via the managed service (item 75).
+    let googleOAuthInterestClient: GoogleOAuthInterestRegistering
+    /// Durable local "already registered" record so the button isn't re-offered.
+    var googleOAuthInterestStore: GoogleOAuthInterestStoring = UserDefaultsGoogleOAuthInterestStore()
     /// Set by the menu-bar controller so a notification "open" action (or a
     /// menu click) can surface the review window.
     var openReviewHandler: (() -> Void)?
@@ -398,6 +408,7 @@ final class AppState: ObservableObject {
         mailProvider: MailProvider = IMAPMailProvider(),
         llm: LLMProviding? = nil,
         managedAccount: ManagedAccountService? = nil,
+        googleOAuthInterestClient: GoogleOAuthInterestRegistering? = nil,
         notifier: DraftNotifying = NullDraftNotifier(),
         reachability: NetworkReachabilityMonitoring = NetworkReachabilityMonitor()
     ) {
@@ -407,6 +418,9 @@ final class AppState: ObservableObject {
         // Managed account (item 56a) + wire it as the LLM session provider.
         let managedAccount = managedAccount ?? ManagedAccountService(secrets: secrets)
         self.managedAccount = managedAccount
+        // Interest capture (item 75) authenticates with the same account session as
+        // drafting; default to the production client unless a test injects a fake.
+        self.googleOAuthInterestClient = googleOAuthInterestClient ?? Self.makeDefaultInterestClient(managedAccount: managedAccount)
         // The quota relay (item 56b) bridges the LLM layer's quota reports to the
         // main actor; wired to the default LLMService, then to AppState after init.
         self.llm = llm ?? LLMService(managedSessionProvider: managedAccount, quotaReporter: managedQuotaRelay)
@@ -477,20 +491,6 @@ final class AppState: ObservableObject {
         )
 
         installExternalActionHandlers()
-    }
-
-    /// Wires the notification-action and reachability-change callbacks. Called
-    /// once from `init`; reachability monitoring itself is started later by the
-    /// app (not here) so headless/test construction never spins up a real
-    /// `NWPathMonitor`.
-    private func installExternalActionHandlers() {
-        notifier.onAction = { [weak self] action, identity in
-            await self?.handleNotificationAction(action, identity: identity)
-        }
-        wireUsageMeteringHandlers()
-        reachability.onChange = { [weak self] online in
-            self?.handleReachabilityChange(online)
-        }
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {

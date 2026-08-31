@@ -318,6 +318,21 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertNil(appState.managedError)
     }
 
+    func testNotificationOnlyEmailSignInPreservesBYOProvider() async {
+        let secrets = InMemorySecretStore(seed: [.llmAPIKey(provider: "anthropic"): "sk-anthropic"])
+        let appState = makeAppState(provider: "anthropic", secrets: secrets)
+
+        appState.managedEmailInput = "marcus@example.com"
+        await appState.startManagedSignIn(activatesManagedProvider: false, isHuntMode: true)
+        appState.managedCodeInput = "123456"
+        await appState.verifyManagedCode(isHuntMode: true)
+
+        XCTAssertTrue(appState.isManagedSignedIn)
+        XCTAssertEqual(appState.managedAccountEmail, "marcus@example.com")
+        XCTAssertEqual(appState.llmProviderKind, .anthropic)
+        XCTAssertFalse(appState.isManagedProviderActive)
+    }
+
     func testCancelManagedGoogleSignInIgnoresLaterCallback() async throws {
         let secrets = InMemorySecretStore()
         let transport = QueueClerkTransport([clerkReply(startResponse, clientToken: "client_A")])

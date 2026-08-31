@@ -45,7 +45,8 @@ extension AppState {
         managedQuota = nil
         managedAccountStatus = nil
         managedQuotaAccountKey = nil
-        managedQuotaAccountKeyAliases.removeAll()
+        // Account-key aliases are identity migrations, not quota display cache.
+        // Delayed callbacks still need them after sign-out.
     }
 
     /// Records the latest quota (from a `/v1/draft` response or a `/v1/me` fetch)
@@ -149,6 +150,8 @@ extension AppState {
         let newAccountKey = currentManagedUsageAccountKey
         managedQuotaAccountKeyAliases[previousAccountKey] = newAccountKey
         usageAlertStore.migrateState(from: previousAccountKey, to: newAccountKey)
+        googleOAuthInterestStore.migrateRegistration(from: previousAccountKey, to: newAccountKey)
+        googleOAuthInterestRegistered = googleOAuthInterestStore.isRegistered(accountKey: newAccountKey)
         if managedQuotaAccountKey == previousAccountKey {
             managedQuotaAccountKey = newAccountKey
         }

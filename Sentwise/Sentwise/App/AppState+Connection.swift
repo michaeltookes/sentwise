@@ -26,17 +26,26 @@ extension AppState {
     }
 
     /// Tests the mailbox connection and, on success, saves the credentials.
-    func testConnection() async {
+    @discardableResult
+    func testConnection() async -> Bool {
         connectionError = nil
         commitMailEmailEditFromUser()
 
-        await testConnection(with: mailCredentials)
+        let credentials = mailCredentials
+        return await testConnection(with: credentials) {
+            self.isCurrentMailCredentialSnapshot($0)
+        }
     }
 
     /// Tests the mailbox connection from an explicit credential snapshot and, on
     /// success, adopts it as the active account.
-    func testConnection(with credentials: MailAccountCredentials) async {
+    @discardableResult
+    func testConnection(
+        with credentials: MailAccountCredentials,
+        shouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool = { _ in true }
+    ) async -> Bool {
         connectionError = nil
+        clearWorkspaceAuthGuidance()
         let email = credentials.email.trimmingCharacters(in: .whitespacesAndNewlines)
         let host = credentials.host.trimmingCharacters(in: .whitespacesAndNewlines)
         let credentials = MailAccountCredentials(
@@ -51,7 +60,7 @@ extension AppState {
         )
         guard credentials.isComplete else {
             connectionError = "Enter your email address and app password first."
-            return
+            return false
         }
 
         isConnecting = true
@@ -61,9 +70,12 @@ extension AppState {
         do {
             try await mailProvider.verifyConnection(credentials)
         } catch {
+            guard shouldApplyResult(credentials) else { return false }
             connectionError = Self.message(for: error)
-            return
+            classifyWorkspaceAuthFailure(error, credentials: credentials)
+            return false
         }
+        guard shouldApplyResult(credentials) else { return false }
 
         let previousSettings = persistence.loadSettings()
         let previousEmail = previousSettings.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -74,7 +86,7 @@ extension AppState {
             previousSettings: previousSettings,
             accountIdentityChanged: accountIdentityChanged,
             requiresTransitionCleanup: requiresTransitionCleanup
-        ) else { return }
+        ) else { return false }
         isAccountConnected = true
         if requiresTransitionCleanup {
             // A different or newly reconnected account invalidates any in-flight
@@ -90,6 +102,7 @@ extension AppState {
         // the account was disconnected but the folder watcher was already active.
         startTranscriptFolderWatchingIfEnabled()
         logger.info("Mailbox connected")
+        return true
     }
 
     private func hasAccountIdentityChanged(from previousEmail: String, to nextEmail: String) -> Bool {
@@ -97,9 +110,26 @@ extension AppState {
         return previousEmail.caseInsensitiveCompare(nextEmail) != .orderedSame
     }
 
+    private func isCurrentMailCredentialSnapshot(_ credentials: MailAccountCredentials) -> Bool {
+        Self.connectionCredentials(mailCredentials, match: credentials)
+    }
+
+    private static func connectionCredentials(
+        _ lhs: MailAccountCredentials,
+        match rhs: MailAccountCredentials
+    ) -> Bool {
+        lhs.email.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare(rhs.email.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+            && lhs.appPassword == rhs.appPassword
+            && lhs.host.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(rhs.host.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+            && lhs.port == rhs.port
+    }
+
     /// Disconnects the mailbox by clearing the stored app password.
     func disconnectMail() {
         connectionError = nil
+        clearWorkspaceAuthGuidance()
         guard !isConnecting else {
             logger.info("Disconnect skipped while a connection test is running")
             return

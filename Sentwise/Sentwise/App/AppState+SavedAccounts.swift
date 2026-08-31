@@ -265,6 +265,7 @@ extension AppState {
     /// are retained — only the *active* pointer moves. Pending drafts are left
     /// untouched; they stay scoped to their originating account by identity.
     func switchToSavedAccount(_ account: SavedMailAccount) async {
+        clearWorkspaceAuthGuidance()
         guard !isActiveAccount(account) else { return }
 
         guard let password = storedMailPassword(forEmail: account.email), !password.isEmpty else {
@@ -313,6 +314,7 @@ extension AppState {
         }
         let wasCurrentAccount = SavedMailAccount.normalizedEmail(mailEmail) == account.id
         let shouldClearCurrentAccount = isActiveAccount(account) || wasCurrentAccount
+        let ownsWorkspaceGuidance = workspaceAuthFailureAccountID == account.id
         let accountKey = SecretKey.mailAppPassword(email: account.email)
         let previousAccountPassword: String?
         let previousLegacyPassword: String?
@@ -362,6 +364,7 @@ extension AppState {
 
         savedAccounts = nextSettings.savedAccounts
 
+        if shouldClearCurrentAccount || ownsWorkspaceGuidance { clearWorkspaceAuthGuidance() }
         if shouldClearCurrentAccount {
             goOfflineAfterRemovingActiveAccount()
         }

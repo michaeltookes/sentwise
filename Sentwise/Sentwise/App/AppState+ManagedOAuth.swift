@@ -30,10 +30,11 @@ extension AppState {
         managedEmailInput = email
         managedCodeInput = ""
         pendingManagedSignInEmail = nil
+        pendingManagedSignInActivatesProvider = true
         managedSignInStage = .idle
         isManagedSignedIn = true
 
-        // Managed is now the active provider path; mark it verified so drafting
+        // When managed is the active provider path, mark it verified so drafting
         // and the connected UI light up. The model is always the managed default.
         if llmProviderKind == .managed {
             verifiedLLMModel = llmProviderKind.defaultModel
@@ -41,6 +42,9 @@ extension AppState {
             resetDraftPreviewForLLMChange()
         }
         saveSettings()
+        // Reflect this account's prior "notify me about Sign in with Google" choice
+        // so the item-75 capture button isn't re-offered after a click (item 75).
+        refreshGoogleOAuthInterestState()
         resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
         startTranscriptFolderWatchingIfEnabled()
         // Pull the current weekly allotment now that we can authenticate (item 56b).
@@ -55,11 +59,13 @@ extension AppState {
     /// `completeManagedGoogleSignInForHunt`. `isHuntMode` is injectable for tests.
     func startManagedGoogleSignIn(
         openURL: (URL) -> Void = { NSWorkspace.shared.open($0) },
+        activatesManagedProvider: Bool = true,
         isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
     ) async {
         managedError = nil
         if isHuntMode {
             // Deterministic offline fake: show the browser-wait panel, open nothing.
+            pendingManagedSignInActivatesProvider = activatesManagedProvider
             managedSignInStage = .awaitingBrowser
             return
         }
@@ -68,8 +74,10 @@ extension AppState {
         do {
             let url = try await managedAccount.startGoogleSignIn(redirectURL: Self.managedOAuthRedirectURL)
             openURL(url)
+            pendingManagedSignInActivatesProvider = activatesManagedProvider
             managedSignInStage = .awaitingBrowser
         } catch {
+            pendingManagedSignInActivatesProvider = true
             managedError = Self.managedMessage(for: error)
         }
     }
@@ -85,13 +93,12 @@ extension AppState {
         } catch {
             managedError = Self.managedMessage(for: error)
             if managedSignInStage == .awaitingBrowser {
+                pendingManagedSignInActivatesProvider = true
                 managedSignInStage = .idle
             }
             return
         }
-        // Managed inference is the point of signing in; make it the active
-        // provider so the account immediately starts drafting.
-        if llmProviderKind != .managed {
+        if pendingManagedSignInActivatesProvider, llmProviderKind != .managed {
             selectLLMProvider(.managed)
         }
         let email = result.displayIdentifier.flatMap { $0.isEmpty ? nil : $0 } ?? "your Google account"
