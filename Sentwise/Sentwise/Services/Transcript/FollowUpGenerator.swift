@@ -34,6 +34,7 @@ struct FollowUpGenerator {
         transcript: ParsedTranscript,
         voiceProfile: VoiceProfile?,
         model: String,
+        userSuppliedFacts: UserSuppliedFacts? = nil,
         complete: Complete
     ) async throws -> String {
         guard !transcript.isEmpty else { throw DraftError.emptyDraft }
@@ -50,7 +51,11 @@ struct FollowUpGenerator {
             system: Self.systemPrompt(voiceProfile: voiceProfile),
             messages: [LLMMessage(
                 role: .user,
-                content: Self.userPrompt(source: source, hasSpeakerLabels: transcript.hasSpeakerLabels)
+                content: Self.userPrompt(
+                    source: source,
+                    hasSpeakerLabels: transcript.hasSpeakerLabels,
+                    userSuppliedFacts: userSuppliedFacts
+                )
             )],
             model: model,
             maxTokens: maxTokens,
@@ -170,15 +175,20 @@ struct FollowUpGenerator {
         return base + "\n\n" + voice
     }
 
-    private static func userPrompt(source: DraftSource, hasSpeakerLabels: Bool) -> String {
+    private static func userPrompt(
+        source: DraftSource,
+        hasSpeakerLabels: Bool,
+        userSuppliedFacts: UserSuppliedFacts?
+    ) -> String {
         let speakerNote = hasSpeakerLabels
             ? "The transcript labels each speaker (e.g. \"Name:\"). Use the labels to attribute "
                 + "action items to the right owner."
             : "The transcript is not labeled by speaker. Infer owners only where the wording makes "
                 + "them clear; otherwise phrase action items without guessing who owns them."
+        var prompt: String
         switch source {
         case .full(let text):
-            return """
+            prompt = """
             Write the follow-up email from this call transcript.
 
             \(speakerNote)
@@ -188,7 +198,7 @@ struct FollowUpGenerator {
             \(text)
             """
         case .summarized(let summary):
-            return """
+            prompt = """
             Write the follow-up email from this distilled summary of a long call. The summary was \
             produced from the full transcript; treat it as the source of truth.
 
@@ -199,5 +209,9 @@ struct FollowUpGenerator {
             \(summary)
             """
         }
+        if let facts = userSuppliedFacts, let block = UserFactsPrompt.block(facts) {
+            prompt += "\n\n" + block
+        }
+        return prompt
     }
 }

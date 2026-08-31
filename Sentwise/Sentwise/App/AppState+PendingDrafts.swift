@@ -188,7 +188,8 @@ extension AppState {
                 for: source.message,
                 mailbox: source.mailbox,
                 requireWatching: false,
-                credentials: credentials
+                credentials: credentials,
+                userSuppliedFacts: draft.userSuppliedFacts
             ) else {
                 approvalError = "The draft could not be regenerated because account settings changed."
                 return
@@ -228,7 +229,8 @@ extension AppState {
             for: source.message,
             mailbox: source.mailbox,
             requireWatching: false,
-            credentials: credentials
+            credentials: credentials,
+            userSuppliedFacts: draft.userSuppliedFacts
         ) else {
             throw DraftDispatchError.accountChanged
         }
