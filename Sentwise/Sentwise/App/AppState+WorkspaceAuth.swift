@@ -101,6 +101,7 @@ extension AppState {
     func registerGoogleOAuthInterest(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
         guard canOfferGoogleOAuthInterest else { return }
         let accountKey = currentGoogleOAuthInterestAccountKey
+        let sessionAccountKey = currentGoogleOAuthInterestSessionAccountKey
         if isHuntMode { return }
 
         googleOAuthInterestError = nil
@@ -109,7 +110,11 @@ extension AppState {
 
         do {
             let registration = try await googleOAuthInterestClient.registerInterest(topic: Self.googleOAuthInterestTopic)
-            markGoogleOAuthInterestRegisteredLocally(accountKey: registration.accountKey ?? accountKey)
+            markGoogleOAuthInterestRegisteredLocally(
+                accountKey: registration.accountKey ?? accountKey,
+                capturedAccountKey: accountKey,
+                capturedSessionAccountKey: sessionAccountKey
+            )
         } catch {
             let failure = googleOAuthInterestFailure(from: error, fallbackAccountKey: accountKey)
             let wasCurrentAccount = isCurrentGoogleOAuthInterestAccount(failure.accountKey)
@@ -128,11 +133,22 @@ extension AppState {
         }
     }
 
-    private func markGoogleOAuthInterestRegisteredLocally(accountKey: String) {
-        let accountKeys = googleOAuthInterestRegistrationKeys(for: accountKey)
+    private func markGoogleOAuthInterestRegisteredLocally(
+        accountKey: String,
+        capturedAccountKey: String? = nil,
+        capturedSessionAccountKey: String? = nil
+    ) {
+        var accountKeys = googleOAuthInterestRegistrationKeys(for: accountKey)
+        if let capturedAccountKey,
+           let capturedSessionAccountKey,
+           resolvedGoogleOAuthInterestAccountKey(capturedSessionAccountKey)
+                == resolvedGoogleOAuthInterestAccountKey(accountKey) {
+            accountKeys.formUnion(googleOAuthInterestRegistrationKeys(for: capturedAccountKey))
+        }
         for accountKey in accountKeys {
             googleOAuthInterestStore.markRegistered(accountKey: accountKey)
         }
+        guard isManagedSignedIn else { return }
         guard accountKeys.contains(currentGoogleOAuthInterestAccountKey) else { return }
         googleOAuthInterestRegistered = true
     }
