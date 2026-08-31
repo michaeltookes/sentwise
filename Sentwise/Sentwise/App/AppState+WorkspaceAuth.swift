@@ -117,7 +117,7 @@ extension AppState {
                 logger.error("Interest registration failed for stale account: \(error.localizedDescription)")
                 return
             }
-            let message = Self.message(for: error)
+            let message = Self.managedMessage(for: error)
             if signedOut {
                 managedError = message
             } else {

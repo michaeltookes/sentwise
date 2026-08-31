@@ -57,6 +57,12 @@ final class ManagedProviderTests: XCTestCase {
         XCTAssertEqual(message, "Sentwise account service returned HTTP 500. Please try again.")
     }
 
+    func testManagedMessageMapsInvalidResponsesToFriendlyCopy() {
+        let message = AppState.managedMessage(for: LLMError.invalidResponse("missing id"))
+
+        XCTAssertEqual(message, "Unexpected response from Sentwise account service. Please try again. (missing id)")
+    }
+
     // MARK: - Settings migration (14 -> 15)
 
     private func migrate(_ settings: Settings, secrets: SecretStore) -> Settings {

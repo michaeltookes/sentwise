@@ -353,7 +353,7 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
         XCTAssertFalse(appState.isManagedSignedIn)
         XCTAssertFalse(appState.canOfferGoogleOAuthInterest)
         XCTAssertTrue(appState.canOfferGoogleOAuthInterestSignIn)
-        XCTAssertNotNil(appState.managedError)
+        XCTAssertEqual(appState.managedError, "Sign-in didn't stick. Please try again.")
     }
 
     func testManagedSignOutClearsInterestConfirmationForPreviousAccount() async {
@@ -387,7 +387,44 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
         await appState.registerGoogleOAuthInterest(isHuntMode: false)
 
         XCTAssertFalse(appState.googleOAuthInterestRegistered)
-        XCTAssertNotNil(appState.googleOAuthInterestError)
+        XCTAssertEqual(
+            appState.googleOAuthInterestError,
+            "Couldn't reach Sentwise sign-in. Check your connection and try again."
+        )
+        XCTAssertTrue(appState.canOfferGoogleOAuthInterest, "a failed attempt can be retried")
+    }
+
+    func testInterestServerErrorUsesManagedMessage() async {
+        let client = RecordingGoogleOAuthInterestClient(error: LLMError.http(
+            status: 500,
+            message: "Interest capture is temporarily unavailable."
+        ))
+        let appState = makeAppState(provider: FakeAppMailProvider(result: .success(())), interestClient: client)
+        appState.googleOAuthInterestStore = InMemoryGoogleOAuthInterestStore()
+        appState.isManagedSignedIn = true
+        appState.managedAccountID = "acct-1"
+        appState.refreshGoogleOAuthInterestState()
+
+        await appState.registerGoogleOAuthInterest(isHuntMode: false)
+
+        XCTAssertEqual(appState.googleOAuthInterestError, "Interest capture is temporarily unavailable.")
+        XCTAssertTrue(appState.canOfferGoogleOAuthInterest, "a failed attempt can be retried")
+    }
+
+    func testInterestMalformedResponseUsesManagedMessage() async {
+        let client = RecordingGoogleOAuthInterestClient(error: LLMError.invalidResponse("missing status"))
+        let appState = makeAppState(provider: FakeAppMailProvider(result: .success(())), interestClient: client)
+        appState.googleOAuthInterestStore = InMemoryGoogleOAuthInterestStore()
+        appState.isManagedSignedIn = true
+        appState.managedAccountID = "acct-1"
+        appState.refreshGoogleOAuthInterestState()
+
+        await appState.registerGoogleOAuthInterest(isHuntMode: false)
+
+        XCTAssertEqual(
+            appState.googleOAuthInterestError,
+            "Unexpected response from Sentwise account service. Please try again. (missing status)"
+        )
         XCTAssertTrue(appState.canOfferGoogleOAuthInterest, "a failed attempt can be retried")
     }
 
@@ -417,63 +454,5 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
 
         XCTAssertTrue(appState.googleOAuthInterestRegistered)
         XCTAssertFalse(appState.canOfferGoogleOAuthInterest)
-    }
-}
-
-/// A recording interest client that suspends until the test completes it, so the
-/// AppState race around account switches can be exercised deterministically.
-final class SuspendingGoogleOAuthInterestClient: GoogleOAuthInterestRegistering, @unchecked Sendable {
-    let didStart = XCTestExpectation(description: "interest registration started")
-
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<Void, Never>?
-    private var _callCount = 0
-    private var _lastTopic: String?
-
-    var callCount: Int { lock.lock(); defer { lock.unlock() }; return _callCount }
-    var lastTopic: String? { lock.lock(); defer { lock.unlock() }; return _lastTopic }
-
-    func registerInterest(topic: String) async throws {
-        await withCheckedContinuation { continuation in
-            lock.lock()
-            _callCount += 1
-            _lastTopic = topic
-            self.continuation = continuation
-            lock.unlock()
-            didStart.fulfill()
-        }
-    }
-
-    func succeed() {
-        lock.lock()
-        let pending = continuation
-        continuation = nil
-        lock.unlock()
-        pending?.resume()
-    }
-}
-
-/// An `LLMProviding` double whose managed-account status fetch returns a fixed
-/// status, so AppState can exercise `/v1/me` account-ID backfill in isolation.
-private final class ManagedStatusLLMProvider: LLMProviding, @unchecked Sendable {
-    let status: ManagedAccountStatus?
-
-    init(status: ManagedAccountStatus?) {
-        self.status = status
-    }
-
-    func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
-
-    func complete(
-        _ request: LLMRequest,
-        provider: LLMProviderKind,
-        apiKey: String,
-        baseURL: String?
-    ) async throws -> LLMResponse {
-        LLMResponse(text: "")
-    }
-
-    func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? {
-        status
     }
 }

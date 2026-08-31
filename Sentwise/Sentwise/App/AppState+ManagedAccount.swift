@@ -262,6 +262,8 @@ extension AppState {
                 return trimmed
             }
             return "Sentwise account service returned HTTP \(status). Please try again."
+        case LLMError.invalidResponse(let detail):
+            return "Unexpected response from Sentwise account service. Please try again. (\(detail))"
         default:
             return nil
         }
