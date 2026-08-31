@@ -73,9 +73,11 @@ struct ManagedSignInControls: View {
     @Environment(\.openURL) private var openURL
 
     let showsGoogleOption: Bool
+    let activatesManagedProvider: Bool
 
-    init(showsGoogleOption: Bool = true) {
+    init(showsGoogleOption: Bool = true, activatesManagedProvider: Bool = true) {
         self.showsGoogleOption = showsGoogleOption
+        self.activatesManagedProvider = activatesManagedProvider
     }
 
     private var isHuntMode: Bool { ProwlHuntRuntime.current.isEnabled }
@@ -117,7 +119,7 @@ struct ManagedSignInControls: View {
                     .accessibilityIdentifier("managedCodeField")
                 HStack {
                     Button {
-                        Task { await appState.verifyManagedCode() }
+                        Task { await appState.verifyManagedCode(activatesManagedProvider: activatesManagedProvider) }
                     } label: {
                         signInLabel(busy: appState.managedBusyAction == .verifyCode, title: "Verify & connect")
                     }

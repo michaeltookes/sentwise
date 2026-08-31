@@ -208,6 +208,62 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
         XCTAssertFalse(appState.googleOAuthInterestRegistered)
     }
 
+    func testRegisteringInterestSurvivesStableIDBackfillWhileRequestIsSuspended() async {
+        let client = SuspendingGoogleOAuthInterestClient()
+        let store = InMemoryGoogleOAuthInterestStore()
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_legacy",
+            .managedSessionID: "sess_legacy"
+        ])
+        let appState = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: secrets,
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: FakeLLMProvider(result: .success(())),
+            googleOAuthInterestClient: client
+        )
+        appState.googleOAuthInterestStore = store
+        appState.isManagedSignedIn = true
+        appState.managedAccountEmail = "your Google account"
+        appState.managedAccountID = ""
+        appState.refreshGoogleOAuthInterestState()
+        let legacyKey = appState.currentManagedUsageAccountKey
+
+        let registration = Task {
+            await appState.registerGoogleOAuthInterest(isHuntMode: false)
+        }
+        await fulfillment(of: [client.didStart], timeout: 1)
+
+        appState.managedAccountID = "clerk-user:user_123"
+        let stableKey = appState.currentManagedUsageAccountKey
+        appState.managedQuotaAccountKeyAliases[legacyKey] = stableKey
+
+        client.succeed()
+        await registration.value
+
+        XCTAssertTrue(store.isRegistered(accountKey: stableKey))
+        XCTAssertFalse(store.isRegistered(accountKey: legacyKey))
+        XCTAssertTrue(appState.googleOAuthInterestRegistered)
+    }
+
+    func testUnauthorizedInterestRegistrationReconcilesSignedOutState() async {
+        let client = RecordingGoogleOAuthInterestClient(error: LLMError.managedNotSignedIn)
+        let appState = makeAppState(provider: FakeAppMailProvider(result: .success(())), interestClient: client)
+        appState.googleOAuthInterestStore = InMemoryGoogleOAuthInterestStore()
+        appState.isManagedSignedIn = true
+        appState.managedAccountEmail = "marcus@example.com"
+        appState.managedAccountID = "acct-1"
+        appState.refreshGoogleOAuthInterestState()
+
+        await appState.registerGoogleOAuthInterest(isHuntMode: false)
+
+        XCTAssertEqual(client.callCount, 1)
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertFalse(appState.canOfferGoogleOAuthInterest)
+        XCTAssertTrue(appState.canOfferGoogleOAuthInterestSignIn)
+        XCTAssertNotNil(appState.managedError)
+    }
+
     func testInterestErrorLeavesButtonOffered() async {
         let client = RecordingGoogleOAuthInterestClient(error: LLMError.transport("offline"))
         let appState = makeAppState(provider: FakeAppMailProvider(result: .success(())), interestClient: client)

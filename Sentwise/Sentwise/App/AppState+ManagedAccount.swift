@@ -68,19 +68,23 @@ extension AppState {
         }
     }
 
-    /// Verifies the code in `managedCodeInput`, completing sign-in. On success the
-    /// managed provider becomes the connected provider and drafting is enabled.
+    /// Verifies the code in `managedCodeInput`, completing sign-in. By default the
+    /// managed provider becomes the connected provider and drafting is enabled; the
+    /// Workspace guidance can sign in only to scope notification-interest capture.
     /// In Prowl hunt mode this is a deterministic, fully-offline fake: any non-empty
     /// code completes to the signed-in fixture account without any network or Clerk
     /// call (item 70). `isHuntMode` is injectable so unit tests can exercise it.
-    func verifyManagedCode(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
+    func verifyManagedCode(
+        activatesManagedProvider: Bool = true,
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
+    ) async {
         managedError = nil
         if isHuntMode {
             // Deterministic offline fake: the button completes to the fixture account.
             // This avoids macOS TextField commit timing making Prowl hunts flaky.
             let signedInEmail = pendingManagedSignInEmail
                 ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
-            if llmProviderKind != .managed { selectLLMProvider(.managed) }
+            if activatesManagedProvider, llmProviderKind != .managed { selectLLMProvider(.managed) }
             finalizeManagedSignIn(email: signedInEmail, accountID: "hunt-email:\(signedInEmail)")
             return
         }
@@ -104,7 +108,7 @@ extension AppState {
         // Sign-in succeeded: record the account tied to the pending Clerk flow.
         let signedInEmail = pendingManagedSignInEmail
             ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        if llmProviderKind != .managed {
+        if activatesManagedProvider, llmProviderKind != .managed {
             selectLLMProvider(.managed)
         }
         finalizeManagedSignIn(email: signedInEmail, accountID: result.accountIdentifier)

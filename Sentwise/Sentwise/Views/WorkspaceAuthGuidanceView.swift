@@ -129,7 +129,7 @@ struct WorkspaceAuthGuidanceView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                ManagedSignInControls(showsGoogleOption: false)
+                ManagedSignInControls(showsGoogleOption: false, activatesManagedProvider: false)
                 ManagedAccountErrorMessage()
             }
             .padding(.top, 2)

@@ -111,18 +111,26 @@ extension AppState {
             try await googleOAuthInterestClient.registerInterest(topic: Self.googleOAuthInterestTopic)
             markGoogleOAuthInterestRegisteredLocally(accountKey: accountKey)
         } catch {
-            guard isCurrentGoogleOAuthInterestAccount(accountKey) else {
+            let wasCurrentAccount = isCurrentGoogleOAuthInterestAccount(accountKey)
+            let signedOut = await reconcileManagedAccountState(after: error, provider: .managed)
+            guard wasCurrentAccount || signedOut else {
                 logger.error("Interest registration failed for stale account: \(error.localizedDescription)")
                 return
             }
-            googleOAuthInterestError = Self.message(for: error)
+            let message = Self.message(for: error)
+            if signedOut {
+                managedError = message
+            } else {
+                googleOAuthInterestError = message
+            }
             logger.error("Interest registration failed: \(error.localizedDescription)")
         }
     }
 
     private func markGoogleOAuthInterestRegisteredLocally(accountKey: String) {
-        googleOAuthInterestStore.markRegistered(accountKey: accountKey)
-        guard isCurrentGoogleOAuthInterestAccount(accountKey) else { return }
+        let resolvedAccountKey = managedQuotaAccountKeyAliases[accountKey] ?? accountKey
+        googleOAuthInterestStore.markRegistered(accountKey: resolvedAccountKey)
+        guard isCurrentGoogleOAuthInterestAccount(resolvedAccountKey) else { return }
         googleOAuthInterestRegistered = true
     }
 
