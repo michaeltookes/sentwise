@@ -207,6 +207,34 @@ neither its id nor its "Open Review Drafts" label collides with a forbidden
 substring (`Open message from` is the only `Open …` forbid, and bare `Draft` is
 not forbidden).
 
+### Answer-in-place on a needs-info draft (item 85)
+
+A `NEEDS_INFO` draft card now carries an **answer area**: one text field per
+missing-info question (`id=needsInfoAnswerField-<n>`, accessible name = the
+question), a free-text "anything else" field (`id=needsInfoExtraField`), a
+**Re-draft with my answers** button (`id=redraftWithAnswers`), and — after the
+loop fails twice — a **Write it yourself** button (`id=writeItYourself`). All of
+these mutate draft state:
+
+- **Re-draft** performs a local regenerate (the same LLM round-trip as the
+  existing `Regenerate` action), so it gets the same treatment as `Regenerate` —
+  **forbidden**.
+- **Write it yourself** and the two field families feed draft content, exactly
+  like the already-forbidden `Reply body`, so they are **forbidden** too.
+
+Their identifiers were chosen so they collide with **no** existing forbidden
+substring (bare `Draft` is not forbidden), so each is blocked by its own new
+entry added to `forbiddenSelectors`: `redraftWithAnswers`, `Re-draft`,
+`writeItYourself`, `Write it yourself`, `needsInfoAnswerField`,
+`needsInfoExtraField`. A hunt may therefore expand a needs-info draft and assert
+the answer area is present (open-and-assert), but can never type an answer or
+fire a re-draft. The offline stub (`StubManagedInferenceClient`) is
+facts-aware — a factless reply request returns `NEEDS_INFO`, and the same request
+returns a normal draft once the user's facts are in the prompt — so the whole
+loop is deterministic and network-free if a future hunt fixture seeds a
+needs-info draft and relaxes these forbids under a scoped test, mirroring the
+item-70 pattern.
+
 ### Feedback / diagnostics controls (item 36)
 
 The `menu-smoke` hunt asserts the **Report a Problem…** menu item is present, and
