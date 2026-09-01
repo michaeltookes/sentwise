@@ -173,6 +173,11 @@ struct Draft: Codable, Identifiable, Equatable {
     /// watched-folder path enqueues drafts this way for the user to complete).
     var authoredRecipients: [MailAddress]?
 
+    /// Parsed transcript context for authored post-call follow-ups. Stored only
+    /// for authored drafts so a `NEEDS_INFO` follow-up can be re-drafted with the
+    /// user's supplied facts instead of losing the original call context.
+    var followUpTranscript: ParsedTranscript?
+
     /// Whether this draft currently needs user input before approval. A model
     /// `NOT_REPLY_WORTHY` override becomes dispatchable only after the user writes
     /// a non-empty reply body.
@@ -250,6 +255,7 @@ struct Draft: Codable, Identifiable, Equatable {
         notReplyWorthy: DraftNotReplyWorthy? = nil,
         offlineQueuedDispatch: OfflineQueuedDraftDispatch? = nil,
         authoredRecipients: [MailAddress]? = nil,
+        followUpTranscript: ParsedTranscript? = nil,
         replyWorthinessOverride: Bool = false,
         replyWorthinessOverrideSource: DraftReplyWorthinessOverrideSource? = nil,
         userSuppliedFacts: UserSuppliedFacts? = nil,
@@ -278,6 +284,7 @@ struct Draft: Codable, Identifiable, Equatable {
         self.replyWorthinessOverrideSource = replyWorthinessOverrideSource
         self.offlineQueuedDispatch = offlineQueuedDispatch
         self.authoredRecipients = authoredRecipients
+        self.followUpTranscript = followUpTranscript
         self.userSuppliedFacts = userSuppliedFacts
         self.answeredRedraftCount = answeredRedraftCount
     }

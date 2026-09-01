@@ -2,7 +2,7 @@ import Foundation
 
 /// A transcript normalized to speaker-preserving plain text, ready to feed the
 /// follow-up drafting prompt (item 51).
-struct ParsedTranscript: Equatable {
+struct ParsedTranscript: Codable, Equatable {
     /// The conversation as plain text: one speaker turn per line where labels
     /// exist (`Name: said this`), timestamps and cue numbers stripped.
     var text: String

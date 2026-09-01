@@ -157,12 +157,12 @@ extension AppState {
         }
     }
 
-    /// Re-drafts a stale queued reply against the newest related source-thread
-    /// message (item 12's "regenerate" option). The old draft remains queued until
+    /// Re-drafts a queued reply or authored follow-up; the old draft remains queued until
     /// the replacement is successfully generated and persisted.
     func regeneratePendingDraft(_ draft: Draft) async {
         guard pendingDrafts.contains(where: { $0.identity == draft.identity }) else { return }
         guard !approvingDraftIDs.contains(draft.identity) else { return }
+        if draft.isAuthored { await regenerateAuthoredFollowUpDraft(draft); return }
         guard let mailbox = Self.sourceMailbox(for: draft), mailbox.supportsReplyDrafting else {
             approvalError = Self.draftMessage(for: DraftError.unsupportedSourceMailbox)
             return
@@ -429,7 +429,7 @@ extension AppState {
         return liveName == mailbox.imapName ? mailbox : .named(liveName)
     }
 
-    private func replacePendingDraft(
+    func replacePendingDraft(
         _ draft: Draft,
         with replacement: Draft,
         staleReason: StaleThreadReason?

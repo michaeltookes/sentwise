@@ -28,7 +28,7 @@ struct FollowUpGenerator {
         case summarized(String)
     }
 
-    /// Produces the follow-up email body. Throws `DraftError.emptyDraft` if the
+    /// Produces the follow-up email outcome. Throws `DraftError.emptyDraft` if the
     /// model returns nothing usable.
     func makeFollowUp(
         transcript: ParsedTranscript,
@@ -36,7 +36,7 @@ struct FollowUpGenerator {
         model: String,
         userSuppliedFacts: UserSuppliedFacts? = nil,
         complete: Complete
-    ) async throws -> String {
+    ) async throws -> DraftOutcome {
         guard !transcript.isEmpty else { throw DraftError.emptyDraft }
 
         let source: DraftSource
@@ -62,9 +62,7 @@ struct FollowUpGenerator {
             temperature: 0.6
         )
         let response = try await complete(request)
-        let body = DraftGenerator.cleaned(response.text)
-        guard !body.isEmpty else { throw DraftError.emptyDraft }
-        return body
+        return try DraftGenerator.parseOutcome(response.text)
     }
 
     // MARK: - Long-transcript summarization
@@ -170,9 +168,21 @@ struct FollowUpGenerator {
         not supported by the transcript. Output ONLY the email body — no subject line, no \
         "Subject:" prefix, and no meta commentary like "Here's a draft".
         """
+        let confidence = """
+        If you cannot write a confident, complete follow-up because it would require \
+        specific information only the user has — a fact, date, decision, number, \
+        price, or attachment that is not present anywhere in the transcript — do NOT \
+        guess or fabricate it. Instead, respond with exactly this format and \
+        nothing else:
+        \(DraftGenerator.needsInfoSentinel) <one short sentence on why you can't draft it yet>
+        - <a specific piece of information you need from the user>
+        - <another, if applicable>
+        Only use this when the follow-up genuinely depends on missing information; a \
+        follow-up that just needs normal judgment or concise wording should still be written.
+        """
         let voice = voiceProfile?.promptBlock()
             ?? "Write in a natural, concise, and professional tone."
-        return base + "\n\n" + voice
+        return base + "\n\n" + confidence + "\n\n" + voice
     }
 
     private static func userPrompt(

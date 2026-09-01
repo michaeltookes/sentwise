@@ -175,17 +175,44 @@ final class UserSuppliedFactsTests: XCTestCase {
         XCTAssertTrue(secondText.contains("canned Sentwise AI response"))
     }
 
-    func testStubKeepsCannedResponseForNonReplyRequests() async throws {
-        // A follow-up/summary request (no needs-info sentinel in the system prompt)
-        // must never come back NEEDS_INFO, or a follow-up body would be corrupted.
+    func testStubReturnsNeedsInfoForFactlessFollowUpThenNormalWithFacts() async throws {
         let stub = StubManagedInferenceClient()
-        let followUp = LLMRequest(
-            system: FollowUpGenerator.systemPrompt(voiceProfile: nil),
+        let followUpSystem = FollowUpGenerator.systemPrompt(voiceProfile: nil)
+
+        let factless = LLMRequest(
+            system: followUpSystem,
             messages: [LLMMessage(role: .user, content: "Write the follow-up email …")],
             model: "m"
         )
+        let firstText = try await stub.complete(factless).text
+        XCTAssertTrue(firstText.hasPrefix(DraftGenerator.needsInfoSentinel))
 
-        let text = try await stub.complete(followUp).text
+        let withFacts = LLMRequest(
+            system: followUpSystem,
+            messages: [LLMMessage(
+                role: .user,
+                content: "Write the follow-up email …\n\n" + (UserFactsPrompt.block(
+                    UserSuppliedFacts(answers: [.init(question: "Q", response: "A")])
+                ) ?? "")
+            )],
+            model: "m"
+        )
+        let secondText = try await stub.complete(withFacts).text
+        XCTAssertFalse(secondText.hasPrefix(DraftGenerator.needsInfoSentinel))
+        XCTAssertTrue(secondText.contains("canned Sentwise AI response"))
+    }
+
+    func testStubKeepsCannedResponseForNonDraftRequests() async throws {
+        // A summary/connection-test style request (no needs-info sentinel in the system prompt)
+        // must never come back NEEDS_INFO, or a follow-up body would be corrupted.
+        let stub = StubManagedInferenceClient()
+        let summary = LLMRequest(
+            system: "You are condensing a call transcript so a follow-up email can be written from it.",
+            messages: [LLMMessage(role: .user, content: "Transcript:\n\nMarcus: recap.")],
+            model: "m"
+        )
+
+        let text = try await stub.complete(summary).text
 
         XCTAssertFalse(text.hasPrefix(DraftGenerator.needsInfoSentinel))
     }

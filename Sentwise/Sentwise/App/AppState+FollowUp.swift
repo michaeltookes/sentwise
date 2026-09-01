@@ -47,9 +47,9 @@ extension AppState {
         let parsed = ingested.parsed()
         guard !parsed.isEmpty else { throw DraftError.emptyDraft }
 
-        let body: String
+        let outcome: DraftOutcome
         do {
-            body = try await makeFollowUpBody(parsed: parsed, llmConfiguration: llmConfiguration)
+            outcome = try await makeFollowUpOutcome(parsed: parsed, llmConfiguration: llmConfiguration)
         } catch {
             await reconcileManagedAccountState(after: error, provider: llmConfiguration.provider)
             throw error
@@ -61,13 +61,14 @@ extension AppState {
         if let shouldCommit, !shouldCommit() {
             throw FollowUpCommitError.sourceChanged
         }
-        let draft = makeAuthoredDraft(
-            body: finalizedDraftBody(body),
+        let draft = makeAuthoredDraft(AuthoredDraftSpec(
+            outcome: outcome,
             recipients: Self.dedupedRecipients(recipients),
             subject: Self.followUpSubject(subject, suggestedTitle: ingested.suggestedTitle),
             model: llmConfiguration.model,
-            credentials: credentials
-        )
+            credentials: credentials,
+            followUpTranscript: parsed
+        ))
         do {
             try enqueuePendingDraft(draft)
         } catch {
@@ -122,16 +123,18 @@ extension AppState {
 
     // MARK: - Helpers
 
-    private func makeFollowUpBody(
+    func makeFollowUpOutcome(
         parsed: ParsedTranscript,
-        llmConfiguration: DraftLLMConfiguration
-    ) async throws -> String {
+        llmConfiguration: DraftLLMConfiguration,
+        userSuppliedFacts: UserSuppliedFacts? = nil
+    ) async throws -> DraftOutcome {
         let profile = voiceProfile
         let runner = retryRunner
         return try await FollowUpGenerator().makeFollowUp(
             transcript: parsed,
             voiceProfile: profile,
-            model: llmConfiguration.model
+            model: llmConfiguration.model,
+            userSuppliedFacts: userSuppliedFacts
         ) { [llm] request in
             try await runner.run(classify: ResilienceClassifier.retryDecision(for:)) {
                 try await llm.complete(
@@ -144,31 +147,39 @@ extension AppState {
         }
     }
 
-    private func makeAuthoredDraft(
-        body: String,
-        recipients: [MailAddress],
-        subject: String,
-        model: String,
-        credentials: MailAccountCredentials
-    ) -> Draft {
+    struct AuthoredDraftSpec {
+        var outcome: DraftOutcome
+        var recipients: [MailAddress]
+        var subject: String
+        var model: String
+        var credentials: MailAccountCredentials
+        var followUpTranscript: ParsedTranscript
+        var id: UInt32?
+    }
+
+    func makeAuthoredDraft(_ spec: AuthoredDraftSpec) -> Draft {
         Draft(
-            id: uniqueAuthoredDraftID(),
+            id: spec.id ?? uniqueAuthoredDraftID(),
             sourceUIDValidity: nil,
-            sourceAccountEmail: credentials.email,
-            sourceMailHost: credentials.host,
-            sourceMailPort: credentials.port,
+            sourceAccountEmail: spec.credentials.email,
+            sourceMailHost: spec.credentials.host,
+            sourceMailPort: spec.credentials.port,
             sourceMailbox: nil,
-            sourceSubject: subject,
+            sourceSubject: spec.subject,
             // Mirror the first recipient into sourceFrom so the review card and
             // notification can show a name; recipients drive actual dispatch.
-            sourceFrom: recipients.first,
+            sourceFrom: spec.recipients.first,
             sourceReplyTo: nil,
             sourceMessageID: nil,
-            replySubject: subject,
-            body: body,
-            model: model,
+            incomingBody: Self.truncatedIncomingBody(spec.followUpTranscript.text),
+            replySubject: spec.subject,
+            body: finalizedDraftBody(Self.body(from: spec.outcome)),
+            model: spec.model,
             generatedAt: Date(),
-            authoredRecipients: recipients
+            needsInfo: Self.needsInfo(from: spec.outcome),
+            notReplyWorthy: Self.notReplyWorthy(from: spec.outcome),
+            authoredRecipients: spec.recipients,
+            followUpTranscript: spec.followUpTranscript
         )
     }
 

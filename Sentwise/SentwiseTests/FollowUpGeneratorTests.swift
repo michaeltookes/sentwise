@@ -26,19 +26,40 @@ final class FollowUpGeneratorTests: XCTestCase {
         let recorder = RequestRecorder(defaultResponse: "Hi team,\n\nGreat call today.")
         let transcript = ParsedTranscript(text: "Marcus: Let's ship Friday.", hasSpeakerLabels: true)
 
-        let body = try await FollowUpGenerator().makeFollowUp(
+        let outcome = try await FollowUpGenerator().makeFollowUp(
             transcript: transcript,
             voiceProfile: nil,
             model: "test-model",
             complete: recorder.complete
         )
 
-        XCTAssertEqual(body, "Hi team,\n\nGreat call today.")
+        XCTAssertEqual(outcome, .ready("Hi team,\n\nGreat call today."))
         XCTAssertEqual(recorder.requests.count, 1)
         let request = try XCTUnwrap(recorder.requests.first)
         XCTAssertTrue(request.system?.contains("follow-up email") ?? false)
         XCTAssertTrue(request.messages.first?.content.contains("Marcus: Let's ship Friday.") ?? false)
         XCTAssertTrue(request.messages.first?.content.contains("labels each speaker") ?? false)
+    }
+
+    func testNeedsInfoOutputIsParsedForFollowUps() async throws {
+        let recorder = RequestRecorder(defaultResponse: """
+        NEEDS_INFO: I need one planning detail.
+        - The launch date
+        """)
+        let transcript = ParsedTranscript(text: "Marcus: We need to confirm the launch date.", hasSpeakerLabels: true)
+
+        let outcome = try await FollowUpGenerator().makeFollowUp(
+            transcript: transcript,
+            voiceProfile: nil,
+            model: "test-model",
+            complete: recorder.complete
+        )
+
+        XCTAssertEqual(outcome, .needsInfo(DraftNeedsInfo(
+            summary: "I need one planning detail.",
+            missing: ["The launch date"]
+        )))
+        XCTAssertTrue(recorder.requests.first?.system?.contains(DraftGenerator.needsInfoSentinel) ?? false)
     }
 
     func testInjectsUserSuppliedFactsBlockForFollowUps() async throws {
@@ -120,13 +141,16 @@ final class FollowUpGeneratorTests: XCTestCase {
             .joined(separator: "\n")
         let transcript = ParsedTranscript(text: longText, hasSpeakerLabels: true)
 
-        let body = try await generator.makeFollowUp(
+        let outcome = try await generator.makeFollowUp(
             transcript: transcript,
             voiceProfile: nil,
             model: "m",
             complete: recorder.complete
         )
 
+        guard case .ready(let body) = outcome else {
+            return XCTFail("Expected ready follow-up, got \(outcome)")
+        }
         XCTAssertFalse(body.isEmpty)
         // More than one call means summarization happened (>=1 summary + 1 draft).
         XCTAssertGreaterThan(recorder.requests.count, 1)
