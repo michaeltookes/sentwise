@@ -44,7 +44,7 @@ struct DraftView: View {
     @State private var countdownRemaining: Int?
     @State private var countdownTask: Task<Void, Never>?
     @State private var hasRecordedTerminalFeedback = false
-    @State private var shouldRecordAbandonmentAfterFailedDispatch = false
+    @State private var deferredPreviewAbandonmentDraft: Draft?
 
     init(draft: Draft) {
         _displayedDraft = State(initialValue: draft)
@@ -273,7 +273,7 @@ struct DraftView: View {
                 force: force
             )
             hasRecordedTerminalFeedback = true
-            shouldRecordAbandonmentAfterFailedDispatch = false
+            deferredPreviewAbandonmentDraft = nil
             staleReason = nil
             staleApprovalSendBehavior = nil
         } catch let error as DraftDispatchError {
@@ -283,11 +283,11 @@ struct DraftView: View {
                 dispatchError = AppState.draftMessage(for: error)
                 staleApprovalSendBehavior = nil
             }
-            recordAbandonmentAfterFailedDispatchIfNeeded()
+            recordDeferredPreviewAbandonmentIfNeeded()
         } catch {
             dispatchError = AppState.draftMessage(for: error)
             staleApprovalSendBehavior = nil
-            recordAbandonmentAfterFailedDispatchIfNeeded()
+            recordDeferredPreviewAbandonmentIfNeeded()
         }
     }
 
@@ -308,6 +308,7 @@ struct DraftView: View {
         } catch {
             dispatchError = AppState.draftMessage(for: error)
         }
+        recordDeferredPreviewAbandonmentIfNeeded()
     }
 
     private var isBusy: Bool {
@@ -327,18 +328,25 @@ struct DraftView: View {
         guard shouldRecordPreviewAbandonment else {
             return
         }
+        var abandonedDraft = displayedDraft
+        abandonedDraft.applyEditedBody(editedBody)
         guard !isDispatching || allowWhileDispatching else {
-            shouldRecordAbandonmentAfterFailedDispatch = true
+            deferredPreviewAbandonmentDraft = abandonedDraft
             return
         }
-        displayedDraft.applyEditedBody(editedBody)
-        appState.recordDraftPreviewAbandonment(for: displayedDraft)
+        appState.recordDraftPreviewAbandonment(for: abandonedDraft)
         hasRecordedTerminalFeedback = true
-        shouldRecordAbandonmentAfterFailedDispatch = false
+        deferredPreviewAbandonmentDraft = nil
     }
 
-    private func recordAbandonmentAfterFailedDispatchIfNeeded() {
-        guard shouldRecordAbandonmentAfterFailedDispatch else { return }
-        recordPreviewAbandonmentIfNeeded(allowWhileDispatching: true)
+    private func recordDeferredPreviewAbandonmentIfNeeded() {
+        guard let abandonedDraft = deferredPreviewAbandonmentDraft else { return }
+        guard !hasRecordedTerminalFeedback else {
+            deferredPreviewAbandonmentDraft = nil
+            return
+        }
+        appState.recordDraftPreviewAbandonment(for: abandonedDraft)
+        hasRecordedTerminalFeedback = true
+        deferredPreviewAbandonmentDraft = nil
     }
 }

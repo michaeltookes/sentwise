@@ -55,6 +55,8 @@ paths succeed. Closing a manual preview before approval records `abandoned` with
 the same local-only hashed identity and provenance fields, but no dispatch or
 deny reason; if the sheet is closed while approval is still in flight, a later
 dispatch failure records the same abandonment rather than dropping the signal.
+The same deferred capture applies if the sheet closes while regeneration is in
+flight; completion flushes the snapshot that was visible when the user dismissed.
 
 ### Edit magnitude
 
