@@ -284,6 +284,20 @@ the *mailbox* (IMAP) account. The AI tab keeps only a one-line
 (`openSubscriptionFromAI`) that switches tabs via `openSettingsHandler`; the
 usage bar is never rendered in two places.
 
+The **Analytics** tab (`SettingsTab.analytics`, after "Subscription"; item 84) is
+a second, strictly read-only reader of `managedQuota`. Its "Quota & usage"
+section shows the current-window **numbers/text only** — drafts used/limit/
+remaining, a subdued tokens caption, the reset time, and the current window's
+`extraPurchased` — via the pure `AnalyticsQuotaPresentation` (returns `nil` →
+short caption when the quota is unknown/signed out). It does **not** re-render
+`ManagedUsageView`'s progress bar; instead it links back to Subscription
+(`openSettingsHandler(.subscription)`) so the allowance bar still lives in exactly
+one place. Its refresh rides the same outer-container `.task { refreshManaged
+Quota() }` pattern. A **56c seam** is noted there: with no billing-period concept
+yet, the tab surfaces only the current-window `extraPurchased` and never
+synthesizes a monthly "times bought extra" count. The tab's drafting-quality
+insights read the item-83 store (see `docs/approval-signal-learning.md`).
+
 ### Status shape (`GET /v1/me`)
 
 `ManagedAccountStatus` (`Services/LLM/ManagedQuota.swift`) is `Codable` and
