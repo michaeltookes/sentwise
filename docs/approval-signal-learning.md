@@ -112,12 +112,13 @@ already open, additional deny requests are ignored so the displayed prompt canno
 silently switch to a different draft.
 
 The activity history's existing **Denied** event gains the reason **code** in its
-detail (code only). The **Other** free text is the one user-authored value in the
-whole system: it is stored only in the feedback store — never in the activity
-history, never logged — and it is Unicode-scalar capped before storage so a
-pasted blob or very large combined grapheme cannot make the feedback file or
-later rewrites unbounded. It is the value that must be scrubbed before any future
-off-device telemetry send (item 35).
+stored detail (code only) and renders known codes as visible reason labels. The
+**Other** free text is the one user-authored value in the whole system: it is
+stored only in the feedback store — never in the activity history, never logged —
+and it is Unicode-scalar capped before storage so a pasted blob or very large
+combined grapheme cannot make the feedback file or later rewrites unbounded. It
+is the value that must be scrubbed before any future off-device telemetry send
+(item 35).
 
 ## Privacy summary
 

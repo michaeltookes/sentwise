@@ -108,6 +108,9 @@ struct ActivityEvent: Codable, Identifiable, Equatable {
     /// The free-form detail currently rendered in the activity-history row.
     var activityHistoryVisibleDetail: String? {
         guard let detail else { return nil }
+        if kind == .denied {
+            return Self.visibleDenyReasonDetail(from: detail)
+        }
         return kind.showsFailureDetail || kind.showsSuccessDetail ? detail : nil
     }
 
@@ -120,6 +123,13 @@ struct ActivityEvent: Codable, Identifiable, Equatable {
         if let detail = activityHistoryVisibleDetail { parts.append(detail) }
         parts.append(timestamp.formatted(date: .abbreviated, time: .shortened))
         return parts.joined(separator: ", ")
+    }
+
+    private static func visibleDenyReasonDetail(from rawCode: String) -> String? {
+        let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else { return nil }
+        let title = DenyReasonCode(rawValue: code)?.displayTitle ?? code
+        return "Reason: \(title)"
     }
 }
 
@@ -212,7 +222,7 @@ enum ActivityEventKind: String, Codable, Equatable, CaseIterable {
     /// Whether rows should render a non-error detail such as an edit note.
     var showsSuccessDetail: Bool {
         switch self {
-        case .approvedSent, .approvedSaved: return true
+        case .approvedSent, .approvedSaved, .denied: return true
         default: return false
         }
     }
