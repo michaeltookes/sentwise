@@ -29,6 +29,12 @@ final class DraftFeedbackRecordTests: XCTestCase {
         )
     }
 
+    func testProvenanceCodesAreStable() {
+        XCTAssertEqual(DraftFeedbackProvenance.watcher.rawValue, "watcher")
+        XCTAssertEqual(DraftFeedbackProvenance.draftAnyway.rawValue, "draftAnyway")
+        XCTAssertEqual(DraftFeedbackProvenance.authored.rawValue, "authored")
+    }
+
     func testDenyReasonDropsOtherTextForNonOtherCode() {
         let reason = DenyReason(code: .wrongTone, otherText: "should be discarded")
         XCTAssertNil(reason.otherText)

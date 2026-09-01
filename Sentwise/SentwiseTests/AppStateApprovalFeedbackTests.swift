@@ -12,7 +12,8 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
         body: String = "Thursday works!",
         originalBody: String? = nil,
         replyWorthinessOverride: Bool = false,
-        userSuppliedFacts: UserSuppliedFacts? = nil
+        userSuppliedFacts: UserSuppliedFacts? = nil,
+        authoredRecipients: [MailAddress]? = nil
     ) -> Draft {
         Draft(
             id: id,
@@ -29,6 +30,7 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
             originalBody: originalBody,
             model: "claude-sonnet-4-6",
             generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            authoredRecipients: authoredRecipients,
             replyWorthinessOverride: replyWorthinessOverride,
             userSuppliedFacts: userSuppliedFacts
         )
@@ -127,6 +129,15 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
         XCTAssertEqual(appState.draftFeedbackRecords.first?.provenance, .draftAnyway)
     }
 
+    func testApproveAuthoredDraftRecordsAuthoredProvenance() async {
+        let draft = pendingDraft(authoredRecipients: [MailAddress(email: "dana@example.com")])
+        let (appState, _) = makeAppState(seed: [draft])
+
+        await appState.approveDraft(draft)
+
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.provenance, .authored)
+    }
+
     func testPreviewApprovalRecordsEditedSentFeedback() async throws {
         let draft = pendingDraft(
             body: "Thursday works for me.",
@@ -205,6 +216,16 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
         // Activity detail is the code, and never the free text.
         XCTAssertEqual(appState.activityEvents.first?.detail, "other")
         XCTAssertNil(appState.activityEvents.first(where: { $0.detail?.contains("newsletter") == true }))
+    }
+
+    func testDenyAuthoredDraftRecordsAuthoredProvenance() {
+        let draft = pendingDraft(authoredRecipients: [MailAddress(email: "dana@example.com")])
+        let (appState, _) = makeAppState(seed: [draft])
+
+        appState.finalizeDenyDraft(draft, reason: DenyReason(code: .handleLater))
+
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.outcome, .denied)
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.provenance, .authored)
     }
 
     func testLegacyDenyRecordsDeniedWithNilReason() {

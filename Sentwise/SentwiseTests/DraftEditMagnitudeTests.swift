@@ -58,4 +58,30 @@ final class DraftEditMagnitudeTests: XCTestCase {
             accuracy: 1e-12
         )
     }
+
+    func testLargeEditedBodiesUseBoundedApproximation() {
+        let length = Int(Double(DraftEditMagnitude.exactDistanceCellLimit).squareRoot()) + 1
+        let middle = length / 2
+        var edited = Array(String(repeating: "a", count: length))
+        edited[middle] = "b"
+
+        XCTAssertGreaterThan(length * length, DraftEditMagnitude.exactDistanceCellLimit)
+        XCTAssertEqual(
+            DraftEditMagnitude.ratio(original: String(repeating: "a", count: length), final: String(edited)),
+            1 / Double(length),
+            accuracy: 1e-12
+        )
+    }
+
+    func testLargeRewriteMagnitudeIsBounded() {
+        let length = Int(Double(DraftEditMagnitude.exactDistanceCellLimit).squareRoot()) + 1
+
+        XCTAssertEqual(
+            DraftEditMagnitude.ratio(
+                original: String(repeating: "a", count: length),
+                final: String(repeating: "b", count: length)
+            ),
+            1
+        )
+    }
 }

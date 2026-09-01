@@ -4,8 +4,9 @@ import Foundation
 /// (item 83, Phase 1). It quantifies item 19's captured `originalBody` vs. the
 /// final `body` as a single normalized number the feedback store can learn from.
 ///
-/// **Metric (documented, fixed):** the normalized character-level Levenshtein
-/// (edit-distance) ratio.
+/// **Metric (documented, fixed):** the normalized character-level edit-distance
+/// ratio: exact Levenshtein for ordinary drafts, with a bounded approximation for
+/// unusually large pasted edits.
 ///
 ///   `magnitude = levenshtein(a, b) / max(a.count, b.count)`
 ///
@@ -18,9 +19,9 @@ import Foundation
 ///
 /// Character-level (over changed-line fraction) is deliberate: a one-word fix
 /// inside a long paragraph should read as a small edit, not a whole changed line.
-/// Cost is `O(a.count * b.count)` with `O(min)` memory (two-row DP); draft bodies
-/// are short and this runs once per approval, so it is cheap in practice.
 enum DraftEditMagnitude {
+
+    static let exactDistanceCellLimit = 250_000
 
     /// The normalized edit magnitude in `0...1`. Both empty (after normalization)
     /// returns `0`.
@@ -28,9 +29,11 @@ enum DraftEditMagnitude {
         let source = Array(normalize(original))
         let target = Array(normalize(final))
         if source.isEmpty && target.isEmpty { return 0 }
-        let distance = levenshtein(source, target)
         let denominator = max(source.count, target.count)
         guard denominator > 0 else { return 0 }
+        let distance = canComputeExactDistance(sourceCount: source.count, targetCount: target.count)
+            ? levenshtein(source, target)
+            : approximateDistance(source, target)
         let ratio = Double(distance) / Double(denominator)
         return min(1, max(0, ratio))
     }
@@ -40,6 +43,33 @@ enum DraftEditMagnitude {
     static func normalize(_ text: String) -> String {
         let collapsed = text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
         return collapsed
+    }
+
+    private static func canComputeExactDistance(sourceCount: Int, targetCount: Int) -> Bool {
+        if sourceCount == 0 || targetCount == 0 { return true }
+        return sourceCount <= exactDistanceCellLimit / targetCount
+    }
+
+    /// Linear fallback for long pasted edits: trim shared prefix and suffix, then
+    /// treat the remaining span as a replace/insert/delete block.
+    private static func approximateDistance(_ source: [Character], _ target: [Character]) -> Int {
+        var prefixLength = 0
+        while prefixLength < source.count,
+              prefixLength < target.count,
+              source[prefixLength] == target[prefixLength] {
+            prefixLength += 1
+        }
+
+        var suffixLength = 0
+        while suffixLength < source.count - prefixLength,
+              suffixLength < target.count - prefixLength,
+              source[source.count - 1 - suffixLength] == target[target.count - 1 - suffixLength] {
+            suffixLength += 1
+        }
+
+        let sourceRemainder = source.count - prefixLength - suffixLength
+        let targetRemainder = target.count - prefixLength - suffixLength
+        return max(sourceRemainder, targetRemainder)
     }
 
     /// Character-level Levenshtein distance with two-row dynamic programming.

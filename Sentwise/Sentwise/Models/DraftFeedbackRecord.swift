@@ -25,7 +25,7 @@ enum DraftFeedbackDispatch: String, Codable, Equatable {
 
 /// Where the draft came from, so Phase 2 can weight a deny by how the draft was
 /// surfaced. `draftAnyway` is the user's explicit skip-log "Draft anyway"
-/// override; everything else is the watcher.
+/// override; `authored` is a user-started follow-up; `watcher` is an inbox draft.
 ///
 /// **Seam (item 68):** watcher provenance is currently a single bucket. Item 68's
 /// header-fetch-degradation diagnosis (a draft that slipped past a *degraded*
@@ -34,6 +34,7 @@ enum DraftFeedbackDispatch: String, Codable, Equatable {
 enum DraftFeedbackProvenance: String, Codable, Equatable {
     case watcher
     case draftAnyway
+    case authored
 }
 
 /// A stable, single-select reason the user gives when denying a draft (owner
@@ -113,7 +114,7 @@ struct DraftFeedbackRecord: Codable, Equatable, Identifiable {
     var editMagnitude: Double?
     /// The reason code (+ optional free text) — set for `.denied` only.
     var denyReason: DenyReason?
-    /// Watcher vs. "Draft anyway" override.
+    /// Watcher vs. "Draft anyway" override vs. user-authored follow-up.
     var provenance: DraftFeedbackProvenance
     /// Whether the user answered a `NEEDS_INFO` prompt before this outcome
     /// (item 85's `Draft.wasAnswered`) — records the "answered-then-approved" case.

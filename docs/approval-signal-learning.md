@@ -32,16 +32,17 @@ body, or sender the identity is derived from.
 | `dispatch` | `sent` vs `saved` — approvals only. |
 | `editMagnitude` | Normalized edit size in `0...1` — `approvedAfterEdit` only. |
 | `denyReason` | Reason code (+ optional Other free text) — denials only. |
-| `provenance` | `watcher` vs `draftAnyway` (a "Draft anyway" skip-log override). |
+| `provenance` | `watcher` vs `draftAnyway` (a "Draft anyway" skip-log override) vs `authored` (a user-started follow-up). |
 | `answeredNeedsInfo` | Whether the user answered a `NEEDS_INFO` prompt (item 85) before this outcome. |
 | `draftIdentityHash` | SHA-256 hex of the draft identity — never the raw identity. |
 
 `approvedAsIs` vs `approvedAfterEdit` comes from item 19's `wasEdited`
-(`originalBody != body`). Provenance is derived from `replyWorthinessOverride`;
-`watcher` is a single bucket today — item 68's header-fetch-degradation
-diagnosis may later split it (a draft that slipped past a *degraded*
-reply-worthiness check vs. a clean one), and `DraftFeedbackProvenance` is where
-that refinement would land.
+(`originalBody != body`). Authored follow-ups record `authored` provenance before
+falling back to `replyWorthinessOverride`; non-authored drafts record `draftAnyway`
+for the skip-log override and `watcher` otherwise. `watcher` is a single bucket
+today — item 68's header-fetch-degradation diagnosis may later split it (a draft
+that slipped past a *degraded* reply-worthiness check vs. a clean one), and
+`DraftFeedbackProvenance` is where that refinement would land.
 
 The approval signal is recorded only after a send or save succeeds. Queued
 approvals share the dispatch choke point, including when an offline-queued
@@ -52,7 +53,7 @@ paths succeed.
 ### Edit magnitude
 
 For an edited approval, the magnitude quantifies how much you rewrote the draft
-as the **normalized character-level Levenshtein (edit-distance) ratio**:
+as the **normalized character-level edit-distance ratio**:
 
 ```
 magnitude = levenshtein(a, b) / max(a.count, b.count)
@@ -65,7 +66,10 @@ tracks substantive content edits, not formatting churn. The result is clamped to
 `0...1`: `0` = identical after normalization, `1` = a complete rewrite.
 Character-level (rather than changed-line fraction) is deliberate — a one-word
 fix inside a long paragraph reads as a small edit, not a whole changed line. The
-metric is pure (`DraftEditMagnitude.ratio`) and unit-tested.
+exact Levenshtein path is capped; unusually large pasted edits use a linear
+common-prefix/suffix approximation so post-dispatch feedback capture cannot freeze
+the main actor before approval cleanup. The metric is pure
+(`DraftEditMagnitude.ratio`) and unit-tested.
 
 ## Deny-reason picker
 
