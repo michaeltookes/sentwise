@@ -330,4 +330,21 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
             $0.timestamp == Date(timeIntervalSince1970: 0)
         })
     }
+
+    func testFlushDraftFeedbackSyncWritesCurrentSnapshot() {
+        let (appState, persistence) = makeAppState()
+        let record = DraftFeedbackRecord(
+            outcome: .denied,
+            denyReason: DenyReason(code: .wrongTone),
+            provenance: .watcher,
+            answeredNeedsInfo: false,
+            draftIdentityHash: DraftFeedbackRecord.hashedIdentity("me@gmail.com|INBOX|10|1")
+        )
+
+        appState.draftFeedbackRecords = [record]
+        appState.flushDraftFeedbackSync()
+
+        XCTAssertEqual(persistence.draftFeedbackSyncSaveCount, 1)
+        XCTAssertEqual(persistence.draftFeedback, [record])
+    }
 }

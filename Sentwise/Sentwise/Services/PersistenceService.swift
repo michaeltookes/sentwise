@@ -51,6 +51,9 @@ protocol PersistenceProvider {
     /// Persists the feedback store (replaces the previous one). Append-and-cap is
     /// the caller's responsibility, mirroring the activity history.
     func saveDraftFeedback(_ records: [DraftFeedbackRecord])
+    /// Persists the feedback store synchronously, used during graceful termination
+    /// so recent terminal draft signals are durable before process exit.
+    func saveDraftFeedbackSync(_ records: [DraftFeedbackRecord]) throws
 }
 
 /// File-based persistence for non-secret application settings.
@@ -334,6 +337,18 @@ final class PersistenceService: PersistenceProvider {
             } catch {
                 logger.error("Failed to save draft feedback: \(error.localizedDescription)")
             }
+        }
+    }
+
+    func saveDraftFeedbackSync(_ records: [DraftFeedbackRecord]) throws {
+        do {
+            try ioQueue.sync { [encoder, draftFeedbackURL] in
+                let data = try encoder.encode(records)
+                try data.write(to: draftFeedbackURL, options: .atomic)
+            }
+        } catch {
+            logger.error("Failed to save draft feedback (sync): \(error.localizedDescription)")
+            throw error
         }
     }
 }

@@ -123,6 +123,10 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         }
     }
 
+    func saveDraftFeedbackSync(_ records: [DraftFeedbackRecord]) throws {
+        saveDraftFeedback(records)
+    }
+
     private func withLock<Value>(_ body: () throws -> Value) rethrows -> Value {
         lock.lock()
         defer { lock.unlock() }

@@ -19,8 +19,9 @@ closed without approval, so preview dismissals do not silently bias acceptance
 rates. The store is a JSON file
 (`~/Library/Application Support/Sentwise/DraftFeedback.json`) written through the
 same persistence layer as pending drafts and the activity log, so it survives
-relaunch. It is append-only, newest first, and capped at 2000 records (oldest
-dropped) so it can't grow unbounded.
+relaunch. Graceful app termination synchronously flushes the current feedback
+snapshot before process exit. It is append-only, newest first, and capped at 2000
+records (oldest dropped) so it can't grow unbounded.
 
 Each record holds **codes, numbers, and hashes only** — with a single exception,
 the deny "Other" free text (below). In particular the draft is referenced by a
@@ -113,9 +114,10 @@ silently switch to a different draft.
 The activity history's existing **Denied** event gains the reason **code** in its
 detail (code only). The **Other** free text is the one user-authored value in the
 whole system: it is stored only in the feedback store — never in the activity
-history, never logged — and it is capped before storage so a pasted blob cannot
-make the feedback file or later rewrites unbounded. It is the value that must be
-scrubbed before any future off-device telemetry send (item 35).
+history, never logged — and it is Unicode-scalar capped before storage so a
+pasted blob or very large combined grapheme cannot make the feedback file or
+later rewrites unbounded. It is the value that must be scrubbed before any future
+off-device telemetry send (item 35).
 
 ## Privacy summary
 

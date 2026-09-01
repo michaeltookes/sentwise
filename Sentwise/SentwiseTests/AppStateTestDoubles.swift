@@ -13,6 +13,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     private(set) var activityEvents: [ActivityEvent]
     private(set) var draftFeedback: [DraftFeedbackRecord]
     private(set) var draftFeedbackSaveCount = 0
+    private(set) var draftFeedbackSyncSaveCount = 0
     private(set) var settingsSaveCount = 0
     private(set) var savedSettingsHistory: [Settings] = []
     private(set) var processedSaveCount = 0
@@ -25,6 +26,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     var pendingDraftSaveError: Error?
     var skippedMessageSaveError: Error?
     var approvedDraftSaveError: Error?
+    var draftFeedbackSyncSaveError: Error?
 
     init(
         settings: Settings = .default,
@@ -116,6 +118,14 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     func saveDraftFeedback(_ records: [DraftFeedbackRecord]) {
         draftFeedback = records
         draftFeedbackSaveCount += 1
+    }
+
+    func saveDraftFeedbackSync(_ records: [DraftFeedbackRecord]) throws {
+        if let draftFeedbackSyncSaveError {
+            throw draftFeedbackSyncSaveError
+        }
+        draftFeedback = records
+        draftFeedbackSyncSaveCount += 1
     }
 }
 

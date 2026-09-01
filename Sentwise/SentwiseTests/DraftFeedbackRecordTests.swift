@@ -54,10 +54,23 @@ final class DraftFeedbackRecordTests: XCTestCase {
     }
 
     func testDenyReasonCapsOtherText() {
-        let longText = String(repeating: "x", count: DenyReason.otherTextCharacterLimit + 50)
+        let longText = String(repeating: "x", count: DenyReason.otherTextUnicodeScalarLimit + 50)
         let reason = DenyReason(code: .other, otherText: longText)
 
-        XCTAssertEqual(reason.otherText?.count, DenyReason.otherTextCharacterLimit)
+        XCTAssertEqual(reason.otherText?.unicodeScalars.count, DenyReason.otherTextUnicodeScalarLimit)
+    }
+
+    func testDenyReasonCapsOtherTextByUnicodeScalars() {
+        let combiningAccent = "\u{0301}"
+        let longCluster = "a" + String(
+            repeating: combiningAccent,
+            count: DenyReason.otherTextUnicodeScalarLimit + 50
+        )
+        let reason = DenyReason(code: .other, otherText: longCluster)
+
+        XCTAssertEqual(reason.otherText?.count, 1)
+        XCTAssertEqual(reason.otherText?.unicodeScalars.count, DenyReason.otherTextUnicodeScalarLimit)
+        XCTAssertLessThan(reason.otherText?.utf8.count ?? 0, longCluster.utf8.count)
     }
 
     func testEncodedRecordHoldsOnlyCodesNumbersHashes() throws {

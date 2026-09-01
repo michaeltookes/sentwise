@@ -36,6 +36,16 @@ extension AppState {
         feedbackLogger.info("Recorded draft feedback (\(record.outcome.rawValue, privacy: .public))")
     }
 
+    /// Synchronously persists the current feedback snapshot. Because production
+    /// persistence uses one serial queue, this also waits behind older queued writes.
+    func flushDraftFeedbackSync() {
+        do {
+            try persistence.saveDraftFeedbackSync(draftFeedbackRecords)
+        } catch {
+            feedbackLogger.error("Failed to flush draft feedback synchronously: \(error.localizedDescription)")
+        }
+    }
+
     /// Records an approval outcome for a draft that just dispatched (item 83).
     /// `approvedAsIs` vs. `approvedAfterEdit` comes from item 19's `wasEdited`;
     /// the edit magnitude is computed only for edited approvals.

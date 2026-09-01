@@ -82,7 +82,7 @@ enum DenyReasonCode: String, Codable, Equatable, CaseIterable {
 /// history, never a log line, and (item 35) it is the value that must be scrubbed
 /// before any future off-device telemetry send.
 struct DenyReason: Codable, Equatable {
-    static let otherTextCharacterLimit = 500
+    static let otherTextUnicodeScalarLimit = 500
 
     var code: DenyReasonCode
     /// Present (non-empty) only when `code == .other`.
@@ -92,7 +92,9 @@ struct DenyReason: Codable, Equatable {
         self.code = code
         if code == .other {
             let trimmed = (otherText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            self.otherText = trimmed.isEmpty ? nil : String(trimmed.prefix(Self.otherTextCharacterLimit))
+            self.otherText = trimmed.isEmpty ? nil : String(
+                trimmed.unicodeScalars.prefix(Self.otherTextUnicodeScalarLimit)
+            )
         } else {
             self.otherText = nil
         }
