@@ -5,8 +5,8 @@ import Foundation
 /// final `body` as a single normalized number the feedback store can learn from.
 ///
 /// **Metric (documented, fixed):** the normalized character-level edit-distance
-/// ratio: exact Levenshtein for ordinary drafts, with a bounded sparse-aware
-/// approximation for unusually large pasted edits.
+/// ratio: exact Levenshtein for ordinary drafts, with bounded sparse-aware and
+/// moved-block-aware fallbacks for unusually large pasted edits.
 ///
 ///   `magnitude = levenshtein(a, b) / max(a.count, b.count)`
 ///
@@ -23,6 +23,7 @@ enum DraftEditMagnitude {
 
     static let exactDistanceCellLimit = 250_000
     private static let approximateResyncWindow = 64
+    private static let boundedAlignmentDistanceLimit = 2_048
 
     /// The normalized edit magnitude in `0...1`. Both empty (after normalization)
     /// returns `0`.
@@ -53,13 +54,18 @@ enum DraftEditMagnitude {
 
     /// Linear fallback for long pasted edits. The resync window keeps sparse,
     /// separated edits from being counted as one large replacement span while
-    /// still bounding work to `O(n * approximateResyncWindow)`.
+    /// the bounded alignment pass catches small moved blocks beyond the fixed
+    /// lookahead without returning to an unbounded `O(n*m)` matrix.
     private static func approximateDistance(_ source: [Character], _ target: [Character]) -> Int {
-        min(
+        var distances = [
             positionalDistance(source, target),
             resyncingDistance(source, target),
             resyncingDistance(target, source)
-        )
+        ]
+        if let aligned = boundedInsertionDeletionDistance(source, target) {
+            distances.append(aligned)
+        }
+        return distances.min() ?? max(source.count, target.count)
     }
 
     private static func positionalDistance(_ source: [Character], _ target: [Character]) -> Int {
@@ -140,6 +146,50 @@ enum DraftEditMagnitude {
         guard start <= end else { return nil }
         for candidate in start...end where characters[candidate] == character {
             return candidate - index
+        }
+        return nil
+    }
+
+    /// Myers-style insert/delete distance up to a fixed budget. This is exact for
+    /// small moved blocks and sparse insertions/deletions, then bails out before it
+    /// can become the quadratic post-send work the approximate path avoids.
+    private static func boundedInsertionDeletionDistance(
+        _ source: [Character],
+        _ target: [Character]
+    ) -> Int? {
+        let maxDistance = boundedAlignmentDistanceLimit
+        guard abs(source.count - target.count) <= maxDistance else { return nil }
+
+        let offset = maxDistance + 1
+        var furthestSourceIndexByDiagonal = Array(repeating: -1, count: 2 * maxDistance + 3)
+        furthestSourceIndexByDiagonal[offset + 1] = 0
+
+        for distance in 0...maxDistance {
+            for diagonal in stride(from: -distance, through: distance, by: 2) {
+                let index = offset + diagonal
+                let shouldInsert = diagonal == -distance || (
+                    diagonal != distance
+                        && furthestSourceIndexByDiagonal[index - 1] < furthestSourceIndexByDiagonal[index + 1]
+                )
+                var sourceIndex = shouldInsert
+                    ? furthestSourceIndexByDiagonal[index + 1]
+                    : furthestSourceIndexByDiagonal[index - 1] + 1
+                guard sourceIndex >= 0 else { continue }
+
+                var targetIndex = sourceIndex - diagonal
+                while sourceIndex < source.count,
+                      targetIndex < target.count,
+                      targetIndex >= 0,
+                      source[sourceIndex] == target[targetIndex] {
+                    sourceIndex += 1
+                    targetIndex += 1
+                }
+                furthestSourceIndexByDiagonal[index] = sourceIndex
+
+                if sourceIndex >= source.count, targetIndex >= target.count {
+                    return distance
+                }
+            }
         }
         return nil
     }

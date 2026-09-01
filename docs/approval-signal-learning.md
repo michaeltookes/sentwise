@@ -75,11 +75,11 @@ tracks substantive content edits, not formatting churn. The result is clamped to
 `0...1`: `0` = identical after normalization, `1` = a complete rewrite.
 Character-level (rather than changed-line fraction) is deliberate — a one-word
 fix inside a long paragraph reads as a small edit, not a whole changed line. The
-exact Levenshtein path is capped; unusually large pasted edits use a bounded
-linear approximation with a small resynchronization window, so separated sparse
-edits stay small without letting post-dispatch feedback capture freeze the main
-actor before approval cleanup. The metric is pure (`DraftEditMagnitude.ratio`)
-and unit-tested.
+exact Levenshtein path is capped; unusually large pasted edits use bounded
+fallbacks: a sparse-aware linear scan, plus a fixed-budget alignment pass that
+keeps moved blocks from looking like full rewrites without letting post-dispatch
+feedback capture freeze the main actor before approval cleanup. The metric is
+pure (`DraftEditMagnitude.ratio`) and unit-tested.
 
 ## Deny-reason picker
 

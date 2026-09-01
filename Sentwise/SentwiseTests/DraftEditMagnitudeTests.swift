@@ -102,6 +102,22 @@ final class DraftEditMagnitudeTests: XCTestCase {
         )
     }
 
+    func testLargeMovedBlockBeyondResyncWindowStaysSmall() {
+        let length = Int(Double(DraftEditMagnitude.exactDistanceCellLimit).squareRoot()) + 1
+        let movedSuffixLength = 65
+        let scalars = (0..<length).map { UnicodeScalar(0xE000 + $0)! }
+        let original = String(String.UnicodeScalarView(scalars))
+        let final = String(original.suffix(movedSuffixLength))
+            + String(original.prefix(length - movedSuffixLength))
+
+        XCTAssertGreaterThan(original.count * final.count, DraftEditMagnitude.exactDistanceCellLimit)
+        XCTAssertEqual(
+            DraftEditMagnitude.ratio(original: original, final: final),
+            Double(movedSuffixLength * 2) / Double(length),
+            accuracy: 1e-12
+        )
+    }
+
     func testLargeRewriteMagnitudeIsBounded() {
         let length = Int(Double(DraftEditMagnitude.exactDistanceCellLimit).squareRoot()) + 1
 
