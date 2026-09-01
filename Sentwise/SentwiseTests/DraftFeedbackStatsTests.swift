@@ -66,7 +66,7 @@ final class DraftFeedbackStatsTests: XCTestCase {
             record(outcome: .denied, daysAgo: 1, denyCode: .wrongTone),
             // Two abandoned previews must NOT dilute the rates.
             record(outcome: .abandoned, daysAgo: 1),
-            record(outcome: .abandoned, daysAgo: 1),
+            record(outcome: .abandoned, daysAgo: 1)
         ]
         let stats = DraftFeedbackStats.compute(records: records, window: .allTime, now: now)
         XCTAssertEqual(stats.decidedCount, 4)
@@ -84,7 +84,7 @@ final class DraftFeedbackStatsTests: XCTestCase {
         let records = [
             record(outcome: .approvedAsIs, daysAgo: 1),    // in 7d, 30d, all
             record(outcome: .approvedAsIs, daysAgo: 8),    // in 30d, all
-            record(outcome: .denied, daysAgo: 40, denyCode: .handleLater), // all only
+            record(outcome: .denied, daysAgo: 40, denyCode: .handleLater) // all only
         ]
         let last7 = DraftFeedbackStats.compute(records: records, window: .last7Days, now: now)
         let last30 = DraftFeedbackStats.compute(records: records, window: .last30Days, now: now)
@@ -113,7 +113,7 @@ final class DraftFeedbackStatsTests: XCTestCase {
             // An edited approval with no stored magnitude is ignored by the average.
             record(outcome: .approvedAfterEdit, daysAgo: 1, editMagnitude: nil),
             // As-is approvals never contribute.
-            record(outcome: .approvedAsIs, daysAgo: 1),
+            record(outcome: .approvedAsIs, daysAgo: 1)
         ]
         let stats = DraftFeedbackStats.compute(records: records, window: .allTime, now: now)
         XCTAssertEqual(stats.averageEditMagnitude ?? -1, 0.3, accuracy: 0.0001)
@@ -135,7 +135,7 @@ final class DraftFeedbackStatsTests: XCTestCase {
             record(outcome: .denied, daysAgo: 1, denyCode: .wrongTone),
             record(outcome: .denied, daysAgo: 1, denyCode: .notWorthReplying),
             // A legacy denial with no reason counts toward deniedCount but no code.
-            record(outcome: .denied, daysAgo: 1, denyCode: nil),
+            record(outcome: .denied, daysAgo: 1, denyCode: nil)
         ]
         let stats = DraftFeedbackStats.compute(records: records, window: .allTime, now: now)
         XCTAssertEqual(stats.deniedCount, 4)
@@ -158,7 +158,7 @@ final class DraftFeedbackStatsTests: XCTestCase {
             // Answered but denied — not an approval, so not counted.
             record(outcome: .denied, daysAgo: 1, denyCode: .wrongContent, answered: true),
             // Approved but not answered — not counted.
-            record(outcome: .approvedAsIs, daysAgo: 1, answered: false),
+            record(outcome: .approvedAsIs, daysAgo: 1, answered: false)
         ]
         let stats = DraftFeedbackStats.compute(records: records, window: .allTime, now: now)
         XCTAssertEqual(stats.answeredThenApprovedCount, 2)

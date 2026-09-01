@@ -30,13 +30,13 @@ final class AnalyticsSettingsPresentationTests: XCTestCase {
     }
 
     func testPresentationMapsDraftAndTokenNumbers() {
-        let p = AnalyticsQuotaPresentation.make(from: quota(), calendar: calendar, locale: locale)
-        XCTAssertEqual(p?.draftsUsed, 12)
-        XCTAssertEqual(p?.limit, 50)
-        XCTAssertEqual(p?.remaining, 38)
-        XCTAssertEqual(p?.draftsSummary, "12 of 50 drafts used · 38 remaining")
+        let pres = AnalyticsQuotaPresentation.make(from: quota(), calendar: calendar, locale: locale)
+        XCTAssertEqual(pres?.draftsUsed, 12)
+        XCTAssertEqual(pres?.limit, 50)
+        XCTAssertEqual(pres?.remaining, 38)
+        XCTAssertEqual(pres?.draftsSummary, "12 of 50 drafts used · 38 remaining")
         // Tokens are a subdued caption with grouping; the UI unit is drafts.
-        XCTAssertEqual(p?.tokensCaption, "125,000 of 250,000 tokens used")
+        XCTAssertEqual(pres?.tokensCaption, "125,000 of 250,000 tokens used")
     }
 
     func testExtraPurchasedRowOnlyWhenPositive() {

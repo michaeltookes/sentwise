@@ -134,7 +134,7 @@ struct ProwlHuntRuntime {
                                 denyReason: DenyReason(code: .notWorthReplying), provenance: .watcher,
                                 answeredNeedsInfo: false, draftIdentityHash: hash(8)),
             DraftFeedbackRecord(timestamp: at(9), outcome: .abandoned, provenance: .manualPreview,
-                                answeredNeedsInfo: false, draftIdentityHash: hash(9)),
+                                answeredNeedsInfo: false, draftIdentityHash: hash(9))
         ]
     }
 
