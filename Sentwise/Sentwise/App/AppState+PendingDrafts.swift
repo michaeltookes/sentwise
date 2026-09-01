@@ -143,15 +143,28 @@ extension AppState {
         recordDraftActivity(.staleWarning, for: draft, staleReason: reason)
     }
 
-    /// Denies (discards) a pending draft without sending or saving it.
+    /// Denies (discards) a pending draft without sending or saving it, with no
+    /// captured reason. This is the legacy/direct path; the user-facing Deny and
+    /// Discard controls go through `requestDenyDraft` so a reason is captured
+    /// first (item 83).
     func denyDraft(_ draft: Draft) {
+        finalizeDenyDraft(draft, reason: nil)
+    }
+
+    /// Removes a denied draft from the queue and records the signal (item 83):
+    /// the activity `.denied` event gains the reason *code* in its detail (code
+    /// only, never the free text), and a `DraftFeedbackRecord` captures the full
+    /// deny signal. Shared by the direct `denyDraft` (reason `nil`) and the
+    /// reason-picker flow (reason set).
+    func finalizeDenyDraft(_ draft: Draft, reason: DenyReason?) {
         guard !approvingDraftIDs.contains(draft.identity) else { return }
         approvalError = nil
         pendingStaleWarnings.removeValue(forKey: draft.identity)
         clearOfflineQueueEntry(draft.identity)
         do {
             try removePendingDraft(draft)
-            recordDraftActivity(.denied, for: draft)
+            recordDraftActivity(.denied, for: draft, detail: reason?.code.rawValue)
+            recordDenyFeedback(for: draft, reason: reason)
         } catch {
             approvalError = Self.draftMessage(for: error)
         }
@@ -267,7 +280,13 @@ extension AppState {
             }
         case .deny:
             guard let draft = pendingDrafts.first(where: { $0.identity == identity }) else { return }
-            denyDraft(draft)
+            // A notification can't host the reason picker, so route to the same
+            // reason-gated flow (item 83): if the user silenced it this session the
+            // deny finalizes immediately with the remembered reason; otherwise the
+            // review window opens so they can pick a reason there.
+            if requestDenyDraft(draft) {
+                openReviewHandler?()
+            }
         }
     }
 

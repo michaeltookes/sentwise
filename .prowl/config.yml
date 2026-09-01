@@ -88,6 +88,14 @@ guardrails:
     - "deny"
     - "Discard"
     - "discard"
+    # Deny-reason picker (item 83). The picker opens from Deny/Discard (already
+    # forbidden), so a hunt reaches it only where guardrails allow; its confirm
+    # control finalizes the deny and mutates the feedback store, so it is
+    # forbidden exactly like Deny. The option rows, Other free-text field, cancel,
+    # and don't-ask-again checkbox are safe (they mutate nothing until confirm) and
+    # keep their AX ids so a hunt can assert the pane. In hunt mode the store is an
+    # in-memory sink (MemoryPersistenceProvider) so even a stray write is disk-free.
+    - "denyReasonConfirm"
     - "Delete"
     - "delete"
     - "Save"

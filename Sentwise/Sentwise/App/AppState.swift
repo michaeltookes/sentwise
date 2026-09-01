@@ -337,6 +337,26 @@ final class AppState: ObservableObject {
     /// User-facing activity history (item 21), newest first; see `AppState+Activity`.
     @Published var activityEvents: [ActivityEvent] = []
 
+    /// On-device approval-signal feedback store (item 83, Phase 1), newest first;
+    /// see `AppState+ApprovalFeedback`. Not `@Published` — Phase 1 only captures
+    /// the signal, no UI observes it yet (item 84 will). Loaded at launch.
+    var draftFeedbackRecords: [DraftFeedbackRecord] = []
+
+    /// A pending deny awaiting the user's reason (item 83, Phase 1). Non-`nil`
+    /// while the reason picker is showing; drives its sheet. See
+    /// `AppState+DenyReasonFlow`.
+    @Published var denyReasonPrompt: DenyReasonPrompt?
+
+    /// The last reason the user picked when denying, remembered for this app run
+    /// so the picker pre-selects it and the "don't ask again" fast path can reuse
+    /// it (item 83 friction guard). Session-only — deliberately not persisted.
+    var lastUsedDenyReason: DenyReason?
+
+    /// Whether the user checked "don't ask again this session" on a deny, so
+    /// subsequent denies this app run reuse `lastUsedDenyReason` silently (still
+    /// recorded). Resets on relaunch.
+    var denyReasonPromptSuppressedThisSession = false
+
     /// Messages the watcher has already handled, so none is drafted twice.
     var processedMessages: ProcessedMessages
 

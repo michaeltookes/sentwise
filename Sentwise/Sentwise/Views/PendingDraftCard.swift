@@ -226,7 +226,7 @@ struct PendingDraftCard: View {
             }
             Spacer()
             Button(draft.isFlagged ? "Dismiss" : "Deny", role: .destructive) {
-                appState.denyDraft(draft)
+                appState.requestDenyDraft(draft)
             }
             .disabled(isBusy)
 
@@ -294,7 +294,7 @@ struct PendingDraftCard: View {
                 .foregroundStyle(.secondary)
             Spacer()
             Button("Discard", role: .destructive) {
-                appState.denyDraft(draft)
+                appState.requestDenyDraft(draft)
             }
             .disabled(isBusy)
             Button(cancelQueuedDispatchLabel) {
@@ -368,7 +368,7 @@ struct PendingDraftCard: View {
                 }
                 Spacer()
                 Button("Discard", role: .destructive) {
-                    appState.denyDraft(draft)
+                    appState.requestDenyDraft(draft)
                 }
                 .disabled(isBusy)
                 Button("Regenerate") {

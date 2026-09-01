@@ -11,6 +11,7 @@ final class MemoryPersistenceProvider: PersistenceProvider {
     private var skippedMessages: [SkippedMessage]
     private var approvedDraftIdentities: Set<String>
     private var activityEvents: [ActivityEvent]
+    private var draftFeedback: [DraftFeedbackRecord]
 
     init(
         settings: Settings = .default,
@@ -19,7 +20,8 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         pendingDrafts: [Draft] = [],
         skippedMessages: [SkippedMessage] = [],
         approvedDraftIdentities: Set<String> = [],
-        activityEvents: [ActivityEvent] = []
+        activityEvents: [ActivityEvent] = [],
+        draftFeedback: [DraftFeedbackRecord] = []
     ) {
         self.settings = settings.validated()
         self.voiceProfile = voiceProfile
@@ -28,6 +30,7 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         self.skippedMessages = skippedMessages
         self.approvedDraftIdentities = approvedDraftIdentities
         self.activityEvents = activityEvents
+        self.draftFeedback = draftFeedback
     }
 
     func loadSettings() -> Settings {
@@ -107,6 +110,16 @@ final class MemoryPersistenceProvider: PersistenceProvider {
     func saveActivityEvents(_ events: [ActivityEvent]) {
         withLock {
             activityEvents = events
+        }
+    }
+
+    func loadDraftFeedback() -> [DraftFeedbackRecord] {
+        withLock { draftFeedback }
+    }
+
+    func saveDraftFeedback(_ records: [DraftFeedbackRecord]) {
+        withLock {
+            draftFeedback = records
         }
     }
 

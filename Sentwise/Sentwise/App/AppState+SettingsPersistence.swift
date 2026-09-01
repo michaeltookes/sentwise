@@ -159,6 +159,7 @@ extension AppState {
     /// Restores persisted review/history state after launch fields are seeded.
     func restoreReviewPersistenceState() {
         activityEvents = persistence.loadActivityEvents()
+        draftFeedbackRecords = persistence.loadDraftFeedback()
         restoreSkippedMessagesFromPersistence()
     }
 

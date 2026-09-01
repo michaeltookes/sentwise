@@ -48,6 +48,12 @@ extension AppState {
         case .saveAsDraft:
             try await performSave(draft, credentials: dispatchCredentials)
         }
+        // Terminal approve (item 83): capture as-is/edited outcome + magnitude,
+        // send behavior, provenance, and answered-needs-info now that dispatch
+        // succeeded. This is the one choke point for both immediate approval and
+        // the end of the auto-send countdown, and the offline drain re-enters here
+        // on reconnect, so the signal is recorded exactly once at real dispatch.
+        recordApprovalFeedback(for: draft, sendBehavior: effectiveSendBehavior)
         try finalizeApprovedDraft(draft)
         return true
     }

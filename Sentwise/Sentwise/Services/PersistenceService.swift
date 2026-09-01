@@ -44,6 +44,13 @@ protocol PersistenceProvider {
     func loadActivityEvents() -> [ActivityEvent]
     /// Persists the activity history (replaces the previous one).
     func saveActivityEvents(_ events: [ActivityEvent])
+
+    /// The on-device approval-signal feedback store (item 83, Phase 1), newest
+    /// first. Holds codes/numbers/hashes only (plus local deny "Other" free text).
+    func loadDraftFeedback() -> [DraftFeedbackRecord]
+    /// Persists the feedback store (replaces the previous one). Append-and-cap is
+    /// the caller's responsibility, mirroring the activity history.
+    func saveDraftFeedback(_ records: [DraftFeedbackRecord])
 }
 
 /// File-based persistence for non-secret application settings.
@@ -65,6 +72,7 @@ final class PersistenceService: PersistenceProvider {
     private let skippedMessagesURL: URL
     private let approvedDraftsURL: URL
     private let activityEventsURL: URL
+    private let draftFeedbackURL: URL
     private let ioQueue = DispatchQueue(label: "com.tookes.Sentwise.persistence", qos: .utility)
 
     private let encoder: JSONEncoder = {
@@ -95,6 +103,7 @@ final class PersistenceService: PersistenceProvider {
         skippedMessagesURL = directory.appendingPathComponent("SkippedMessages.json")
         approvedDraftsURL = directory.appendingPathComponent("ApprovedDrafts.json")
         activityEventsURL = directory.appendingPathComponent("ActivityEvents.json")
+        draftFeedbackURL = directory.appendingPathComponent("DraftFeedback.json")
     }
 
     // MARK: - Settings
@@ -298,6 +307,32 @@ final class PersistenceService: PersistenceProvider {
                 try data.write(to: activityEventsURL, options: .atomic)
             } catch {
                 logger.error("Failed to save activity events: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    // MARK: - Draft Feedback (item 83)
+
+    func loadDraftFeedback() -> [DraftFeedbackRecord] {
+        guard FileManager.default.fileExists(atPath: draftFeedbackURL.path) else {
+            return []
+        }
+        do {
+            let data = try Data(contentsOf: draftFeedbackURL)
+            return try decoder.decode([DraftFeedbackRecord].self, from: data)
+        } catch {
+            logger.error("Failed to load draft feedback: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    func saveDraftFeedback(_ records: [DraftFeedbackRecord]) {
+        ioQueue.async { [encoder, draftFeedbackURL] in
+            do {
+                let data = try encoder.encode(records)
+                try data.write(to: draftFeedbackURL, options: .atomic)
+            } catch {
+                logger.error("Failed to save draft feedback: \(error.localizedDescription)")
             }
         }
     }

@@ -218,6 +218,18 @@ struct Draft: Codable, Identifiable, Equatable {
     /// How many answered re-drafts still returned `NEEDS_INFO` (item 85).
     var answeredRedraftFailures: Int { answeredRedraftCount ?? 0 }
 
+    /// The approval-signal provenance of this draft (item 83, Phase 1): a
+    /// user-forced "Draft anyway" skip-log override vs. a watcher draft. Derived
+    /// from `replyWorthinessOverride`.
+    ///
+    /// **Seam (item 68):** `watcher` is a single bucket today. Item 68's
+    /// header-fetch-degradation diagnosis may later refine it (a draft that
+    /// slipped past a *degraded* reply-worthiness check vs. a clean one);
+    /// `DraftFeedbackProvenance` is where that split would land.
+    var feedbackProvenance: DraftFeedbackProvenance {
+        replyWorthinessOverride == true ? .draftAnyway : .watcher
+    }
+
     /// Whether the card should surface the "write it yourself" escape: the user
     /// has answered and re-drafted at least twice and the model still needs input.
     var shouldOfferWriteItYourself: Bool {

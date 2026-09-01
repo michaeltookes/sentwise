@@ -11,6 +11,8 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     private(set) var skippedMessages: [SkippedMessage]
     private(set) var approvedDraftIdentities: Set<String>
     private(set) var activityEvents: [ActivityEvent]
+    private(set) var draftFeedback: [DraftFeedbackRecord]
+    private(set) var draftFeedbackSaveCount = 0
     private(set) var settingsSaveCount = 0
     private(set) var savedSettingsHistory: [Settings] = []
     private(set) var processedSaveCount = 0
@@ -31,7 +33,8 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         pendingDrafts: [Draft] = [],
         skippedMessages: [SkippedMessage] = [],
         approvedDraftIdentities: Set<String> = [],
-        activityEvents: [ActivityEvent] = []
+        activityEvents: [ActivityEvent] = [],
+        draftFeedback: [DraftFeedbackRecord] = []
     ) {
         self.settings = settings
         self.voiceProfile = voiceProfile
@@ -40,6 +43,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         self.skippedMessages = skippedMessages
         self.approvedDraftIdentities = approvedDraftIdentities
         self.activityEvents = activityEvents
+        self.draftFeedback = draftFeedback
     }
 
     func loadSettings() -> Settings { settings }
@@ -104,6 +108,14 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     func saveActivityEvents(_ events: [ActivityEvent]) {
         activityEvents = events
         activityEventSaveCount += 1
+    }
+
+    func loadDraftFeedback() -> [DraftFeedbackRecord] { draftFeedback }
+    // Like the activity log, the feedback store is an additive side effect and is
+    // deliberately left out of `saveEvents` so core save-order assertions hold.
+    func saveDraftFeedback(_ records: [DraftFeedbackRecord]) {
+        draftFeedback = records
+        draftFeedbackSaveCount += 1
     }
 }
 
