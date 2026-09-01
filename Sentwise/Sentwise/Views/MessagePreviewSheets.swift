@@ -43,6 +43,7 @@ struct DraftView: View {
     @State private var staleApprovalSendBehavior: SendBehavior?
     @State private var countdownRemaining: Int?
     @State private var countdownTask: Task<Void, Never>?
+    @State private var hasRecordedTerminalFeedback = false
 
     init(draft: Draft) {
         _displayedDraft = State(initialValue: draft)
@@ -121,7 +122,7 @@ struct DraftView: View {
             .padding()
         }
         .frame(width: 480, height: 460)
-        .onDisappear { cancelPreviewCountdown() }
+        .onDisappear { recordPreviewAbandonmentIfNeeded() }
         .confirmationDialog(
             staleReason?.headline ?? "",
             isPresented: staleWarningBinding,
@@ -270,6 +271,7 @@ struct DraftView: View {
                 sendBehavior: approvalSendBehavior,
                 force: force
             )
+            hasRecordedTerminalFeedback = true
             staleReason = nil
             staleApprovalSendBehavior = nil
         } catch let error as DraftDispatchError {
@@ -310,5 +312,18 @@ struct DraftView: View {
 
     private var isDone: Bool {
         dispatchConfirmation != nil
+    }
+
+    private func recordPreviewAbandonmentIfNeeded() {
+        cancelPreviewCountdown()
+        guard !hasRecordedTerminalFeedback,
+              !isDispatching,
+              !isDone,
+              displayedDraft.manualPreview == true else {
+            return
+        }
+        displayedDraft.applyEditedBody(editedBody)
+        appState.recordDraftPreviewAbandonment(for: displayedDraft)
+        hasRecordedTerminalFeedback = true
     }
 }

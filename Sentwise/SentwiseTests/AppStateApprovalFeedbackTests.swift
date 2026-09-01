@@ -160,6 +160,28 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
         XCTAssertEqual(replacement.feedbackProvenance, .manualPreview)
     }
 
+    func testManualPreviewAbandonmentRecordsTerminalFeedback() {
+        let draft = pendingDraft(manualPreview: true)
+        let (appState, _) = makeAppState(seed: [])
+
+        appState.recordDraftPreviewAbandonment(for: draft)
+
+        let record = appState.draftFeedbackRecords.first
+        XCTAssertEqual(record?.outcome, .abandoned)
+        XCTAssertEqual(record?.provenance, .manualPreview)
+        XCTAssertNil(record?.dispatch)
+        XCTAssertNil(record?.denyReason)
+    }
+
+    func testNonPreviewAbandonmentIsNoOp() {
+        let draft = pendingDraft()
+        let (appState, _) = makeAppState(seed: [])
+
+        appState.recordDraftPreviewAbandonment(for: draft)
+
+        XCTAssertTrue(appState.draftFeedbackRecords.isEmpty)
+    }
+
     func testPreviewApprovalRecordsEditedSentFeedback() async throws {
         let draft = pendingDraft(
             body: "Thursday works for me.",

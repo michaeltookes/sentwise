@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 /// The user's terminal action on a draft, treated as durable learning signal
-/// (item 83, Phase 1). Every reviewable draft ends in exactly one of these.
+/// (item 83, Phase 1). Every captured draft path ends in exactly one of these.
 enum DraftFeedbackOutcome: String, Codable, Equatable {
     /// Approved without touching the assistant's generated body.
     case approvedAsIs
@@ -10,6 +10,8 @@ enum DraftFeedbackOutcome: String, Codable, Equatable {
     case approvedAfterEdit
     /// Discarded from the review queue.
     case denied
+    /// A manually generated preview was closed without approval.
+    case abandoned
 }
 
 /// What an approval did with the draft — the send-behavior split, recorded so the
@@ -110,9 +112,9 @@ struct DraftFeedbackRecord: Codable, Equatable, Identifiable {
     var id: UUID
     /// When the terminal action happened.
     var timestamp: Date
-    /// Approved-as-is / approved-after-edit / denied.
+    /// Approved-as-is / approved-after-edit / denied / abandoned.
     var outcome: DraftFeedbackOutcome
-    /// Sent vs saved — set for approvals only, `nil` for denials.
+    /// Sent vs saved — set for approvals only, `nil` for non-approvals.
     var dispatch: DraftFeedbackDispatch?
     /// Normalized edit magnitude in `0...1` — set for `.approvedAfterEdit` only.
     /// See `DraftEditMagnitude` for the metric definition.

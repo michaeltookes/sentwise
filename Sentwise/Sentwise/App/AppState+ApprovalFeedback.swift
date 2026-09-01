@@ -4,10 +4,10 @@ import os
 private let feedbackLogger = Logger(subsystem: "com.tookes.Sentwise", category: "ApprovalFeedback")
 
 /// On-device approval-signal capture (item 83, Phase 1). Every terminal draft
-/// action — approved-as-is, approved-after-edit, or denied — is recorded as a
-/// durable, privacy-safe `DraftFeedbackRecord` so later phases (2–4) and items
-/// 84/35 have a substrate to read. Phase 1 only writes the store; nothing here
-/// learns from it or leaves the machine.
+/// action — approved-as-is, approved-after-edit, denied, or abandoned from a
+/// manual preview — is recorded as a durable, privacy-safe `DraftFeedbackRecord`
+/// so later phases (2–4) and items 84/35 have a substrate to read. Phase 1 only
+/// writes the store; nothing here learns from it or leaves the machine.
 ///
 /// **Privacy:** records hold codes, numbers, and hashes only, with the single
 /// exception of a deny's "Other" free text (see `DenyReason`). The draft is
@@ -63,6 +63,21 @@ extension AppState {
             dispatch: nil,
             editMagnitude: nil,
             denyReason: reason,
+            provenance: draft.feedbackProvenance,
+            answeredNeedsInfo: draft.wasAnswered,
+            draftIdentityHash: DraftFeedbackRecord.hashedIdentity(draft.identity)
+        ))
+    }
+
+    /// Records a manually generated preview that the user closed without sending
+    /// or saving. Watcher/queued drafts use the explicit deny path instead.
+    func recordDraftPreviewAbandonment(for draft: Draft) {
+        guard draft.manualPreview == true else { return }
+        recordDraftFeedback(DraftFeedbackRecord(
+            outcome: .abandoned,
+            dispatch: nil,
+            editMagnitude: nil,
+            denyReason: nil,
             provenance: draft.feedbackProvenance,
             answeredNeedsInfo: draft.wasAnswered,
             draftIdentityHash: DraftFeedbackRecord.hashedIdentity(draft.identity)

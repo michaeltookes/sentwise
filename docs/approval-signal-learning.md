@@ -14,7 +14,9 @@ separate, opt-in telemetry path (item 35) and is **not** part of this feature.
 ## The feedback store
 
 Every reviewable draft ends in exactly one terminal action, and each records one
-`DraftFeedbackRecord`. The store is a JSON file
+`DraftFeedbackRecord`. Manual previews also record `abandoned` when the sheet is
+closed without approval, so preview dismissals do not silently bias acceptance
+rates. The store is a JSON file
 (`~/Library/Application Support/Sentwise/DraftFeedback.json`) written through the
 same persistence layer as pending drafts and the activity log, so it survives
 relaunch. It is append-only, newest first, and capped at 2000 records (oldest
@@ -28,7 +30,7 @@ body, or sender the identity is derived from.
 | Field | Meaning |
 | --- | --- |
 | `timestamp` | When the terminal action happened. |
-| `outcome` | `approvedAsIs` / `approvedAfterEdit` / `denied`. |
+| `outcome` | `approvedAsIs` / `approvedAfterEdit` / `denied` / `abandoned`. |
 | `dispatch` | `sent` vs `saved` — approvals only. |
 | `editMagnitude` | Normalized edit size in `0...1` — `approvedAfterEdit` only. |
 | `denyReason` | Reason code (+ optional Other free text) — denials only. |
@@ -49,7 +51,9 @@ The approval signal is recorded only after a send or save succeeds. Queued
 approvals share the dispatch choke point, including when an offline-queued
 approval finally dispatches on reconnect; preview-sheet and legacy generated
 draft approvals record the same signal immediately after their direct dispatch
-paths succeed.
+paths succeed. Closing a manual preview before approval records `abandoned` with
+the same local-only hashed identity and provenance fields, but no dispatch or
+deny reason.
 
 ### Edit magnitude
 

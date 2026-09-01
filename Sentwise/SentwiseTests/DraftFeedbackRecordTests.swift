@@ -29,6 +29,13 @@ final class DraftFeedbackRecordTests: XCTestCase {
         )
     }
 
+    func testOutcomeCodesAreStable() {
+        XCTAssertEqual(DraftFeedbackOutcome.approvedAsIs.rawValue, "approvedAsIs")
+        XCTAssertEqual(DraftFeedbackOutcome.approvedAfterEdit.rawValue, "approvedAfterEdit")
+        XCTAssertEqual(DraftFeedbackOutcome.denied.rawValue, "denied")
+        XCTAssertEqual(DraftFeedbackOutcome.abandoned.rawValue, "abandoned")
+    }
+
     func testProvenanceCodesAreStable() {
         XCTAssertEqual(DraftFeedbackProvenance.watcher.rawValue, "watcher")
         XCTAssertEqual(DraftFeedbackProvenance.draftAnyway.rawValue, "draftAnyway")
