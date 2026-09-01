@@ -28,6 +28,7 @@ extension AppState {
     /// cap, and persists. Never throws — a feedback-store write must not fail an
     /// approve or deny.
     func recordDraftFeedback(_ record: DraftFeedbackRecord) {
+        objectWillChange.send()
         draftFeedbackRecords.insert(record, at: 0)
         if draftFeedbackRecords.count > draftFeedbackLogLimit {
             draftFeedbackRecords.removeLast(draftFeedbackRecords.count - draftFeedbackLogLimit)
