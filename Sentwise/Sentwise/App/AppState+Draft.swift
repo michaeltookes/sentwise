@@ -83,7 +83,8 @@ extension AppState {
         for message: MailMessage,
         mailbox: Mailbox = .inbox,
         requireWatching: Bool = true,
-        credentials capturedCredentials: MailAccountCredentials? = nil
+        credentials capturedCredentials: MailAccountCredentials? = nil,
+        userSuppliedFacts: UserSuppliedFacts? = nil
     ) async throws -> Draft? {
         guard mailbox.supportsReplyDrafting else {
             throw DraftError.unsupportedSourceMailbox
@@ -112,7 +113,8 @@ extension AppState {
         )
         let outcome: DraftOutcome
         do {
-            outcome = try await makeReplyOutcome(context: context, llmConfiguration: llmConfiguration)
+            outcome = try await makeReplyOutcome(
+                context: context, llmConfiguration: llmConfiguration, userSuppliedFacts: userSuppliedFacts)
         } catch {
             await reconcileManagedAccountState(after: error, provider: llmConfiguration.provider)
             throw error
@@ -122,7 +124,6 @@ extension AppState {
             llmConfiguration: llmConfiguration,
             requireWatching: requireWatching
         ) else { return nil }
-        let initialBody = finalizedDraftBody(Self.body(from: outcome))
         let draft = Draft(
             id: message.id,
             sourceUIDValidity: message.uidValidity,
@@ -136,7 +137,7 @@ extension AppState {
             sourceMessageID: message.messageID,
             incomingBody: Self.truncatedIncomingBody(incomingText),
             replySubject: Self.replySubject(for: message.subject),
-            body: initialBody,
+            body: finalizedDraftBody(Self.body(from: outcome)),
             model: llmConfiguration.model,
             generatedAt: Date(),
             needsInfo: Self.needsInfo(from: outcome),
@@ -283,13 +284,15 @@ extension AppState {
 
     private func makeReplyOutcome(
         context: ReplyContext,
-        llmConfiguration: DraftLLMConfiguration
+        llmConfiguration: DraftLLMConfiguration,
+        userSuppliedFacts: UserSuppliedFacts? = nil
     ) async throws -> DraftOutcome {
         let profile = voiceProfile
         return try await DraftGenerator().makeDraft(
             replyingTo: context,
             voiceProfile: profile,
-            model: llmConfiguration.model
+            model: llmConfiguration.model,
+            userSuppliedFacts: userSuppliedFacts
         ) { [llm] request in
             try await llm.complete(
                 request,

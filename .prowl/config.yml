@@ -106,6 +106,17 @@ guardrails:
     - "Clear"
     - "Dismiss"
     - "Regenerate"
+    # Item 85 "answer in place and re-draft": Re-draft triggers a local regenerate
+    # (same treatment as "Regenerate"); Write-it-yourself and the answer text
+    # fields mutate draft content (same treatment as "Reply body"). Forbidden by
+    # AX id and by accessible name so a hunt can see them (open-and-assert) but
+    # never types an answer or fires a re-draft.
+    - "redraftWithAnswers"
+    - "Re-draft"
+    - "writeItYourself"
+    - "Write it yourself"
+    - "needsInfoAnswerField"
+    - "needsInfoExtraField"
     # Live-connection actions (settings test, mailbox search, watching). "Test"
     # still covers the mail "Test Connection" button; "Disconnect" is forbidden
     # explicitly now that the broad "Connect" substring is gone.

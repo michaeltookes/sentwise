@@ -37,7 +37,7 @@ struct PendingDraftCard: View {
     private var approvalNeedsBody: Bool { draft.notReplyWorthy != nil && !hasEditedReplyBody }
 
     private var replyColumnTitle: String {
-        draft.needsInfo != nil ? "Can't draft this one" : (draft.notReplyWorthy != nil ? "Write a reply" : "Proposed reply")
+        draft.needsInfo != nil ? "Answer to re-draft" : (draft.notReplyWorthy != nil ? "Write a reply" : "Proposed reply")
     }
 
     private var replySubjectDisplayText: String {
@@ -73,6 +73,13 @@ struct PendingDraftCard: View {
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(cardStroke, lineWidth: draft.isFlagged ? 1.5 : 1))
+        .onChange(of: draft.body) { _, newValue in
+            syncEditedBody(with: newValue)
+        }
+        .onChange(of: draft.needsInfo == nil) { _, isReplyEditorVisible in
+            guard isReplyEditorVisible else { return }
+            syncEditedBody(with: draft.body)
+        }
         .onDisappear { persistEditedBodyImmediately() }
     }
 
@@ -152,11 +159,12 @@ struct PendingDraftCard: View {
             Text(replyColumnTitle)
                 .font(.caption).bold()
                 .foregroundStyle(.secondary)
-            if let needsInfo = draft.needsInfo {
+            if draft.needsInfo != nil {
                 ScrollView {
-                    DraftNeedsInfoView(needsInfo: needsInfo)
+                    DraftNeedsInfoAnswerView(draft: draft)
+                        .environmentObject(appState)
                 }
-                .frame(maxHeight: 180)
+                .frame(maxHeight: 260)
             } else {
                 if let notReplyWorthy = draft.notReplyWorthy {
                     ScrollView {
@@ -207,9 +215,6 @@ struct PendingDraftCard: View {
                     if !focused {
                         persistEditedBodyImmediately()
                     }
-                }
-                .onChange(of: draft.body) { _, newValue in
-                    editedBody = newValue
                 }
         }
     }
@@ -316,6 +321,11 @@ struct PendingDraftCard: View {
             guard !Task.isCancelled, editPersistRevision == revision else { return }
             appState.updatePendingDraftBody(draft, to: newValue)
         }
+    }
+
+    private func syncEditedBody(with body: String) {
+        guard editedBody != body else { return }
+        editedBody = body
     }
 
     private func persistEditedBodyImmediately() {

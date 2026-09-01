@@ -1,5 +1,12 @@
 import Foundation
 
+/// A generated follow-up plus the bounded source context that should be
+/// persisted for future needs-info re-drafts.
+struct FollowUpGeneration: Equatable {
+    var outcome: DraftOutcome
+    var context: FollowUpDraftContext
+}
+
 /// Drafts a post-call follow-up email from a parsed transcript in the user's
 /// learned voice (item 51): a brief recap, agreed next steps / action items with
 /// owners, and a proposed next meeting.
@@ -21,48 +28,89 @@ struct FollowUpGenerator {
     /// Token ceiling for the follow-up draft itself.
     var maxTokens = 1200
 
-    /// How the transcript is presented to the drafting prompt: the full text, or a
-    /// distilled summary when the transcript was too long to send whole.
-    private enum DraftSource {
-        case full(String)
-        case summarized(String)
-    }
-
-    /// Produces the follow-up email body. Throws `DraftError.emptyDraft` if the
+    /// Produces the follow-up email outcome. Throws `DraftError.emptyDraft` if the
     /// model returns nothing usable.
     func makeFollowUp(
         transcript: ParsedTranscript,
         voiceProfile: VoiceProfile?,
         model: String,
+        userSuppliedFacts: UserSuppliedFacts? = nil,
         complete: Complete
-    ) async throws -> String {
+    ) async throws -> DraftOutcome {
+        try await makeFollowUpGeneration(
+            transcript: transcript,
+            voiceProfile: voiceProfile,
+            model: model,
+            userSuppliedFacts: userSuppliedFacts,
+            complete: complete
+        ).outcome
+    }
+
+    /// Produces the follow-up email outcome plus the bounded source context used
+    /// for drafting. Callers persist the context for future needs-info re-drafts.
+    func makeFollowUpGeneration(
+        transcript: ParsedTranscript,
+        voiceProfile: VoiceProfile?,
+        model: String,
+        userSuppliedFacts: UserSuppliedFacts? = nil,
+        complete: Complete
+    ) async throws -> FollowUpGeneration {
         guard !transcript.isEmpty else { throw DraftError.emptyDraft }
 
-        let source: DraftSource
-        if transcript.text.count <= maxSinglePassChars {
-            source = .full(transcript.text)
-        } else {
-            let summary = try await summarize(transcript.text, model: model, complete: complete)
-            source = .summarized(summary)
-        }
+        let context = try await draftContext(for: transcript, model: model, complete: complete)
+        let outcome = try await makeFollowUp(
+            from: context,
+            voiceProfile: voiceProfile,
+            model: model,
+            userSuppliedFacts: userSuppliedFacts,
+            complete: complete
+        )
+
+        return FollowUpGeneration(outcome: outcome, context: context)
+    }
+
+    /// Re-drafts from a previously persisted follow-up context. A context may be
+    /// the parsed transcript for short calls or the complete-call summary for
+    /// long calls.
+    func makeFollowUp(
+        from context: FollowUpDraftContext,
+        voiceProfile: VoiceProfile?,
+        model: String,
+        userSuppliedFacts: UserSuppliedFacts? = nil,
+        complete: Complete
+    ) async throws -> DraftOutcome {
+        guard !context.isEmpty else { throw DraftError.emptyDraft }
 
         let request = LLMRequest(
             system: Self.systemPrompt(voiceProfile: voiceProfile),
             messages: [LLMMessage(
                 role: .user,
-                content: Self.userPrompt(source: source, hasSpeakerLabels: transcript.hasSpeakerLabels)
+                content: Self.userPrompt(
+                    context: context,
+                    userSuppliedFacts: userSuppliedFacts
+                )
             )],
             model: model,
             maxTokens: maxTokens,
             temperature: 0.6
         )
         let response = try await complete(request)
-        let body = DraftGenerator.cleaned(response.text)
-        guard !body.isEmpty else { throw DraftError.emptyDraft }
-        return body
+        return try DraftGenerator.parseOutcome(response.text)
     }
 
     // MARK: - Long-transcript summarization
+
+    private func draftContext(
+        for transcript: ParsedTranscript,
+        model: String,
+        complete: Complete
+    ) async throws -> FollowUpDraftContext {
+        if transcript.text.count <= maxSinglePassChars {
+            return .transcript(transcript)
+        }
+        let summary = try await summarize(transcript.text, model: model, complete: complete)
+        return .summary(summary, hasSpeakerLabels: transcript.hasSpeakerLabels)
+    }
 
     /// Summarizes an over-long transcript chunk-by-chunk, then reduces the joined
     /// summaries until the drafting pass receives a bounded source.
@@ -165,30 +213,48 @@ struct FollowUpGenerator {
         not supported by the transcript. Output ONLY the email body — no subject line, no \
         "Subject:" prefix, and no meta commentary like "Here's a draft".
         """
+        let confidence = """
+        If you cannot write a confident, complete follow-up because it would require \
+        specific information only the user has — a fact, date, decision, number, \
+        price, or attachment that is not present anywhere in the transcript — do NOT \
+        guess or fabricate it. Instead, respond with exactly this format and \
+        nothing else:
+        \(DraftGenerator.needsInfoSentinel) <one short sentence on why you can't draft it yet>
+        - <a specific piece of information you need from the user>
+        - <another, if applicable>
+        Only use this when the follow-up genuinely depends on missing information; a \
+        follow-up that just needs normal judgment or concise wording should still be written.
+        """
         let voice = voiceProfile?.promptBlock()
             ?? "Write in a natural, concise, and professional tone."
-        return base + "\n\n" + voice
+        return base + "\n\n" + confidence + "\n\n" + voice
     }
 
-    private static func userPrompt(source: DraftSource, hasSpeakerLabels: Bool) -> String {
-        let speakerNote = hasSpeakerLabels
+    static func userPrompt(
+        context: FollowUpDraftContext,
+        userSuppliedFacts: UserSuppliedFacts?
+    ) -> String {
+        let speakerNote = context.hasSpeakerLabels
             ? "The transcript labels each speaker (e.g. \"Name:\"). Use the labels to attribute "
                 + "action items to the right owner."
             : "The transcript is not labeled by speaker. Infer owners only where the wording makes "
                 + "them clear; otherwise phrase action items without guessing who owns them."
-        switch source {
-        case .full(let text):
-            return """
+        var prompt: String
+        switch context.source {
+        case .transcript:
+            let transcript = UserFactsPrompt.sanitizedSourceText(context.text)
+            prompt = """
             Write the follow-up email from this call transcript.
 
             \(speakerNote)
 
             Transcript:
 
-            \(text)
+            \(transcript)
             """
-        case .summarized(let summary):
-            return """
+        case .summary:
+            let sanitizedSummary = UserFactsPrompt.sanitizedSourceText(context.text)
+            prompt = """
             Write the follow-up email from this distilled summary of a long call. The summary was \
             produced from the full transcript; treat it as the source of truth.
 
@@ -196,8 +262,12 @@ struct FollowUpGenerator {
 
             Call summary:
 
-            \(summary)
+            \(sanitizedSummary)
             """
         }
+        if let facts = userSuppliedFacts, let block = UserFactsPrompt.block(facts) {
+            prompt += "\n\n" + block
+        }
+        return prompt
     }
 }

@@ -58,13 +58,19 @@ struct DraftGenerator {
         replyingTo context: ReplyContext,
         voiceProfile: VoiceProfile?,
         model: String,
+        userSuppliedFacts: UserSuppliedFacts? = nil,
         complete: Complete
     ) async throws -> DraftOutcome {
         let request = LLMRequest(
             system: Self.systemPrompt(voiceProfile: voiceProfile),
             messages: [LLMMessage(
                 role: .user,
-                content: Self.userPrompt(context, maxChars: maxIncomingChars, maxThreadChars: maxThreadChars)
+                content: Self.userPrompt(
+                    context,
+                    maxChars: maxIncomingChars,
+                    maxThreadChars: maxThreadChars,
+                    userSuppliedFacts: userSuppliedFacts
+                )
             )],
             model: model,
             maxTokens: 1024,
@@ -160,19 +166,27 @@ struct DraftGenerator {
         return base + "\n\n" + confidence + "\n\n" + voice
     }
 
-    private static func userPrompt(_ context: ReplyContext, maxChars: Int, maxThreadChars: Int) -> String {
-        let sender = senderLine(context)
+    private static func userPrompt(
+        _ context: ReplyContext,
+        maxChars: Int,
+        maxThreadChars: Int,
+        userSuppliedFacts: UserSuppliedFacts?
+    ) -> String {
+        let sender = UserFactsPrompt.sanitizedSourceText(senderLine(context))
+        let subject = UserFactsPrompt.sanitizedSourceText(context.subject)
         let thread = EmailThreadParser.split(context.body)
-        let latest = String(thread.latest.prefix(maxChars))
+        let latest = UserFactsPrompt.sanitizedSourceText(String(thread.latest.prefix(maxChars)))
         var prompt = """
         Reply to the latest message in this email thread:
 
         From: \(sender)
-        Subject: \(context.subject)
+        Subject: \(subject)
 
         \(latest)
         """
-        let history = EmailThreadParser.readableHistory(fromQuoted: thread.quotedHistory, maxChars: maxThreadChars)
+        let history = UserFactsPrompt.sanitizedSourceText(
+            EmailThreadParser.readableHistory(fromQuoted: thread.quotedHistory, maxChars: maxThreadChars)
+        )
         if !history.isEmpty {
             prompt += """
 
@@ -180,6 +194,9 @@ struct DraftGenerator {
             --- Earlier in this thread (context only — do not quote it back) ---
             \(history)
             """
+        }
+        if let facts = userSuppliedFacts, let block = UserFactsPrompt.block(facts) {
+            prompt += "\n\n" + block
         }
         return prompt
     }

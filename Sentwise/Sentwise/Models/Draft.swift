@@ -151,6 +151,18 @@ struct Draft: Codable, Identifiable, Equatable {
     /// automatically repeat a send whose post-send persistence failed.
     var offlineQueuedDispatch: OfflineQueuedDraftDispatch?
 
+    /// Facts the user typed to answer a `NEEDS_INFO` draft (item 85). Carried on
+    /// the draft so they persist through the pending queue and a relaunch, and are
+    /// re-injected into the generator prompt on every re-draft. `nil` until the
+    /// user answers. Local-only: never logged or written to the activity history.
+    var userSuppliedFacts: UserSuppliedFacts?
+
+    /// How many times an answered re-draft still came back `NEEDS_INFO` (item 85).
+    /// Drives the escape hatch: after the second failed round the card offers
+    /// "write it yourself". `nil`/`0` for a draft the user hasn't re-drafted with
+    /// answers, or one whose re-draft produced a usable reply.
+    var answeredRedraftCount: Int?
+
     /// User-supplied recipients for an authored follow-up that has no inbound
     /// source message (item 51). When non-`nil` this draft is an *authored*
     /// follow-up rather than a reply: dispatch sends to these addresses and does
@@ -160,6 +172,15 @@ struct Draft: Codable, Identifiable, Equatable {
     /// is authored but still needs recipients before it can be sent (the
     /// watched-folder path enqueues drafts this way for the user to complete).
     var authoredRecipients: [MailAddress]?
+
+    /// Legacy parsed transcript context for authored post-call follow-ups. New
+    /// drafts use `followUpContext`; this remains so already-queued drafts from
+    /// earlier builds can still be re-drafted with the original call context.
+    var followUpTranscript: ParsedTranscript?
+
+    /// Bounded transcript-or-summary context used to regenerate authored
+    /// follow-ups without persisting unbounded pasted or watched transcripts.
+    var followUpContext: FollowUpDraftContext?
 
     /// Whether this draft currently needs user input before approval. A model
     /// `NOT_REPLY_WORTHY` override becomes dispatchable only after the user writes
@@ -183,6 +204,24 @@ struct Draft: Codable, Identifiable, Equatable {
     var wasEdited: Bool {
         guard let originalBody else { return false }
         return originalBody != body
+    }
+
+    /// Whether the user answered a `NEEDS_INFO` prompt on this draft (item 85):
+    /// the draft carries at least one non-blank supplied fact. Item 83's
+    /// approval-signal capture consumes this to record an "answered-then-approved"
+    /// outcome once that capture exists.
+    var wasAnswered: Bool {
+        guard let userSuppliedFacts else { return false }
+        return !userSuppliedFacts.isEmpty
+    }
+
+    /// How many answered re-drafts still returned `NEEDS_INFO` (item 85).
+    var answeredRedraftFailures: Int { answeredRedraftCount ?? 0 }
+
+    /// Whether the card should surface the "write it yourself" escape: the user
+    /// has answered and re-drafted at least twice and the model still needs input.
+    var shouldOfferWriteItYourself: Bool {
+        needsInfo != nil && answeredRedraftFailures >= 2
     }
 
     /// Applies a user edit to the reply body (item 19), capturing the assistant's
@@ -220,8 +259,12 @@ struct Draft: Codable, Identifiable, Equatable {
         notReplyWorthy: DraftNotReplyWorthy? = nil,
         offlineQueuedDispatch: OfflineQueuedDraftDispatch? = nil,
         authoredRecipients: [MailAddress]? = nil,
+        followUpTranscript: ParsedTranscript? = nil,
+        followUpContext: FollowUpDraftContext? = nil,
         replyWorthinessOverride: Bool = false,
-        replyWorthinessOverrideSource: DraftReplyWorthinessOverrideSource? = nil
+        replyWorthinessOverrideSource: DraftReplyWorthinessOverrideSource? = nil,
+        userSuppliedFacts: UserSuppliedFacts? = nil,
+        answeredRedraftCount: Int? = nil
     ) {
         self.id = id
         self.sourceUIDValidity = sourceUIDValidity
@@ -246,6 +289,10 @@ struct Draft: Codable, Identifiable, Equatable {
         self.replyWorthinessOverrideSource = replyWorthinessOverrideSource
         self.offlineQueuedDispatch = offlineQueuedDispatch
         self.authoredRecipients = authoredRecipients
+        self.followUpTranscript = followUpTranscript
+        self.followUpContext = followUpContext
+        self.userSuppliedFacts = userSuppliedFacts
+        self.answeredRedraftCount = answeredRedraftCount
     }
 
     /// A stable identity across the pending queue and notifications, scoped by
