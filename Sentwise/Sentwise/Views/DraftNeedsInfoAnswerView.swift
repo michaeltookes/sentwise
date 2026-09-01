@@ -17,17 +17,15 @@ struct DraftNeedsInfoAnswerView: View {
 
     init(draft: Draft) {
         self.draft = draft
-        let missing = draft.needsInfo?.missing ?? []
-        let stored = draft.userSuppliedFacts
-        _answers = State(initialValue: missing.map { question in
-            stored?.answers.first(where: { $0.question == question })?.response ?? ""
-        })
-        _extra = State(initialValue: stored?.additional ?? "")
+        let seed = Self.answerSeed(for: draft)
+        _answers = State(initialValue: seed.answers)
+        _extra = State(initialValue: seed.extra)
     }
 
     private var needsInfo: DraftNeedsInfo { draft.needsInfo ?? DraftNeedsInfo(summary: "") }
     private var missing: [String] { needsInfo.missing }
     private var isBusy: Bool { appState.approvingDraftIDs.contains(draft.identity) }
+    private var answerSeed: AnswerSeed { Self.answerSeed(for: draft) }
 
     /// Re-draft is enabled once at least one field is non-empty (item 85).
     private var canRedraft: Bool {
@@ -62,6 +60,10 @@ struct DraftNeedsInfoAnswerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .onChange(of: answerSeed) { _, seed in
+            answers = seed.answers
+            extra = seed.extra
+        }
     }
 
     private var header: some View {
@@ -146,6 +148,15 @@ struct DraftNeedsInfoAnswerView: View {
         )
     }
 
+    private static func answerSeed(for draft: Draft) -> AnswerSeed {
+        let missing = draft.needsInfo?.missing ?? []
+        let stored = draft.userSuppliedFacts
+        let answers = missing.map { question in
+            stored?.answers.first(where: { $0.question == question })?.response ?? ""
+        }
+        return AnswerSeed(missing: missing, answers: answers, extra: stored?.additional ?? "")
+    }
+
     /// Snapshots the current field values as a fresh answer round, paired back to
     /// the questions they answer.
     private func currentRound() -> UserSuppliedFacts {
@@ -153,5 +164,11 @@ struct DraftNeedsInfoAnswerView: View {
             UserSuppliedFacts.Answer(question: question, response: response)
         }
         return UserSuppliedFacts(answers: paired, additional: extra)
+    }
+
+    private struct AnswerSeed: Equatable {
+        var missing: [String]
+        var answers: [String]
+        var extra: String
     }
 }
