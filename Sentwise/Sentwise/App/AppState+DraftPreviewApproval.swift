@@ -25,15 +25,18 @@ extension AppState {
             force: force
         )
 
+        let confirmation: String
         switch effectiveSendBehavior {
         case .autoSend:
             try await performSend(draft, credentials: dispatchCredentials)
             clearGeneratedDraftIfDisplayed(draft)
-            return "Sent."
+            confirmation = "Sent."
         case .saveAsDraft:
             try await performSave(draft, credentials: dispatchCredentials)
-            return "Saved to your Drafts."
+            confirmation = "Saved to your Drafts."
         }
+        recordApprovalFeedback(for: draft, sendBehavior: effectiveSendBehavior)
+        return confirmation
     }
 
     /// Records a canceled preview auto-send countdown in the same audit stream as

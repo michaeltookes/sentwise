@@ -43,9 +43,11 @@ diagnosis may later split it (a draft that slipped past a *degraded*
 reply-worthiness check vs. a clean one), and `DraftFeedbackProvenance` is where
 that refinement would land.
 
-The approval signal is recorded at the single dispatch choke point after a send
-or save succeeds, so it is captured exactly once at real dispatch — including
-when an offline-queued approval finally dispatches on reconnect.
+The approval signal is recorded only after a send or save succeeds. Queued
+approvals share the dispatch choke point, including when an offline-queued
+approval finally dispatches on reconnect; preview-sheet and legacy generated
+draft approvals record the same signal immediately after their direct dispatch
+paths succeed.
 
 ### Edit magnitude
 

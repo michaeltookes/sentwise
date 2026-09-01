@@ -160,4 +160,19 @@ final class AppStateDenyReasonFlowTests: XCTestCase {
         XCTAssertEqual(appState.draftFeedbackRecords.first?.denyReason?.code, .other)
         XCTAssertEqual(appState.draftFeedbackRecords.first?.denyReason?.otherText, "automated alert")
     }
+
+    func testConfirmDenyReasonIsNoOpWhenDraftAlreadyLeftQueue() async {
+        let draft = pendingDraft(id: 1)
+        let appState = makeAppState(seed: [draft])
+        _ = appState.requestDenyDraft(draft)
+
+        await appState.approveDraft(draft)
+        appState.confirmDenyReason(code: .wrongContent, otherText: "", dontAskAgain: true)
+
+        XCTAssertEqual(appState.draftFeedbackRecords.count, 1)
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.outcome, .approvedAsIs)
+        XCTAssertNil(appState.activityEvents.first(where: { $0.kind == .denied }))
+        XCTAssertNil(appState.lastUsedDenyReason)
+        XCTAssertFalse(appState.denyReasonPromptSuppressedThisSession)
+    }
 }

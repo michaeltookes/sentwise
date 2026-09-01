@@ -127,6 +127,58 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
         XCTAssertEqual(appState.draftFeedbackRecords.first?.provenance, .draftAnyway)
     }
 
+    func testPreviewApprovalRecordsEditedSentFeedback() async throws {
+        let draft = pendingDraft(
+            body: "Thursday works for me.",
+            originalBody: "Thursday works!"
+        )
+        let (appState, _) = makeAppState(seed: [])
+        appState.generatedDraft = draft
+
+        let confirmation = try await appState.approveDraftPreview(draft, sendBehavior: .autoSend)
+
+        XCTAssertEqual(confirmation, "Sent.")
+        let record = appState.draftFeedbackRecords.first
+        XCTAssertEqual(record?.outcome, .approvedAfterEdit)
+        XCTAssertEqual(record?.dispatch, .sent)
+        XCTAssertNotNil(record?.editMagnitude)
+        XCTAssertNil(record?.denyReason)
+        XCTAssertNil(appState.generatedDraft)
+    }
+
+    func testPreviewApprovalRecordsSavedFeedback() async throws {
+        let draft = pendingDraft()
+        let (appState, _) = makeAppState(seed: [])
+
+        let confirmation = try await appState.approveDraftPreview(draft, sendBehavior: .saveAsDraft)
+
+        XCTAssertEqual(confirmation, "Saved to your Drafts.")
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.outcome, .approvedAsIs)
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.dispatch, .saved)
+    }
+
+    func testGeneratedDraftSendRecordsApprovalFeedback() async {
+        let draft = pendingDraft()
+        let (appState, _) = makeAppState(seed: [])
+        appState.generatedDraft = draft
+
+        await appState.sendGeneratedDraft()
+
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.outcome, .approvedAsIs)
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.dispatch, .sent)
+    }
+
+    func testGeneratedDraftSaveRecordsApprovalFeedback() async {
+        let draft = pendingDraft()
+        let (appState, _) = makeAppState(seed: [])
+        appState.generatedDraft = draft
+
+        await appState.saveGeneratedDraftToDrafts()
+
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.outcome, .approvedAsIs)
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.dispatch, .saved)
+    }
+
     // MARK: - Deny capture
 
     func testDenyWithReasonRecordsDeniedAndCodeOnlyInActivity() {

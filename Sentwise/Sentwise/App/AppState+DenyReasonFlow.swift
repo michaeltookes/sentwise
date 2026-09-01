@@ -58,12 +58,12 @@ extension AppState {
         if code == .other, trimmedOther.isEmpty { return }
 
         let reason = DenyReason(code: code, otherText: code == .other ? trimmedOther : nil)
+        denyReasonPrompt = nil
+        guard finalizeDenyDraft(prompt.draft, reason: reason) else { return }
         lastUsedDenyReason = reason
         if dontAskAgain {
             denyReasonPromptSuppressedThisSession = true
         }
-        denyReasonPrompt = nil
-        finalizeDenyDraft(prompt.draft, reason: reason)
     }
 
     /// Aborts the pending deny cleanly — the draft stays queued, nothing recorded.
@@ -82,17 +82,20 @@ extension AppState {
     /// activity `.denied` event gains the reason *code* in its detail (code only,
     /// never the free text), and a `DraftFeedbackRecord` captures the full deny
     /// signal. Shared by `denyDraft` (reason `nil`) and the reason-picker flow.
-    func finalizeDenyDraft(_ draft: Draft, reason: DenyReason?) {
-        guard !approvingDraftIDs.contains(draft.identity) else { return }
+    @discardableResult
+    func finalizeDenyDraft(_ draft: Draft, reason: DenyReason?) -> Bool {
+        guard !approvingDraftIDs.contains(draft.identity) else { return false }
         approvalError = nil
-        pendingStaleWarnings.removeValue(forKey: draft.identity)
-        clearOfflineQueueEntry(draft.identity)
         do {
-            try removePendingDraft(draft)
+            guard try removePendingDraft(draft) != nil else { return false }
+            pendingStaleWarnings.removeValue(forKey: draft.identity)
+            clearOfflineQueueEntry(draft.identity)
             recordDraftActivity(.denied, for: draft, detail: reason?.code.rawValue)
             recordDenyFeedback(for: draft, reason: reason)
+            return true
         } catch {
             approvalError = Self.draftMessage(for: error)
+            return false
         }
     }
 }
