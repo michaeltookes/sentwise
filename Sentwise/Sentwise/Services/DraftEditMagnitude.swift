@@ -23,7 +23,7 @@ enum DraftEditMagnitude {
 
     static let exactDistanceCellLimit = 250_000
     private static let approximateResyncWindow = 64
-    private static let boundedAlignmentDistanceLimit = 2_048
+    private static let boundedMovedBlockDistanceLimit = 2_048
 
     /// The normalized edit magnitude in `0...1`. Both empty (after normalization)
     /// returns `0`.
@@ -62,7 +62,7 @@ enum DraftEditMagnitude {
             resyncingDistance(source, target),
             resyncingDistance(target, source)
         ]
-        if let aligned = boundedInsertionDeletionDistance(source, target) {
+        if let aligned = boundedMovedBlockDistance(source, target) {
             distances.append(aligned)
         }
         return distances.min() ?? max(source.count, target.count)
@@ -150,14 +150,14 @@ enum DraftEditMagnitude {
         return nil
     }
 
-    /// Myers-style insert/delete distance up to a fixed budget. This is exact for
-    /// small moved blocks and sparse insertions/deletions, then bails out before it
-    /// can become the quadratic post-send work the approximate path avoids.
-    private static func boundedInsertionDeletionDistance(
+    /// Myers-style insert/delete distance up to a fixed edit budget. This detects
+    /// moved blocks beyond the small resync window, then bails out before it can
+    /// become the quadratic post-send work the approximate path avoids.
+    private static func boundedMovedBlockDistance(
         _ source: [Character],
         _ target: [Character]
     ) -> Int? {
-        let maxDistance = boundedAlignmentDistanceLimit
+        let maxDistance = boundedMovedBlockDistanceLimit
         guard abs(source.count - target.count) <= maxDistance else { return nil }
 
         let offset = maxDistance + 1

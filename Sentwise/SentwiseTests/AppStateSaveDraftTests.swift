@@ -54,6 +54,7 @@ final class AppStateSaveDraftTests: XCTestCase {
         XCTAssertNotNil(appState.draftSavedMessage)
         XCTAssertNil(appState.draftError)
         XCTAssertFalse(appState.isSavingDraft)
+        XCTAssertNil(appState.generatedDraft)
 
         let rfc822 = String(data: provider.appendedRFC822 ?? Data(), encoding: .utf8) ?? ""
         XCTAssertTrue(rfc822.contains("To: alice@example.com"))

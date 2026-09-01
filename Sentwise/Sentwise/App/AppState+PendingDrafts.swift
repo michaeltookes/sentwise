@@ -259,6 +259,8 @@ extension AppState {
             // review window opens so they can pick a reason there.
             if requestDenyDraft(draft) {
                 openReviewHandler?()
+            } else if denyReasonPrompt != nil {
+                openReviewHandler?()
             }
         }
     }

@@ -349,6 +349,21 @@ final class AppStateApprovalTests: XCTestCase {
         XCTAssertEqual(appState.draftFeedbackRecords.first?.denyReason?.code, .handleLater)
     }
 
+    func testNotificationDenyDoesNotReplaceActivePrompt() async {
+        let first = pendingDraft(id: 1)
+        let second = pendingDraft(id: 2)
+        let (appState, _, notifier, _) = makeAppState(seed: [first, second])
+        var openCount = 0
+        appState.openReviewHandler = { openCount += 1 }
+        _ = appState.requestDenyDraft(first)
+
+        await notifier.fireAction(.deny, identity: second.identity)
+
+        XCTAssertEqual(appState.denyReasonPrompt?.id, first.identity)
+        XCTAssertTrue(appState.pendingDrafts.contains { $0.identity == second.identity })
+        XCTAssertEqual(openCount, 1)
+    }
+
     func testNotificationOpenActionInvokesReviewHandler() async {
         let (appState, _, notifier, _) = makeAppState(seed: [pendingDraft()])
         var opened = false

@@ -33,9 +33,10 @@ extension AppState {
             confirmation = "Sent."
         case .saveAsDraft:
             try await performSave(draft, credentials: dispatchCredentials)
+            clearGeneratedDraftIfDisplayed(draft)
             confirmation = "Saved to your Drafts."
         }
-        recordApprovalFeedback(for: draft, sendBehavior: effectiveSendBehavior)
+        recordSuccessfulApprovalDispatch(for: draft, sendBehavior: effectiveSendBehavior)
         return confirmation
     }
 

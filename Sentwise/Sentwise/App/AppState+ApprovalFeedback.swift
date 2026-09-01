@@ -46,10 +46,17 @@ extension AppState {
         }
     }
 
+    /// Records the approval signal after any successful send/save dispatch. This is
+    /// shared by queued drafts, manual-preview approvals, and the legacy generated
+    /// draft buttons so approval feedback cannot drift by surface again.
+    func recordSuccessfulApprovalDispatch(for draft: Draft, sendBehavior: SendBehavior) {
+        recordApprovalFeedback(for: draft, sendBehavior: sendBehavior)
+    }
+
     /// Records an approval outcome for a draft that just dispatched (item 83).
     /// `approvedAsIs` vs. `approvedAfterEdit` comes from item 19's `wasEdited`;
     /// the edit magnitude is computed only for edited approvals.
-    func recordApprovalFeedback(for draft: Draft, sendBehavior: SendBehavior) {
+    private func recordApprovalFeedback(for draft: Draft, sendBehavior: SendBehavior) {
         let outcome: DraftFeedbackOutcome = draft.wasEdited ? .approvedAfterEdit : .approvedAsIs
         let magnitude = draft.wasEdited
             ? DraftEditMagnitude.ratio(original: draft.originalBody ?? "", final: draft.body)

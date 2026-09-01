@@ -204,12 +204,14 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
     func testPreviewApprovalRecordsSavedFeedback() async throws {
         let draft = pendingDraft()
         let (appState, _) = makeAppState(seed: [])
+        appState.generatedDraft = draft
 
         let confirmation = try await appState.approveDraftPreview(draft, sendBehavior: .saveAsDraft)
 
         XCTAssertEqual(confirmation, "Saved to your Drafts.")
         XCTAssertEqual(appState.draftFeedbackRecords.first?.outcome, .approvedAsIs)
         XCTAssertEqual(appState.draftFeedbackRecords.first?.dispatch, .saved)
+        XCTAssertNil(appState.generatedDraft)
     }
 
     func testGeneratedDraftSendRecordsApprovalFeedback() async {
@@ -232,6 +234,7 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
 
         XCTAssertEqual(appState.draftFeedbackRecords.first?.outcome, .approvedAsIs)
         XCTAssertEqual(appState.draftFeedbackRecords.first?.dispatch, .saved)
+        XCTAssertNil(appState.generatedDraft)
     }
 
     // MARK: - Deny capture
