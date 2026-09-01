@@ -50,14 +50,24 @@ enum UserFactsPrompt {
         return lines
     }
 
+    /// Escapes facts-fence markers inside untrusted email or transcript source
+    /// text before the source appears in the same prompt as authoritative facts.
+    static func sanitizedSourceText(_ text: String) -> String {
+        neutralizingFenceMarkers(in: text)
+    }
+
     /// Removes any embedded fence markers and collapses newlines so a single fact
     /// stays a single fenced line and can't forge the fence boundary.
     private static func sanitize(_ line: String) -> String {
-        line
-            .replacingOccurrences(of: openingFence, with: "USER FACTS")
-            .replacingOccurrences(of: closingFence, with: "USER FACTS")
+        neutralizingFenceMarkers(in: line)
             .replacingOccurrences(of: "\r\n", with: " ")
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\r", with: " ")
+    }
+
+    private static func neutralizingFenceMarkers(in text: String) -> String {
+        text
+            .replacingOccurrences(of: openingFence, with: "USER FACTS")
+            .replacingOccurrences(of: closingFence, with: "USER FACTS")
     }
 }

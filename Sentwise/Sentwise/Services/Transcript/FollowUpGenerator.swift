@@ -198,6 +198,7 @@ struct FollowUpGenerator {
         var prompt: String
         switch source {
         case .full(let text):
+            let transcript = UserFactsPrompt.sanitizedSourceText(text)
             prompt = """
             Write the follow-up email from this call transcript.
 
@@ -205,9 +206,10 @@ struct FollowUpGenerator {
 
             Transcript:
 
-            \(text)
+            \(transcript)
             """
         case .summarized(let summary):
+            let sanitizedSummary = UserFactsPrompt.sanitizedSourceText(summary)
             prompt = """
             Write the follow-up email from this distilled summary of a long call. The summary was \
             produced from the full transcript; treat it as the source of truth.
@@ -216,7 +218,7 @@ struct FollowUpGenerator {
 
             Call summary:
 
-            \(summary)
+            \(sanitizedSummary)
             """
         }
         if let facts = userSuppliedFacts, let block = UserFactsPrompt.block(facts) {

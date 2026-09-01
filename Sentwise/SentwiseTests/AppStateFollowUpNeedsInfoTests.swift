@@ -80,6 +80,21 @@ final class AppStateFollowUpNeedsInfoTests: XCTestCase {
         XCTAssertEqual(notifier.notifiedDrafts.last?.identity, draft.identity)
     }
 
+    func testCreateFollowUpBoundsPersistedTranscriptContext() async throws {
+        let longTranscript = String(repeating: "Marcus: Detail that might matter later.\n", count: 500)
+        let llm = RecordingSequencedFollowUpLLMProvider(completions: [])
+        let (appState, _, persistence) = makeAppState(llm: llm)
+
+        let draft = try await appState.createFollowUp(from: TranscriptIngest.fromPaste(longTranscript))
+
+        let text = try XCTUnwrap(draft.followUpTranscript?.text)
+        XCTAssertEqual(text.count, AppState.maxPersistedFollowUpTranscriptChars)
+        XCTAssertLessThanOrEqual(
+            persistence.loadPendingDrafts().first?.followUpTranscript?.text.count ?? 0,
+            AppState.maxPersistedFollowUpTranscriptChars
+        )
+    }
+
     func testAnsweredNeedsInfoFollowUpRedraftsWithFacts() async throws {
         let llm = RecordingSequencedFollowUpLLMProvider(completions: [
             .success(LLMResponse(text: """

@@ -172,18 +172,21 @@ struct DraftGenerator {
         maxThreadChars: Int,
         userSuppliedFacts: UserSuppliedFacts?
     ) -> String {
-        let sender = senderLine(context)
+        let sender = UserFactsPrompt.sanitizedSourceText(senderLine(context))
+        let subject = UserFactsPrompt.sanitizedSourceText(context.subject)
         let thread = EmailThreadParser.split(context.body)
-        let latest = String(thread.latest.prefix(maxChars))
+        let latest = UserFactsPrompt.sanitizedSourceText(String(thread.latest.prefix(maxChars)))
         var prompt = """
         Reply to the latest message in this email thread:
 
         From: \(sender)
-        Subject: \(context.subject)
+        Subject: \(subject)
 
         \(latest)
         """
-        let history = EmailThreadParser.readableHistory(fromQuoted: thread.quotedHistory, maxChars: maxThreadChars)
+        let history = UserFactsPrompt.sanitizedSourceText(
+            EmailThreadParser.readableHistory(fromQuoted: thread.quotedHistory, maxChars: maxThreadChars)
+        )
         if !history.isEmpty {
             prompt += """
 

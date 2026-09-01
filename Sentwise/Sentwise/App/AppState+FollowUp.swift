@@ -61,13 +61,14 @@ extension AppState {
         if let shouldCommit, !shouldCommit() {
             throw FollowUpCommitError.sourceChanged
         }
+        let followUpTranscript = Self.boundedFollowUpTranscript(parsed)
         let draft = makeAuthoredDraft(AuthoredDraftSpec(
             outcome: outcome,
             recipients: Self.dedupedRecipients(recipients),
             subject: Self.followUpSubject(subject, suggestedTitle: ingested.suggestedTitle),
             model: llmConfiguration.model,
             credentials: credentials,
-            followUpTranscript: parsed
+            followUpTranscript: followUpTranscript
         ))
         do {
             try enqueuePendingDraft(draft)
@@ -180,6 +181,16 @@ extension AppState {
             notReplyWorthy: Self.notReplyWorthy(from: spec.outcome),
             authoredRecipients: spec.recipients,
             followUpTranscript: spec.followUpTranscript
+        )
+    }
+
+    static let maxPersistedFollowUpTranscriptChars = 12_000
+
+    static func boundedFollowUpTranscript(_ transcript: ParsedTranscript) -> ParsedTranscript {
+        guard transcript.text.count > maxPersistedFollowUpTranscriptChars else { return transcript }
+        return ParsedTranscript(
+            text: String(transcript.text.prefix(maxPersistedFollowUpTranscriptChars)),
+            hasSpeakerLabels: transcript.hasSpeakerLabels
         )
     }
 
