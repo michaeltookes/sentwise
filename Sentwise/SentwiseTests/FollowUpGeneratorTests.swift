@@ -188,6 +188,62 @@ final class FollowUpGeneratorTests: XCTestCase {
         XCTAssertTrue(summaryRequest.system?.contains("condensing a call transcript") ?? false)
     }
 
+    func testLongTranscriptGenerationReturnsCompleteSummaryContext() async throws {
+        let recorder = RequestRecorder(
+            responses: ["first", "middle", "tail Friday"],
+            defaultResponse: "Final follow-up body."
+        )
+        var generator = FollowUpGenerator()
+        generator.maxSinglePassChars = 40
+        generator.maxChunkChars = 20
+        let transcript = ParsedTranscript(
+            text: """
+            A: first decision
+            B: middle action
+            A: tail Friday
+            """,
+            hasSpeakerLabels: true
+        )
+
+        let generation = try await generator.makeFollowUpGeneration(
+            transcript: transcript,
+            voiceProfile: nil,
+            model: "m",
+            complete: recorder.complete
+        )
+
+        XCTAssertEqual(generation.outcome, .ready("Final follow-up body."))
+        XCTAssertEqual(generation.context.source, .summary)
+        XCTAssertEqual(generation.context.text, "first\n\nmiddle\n\ntail Friday")
+        XCTAssertLessThanOrEqual(generation.context.text.count, generator.maxSinglePassChars)
+        let draftContent = try XCTUnwrap(recorder.requests.last?.messages.first?.content)
+        XCTAssertTrue(draftContent.contains("Call summary:"))
+        XCTAssertTrue(draftContent.contains("tail Friday"))
+    }
+
+    func testRedraftsFromPersistedSummaryContext() async throws {
+        let recorder = RequestRecorder(defaultResponse: "Follow-up with supplied detail.")
+        let context = FollowUpDraftContext.summary(
+            "Priya owns the launch handoff.",
+            hasSpeakerLabels: true
+        )
+
+        _ = try await FollowUpGenerator().makeFollowUp(
+            from: context,
+            voiceProfile: nil,
+            model: "m",
+            userSuppliedFacts: UserSuppliedFacts(answers: [
+                .init(question: "Launch date?", response: "Friday")
+            ]),
+            complete: recorder.complete
+        )
+
+        let content = try XCTUnwrap(recorder.requests.last?.messages.first?.content)
+        XCTAssertTrue(content.contains("distilled summary of a long call"))
+        XCTAssertTrue(content.contains("Priya owns the launch handoff."))
+        XCTAssertTrue(content.contains("Launch date?: Friday"))
+    }
+
     func testLongTranscriptReducesCombinedSummaryBeforeDrafting() async throws {
         let recorder = RequestRecorder(
             responses: Array(repeating: String(repeating: "A", count: 80), count: 4),

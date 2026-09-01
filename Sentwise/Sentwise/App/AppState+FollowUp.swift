@@ -47,9 +47,9 @@ extension AppState {
         let parsed = ingested.parsed()
         guard !parsed.isEmpty else { throw DraftError.emptyDraft }
 
-        let outcome: DraftOutcome
+        let generation: FollowUpGeneration
         do {
-            outcome = try await makeFollowUpOutcome(parsed: parsed, llmConfiguration: llmConfiguration)
+            generation = try await makeFollowUpGeneration(parsed: parsed, llmConfiguration: llmConfiguration)
         } catch {
             await reconcileManagedAccountState(after: error, provider: llmConfiguration.provider)
             throw error
@@ -61,14 +61,13 @@ extension AppState {
         if let shouldCommit, !shouldCommit() {
             throw FollowUpCommitError.sourceChanged
         }
-        let followUpTranscript = Self.boundedFollowUpTranscript(parsed)
         let draft = makeAuthoredDraft(AuthoredDraftSpec(
-            outcome: outcome,
+            outcome: generation.outcome,
             recipients: Self.dedupedRecipients(recipients),
             subject: Self.followUpSubject(subject, suggestedTitle: ingested.suggestedTitle),
             model: llmConfiguration.model,
             credentials: credentials,
-            followUpTranscript: followUpTranscript
+            followUpContext: generation.context
         ))
         do {
             try enqueuePendingDraft(draft)
@@ -129,10 +128,46 @@ extension AppState {
         llmConfiguration: DraftLLMConfiguration,
         userSuppliedFacts: UserSuppliedFacts? = nil
     ) async throws -> DraftOutcome {
+        try await makeFollowUpGeneration(
+            parsed: parsed,
+            llmConfiguration: llmConfiguration,
+            userSuppliedFacts: userSuppliedFacts
+        ).outcome
+    }
+
+    func makeFollowUpGeneration(
+        parsed: ParsedTranscript,
+        llmConfiguration: DraftLLMConfiguration,
+        userSuppliedFacts: UserSuppliedFacts? = nil
+    ) async throws -> FollowUpGeneration {
+        let profile = voiceProfile
+        let runner = retryRunner
+        return try await FollowUpGenerator().makeFollowUpGeneration(
+            transcript: parsed,
+            voiceProfile: profile,
+            model: llmConfiguration.model,
+            userSuppliedFacts: userSuppliedFacts
+        ) { [llm] request in
+            try await runner.run(classify: ResilienceClassifier.retryDecision(for:)) {
+                try await llm.complete(
+                    request,
+                    provider: llmConfiguration.provider,
+                    apiKey: llmConfiguration.apiKey,
+                    baseURL: llmConfiguration.baseURL
+                )
+            }
+        }
+    }
+
+    func makeFollowUpOutcome(
+        context: FollowUpDraftContext,
+        llmConfiguration: DraftLLMConfiguration,
+        userSuppliedFacts: UserSuppliedFacts? = nil
+    ) async throws -> DraftOutcome {
         let profile = voiceProfile
         let runner = retryRunner
         return try await FollowUpGenerator().makeFollowUp(
-            transcript: parsed,
+            from: context,
             voiceProfile: profile,
             model: llmConfiguration.model,
             userSuppliedFacts: userSuppliedFacts
@@ -154,7 +189,7 @@ extension AppState {
         var subject: String
         var model: String
         var credentials: MailAccountCredentials
-        var followUpTranscript: ParsedTranscript
+        var followUpContext: FollowUpDraftContext
         var id: UInt32?
     }
 
@@ -172,7 +207,7 @@ extension AppState {
             sourceFrom: spec.recipients.first,
             sourceReplyTo: nil,
             sourceMessageID: nil,
-            incomingBody: Self.truncatedIncomingBody(spec.followUpTranscript.text),
+            incomingBody: Self.truncatedIncomingBody(spec.followUpContext.text),
             replySubject: spec.subject,
             body: finalizedDraftBody(Self.body(from: spec.outcome)),
             model: spec.model,
@@ -180,19 +215,11 @@ extension AppState {
             needsInfo: Self.needsInfo(from: spec.outcome),
             notReplyWorthy: Self.notReplyWorthy(from: spec.outcome),
             authoredRecipients: spec.recipients,
-            followUpTranscript: spec.followUpTranscript
+            followUpContext: spec.followUpContext
         )
     }
 
-    static let maxPersistedFollowUpTranscriptChars = 12_000
-
-    static func boundedFollowUpTranscript(_ transcript: ParsedTranscript) -> ParsedTranscript {
-        guard transcript.text.count > maxPersistedFollowUpTranscriptChars else { return transcript }
-        return ParsedTranscript(
-            text: String(transcript.text.prefix(maxPersistedFollowUpTranscriptChars)),
-            hasSpeakerLabels: transcript.hasSpeakerLabels
-        )
-    }
+    static let maxPersistedFollowUpContextChars = FollowUpGenerator().maxSinglePassChars
 
     func rollbackPendingFollowUp(_ draft: Draft) throws {
         let previousDrafts = pendingDrafts

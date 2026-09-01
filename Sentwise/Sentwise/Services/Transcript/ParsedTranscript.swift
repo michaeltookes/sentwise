@@ -16,3 +16,37 @@ struct ParsedTranscript: Codable, Equatable {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
+
+/// Bounded source context persisted with authored follow-ups so a later
+/// `NEEDS_INFO` re-draft can reuse the complete call context without storing an
+/// unbounded transcript in the pending queue.
+struct FollowUpDraftContext: Codable, Equatable {
+    enum Source: String, Codable {
+        case transcript
+        case summary
+    }
+
+    var text: String
+    var hasSpeakerLabels: Bool
+    var source: Source
+
+    var isEmpty: Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    static func transcript(_ transcript: ParsedTranscript) -> FollowUpDraftContext {
+        FollowUpDraftContext(
+            text: transcript.text,
+            hasSpeakerLabels: transcript.hasSpeakerLabels,
+            source: .transcript
+        )
+    }
+
+    static func summary(_ text: String, hasSpeakerLabels: Bool) -> FollowUpDraftContext {
+        FollowUpDraftContext(
+            text: text,
+            hasSpeakerLabels: hasSpeakerLabels,
+            source: .summary
+        )
+    }
+}

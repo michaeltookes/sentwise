@@ -6,7 +6,8 @@ import Foundation
 extension AppState {
 
     func regenerateAuthoredFollowUpDraft(_ draft: Draft) async {
-        guard let transcript = Self.followUpTranscript(for: draft) else {
+        guard let draft = flushPendingDraftRecipientEdit(for: draft) else { return }
+        guard let context = Self.followUpContext(for: draft) else {
             approvalError = Self.draftMessage(for: DraftError.sourceMessageUnavailable)
             return
         }
@@ -30,7 +31,7 @@ extension AppState {
 
         do {
             let outcome = try await makeFollowUpOutcome(
-                parsed: transcript,
+                context: context,
                 llmConfiguration: llmConfiguration,
                 userSuppliedFacts: draft.userSuppliedFacts
             )
@@ -46,7 +47,7 @@ extension AppState {
                 subject: draft.replySubject,
                 model: llmConfiguration.model,
                 credentials: credentials,
-                followUpTranscript: transcript,
+                followUpContext: context,
                 id: draft.id
             ))
             preserveRegenerationProvenance(from: draft, on: &replacement)
@@ -58,15 +59,19 @@ extension AppState {
         }
     }
 
-    private static func followUpTranscript(for draft: Draft) -> ParsedTranscript? {
+    private static func followUpContext(for draft: Draft) -> FollowUpDraftContext? {
+        if let context = draft.followUpContext, !context.isEmpty {
+            return context
+        }
         if let transcript = draft.followUpTranscript, !transcript.isEmpty {
-            return transcript
+            return .transcript(transcript)
         }
         guard draft.isAuthored,
               let body = draft.incomingBody,
               !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
         }
-        return TranscriptParser.parse(body, format: .plainText)
+        let transcript = TranscriptParser.parse(body, format: .plainText)
+        return transcript.isEmpty ? nil : .transcript(transcript)
     }
 }

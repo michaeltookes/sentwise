@@ -173,10 +173,14 @@ struct Draft: Codable, Identifiable, Equatable {
     /// watched-folder path enqueues drafts this way for the user to complete).
     var authoredRecipients: [MailAddress]?
 
-    /// Parsed transcript context for authored post-call follow-ups. Stored only
-    /// for authored drafts so a `NEEDS_INFO` follow-up can be re-drafted with the
-    /// user's supplied facts instead of losing the original call context.
+    /// Legacy parsed transcript context for authored post-call follow-ups. New
+    /// drafts use `followUpContext`; this remains so already-queued drafts from
+    /// earlier builds can still be re-drafted with the original call context.
     var followUpTranscript: ParsedTranscript?
+
+    /// Bounded transcript-or-summary context used to regenerate authored
+    /// follow-ups without persisting unbounded pasted or watched transcripts.
+    var followUpContext: FollowUpDraftContext?
 
     /// Whether this draft currently needs user input before approval. A model
     /// `NOT_REPLY_WORTHY` override becomes dispatchable only after the user writes
@@ -256,6 +260,7 @@ struct Draft: Codable, Identifiable, Equatable {
         offlineQueuedDispatch: OfflineQueuedDraftDispatch? = nil,
         authoredRecipients: [MailAddress]? = nil,
         followUpTranscript: ParsedTranscript? = nil,
+        followUpContext: FollowUpDraftContext? = nil,
         replyWorthinessOverride: Bool = false,
         replyWorthinessOverrideSource: DraftReplyWorthinessOverrideSource? = nil,
         userSuppliedFacts: UserSuppliedFacts? = nil,
@@ -285,6 +290,7 @@ struct Draft: Codable, Identifiable, Equatable {
         self.offlineQueuedDispatch = offlineQueuedDispatch
         self.authoredRecipients = authoredRecipients
         self.followUpTranscript = followUpTranscript
+        self.followUpContext = followUpContext
         self.userSuppliedFacts = userSuppliedFacts
         self.answeredRedraftCount = answeredRedraftCount
     }
