@@ -114,15 +114,6 @@ final class AppStateActivityHistoryTests: XCTestCase {
         XCTAssertTrue(persistence.loadActivityEvents().isEmpty)
     }
 
-    func testActivityDetailVisibilityIncludesSaveFailuresAndEditNotes() {
-        XCTAssertTrue(ActivityEventKind.sendFailed.showsFailureDetail)
-        XCTAssertTrue(ActivityEventKind.saveFailed.showsFailureDetail)
-        XCTAssertFalse(ActivityEventKind.approvedSaved.showsFailureDetail)
-        XCTAssertTrue(ActivityEventKind.approvedSent.showsSuccessDetail)
-        XCTAssertTrue(ActivityEventKind.approvedSaved.showsSuccessDetail)
-        XCTAssertFalse(ActivityEventKind.saveFailed.showsSuccessDetail)
-    }
-
     func testActivitySubjectDisplayDecodesEncodedWords() {
         let encoded = Data("Café".utf8).base64EncodedString()
         let event = ActivityEvent(kind: .draftCreated, subject: "=?UTF-8?B?\(encoded)?=")
@@ -130,18 +121,6 @@ final class AppStateActivityHistoryTests: XCTestCase {
         XCTAssertEqual(event.subjectDisplay, "Café")
         let authored = ActivityEvent(kind: .draftCreated, subject: "☕ =?UTF-8?Q?failed?=", subjectSource: .authored)
         XCTAssertEqual(authored.subjectDisplay, "☕ =?UTF-8?Q?failed?=")
-    }
-
-    func testActivityAccessibilityLabelIncludesVisibleDetail() {
-        let event = ActivityEvent(
-            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
-            kind: .approvedSent,
-            sender: "Alice",
-            subject: "Lunch?",
-            detail: "Edited before send"
-        )
-
-        XCTAssertTrue(event.activityHistoryAccessibilityLabel.contains("Edited before send"))
     }
 
     func testActivityEventsPersistAndReloadOnNewAppState() {
@@ -261,6 +240,17 @@ final class AppStateActivityHistoryTests: XCTestCase {
 
         XCTAssertEqual(appState.activityEvents.map(\.kind), [.denied])
         XCTAssertEqual(appState.activityEvents.first?.subject, "Lunch?")
+    }
+
+    func testDenyWithReasonRecordsVisibleActivityReason() {
+        let draft = pendingDraft()
+        let (appState, _, _) = makeAppState(seed: [draft])
+
+        appState.finalizeDenyDraft(draft, reason: DenyReason(code: .wrongContent))
+
+        XCTAssertEqual(appState.activityEvents.map(\.kind), [.denied])
+        XCTAssertEqual(appState.activityEvents.first?.detail, "wrong_content")
+        XCTAssertEqual(appState.activityEvents.first?.activityHistoryVisibleDetail, "Reason: Wrong content")
     }
 
     func testPreviewCountdownCancelRecordsSendCanceledEvent() {

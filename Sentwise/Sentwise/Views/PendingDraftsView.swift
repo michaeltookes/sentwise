@@ -49,6 +49,21 @@ struct PendingDraftsView: View {
         }
         .frame(width: 720, height: 540)
         .task { await appState.refreshNotificationPermission() }
+        .sheet(item: denyReasonPromptBinding) { prompt in
+            DenyReasonPicker(prompt: prompt)
+                .environmentObject(appState)
+        }
+    }
+
+    /// Binds the deny-reason picker sheet (item 83) to the app-state prompt.
+    /// A dismissal (nil set) routes through `cancelDenyReason` so the draft stays.
+    private var denyReasonPromptBinding: Binding<DenyReasonPrompt?> {
+        Binding(
+            get: { appState.denyReasonPrompt },
+            set: { newValue in
+                if newValue == nil { appState.cancelDenyReason() }
+            }
+        )
     }
 
     /// The "notifications are off" hint (item 78). Because the notification is now

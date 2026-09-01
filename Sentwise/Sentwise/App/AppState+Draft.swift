@@ -213,7 +213,8 @@ extension AppState {
             model: llmConfiguration.model,
             generatedAt: Date(),
             needsInfo: Self.needsInfo(from: outcome),
-            notReplyWorthy: Self.notReplyWorthy(from: outcome)
+            notReplyWorthy: Self.notReplyWorthy(from: outcome),
+            manualPreview: true
         )
     }
 
@@ -342,6 +343,7 @@ extension AppState {
 
         do {
             try await performSend(draft, credentials: credentials)
+            recordSuccessfulApprovalDispatch(for: draft, sendBehavior: .autoSend)
             draftSentMessage = "Sent."
             generatedDraft = nil
         } catch {
@@ -376,7 +378,9 @@ extension AppState {
 
         do {
             try await performSave(draft, credentials: credentials)
+            recordSuccessfulApprovalDispatch(for: draft, sendBehavior: .saveAsDraft)
             draftSavedMessage = "Saved to your Drafts."
+            generatedDraft = nil
         } catch {
             draftError = Self.draftMessage(for: error)
         }

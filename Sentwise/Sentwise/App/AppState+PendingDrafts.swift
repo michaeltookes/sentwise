@@ -143,20 +143,6 @@ extension AppState {
         recordDraftActivity(.staleWarning, for: draft, staleReason: reason)
     }
 
-    /// Denies (discards) a pending draft without sending or saving it.
-    func denyDraft(_ draft: Draft) {
-        guard !approvingDraftIDs.contains(draft.identity) else { return }
-        approvalError = nil
-        pendingStaleWarnings.removeValue(forKey: draft.identity)
-        clearOfflineQueueEntry(draft.identity)
-        do {
-            try removePendingDraft(draft)
-            recordDraftActivity(.denied, for: draft)
-        } catch {
-            approvalError = Self.draftMessage(for: error)
-        }
-    }
-
     /// Re-drafts a queued reply or authored follow-up; the old draft remains queued until
     /// the replacement is successfully generated and persisted.
     func regeneratePendingDraft(_ draft: Draft) async {
@@ -267,7 +253,15 @@ extension AppState {
             }
         case .deny:
             guard let draft = pendingDrafts.first(where: { $0.identity == identity }) else { return }
-            denyDraft(draft)
+            // A notification can't host the reason picker, so route to the same
+            // reason-gated flow (item 83): if the user silenced it this session the
+            // deny finalizes immediately with the remembered reason; otherwise the
+            // review window opens so they can pick a reason there.
+            if requestDenyDraft(draft) {
+                openReviewHandler?()
+            } else if denyReasonPrompt != nil {
+                openReviewHandler?()
+            }
         }
     }
 

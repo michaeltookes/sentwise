@@ -48,6 +48,9 @@ extension AppState {
         case .saveAsDraft:
             try await performSave(draft, credentials: dispatchCredentials)
         }
+        // Terminal approve (item 83): capture the same successful-dispatch signal
+        // used by preview and legacy approval paths.
+        recordSuccessfulApprovalDispatch(for: draft, sendBehavior: effectiveSendBehavior)
         try finalizeApprovedDraft(draft)
         return true
     }

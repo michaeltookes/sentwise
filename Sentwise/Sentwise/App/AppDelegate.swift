@@ -152,6 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.cancelAllSendCountdowns()
         appState.stopReachabilityMonitoring()
         appState.stopTranscriptFolderWatching()
+        appState.flushDraftFeedbackSync()
         appState.saveSettingsSync()
         logger.info("Sentwise terminating")
     }

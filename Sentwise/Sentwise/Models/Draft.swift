@@ -146,6 +146,10 @@ struct Draft: Codable, Identifiable, Equatable {
     var replyWorthinessOverride: Bool?
     /// The skipped message identity that produced a "Draft anyway" override.
     var replyWorthinessOverrideSource: DraftReplyWorthinessOverrideSource?
+    /// Whether this reply draft came from an explicit user-requested preview
+    /// rather than the watcher. Optional so existing persisted drafts decode
+    /// cleanly; `nil` means an old draft has no migration-safe preview provenance.
+    var manualPreview: Bool?
     /// An approved dispatch that could not run because the network was offline.
     /// Once dispatch starts, the intent is marked terminal so relaunch cannot
     /// automatically repeat a send whose post-send persistence failed.
@@ -218,6 +222,21 @@ struct Draft: Codable, Identifiable, Equatable {
     /// How many answered re-drafts still returned `NEEDS_INFO` (item 85).
     var answeredRedraftFailures: Int { answeredRedraftCount ?? 0 }
 
+    /// The approval-signal provenance of this draft (item 83, Phase 1): authored
+    /// follow-up, user-forced "Draft anyway" skip-log override, manual preview,
+    /// or watcher draft.
+    ///
+    /// **Seam (item 68):** `watcher` is a single bucket today. Item 68's
+    /// header-fetch-degradation diagnosis may later refine it (a draft that
+    /// slipped past a *degraded* reply-worthiness check vs. a clean one);
+    /// `DraftFeedbackProvenance` is where that split would land.
+    var feedbackProvenance: DraftFeedbackProvenance {
+        if isAuthored { return .authored }
+        if replyWorthinessOverride == true { return .draftAnyway }
+        if manualPreview == true { return .manualPreview }
+        return .watcher
+    }
+
     /// Whether the card should surface the "write it yourself" escape: the user
     /// has answered and re-drafted at least twice and the model still needs input.
     var shouldOfferWriteItYourself: Bool {
@@ -263,6 +282,7 @@ struct Draft: Codable, Identifiable, Equatable {
         followUpContext: FollowUpDraftContext? = nil,
         replyWorthinessOverride: Bool = false,
         replyWorthinessOverrideSource: DraftReplyWorthinessOverrideSource? = nil,
+        manualPreview: Bool = false,
         userSuppliedFacts: UserSuppliedFacts? = nil,
         answeredRedraftCount: Int? = nil
     ) {
@@ -287,6 +307,7 @@ struct Draft: Codable, Identifiable, Equatable {
         self.notReplyWorthy = notReplyWorthy
         self.replyWorthinessOverride = replyWorthinessOverride
         self.replyWorthinessOverrideSource = replyWorthinessOverrideSource
+        self.manualPreview = manualPreview
         self.offlineQueuedDispatch = offlineQueuedDispatch
         self.authoredRecipients = authoredRecipients
         self.followUpTranscript = followUpTranscript

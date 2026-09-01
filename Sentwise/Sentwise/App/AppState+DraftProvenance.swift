@@ -37,6 +37,7 @@ extension AppState {
         replacement.generatedAt = draft.generatedAt
         replacement.regeneratedAt = Date()
         replacement.replyWorthinessOverride = draft.replyWorthinessOverride
+        replacement.manualPreview = draft.manualPreview
         preserveUserSuppliedFacts(from: draft, on: &replacement)
         guard draft.replyWorthinessOverride == true else { return }
         replacement.replyWorthinessOverrideSource = draft.replyWorthinessOverrideSource

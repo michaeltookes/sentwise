@@ -318,13 +318,50 @@ final class AppStateApprovalTests: XCTestCase {
         XCTAssertTrue(appState.pendingDrafts.isEmpty)
     }
 
-    func testNotificationDenyActionDiscardsDraft() async {
+    func testNotificationDenyActionPresentsReasonPickerAndOpensReview() async {
+        // A notification can't host the reason picker, so deny (item 83) routes to
+        // the reason-gated flow: the draft stays pending, the picker is presented,
+        // and the review window that hosts it is opened.
         let draft = pendingDraft()
         let (appState, _, notifier, _) = makeAppState(seed: [draft])
+        var opened = false
+        appState.openReviewHandler = { opened = true }
+
+        await notifier.fireAction(.deny, identity: draft.identity)
+
+        XCTAssertEqual(appState.pendingDrafts.count, 1)
+        XCTAssertEqual(appState.denyReasonPrompt?.id, draft.identity)
+        XCTAssertTrue(opened)
+    }
+
+    func testNotificationDenyWithSilencedPickerDiscardsSilently() async {
+        // With "don't ask again this session" set, a notification deny reuses the
+        // remembered reason and discards immediately (still recorded).
+        let draft = pendingDraft()
+        let (appState, _, notifier, _) = makeAppState(seed: [draft])
+        appState.lastUsedDenyReason = DenyReason(code: .handleLater)
+        appState.denyReasonPromptSuppressedThisSession = true
 
         await notifier.fireAction(.deny, identity: draft.identity)
 
         XCTAssertTrue(appState.pendingDrafts.isEmpty)
+        XCTAssertNil(appState.denyReasonPrompt)
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.denyReason?.code, .handleLater)
+    }
+
+    func testNotificationDenyDoesNotReplaceActivePrompt() async {
+        let first = pendingDraft(id: 1)
+        let second = pendingDraft(id: 2)
+        let (appState, _, notifier, _) = makeAppState(seed: [first, second])
+        var openCount = 0
+        appState.openReviewHandler = { openCount += 1 }
+        _ = appState.requestDenyDraft(first)
+
+        await notifier.fireAction(.deny, identity: second.identity)
+
+        XCTAssertEqual(appState.denyReasonPrompt?.id, first.identity)
+        XCTAssertTrue(appState.pendingDrafts.contains { $0.identity == second.identity })
+        XCTAssertEqual(openCount, 1)
     }
 
     func testNotificationOpenActionInvokesReviewHandler() async {

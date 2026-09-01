@@ -43,6 +43,8 @@ struct DraftView: View {
     @State private var staleApprovalSendBehavior: SendBehavior?
     @State private var countdownRemaining: Int?
     @State private var countdownTask: Task<Void, Never>?
+    @State private var hasRecordedTerminalFeedback = false
+    @State private var deferredPreviewAbandonmentDraft: Draft?
 
     init(draft: Draft) {
         _displayedDraft = State(initialValue: draft)
@@ -121,7 +123,7 @@ struct DraftView: View {
             .padding()
         }
         .frame(width: 480, height: 460)
-        .onDisappear { cancelPreviewCountdown() }
+        .onDisappear { recordPreviewAbandonmentIfNeeded() }
         .confirmationDialog(
             staleReason?.headline ?? "",
             isPresented: staleWarningBinding,
@@ -270,6 +272,8 @@ struct DraftView: View {
                 sendBehavior: approvalSendBehavior,
                 force: force
             )
+            hasRecordedTerminalFeedback = true
+            deferredPreviewAbandonmentDraft = nil
             staleReason = nil
             staleApprovalSendBehavior = nil
         } catch let error as DraftDispatchError {
@@ -279,9 +283,11 @@ struct DraftView: View {
                 dispatchError = AppState.draftMessage(for: error)
                 staleApprovalSendBehavior = nil
             }
+            recordDeferredPreviewAbandonmentIfNeeded()
         } catch {
             dispatchError = AppState.draftMessage(for: error)
             staleApprovalSendBehavior = nil
+            recordDeferredPreviewAbandonmentIfNeeded()
         }
     }
 
@@ -302,6 +308,7 @@ struct DraftView: View {
         } catch {
             dispatchError = AppState.draftMessage(for: error)
         }
+        recordDeferredPreviewAbandonmentIfNeeded()
     }
 
     private var isBusy: Bool {
@@ -310,5 +317,36 @@ struct DraftView: View {
 
     private var isDone: Bool {
         dispatchConfirmation != nil
+    }
+
+    private var shouldRecordPreviewAbandonment: Bool {
+        !hasRecordedTerminalFeedback && !isDone && displayedDraft.manualPreview == true
+    }
+
+    private func recordPreviewAbandonmentIfNeeded(allowWhileDispatching: Bool = false) {
+        cancelPreviewCountdown()
+        guard shouldRecordPreviewAbandonment else {
+            return
+        }
+        var abandonedDraft = displayedDraft
+        abandonedDraft.applyEditedBody(editedBody)
+        guard !isDispatching || allowWhileDispatching else {
+            deferredPreviewAbandonmentDraft = abandonedDraft
+            return
+        }
+        appState.recordDraftPreviewAbandonment(for: abandonedDraft)
+        hasRecordedTerminalFeedback = true
+        deferredPreviewAbandonmentDraft = nil
+    }
+
+    private func recordDeferredPreviewAbandonmentIfNeeded() {
+        guard let abandonedDraft = deferredPreviewAbandonmentDraft else { return }
+        guard !hasRecordedTerminalFeedback else {
+            deferredPreviewAbandonmentDraft = nil
+            return
+        }
+        appState.recordDraftPreviewAbandonment(for: abandonedDraft)
+        hasRecordedTerminalFeedback = true
+        deferredPreviewAbandonmentDraft = nil
     }
 }
