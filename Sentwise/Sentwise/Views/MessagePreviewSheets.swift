@@ -44,6 +44,7 @@ struct DraftView: View {
     @State private var countdownRemaining: Int?
     @State private var countdownTask: Task<Void, Never>?
     @State private var hasRecordedTerminalFeedback = false
+    @State private var shouldRecordAbandonmentAfterFailedDispatch = false
 
     init(draft: Draft) {
         _displayedDraft = State(initialValue: draft)
@@ -272,6 +273,7 @@ struct DraftView: View {
                 force: force
             )
             hasRecordedTerminalFeedback = true
+            shouldRecordAbandonmentAfterFailedDispatch = false
             staleReason = nil
             staleApprovalSendBehavior = nil
         } catch let error as DraftDispatchError {
@@ -281,9 +283,11 @@ struct DraftView: View {
                 dispatchError = AppState.draftMessage(for: error)
                 staleApprovalSendBehavior = nil
             }
+            recordAbandonmentAfterFailedDispatchIfNeeded()
         } catch {
             dispatchError = AppState.draftMessage(for: error)
             staleApprovalSendBehavior = nil
+            recordAbandonmentAfterFailedDispatchIfNeeded()
         }
     }
 
@@ -314,16 +318,27 @@ struct DraftView: View {
         dispatchConfirmation != nil
     }
 
-    private func recordPreviewAbandonmentIfNeeded() {
+    private var shouldRecordPreviewAbandonment: Bool {
+        !hasRecordedTerminalFeedback && !isDone && displayedDraft.manualPreview == true
+    }
+
+    private func recordPreviewAbandonmentIfNeeded(allowWhileDispatching: Bool = false) {
         cancelPreviewCountdown()
-        guard !hasRecordedTerminalFeedback,
-              !isDispatching,
-              !isDone,
-              displayedDraft.manualPreview == true else {
+        guard shouldRecordPreviewAbandonment else {
+            return
+        }
+        guard !isDispatching || allowWhileDispatching else {
+            shouldRecordAbandonmentAfterFailedDispatch = true
             return
         }
         displayedDraft.applyEditedBody(editedBody)
         appState.recordDraftPreviewAbandonment(for: displayedDraft)
         hasRecordedTerminalFeedback = true
+        shouldRecordAbandonmentAfterFailedDispatch = false
+    }
+
+    private func recordAbandonmentAfterFailedDispatchIfNeeded() {
+        guard shouldRecordAbandonmentAfterFailedDispatch else { return }
+        recordPreviewAbandonmentIfNeeded(allowWhileDispatching: true)
     }
 }

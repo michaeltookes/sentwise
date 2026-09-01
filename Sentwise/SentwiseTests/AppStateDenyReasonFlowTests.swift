@@ -65,6 +65,24 @@ final class AppStateDenyReasonFlowTests: XCTestCase {
         XCTAssertNil(appState.denyReasonPrompt)
     }
 
+    func testRequestDenyDoesNotReplaceActivePrompt() {
+        let first = pendingDraft(id: 1)
+        let second = pendingDraft(id: 2)
+        let appState = makeAppState(seed: [first, second])
+
+        XCTAssertTrue(appState.requestDenyDraft(first))
+        XCTAssertFalse(appState.requestDenyDraft(second))
+
+        XCTAssertEqual(appState.denyReasonPrompt?.id, first.identity)
+        appState.confirmDenyReason(code: .wrongTone, otherText: "", dontAskAgain: false)
+        XCTAssertFalse(appState.pendingDrafts.contains { $0.identity == first.identity })
+        XCTAssertTrue(appState.pendingDrafts.contains { $0.identity == second.identity })
+        XCTAssertEqual(
+            appState.draftFeedbackRecords.first?.draftIdentityHash,
+            DraftFeedbackRecord.hashedIdentity(first.identity)
+        )
+    }
+
     func testConfirmPresetFinalizesDenyAndRecords() {
         let draft = pendingDraft(id: 1)
         let appState = makeAppState(seed: [draft])

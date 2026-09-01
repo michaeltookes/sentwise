@@ -26,13 +26,15 @@ extension AppState {
     /// remembered reason is reused and the deny finalizes immediately (still
     /// recorded). Returns `true` when the picker was presented, so callers (e.g.
     /// the notification path) can surface the review window that hosts it.
-    /// A no-op when the draft isn't pending or is mid-approval.
+    /// A no-op when the draft isn't pending, is mid-approval, or another deny
+    /// prompt is already active.
     @discardableResult
     func requestDenyDraft(_ draft: Draft) -> Bool {
         guard !approvingDraftIDs.contains(draft.identity),
               pendingDrafts.contains(where: { $0.identity == draft.identity }) else {
             return false
         }
+        guard denyReasonPrompt == nil else { return false }
         // Friction guard: silence the picker for the rest of this app run.
         if denyReasonPromptSuppressedThisSession, let remembered = lastUsedDenyReason {
             finalizeDenyDraft(draft, reason: remembered)

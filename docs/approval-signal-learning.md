@@ -53,7 +53,8 @@ approval finally dispatches on reconnect; preview-sheet and legacy generated
 draft approvals record the same signal immediately after their direct dispatch
 paths succeed. Closing a manual preview before approval records `abandoned` with
 the same local-only hashed identity and provenance fields, but no dispatch or
-deny reason.
+deny reason; if the sheet is closed while approval is still in flight, a later
+dispatch failure records the same abandonment rather than dropping the signal.
 
 ### Edit magnitude
 
@@ -103,7 +104,9 @@ relaunch.
 
 A notification's **Deny** action can't host the picker, so it opens the review
 window with the picker — unless "don't ask again" is set for the session, in
-which case it discards immediately with the remembered reason.
+which case it discards immediately with the remembered reason. While a picker is
+already open, additional deny requests are ignored so the displayed prompt cannot
+silently switch to a different draft.
 
 The activity history's existing **Denied** event gains the reason **code** in its
 detail (code only). The **Other** free text is the one user-authored value in the
