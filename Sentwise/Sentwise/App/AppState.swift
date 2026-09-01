@@ -337,24 +337,13 @@ final class AppState: ObservableObject {
     /// User-facing activity history (item 21), newest first; see `AppState+Activity`.
     @Published var activityEvents: [ActivityEvent] = []
 
-    /// On-device approval-signal feedback store (item 83, Phase 1), newest first;
-    /// see `AppState+ApprovalFeedback`. Not `@Published` — Phase 1 only captures
-    /// the signal, no UI observes it yet (item 84 will). Loaded at launch.
+    /// On-device approval-signal feedback store (item 83), newest first; loaded at
+    /// launch. See `AppState+ApprovalFeedback` / `AppState+DenyReasonFlow`.
     var draftFeedbackRecords: [DraftFeedbackRecord] = []
-
-    /// A pending deny awaiting the user's reason (item 83, Phase 1). Non-`nil`
-    /// while the reason picker is showing; drives its sheet. See
-    /// `AppState+DenyReasonFlow`.
+    /// Deny-reason picker state + session memory (item 83): the pending deny, the
+    /// last-used reason (pre-selected default), and a per-session "don't ask again".
     @Published var denyReasonPrompt: DenyReasonPrompt?
-
-    /// The last reason the user picked when denying, remembered for this app run
-    /// so the picker pre-selects it and the "don't ask again" fast path can reuse
-    /// it (item 83 friction guard). Session-only — deliberately not persisted.
     var lastUsedDenyReason: DenyReason?
-
-    /// Whether the user checked "don't ask again this session" on a deny, so
-    /// subsequent denies this app run reuse `lastUsedDenyReason` silently (still
-    /// recorded). Resets on relaunch.
     var denyReasonPromptSuppressedThisSession = false
 
     /// Messages the watcher has already handled, so none is drafted twice.
@@ -448,11 +437,9 @@ final class AppState: ObservableObject {
         self.reachability = reachability
         self.isOnline = reachability.isOnline
         self.hasConfirmedReachability = reachability.hasCurrentPath
-
         // Migrate a pre-v11 file to the saved-accounts model before anything reads
-        // the mail secret, so the per-account key is populated (item 48). The
-        // original (pre-migration) settings drive the schema-version-sensitive
-        // guidance/onboarding checks below so those one-shot migrations still fire.
+        // the mail secret (item 48); the original settings still drive the
+        // schema-version-sensitive guidance/onboarding one-shot migrations below.
         let loadedSettings = persistence.loadSettings()
         let settings = Self.fullyMigratedSettings(loaded: loadedSettings, secrets: secrets, persistence: persistence)
         self.pollIntervalSeconds = settings.pollIntervalSeconds
@@ -480,7 +467,6 @@ final class AppState: ObservableObject {
         let activeEmail = settings.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let activePassword = Self.storedMailPassword(forEmail: activeEmail, settings: settings, secrets: secrets) ?? ""
         self.mailAppPassword = activePassword
-
         let managedLaunch = Self.managedLaunchState(settings: settings, secrets: secrets)
         self.llmProviderKind = managedLaunch.provider
         self.llmModel = managedLaunch.llmModel
@@ -488,23 +474,17 @@ final class AppState: ObservableObject {
         self.verifiedLLMModel = managedLaunch.verifiedLLMModel
         self.llmAPIKey = managedLaunch.apiKey
         self.isOpenRouterProvisioning = secrets.hasValue(for: .openRouterPKCEVerifier)
-
         self.voiceProfile = persistence.loadVoiceProfile()
         restoreManagedAccountLaunchIdentity(managedLaunch, settings: settings)
         restoreReviewPersistenceState()
-
         cleanupLegacyOAuthCredentials()
         self.isAccountConnected = !settings.mailEmail.isEmpty && !activePassword.isEmpty
         restoreMailHostGuidanceFromSettings(loadedSettings)
         refreshLLMConnectionStatus()
-
-        // Seed the persisted draft-production preferences before the autosave
-        // sinks are wired, so restoring them does not trigger a spurious save.
+        // Seed persisted draft-production preferences before wiring autosave sinks.
         restoreDraftPreferences(from: settings)
         setupAutoSave()
-
         persistRestoredManagedVerificationIfNeeded(managedLaunch, loadedFrom: settings)
-
         self.inboxWatcher = InboxWatcher(
             interval: { [weak self] in TimeInterval(self?.pollIntervalSeconds ?? 300) },
             onTick: { [weak self] in await self?.pollInboxOnce() }

@@ -70,4 +70,29 @@ extension AppState {
     func cancelDenyReason() {
         denyReasonPrompt = nil
     }
+
+    /// Denies (discards) a pending draft with no captured reason. The legacy/
+    /// direct path; user-facing Deny/Discard controls go through `requestDenyDraft`
+    /// so a reason is captured first (item 83).
+    func denyDraft(_ draft: Draft) {
+        finalizeDenyDraft(draft, reason: nil)
+    }
+
+    /// Removes a denied draft from the queue and records the signal (item 83): the
+    /// activity `.denied` event gains the reason *code* in its detail (code only,
+    /// never the free text), and a `DraftFeedbackRecord` captures the full deny
+    /// signal. Shared by `denyDraft` (reason `nil`) and the reason-picker flow.
+    func finalizeDenyDraft(_ draft: Draft, reason: DenyReason?) {
+        guard !approvingDraftIDs.contains(draft.identity) else { return }
+        approvalError = nil
+        pendingStaleWarnings.removeValue(forKey: draft.identity)
+        clearOfflineQueueEntry(draft.identity)
+        do {
+            try removePendingDraft(draft)
+            recordDraftActivity(.denied, for: draft, detail: reason?.code.rawValue)
+            recordDenyFeedback(for: draft, reason: reason)
+        } catch {
+            approvalError = Self.draftMessage(for: error)
+        }
+    }
 }

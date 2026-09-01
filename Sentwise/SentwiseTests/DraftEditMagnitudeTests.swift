@@ -50,11 +50,11 @@ final class DraftEditMagnitudeTests: XCTestCase {
     }
 
     func testMetricIsSymmetric() {
-        let a = "Let's meet Tuesday at noon"
-        let b = "Let's meet Wednesday at noon"
+        let first = "Let's meet Tuesday at noon"
+        let second = "Let's meet Wednesday at noon"
         XCTAssertEqual(
-            DraftEditMagnitude.ratio(original: a, final: b),
-            DraftEditMagnitude.ratio(original: b, final: a),
+            DraftEditMagnitude.ratio(original: first, final: second),
+            DraftEditMagnitude.ratio(original: second, final: first),
             accuracy: 1e-12
         )
     }

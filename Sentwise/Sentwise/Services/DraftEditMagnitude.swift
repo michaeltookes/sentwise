@@ -25,11 +25,11 @@ enum DraftEditMagnitude {
     /// The normalized edit magnitude in `0...1`. Both empty (after normalization)
     /// returns `0`.
     static func ratio(original: String, final: String) -> Double {
-        let a = Array(normalize(original))
-        let b = Array(normalize(final))
-        if a.isEmpty && b.isEmpty { return 0 }
-        let distance = levenshtein(a, b)
-        let denominator = max(a.count, b.count)
+        let source = Array(normalize(original))
+        let target = Array(normalize(final))
+        if source.isEmpty && target.isEmpty { return 0 }
+        let distance = levenshtein(source, target)
+        let denominator = max(source.count, target.count)
         guard denominator > 0 else { return 0 }
         let ratio = Double(distance) / Double(denominator)
         return min(1, max(0, ratio))
@@ -43,25 +43,25 @@ enum DraftEditMagnitude {
     }
 
     /// Character-level Levenshtein distance with two-row dynamic programming.
-    private static func levenshtein(_ a: [Character], _ b: [Character]) -> Int {
-        if a.isEmpty { return b.count }
-        if b.isEmpty { return a.count }
+    private static func levenshtein(_ source: [Character], _ target: [Character]) -> Int {
+        if source.isEmpty { return target.count }
+        if target.isEmpty { return source.count }
 
-        var previous = Array(0...b.count)
-        var current = [Int](repeating: 0, count: b.count + 1)
+        var previous = Array(0...target.count)
+        var current = [Int](repeating: 0, count: target.count + 1)
 
-        for i in 1...a.count {
-            current[0] = i
-            for j in 1...b.count {
-                let substitutionCost = a[i - 1] == b[j - 1] ? 0 : 1
-                current[j] = min(
-                    previous[j] + 1,          // deletion
-                    current[j - 1] + 1,       // insertion
-                    previous[j - 1] + substitutionCost // substitution
+        for row in 1...source.count {
+            current[0] = row
+            for col in 1...target.count {
+                let substitutionCost = source[row - 1] == target[col - 1] ? 0 : 1
+                current[col] = min(
+                    previous[col] + 1,          // deletion
+                    current[col - 1] + 1,       // insertion
+                    previous[col - 1] + substitutionCost // substitution
                 )
             }
             swap(&previous, &current)
         }
-        return previous[b.count]
+        return previous[target.count]
     }
 }
