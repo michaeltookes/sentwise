@@ -52,6 +52,8 @@ final class AppStateDraftTests: XCTestCase {
         XCTAssertEqual(appState.generatedDraft?.sourceReplyTo?.email, "team@x.com")
         XCTAssertEqual(appState.generatedDraft?.sourceAccountEmail, "me@gmail.com")
         XCTAssertEqual(appState.generatedDraft?.sourceMailbox, Mailbox.inbox.imapName)
+        XCTAssertEqual(appState.generatedDraft?.manualPreview, true)
+        XCTAssertEqual(appState.generatedDraft?.feedbackProvenance, .manualPreview)
         XCTAssertNil(appState.draftError)
         XCTAssertFalse(appState.isGeneratingDraft)
         XCTAssertEqual(llm.lastAPIKey, "sk-live")

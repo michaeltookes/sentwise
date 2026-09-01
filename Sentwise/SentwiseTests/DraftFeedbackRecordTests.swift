@@ -33,6 +33,7 @@ final class DraftFeedbackRecordTests: XCTestCase {
         XCTAssertEqual(DraftFeedbackProvenance.watcher.rawValue, "watcher")
         XCTAssertEqual(DraftFeedbackProvenance.draftAnyway.rawValue, "draftAnyway")
         XCTAssertEqual(DraftFeedbackProvenance.authored.rawValue, "authored")
+        XCTAssertEqual(DraftFeedbackProvenance.manualPreview.rawValue, "manualPreview")
     }
 
     func testDenyReasonDropsOtherTextForNonOtherCode() {
@@ -43,6 +44,13 @@ final class DraftFeedbackRecordTests: XCTestCase {
     func testDenyReasonTrimsAndNilsEmptyOtherText() {
         XCTAssertNil(DenyReason(code: .other, otherText: "   ").otherText)
         XCTAssertEqual(DenyReason(code: .other, otherText: "  spammy vendor ").otherText, "spammy vendor")
+    }
+
+    func testDenyReasonCapsOtherText() {
+        let longText = String(repeating: "x", count: DenyReason.otherTextCharacterLimit + 50)
+        let reason = DenyReason(code: .other, otherText: longText)
+
+        XCTAssertEqual(reason.otherText?.count, DenyReason.otherTextCharacterLimit)
     }
 
     func testEncodedRecordHoldsOnlyCodesNumbersHashes() throws {

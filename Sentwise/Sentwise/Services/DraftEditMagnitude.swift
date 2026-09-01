@@ -5,8 +5,8 @@ import Foundation
 /// final `body` as a single normalized number the feedback store can learn from.
 ///
 /// **Metric (documented, fixed):** the normalized character-level edit-distance
-/// ratio: exact Levenshtein for ordinary drafts, with a bounded approximation for
-/// unusually large pasted edits.
+/// ratio: exact Levenshtein for ordinary drafts, with a bounded sparse-aware
+/// approximation for unusually large pasted edits.
 ///
 ///   `magnitude = levenshtein(a, b) / max(a.count, b.count)`
 ///
@@ -22,6 +22,7 @@ import Foundation
 enum DraftEditMagnitude {
 
     static let exactDistanceCellLimit = 250_000
+    private static let approximateResyncWindow = 64
 
     /// The normalized edit magnitude in `0...1`. Both empty (after normalization)
     /// returns `0`.
@@ -50,26 +51,97 @@ enum DraftEditMagnitude {
         return sourceCount <= exactDistanceCellLimit / targetCount
     }
 
-    /// Linear fallback for long pasted edits: trim shared prefix and suffix, then
-    /// treat the remaining span as a replace/insert/delete block.
+    /// Linear fallback for long pasted edits. The resync window keeps sparse,
+    /// separated edits from being counted as one large replacement span while
+    /// still bounding work to `O(n * approximateResyncWindow)`.
     private static func approximateDistance(_ source: [Character], _ target: [Character]) -> Int {
-        var prefixLength = 0
-        while prefixLength < source.count,
-              prefixLength < target.count,
-              source[prefixLength] == target[prefixLength] {
-            prefixLength += 1
+        min(
+            positionalDistance(source, target),
+            resyncingDistance(source, target),
+            resyncingDistance(target, source)
+        )
+    }
+
+    private static func positionalDistance(_ source: [Character], _ target: [Character]) -> Int {
+        let sharedCount = min(source.count, target.count)
+        let mismatches = (0..<sharedCount).reduce(0) { partial, index in
+            partial + (source[index] == target[index] ? 0 : 1)
+        }
+        return mismatches + abs(source.count - target.count)
+    }
+
+    private static func resyncingDistance(_ source: [Character], _ target: [Character]) -> Int {
+        var sourceIndex = 0
+        var targetIndex = 0
+        var distance = 0
+
+        while sourceIndex < source.count, targetIndex < target.count {
+            if source[sourceIndex] == target[targetIndex] {
+                sourceIndex += 1
+                targetIndex += 1
+                continue
+            }
+
+            let sourceRemainder = source.count - sourceIndex
+            let targetRemainder = target.count - targetIndex
+            let insertionOffset = matchOffset(
+                of: source[sourceIndex],
+                in: target,
+                after: targetIndex,
+                maxOffset: approximateResyncWindow
+            )
+            let deletionOffset = matchOffset(
+                of: target[targetIndex],
+                in: source,
+                after: sourceIndex,
+                maxOffset: approximateResyncWindow
+            )
+
+            if targetRemainder > sourceRemainder, let insertionOffset {
+                distance += insertionOffset
+                targetIndex += insertionOffset
+            } else if sourceRemainder > targetRemainder, let deletionOffset {
+                distance += deletionOffset
+                sourceIndex += deletionOffset
+            } else if let insertionOffset, let deletionOffset {
+                if insertionOffset <= deletionOffset {
+                    distance += insertionOffset
+                    targetIndex += insertionOffset
+                } else {
+                    distance += deletionOffset
+                    sourceIndex += deletionOffset
+                }
+            } else if let insertionOffset {
+                distance += insertionOffset
+                targetIndex += insertionOffset
+            } else if let deletionOffset {
+                distance += deletionOffset
+                sourceIndex += deletionOffset
+            } else {
+                distance += 1
+                sourceIndex += 1
+                targetIndex += 1
+            }
         }
 
-        var suffixLength = 0
-        while suffixLength < source.count - prefixLength,
-              suffixLength < target.count - prefixLength,
-              source[source.count - 1 - suffixLength] == target[target.count - 1 - suffixLength] {
-            suffixLength += 1
-        }
+        return distance + (source.count - sourceIndex) + (target.count - targetIndex)
+    }
 
-        let sourceRemainder = source.count - prefixLength - suffixLength
-        let targetRemainder = target.count - prefixLength - suffixLength
-        return max(sourceRemainder, targetRemainder)
+    private static func matchOffset(
+        of character: Character,
+        in characters: [Character],
+        after index: Int,
+        maxOffset: Int
+    ) -> Int? {
+        guard maxOffset > 0 else { return nil }
+        let start = index + 1
+        guard start < characters.count else { return nil }
+        let end = min(characters.count - 1, index + maxOffset)
+        guard start <= end else { return nil }
+        for candidate in start...end where characters[candidate] == character {
+            return candidate - index
+        }
+        return nil
     }
 
     /// Character-level Levenshtein distance with two-row dynamic programming.

@@ -73,6 +73,35 @@ final class DraftEditMagnitudeTests: XCTestCase {
         )
     }
 
+    func testLargeSparseEditsStaySmall() {
+        let length = Int(Double(DraftEditMagnitude.exactDistanceCellLimit).squareRoot()) + 2
+        var edited = Array(String(repeating: "a", count: length))
+        edited[3] = "b"
+        edited[length - 4] = "c"
+
+        XCTAssertGreaterThan(length * length, DraftEditMagnitude.exactDistanceCellLimit)
+        XCTAssertEqual(
+            DraftEditMagnitude.ratio(original: String(repeating: "a", count: length), final: String(edited)),
+            2 / Double(length),
+            accuracy: 1e-12
+        )
+    }
+
+    func testLargeSeparatedInsertionsStaySmall() {
+        let length = Int(Double(DraftEditMagnitude.exactDistanceCellLimit).squareRoot()) + 2
+        let original = String(repeating: "a", count: length)
+        var edited = Array(original)
+        edited.insert("b", at: 4)
+        edited.insert("c", at: edited.count - 4)
+
+        XCTAssertGreaterThan(original.count * edited.count, DraftEditMagnitude.exactDistanceCellLimit)
+        XCTAssertEqual(
+            DraftEditMagnitude.ratio(original: original, final: String(edited)),
+            2 / Double(edited.count),
+            accuracy: 1e-12
+        )
+    }
+
     func testLargeRewriteMagnitudeIsBounded() {
         let length = Int(Double(DraftEditMagnitude.exactDistanceCellLimit).squareRoot()) + 1
 

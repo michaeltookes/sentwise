@@ -13,7 +13,8 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
         originalBody: String? = nil,
         replyWorthinessOverride: Bool = false,
         userSuppliedFacts: UserSuppliedFacts? = nil,
-        authoredRecipients: [MailAddress]? = nil
+        authoredRecipients: [MailAddress]? = nil,
+        manualPreview: Bool = false
     ) -> Draft {
         Draft(
             id: id,
@@ -32,6 +33,7 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
             generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
             authoredRecipients: authoredRecipients,
             replyWorthinessOverride: replyWorthinessOverride,
+            manualPreview: manualPreview,
             userSuppliedFacts: userSuppliedFacts
         )
     }
@@ -136,6 +138,26 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
         await appState.approveDraft(draft)
 
         XCTAssertEqual(appState.draftFeedbackRecords.first?.provenance, .authored)
+    }
+
+    func testApproveManualPreviewRecordsManualPreviewProvenance() async throws {
+        let draft = pendingDraft(manualPreview: true)
+        let (appState, _) = makeAppState(seed: [])
+
+        _ = try await appState.approveDraftPreview(draft, sendBehavior: .autoSend)
+
+        XCTAssertEqual(appState.draftFeedbackRecords.first?.provenance, .manualPreview)
+    }
+
+    func testRegeneratedManualPreviewPreservesManualPreviewProvenance() {
+        let draft = pendingDraft(manualPreview: true)
+        var replacement = pendingDraft(id: 2)
+        let (appState, _) = makeAppState(seed: [])
+
+        appState.preserveRegenerationProvenance(from: draft, on: &replacement)
+
+        XCTAssertEqual(replacement.manualPreview, true)
+        XCTAssertEqual(replacement.feedbackProvenance, .manualPreview)
     }
 
     func testPreviewApprovalRecordsEditedSentFeedback() async throws {

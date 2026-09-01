@@ -32,16 +32,17 @@ body, or sender the identity is derived from.
 | `dispatch` | `sent` vs `saved` — approvals only. |
 | `editMagnitude` | Normalized edit size in `0...1` — `approvedAfterEdit` only. |
 | `denyReason` | Reason code (+ optional Other free text) — denials only. |
-| `provenance` | `watcher` vs `draftAnyway` (a "Draft anyway" skip-log override) vs `authored` (a user-started follow-up). |
+| `provenance` | `watcher` vs `manualPreview` (user-requested preview) vs `draftAnyway` (a "Draft anyway" skip-log override) vs `authored` (a user-started follow-up). |
 | `answeredNeedsInfo` | Whether the user answered a `NEEDS_INFO` prompt (item 85) before this outcome. |
 | `draftIdentityHash` | SHA-256 hex of the draft identity — never the raw identity. |
 
 `approvedAsIs` vs `approvedAfterEdit` comes from item 19's `wasEdited`
-(`originalBody != body`). Authored follow-ups record `authored` provenance before
-falling back to `replyWorthinessOverride`; non-authored drafts record `draftAnyway`
-for the skip-log override and `watcher` otherwise. `watcher` is a single bucket
-today — item 68's header-fetch-degradation diagnosis may later split it (a draft
-that slipped past a *degraded* reply-worthiness check vs. a clean one), and
+(`originalBody != body`). Authored follow-ups record `authored` provenance,
+skip-log overrides record `draftAnyway`, drafts explicitly generated from the
+mail preview surfaces record `manualPreview`, and only automatic inbox-watch
+drafts fall back to `watcher`. `watcher` is a single bucket today — item 68's
+header-fetch-degradation diagnosis may later split it (a draft that slipped past
+a *degraded* reply-worthiness check vs. a clean one), and
 `DraftFeedbackProvenance` is where that refinement would land.
 
 The approval signal is recorded only after a send or save succeeds. Queued
@@ -66,10 +67,11 @@ tracks substantive content edits, not formatting churn. The result is clamped to
 `0...1`: `0` = identical after normalization, `1` = a complete rewrite.
 Character-level (rather than changed-line fraction) is deliberate — a one-word
 fix inside a long paragraph reads as a small edit, not a whole changed line. The
-exact Levenshtein path is capped; unusually large pasted edits use a linear
-common-prefix/suffix approximation so post-dispatch feedback capture cannot freeze
-the main actor before approval cleanup. The metric is pure
-(`DraftEditMagnitude.ratio`) and unit-tested.
+exact Levenshtein path is capped; unusually large pasted edits use a bounded
+linear approximation with a small resynchronization window, so separated sparse
+edits stay small without letting post-dispatch feedback capture freeze the main
+actor before approval cleanup. The metric is pure (`DraftEditMagnitude.ratio`)
+and unit-tested.
 
 ## Deny-reason picker
 
@@ -102,8 +104,9 @@ which case it discards immediately with the remembered reason.
 The activity history's existing **Denied** event gains the reason **code** in its
 detail (code only). The **Other** free text is the one user-authored value in the
 whole system: it is stored only in the feedback store — never in the activity
-history, never logged — and it is the value that must be scrubbed before any
-future off-device telemetry send (item 35).
+history, never logged — and it is capped before storage so a pasted blob cannot
+make the feedback file or later rewrites unbounded. It is the value that must be
+scrubbed before any future off-device telemetry send (item 35).
 
 ## Privacy summary
 

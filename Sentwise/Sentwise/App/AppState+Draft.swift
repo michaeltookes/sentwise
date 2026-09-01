@@ -213,7 +213,8 @@ extension AppState {
             model: llmConfiguration.model,
             generatedAt: Date(),
             needsInfo: Self.needsInfo(from: outcome),
-            notReplyWorthy: Self.notReplyWorthy(from: outcome)
+            notReplyWorthy: Self.notReplyWorthy(from: outcome),
+            manualPreview: true
         )
     }
 

@@ -25,7 +25,9 @@ enum DraftFeedbackDispatch: String, Codable, Equatable {
 
 /// Where the draft came from, so Phase 2 can weight a deny by how the draft was
 /// surfaced. `draftAnyway` is the user's explicit skip-log "Draft anyway"
-/// override; `authored` is a user-started follow-up; `watcher` is an inbox draft.
+/// override; `authored` is a user-started follow-up; `manualPreview` is a draft
+/// the user explicitly generated from a message preview; `watcher` is an inbox
+/// draft surfaced automatically.
 ///
 /// **Seam (item 68):** watcher provenance is currently a single bucket. Item 68's
 /// header-fetch-degradation diagnosis (a draft that slipped past a *degraded*
@@ -35,6 +37,7 @@ enum DraftFeedbackProvenance: String, Codable, Equatable {
     case watcher
     case draftAnyway
     case authored
+    case manualPreview
 }
 
 /// A stable, single-select reason the user gives when denying a draft (owner
@@ -77,6 +80,8 @@ enum DenyReasonCode: String, Codable, Equatable, CaseIterable {
 /// history, never a log line, and (item 35) it is the value that must be scrubbed
 /// before any future off-device telemetry send.
 struct DenyReason: Codable, Equatable {
+    static let otherTextCharacterLimit = 500
+
     var code: DenyReasonCode
     /// Present (non-empty) only when `code == .other`.
     var otherText: String?
@@ -85,7 +90,7 @@ struct DenyReason: Codable, Equatable {
         self.code = code
         if code == .other {
             let trimmed = (otherText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            self.otherText = trimmed.isEmpty ? nil : trimmed
+            self.otherText = trimmed.isEmpty ? nil : String(trimmed.prefix(Self.otherTextCharacterLimit))
         } else {
             self.otherText = nil
         }
@@ -114,7 +119,7 @@ struct DraftFeedbackRecord: Codable, Equatable, Identifiable {
     var editMagnitude: Double?
     /// The reason code (+ optional free text) — set for `.denied` only.
     var denyReason: DenyReason?
-    /// Watcher vs. "Draft anyway" override vs. user-authored follow-up.
+    /// Watcher vs. manual preview vs. "Draft anyway" override vs. authored follow-up.
     var provenance: DraftFeedbackProvenance
     /// Whether the user answered a `NEEDS_INFO` prompt before this outcome
     /// (item 85's `Draft.wasAnswered`) — records the "answered-then-approved" case.
