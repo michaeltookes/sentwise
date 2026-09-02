@@ -254,6 +254,17 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - If sandboxed: the folder picker persists a security-scoped bookmark; launch resolves it and calls `startAccessingSecurityScopedResource`; a stale bookmark is detected and surfaced through the existing `transcriptFolderError` state ("choose the folder again in Settings").
     - If not sandboxed: close this item by documenting that decision.
 
+86. **Live in-call follow-up drafting ("before you end your call")**
+    Draft the follow-up *during* the call from a streaming transcript so it's ready the instant the call ends — the capability that unlocks the aspirational landing-page claim.
+    > **Origin (2026-09-02):** the landing-page hero (sentwise-landing-page repo, brand item 2 / page item 3) softened its headline to *"the moment your call ends"* because today's flow drafts from a transcript **after** the call. This item is the graduation path back to the stronger *"before you end your call"* line — do not publish that claim until this ships.
+    *As Marcus, I want my follow-up draft already assembling while I'm still on the call, so that it's ready to review and send the moment I hang up.*
+    - Builds on item 54 (native call capture + on-device transcription — specifically 54a/54b, ideally 54c) and the item 51 workflow: audio is transcribed **incrementally during the call**, not only at call end.
+    - The draft is materially complete by call end; call-end simply finalizes and opens the review/composer flow.
+    - Same privacy posture as today: audio and transcript stay on-device; drafting inference leaves only via the managed zero-retention proxy or BYO/local exactly as item 56 — live drafting must not weaken this.
+    - The visible "transcribing" indicator (item 54) also conveys a draft is being prepared; **nothing is auto-sent** — deliberate approval in the Review Drafts window is unchanged (item 79).
+    - Degrades gracefully: if live drafting isn't available or enabled, fall back to the current post-call draft with no user-facing error.
+    - **Marketing tie-in:** when this lands, coordinate the landing-page copy graduation (sentwise-landing-page items 2/3) back to "before you end your call."
+
 ## Low Priority
 
 31. **Outlook / Microsoft 365 support**
