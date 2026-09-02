@@ -120,6 +120,46 @@ combined grapheme cannot make the feedback file or later rewrites unbounded. It
 is the value that must be scrubbed before any future off-device telemetry send
 (item 35).
 
+## Surfacing (item 84)
+
+The Settings → **Analytics** tab (item 84) is the first reader of this store and
+the user-facing half of Phase 4's "how am I doing" view. It is **strictly
+read-only** — the only interactive elements are a link that switches to the
+Subscription tab and a window picker (a local view toggle) — and everything it
+shows is computed on-device; nothing here leaves the machine and no free text is
+read.
+
+- **Drafting-quality insights** come from a pure, unit-tested aggregator,
+  `DraftFeedbackStats`, over the `DraftFeedbackRecord`s. For a selectable window
+  (last 7 days / last 30 days / all time) it reports the one-shot-accept, edited,
+  and denied **rates** — fractions of *decided* drafts (`approvedAsIs +
+  approvedAfterEdit + denied`); an `.abandoned` preview dismissal is **excluded**
+  from the rate denominators so a closed preview never reads as a rejection,
+  though its count is still available. It also reports the average edit magnitude
+  over edited approvals, the deny-reason breakdown **by code only** (the deny
+  "Other" free text is never displayed), and the answered-then-approved count
+  (item 85's `answeredNeedsInfo`). The section shows an empty-state caption until
+  the store holds at least 3 records.
+- **Quota & usage** on the same tab is sourced from item 56b's `managedQuota`
+  (drafts used/limit/remaining, a subdued tokens caption, reset time, and the
+  current window's `extraPurchased`). It shows numbers/text only and links to the
+  Subscription pane for the allowance bar rather than duplicating item 73's
+  `ManagedUsageView`. A **56c seam** is documented in `AnalyticsQuotaPresentation`:
+  the account has no billing-period concept yet, so the tab surfaces the
+  current-window `extraPurchased` and deliberately does **not** synthesize a
+  monthly "times bought extra" count.
+
+**Hunt mode:** the tab is open-and-assert friendly. `ProwlHuntRuntime` seeds a
+fixed set of feedback records (via the in-memory provider, zero disk side
+effects) timestamped within the last day so every window renders identical,
+deterministic stats, and the existing stubbed quota drives the usage section.
+Every stat carries a stable AX id (`analyticsTab`, `analyticsQuotaSection`,
+`analyticsInsightsSection`, `analyticsOneShotRate`, `analyticsEditRate`,
+`analyticsDeniedRate`, `analyticsDeniedReason-<code>`, `analyticsAnsweredCount`,
+`analyticsEmptyState`, …). The ids use **`Denied`** (not `Deny`) so they never
+collide with the `"Deny"`/`"deny"` forbidden-selector substrings; because nothing
+on the tab mutates state, no `.prowl/config.yml` forbid additions are needed.
+
 ## Privacy summary
 
 - The store and all capture stay on the Mac; nothing here leaves the machine.

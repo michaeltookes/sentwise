@@ -14,6 +14,7 @@ enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
     case account = "Account"
     case ai = "AI"
     case subscription = "Subscription"
+    case analytics = "Analytics"
     case rules = "Rules"
     case about = "About"
 
@@ -26,6 +27,7 @@ enum SettingsTab: String, CaseIterable, Hashable, Identifiable {
         case .account: return "envelope"
         case .ai: return "sparkles"
         case .subscription: return "person.crop.circle"
+        case .analytics: return "chart.bar.xaxis"
         case .rules: return "line.3.horizontal.decrease.circle"
         case .about: return "info.circle"
         }
@@ -54,6 +56,8 @@ struct SettingsContentView: View {
                 AIProviderSettingsView()
             case .subscription:
                 SubscriptionSettingsView()
+            case .analytics:
+                AnalyticsSettingsView()
             case .rules:
                 SenderRulesSettingsView()
             case .about:

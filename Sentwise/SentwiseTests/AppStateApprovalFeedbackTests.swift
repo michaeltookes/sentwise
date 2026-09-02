@@ -1,3 +1,4 @@
+import Combine
 import SentwiseMail
 import XCTest
 @testable import Sentwise
@@ -171,6 +172,24 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
         XCTAssertEqual(record?.provenance, .manualPreview)
         XCTAssertNil(record?.dispatch)
         XCTAssertNil(record?.denyReason)
+    }
+
+    func testRecordingFeedbackPublishesForAnalyticsViews() {
+        let (appState, _) = makeAppState(seed: [])
+        var observedChanges = 0
+        let cancellable = appState.objectWillChange.sink {
+            observedChanges += 1
+        }
+        defer { cancellable.cancel() }
+
+        appState.recordDraftFeedback(DraftFeedbackRecord(
+            outcome: .abandoned,
+            provenance: .manualPreview,
+            answeredNeedsInfo: false,
+            draftIdentityHash: DraftFeedbackRecord.hashedIdentity("me@gmail.com|INBOX|10|1")
+        ))
+
+        XCTAssertGreaterThan(observedChanges, 0)
     }
 
     func testNonPreviewAbandonmentIsNoOp() {
