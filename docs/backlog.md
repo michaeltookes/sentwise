@@ -265,6 +265,25 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Degrades gracefully: if live drafting isn't available or enabled, fall back to the current post-call draft with no user-facing error.
     - **Marketing tie-in:** when this lands, coordinate the landing-page copy graduation (sentwise-landing-page items 2/3) back to "before you end your call."
 
+87. **Trial-ending reminders (7-day and 1-day)**
+    Native notifications that nudge the user before the 14-day trial converts, so the pay prompt at trial end isn't a surprise.
+    > **Origin (2026-09-04):** owner decision on the launch billing flow — app-managed 14-day trial (no card up front, item 56a), user prompted to pay when the trial ends. These reminders raise conversion by warning ahead of time.
+    *As a trial user, I want a heads-up before my free trial ends, so that I can decide to subscribe (or not) without being caught off guard.*
+    - Two native macOS notifications during the trial: **7 days out** and **1 day out** from trial end.
+    - Copy states the trial end date and that payment continues the plan; tapping opens the subscribe/account flow (item 56c). Nothing auto-charges — consistent with the no-card trial and the deliberate-approval ethos (item 79).
+    - Timing derives from the **server-side trial state** (56a stores trial end in Clerk metadata); each reminder fires once, idempotent across relaunches (reuse 56b's usage-alert idempotence approach).
+    - Local product notifications only — no off-device data; distinct from the opt-in telemetry path (item 83).
+    - Degrades gracefully if notifications are disabled: the same countdown shows in Settings → AI Provider and the account pane (item 73).
+
+88. **Trial→paid conversion analytics (server-side)**
+    Measure how many trials convert and to which tier, for traction proof and pricing/marketing tuning.
+    > **Origin (2026-09-04):** owner request alongside the launch billing flow; pricing confirmed as individual tiers **Starter / Pro / Unlimited** (see sentwise-landing-page item 5).
+    *As the maintainer, I want to see trial-to-paid conversion by tier, so that I can prove traction and tune pricing and marketing messaging.*
+    - Server-side (`sentwise-service` / licensing) metrics: trials started, converted, conversion rate, time-to-convert, and **which tier** (Starter/Pro/Unlimited); cohort by signup week.
+    - These are **billing/licensing events the service inherently holds** — not device telemetry — so **no opt-in consent prompt is required** (distinct from item 83's opt-in off-device feedback). No call or draft content is involved.
+    - Surfaced to the maintainer via the existing `/admin` surface (alongside 56b's margin dashboard) or an export; feeds marketing ("X% convert, mostly to Pro").
+    - Depends on 56c emitting the conversion/subscription event; complements 56b (usage/margin).
+
 ## Low Priority
 
 31. **Outlook / Microsoft 365 support**
