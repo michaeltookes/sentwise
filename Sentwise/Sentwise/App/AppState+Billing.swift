@@ -1,6 +1,8 @@
 import AppKit
 import Foundation
 
+private let paidManagedSubscriptionPlans: Set<ManagedSubscription.Plan> = [.starter, .pro, .unlimited, .team]
+
 /// A request to present the Paddle overlay-checkout sheet (backlog item 56c).
 /// `plan == nil` opens the sheet on the plan picker; a non-nil plan jumps
 /// straight to that tier's checkout. `Identifiable` so it drives `.sheet(item:)`.
@@ -48,7 +50,7 @@ extension AppState {
     /// Paddle's billing portal so they modify the current subscription rather than
     /// opening a second recurring checkout.
     func presentBillingCheckout(plan: PaddlePlan? = nil) {
-        guard isManagedSignedIn, !isOnActivePaidPlan else { return }
+        guard isManagedSignedIn, !hasManageablePaidSubscription else { return }
         billingCheckout = BillingCheckoutRequest(plan: plan)
     }
 
@@ -123,15 +125,25 @@ extension AppState {
     /// (on a paid plan).
     var isOnActivePaidPlan: Bool {
         guard let sub = managedAccountStatus?.subscription else { return false }
-        let paid: Set<ManagedSubscription.Plan> = [.starter, .pro, .unlimited, .team]
-        return sub.status == .active && paid.contains(sub.plan)
+        return sub.status == .active && paidManagedSubscriptionPlans.contains(sub.plan)
+    }
+
+    /// Whether there is an existing paid subscription that should be managed through
+    /// Paddle's portal instead of starting a new recurring checkout.
+    var hasManageablePaidSubscription: Bool {
+        guard let sub = managedAccountStatus?.subscription,
+              paidManagedSubscriptionPlans.contains(sub.plan) else {
+            return false
+        }
+        return sub.status == .active || sub.status == .pastDue
     }
 
     /// Whether to offer the subscribe/upgrade CTA. Offered whenever the account is
-    /// not on an active paid plan (trialing, lapsed, past_due, canceled, none, or
-    /// unknown) — i.e. any state a purchase would move forward.
+    /// not already tied to an active or recoverable paid subscription (trialing,
+    /// lapsed, canceled, none, or unknown) — i.e. any state a new checkout would move
+    /// forward without duplicating an existing Paddle subscription.
     var shouldOfferSubscribe: Bool {
-        isManagedSignedIn && !isOnActivePaidPlan
+        isManagedSignedIn && !hasManageablePaidSubscription
     }
 
     // MARK: - Offline license grace
@@ -148,11 +160,13 @@ extension AppState {
     }
 
     /// The evaluated entitlement for managed drafting (item 56c). Uses the live
-    /// `/v1/me` status when online; when offline (or the status is unknown) it
-    /// falls back to the cached snapshot within a grace window, so the app/UI never
-    /// hard-fails offline. Recomputed by SwiftUI whenever the status changes.
+    /// `/v1/me` status only after a successful refresh; when offline, unknown, or
+    /// stale after a failed refresh it falls back to the cached snapshot within a
+    /// grace window, so the app/UI never hard-fails offline.
     var managedLicense: SubscriptionLicense {
-        let liveStatus = isOnline ? managedAccountStatus?.subscription?.status : nil
+        let liveStatus = isOnline && managedAccountStatusIsFresh
+            ? managedAccountStatus?.subscription?.status
+            : nil
         return SubscriptionLicenseEvaluator.evaluate(
             liveStatus: liveStatus,
             cached: effectiveSubscriptionSnapshot

@@ -108,10 +108,10 @@ final class AppState: ObservableObject {
     var pendingManagedSignInEmail: String?
     var pendingManagedSignInActivatesProvider = true
 
-    /// Latest full managed-account status from `/v1/me` (email, trial,
-    /// subscription, quota) driving the Subscription pane (item 73); `nil` until
-    /// known or when signed out.
+    /// Latest `/v1/me` account status for the Subscription pane; nil until known or signed out.
     @Published var managedAccountStatus: ManagedAccountStatus?
+    /// True only after the latest `/v1/me` refresh succeeds; failures use snapshot grace.
+    @Published var managedAccountStatusIsFresh = false
     /// True briefly after a successful account deletion so the signed-out
     /// Subscription pane can confirm it (item 73). Cleared on the next sign-in.
     @Published var didDeleteManagedAccount: Bool = false

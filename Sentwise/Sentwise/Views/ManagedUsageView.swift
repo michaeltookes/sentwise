@@ -45,7 +45,7 @@ struct ManagedUsageView: View {
                 }
 
                 if appState.isManagedQuotaExhausted {
-                    if appState.isOnActivePaidPlan {
+                    if appState.hasManageablePaidSubscription {
                         Button("Manage plan") {
                             appState.openManageBilling()
                         }

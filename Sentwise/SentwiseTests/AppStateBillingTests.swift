@@ -134,6 +134,24 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertNil(appState.billingCheckout)
     }
 
+    func testPastDuePaidPlanUsesManageBillingInsteadOfNewCheckout() {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountStatus = status(
+            plan: .pro,
+            statusValue: .pastDue,
+            billingURL: "https://billing.example/portal"
+        )
+
+        XCTAssertFalse(appState.isOnActivePaidPlan)
+        XCTAssertTrue(appState.hasManageablePaidSubscription)
+        XCTAssertFalse(appState.shouldOfferSubscribe)
+
+        appState.presentBillingCheckout()
+        XCTAssertNil(appState.billingCheckout)
+        XCTAssertTrue(appState.canManageBilling)
+    }
+
     func testCheckoutModelThreadsClerkIDAndEmail() {
         let llm = StatusLLM()
         let appState = makeSignedInAppState(llm: llm)
@@ -227,6 +245,29 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertEqual(appState.cachedSubscriptionSnapshot?.status, .active)
         XCTAssertFalse(store.saved.isEmpty, "the snapshot should be persisted to the durable store")
         XCTAssertEqual(appState.managedLicense, .entitled)
+    }
+
+    func testRefreshFailureFallsBackToSnapshotForLicenseFreshness() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = status(plan: .pro, statusValue: .active)
+        let appState = makeSignedInAppState(llm: llm, cacheStore: InMemorySubscriptionCacheStore())
+
+        await appState.refreshManagedQuota()
+        XCTAssertTrue(appState.managedAccountStatusIsFresh)
+        XCTAssertEqual(appState.managedLicense, .entitled)
+
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(
+            plan: .pro,
+            status: .active,
+            capturedAt: Date().addingTimeInterval(-8 * 86_400)
+        )
+        llm.fetchError = NSError(domain: "AppStateBillingTests", code: 1)
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
+        XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .active)
+        XCTAssertEqual(appState.managedLicense, .unknown)
     }
 
     func testOfflineFallsBackToCachedSnapshotWithinGrace() async {

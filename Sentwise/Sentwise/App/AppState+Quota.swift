@@ -44,6 +44,7 @@ extension AppState {
     func clearManagedQuotaCache() {
         managedQuota = nil
         managedAccountStatus = nil
+        managedAccountStatusIsFresh = false
         managedQuotaAccountKey = nil
         clearCachedSubscriptionSnapshot()
         // Account-key aliases are identity migrations, not quota display cache.
@@ -115,6 +116,7 @@ extension AppState {
                 // Subscription pane (item 73), even when `quota` is absent on an
                 // older Worker build.
                 managedAccountStatus = status
+                managedAccountStatusIsFresh = true
                 let resolvedAccountKey = backfillManagedAccountIDIfNeeded(
                     from: status,
                     replacing: accountKey
@@ -124,8 +126,11 @@ extension AppState {
                 }
                 // Cache the last-known subscription for offline license grace (56c).
                 recordSubscriptionSnapshot(from: status)
+            } else {
+                managedAccountStatusIsFresh = false
             }
         } catch {
+            managedAccountStatusIsFresh = false
             // Metering is best-effort surfacing, never a blocking failure; a
             // managed 401 is reconciled by the normal draft/test paths.
             await reconcileManagedAccountState(after: error, provider: .managed)
