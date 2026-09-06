@@ -34,10 +34,11 @@ extension AppState {
         }
     }
 
-    func refreshManagedQuotaAfterBillingPortalReturnIfNeeded() async {
+    func refreshManagedQuotaAfterBillingPortalReturnIfNeeded(reconciliationRetryDelays: [UInt64]? = nil) async {
         guard billingPortalRefreshPending else { return }
         billingPortalRefreshPending = false
         guard isManagedSignedIn else { return }
         await refreshManagedQuota()
+        scheduleBillingReconciliationIfNeeded(delays: reconciliationRetryDelays)
     }
 }

@@ -55,7 +55,7 @@ extension AppState {
         managedAccountStatusRefreshOrdering.acceptedGeneration = managedAccountStatusRefreshOrdering.startedGeneration
         managedAccountStatusRefreshOrdering.successVersion &+= 1
         cancelScheduledManagedAccountStatusRefresh()
-        cancelBillingCheckoutReconciliation()
+        cancelBillingReconciliation()
         managedQuotaAccountKey = nil
         clearCachedSubscriptionSnapshot()
         // Account-key aliases are identity migrations, not quota display cache.
@@ -129,6 +129,7 @@ extension AppState {
                 ) else { return }
                 managedAccountStatusRefreshOrdering.acceptedGeneration = refreshGeneration
                 managedAccountStatusRefreshOrdering.successVersion &+= 1
+                let snapshotBeforeAccountKeyBackfill = effectiveSubscriptionSnapshot
                 // Mirror the full status (email/trial/subscription) for the
                 // Subscription pane (item 73), even when `quota` is absent on an
                 // older Worker build.
@@ -139,6 +140,7 @@ extension AppState {
                     from: status,
                     replacing: accountKey
                 )
+                cachedSubscriptionSnapshot = cachedSubscriptionSnapshot ?? snapshotBeforeAccountKeyBackfill
                 if let quota = status.quota {
                     ingestManagedQuota(quota, accountKey: resolvedAccountKey)
                 }

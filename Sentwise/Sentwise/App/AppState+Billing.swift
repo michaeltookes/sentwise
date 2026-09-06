@@ -299,7 +299,7 @@ extension AppState {
                 let shouldContinue = await self.refreshManagedQuotaForRetry()
                 if !shouldContinue { return }
             }
-            await self?.finishManagedAccountStatusRefreshRetry()
+            self?.finishManagedAccountStatusRefreshRetry()
         }
     }
 

@@ -255,7 +255,7 @@ final class AppStateBillingTests: XCTestCase {
             status(plan: .pro, statusValue: .active)
         ]
         let appState = makeSignedInAppState(llm: llm)
-        defer { appState.cancelBillingCheckoutReconciliation() }
+        defer { appState.cancelBillingReconciliation() }
 
         await appState.completeBillingCheckout(refreshRetryDelays: [0], reconciliationRetryDelays: [0])
         for _ in 0..<1_000 where llm.fetchCount < 3 {
@@ -264,7 +264,7 @@ final class AppStateBillingTests: XCTestCase {
 
         XCTAssertEqual(llm.fetchCount, 3)
         XCTAssertTrue(appState.isOnActivePaidPlan)
-        XCTAssertNil(appState.billingCheckoutReconciliationTask)
+        XCTAssertNil(appState.billingReconciliationTask)
     }
 
     // MARK: - Offline license grace

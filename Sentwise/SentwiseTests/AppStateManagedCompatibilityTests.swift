@@ -149,6 +149,40 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         }
     }
 
+    func testQuotaOnlyAccountStatusMigratesPaidSnapshotAcrossAccountKeyBackfill() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            quota: managedQuota()
+        )
+        let store = InMemorySubscriptionCacheStore()
+        let appState = makeSignedInAppState(llm: llm, cacheStore: store)
+        appState.managedAccountID = "clerk-session:sess_X"
+        let sessionKey = appState.currentManagedUsageAccountKey
+        store.save(
+            SubscriptionSnapshot(
+                plan: .pro,
+                status: .active,
+                manageBillingURL: "https://billing.example.com/session",
+                capturedAt: Date().addingTimeInterval(-8 * 86_400)
+            ),
+            accountKey: sessionKey
+        )
+
+        await appState.refreshManagedQuota()
+
+        let stableKey = appState.currentManagedUsageAccountKey
+        XCTAssertNotEqual(sessionKey, stableKey)
+        XCTAssertEqual(appState.managedAccountID, "clerk-user:user_marcus")
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.plan, .pro)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.status, .active)
+        XCTAssertFalse(appState.shouldOfferSubscribe)
+        XCTAssertEqual(appState.manageBillingURL?.absoluteString, "https://billing.example.com/session")
+        XCTAssertEqual(store.saved[stableKey]?.plan, .pro)
+        XCTAssertEqual(store.saved[stableKey]?.manageBillingURL, "https://billing.example.com/session")
+    }
+
     func testQuotaOnlyAccountStatusUsesCompatibilityStatusForPastDueSnapshot() async {
         let llm = StatusLLM()
         llm.statusToReturn = ManagedAccountStatus(

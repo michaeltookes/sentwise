@@ -125,7 +125,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Billing / checkout (item 56c). See AppState+Billing.
     @Published var billingCheckout: BillingCheckoutRequest?
-    var billingCheckoutReconciliationTask: Task<Void, Never>?
+    var billingReconciliationTask: Task<Void, Never>?
     @Published var cachedSubscriptionSnapshot: SubscriptionSnapshot?
     var billingPortalRefreshPending = false
     /// Durable per-account subscription cache (test-injectable) backing the above.

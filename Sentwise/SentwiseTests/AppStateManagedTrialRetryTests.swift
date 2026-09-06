@@ -6,6 +6,7 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
 
     private final class StatusLLM: LLMProviding, @unchecked Sendable {
         var statusToReturn: ManagedAccountStatus?
+        var statusesToReturn: [ManagedAccountStatus?] = []
         private(set) var fetchCount = 0
 
         func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
@@ -14,6 +15,9 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         }
         func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? {
             fetchCount += 1
+            if !statusesToReturn.isEmpty {
+                return statusesToReturn.removeFirst()
+            }
             return statusToReturn
         }
         func fetchManagedQuota() async throws -> ManagedQuota? { statusToReturn?.quota }
@@ -113,6 +117,40 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         XCTAssertFalse(appState.billingPortalRefreshPending)
         XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .active)
         XCTAssertEqual(appState.managedLicense, .entitled)
+    }
+
+    func testBillingPortalReturnReconcilesAfterInitialPastDueRefresh() async throws {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        defer { appState.cancelBillingReconciliation() }
+        let portalURL = "https://billing.example/portal"
+        let pastDue = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .pastDue, manageBillingURL: portalURL)
+        )
+        appState.managedAccountStatus = pastDue
+        appState.markManagedAccountStatusFresh(from: pastDue)
+        appState.openManageBilling { _ in }
+        llm.statusesToReturn = [
+            pastDue,
+            ManagedAccountStatus(
+                userID: "user_marcus",
+                email: "marcus@example.com",
+                subscription: ManagedSubscription(plan: .pro, status: .active, manageBillingURL: portalURL)
+            )
+        ]
+
+        await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded(reconciliationRetryDelays: [0])
+        for _ in 0..<1_000 where llm.fetchCount < 2 {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+
+        XCTAssertEqual(llm.fetchCount, 2)
+        XCTAssertFalse(appState.billingPortalRefreshPending)
+        XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .active)
+        XCTAssertEqual(appState.managedLicense, .entitled)
+        XCTAssertNil(appState.billingReconciliationTask)
     }
 
     func testFreshPastDueRefreshKeepsWatcherResumeIntent() async {
