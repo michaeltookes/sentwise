@@ -108,6 +108,13 @@ enum SubscriptionLicenseEvaluator {
 
         guard let cached else { return .unknown }
 
+        if cached.plan == .trial,
+           cached.status == .trialing,
+           let trialEndsAt = cached.renewsAt,
+           now >= trialEndsAt {
+            return .unknown
+        }
+
         guard isEntitled(cached.status) else {
             // We already knew the account wasn't entitled; no grace to extend.
             return cached.status == .unknown ? .unknown : .notEntitled

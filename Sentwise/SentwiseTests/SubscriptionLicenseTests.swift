@@ -42,6 +42,29 @@ final class SubscriptionLicenseTests: XCTestCase {
         XCTAssertEqual(days, 5)
     }
 
+    func testCachedTrialPastKnownEndDoesNotGrace() {
+        let cached = SubscriptionSnapshot(
+            plan: .trial,
+            status: .trialing,
+            renewsAt: now.addingTimeInterval(-1),
+            capturedAt: now.addingTimeInterval(-2 * 86_400)
+        )
+        let license = SubscriptionLicenseEvaluator.evaluate(liveStatus: nil, cached: cached, now: now)
+        XCTAssertEqual(license, .unknown)
+    }
+
+    func testCachedTrialBeforeKnownEndCanGrace() {
+        let cached = SubscriptionSnapshot(
+            plan: .trial,
+            status: .trialing,
+            renewsAt: now.addingTimeInterval(86_400),
+            capturedAt: now.addingTimeInterval(-2 * 86_400)
+        )
+        let license = SubscriptionLicenseEvaluator.evaluate(liveStatus: nil, cached: cached, now: now)
+        guard case .grace(let days) = license else { return XCTFail("expected grace, got \(license)") }
+        XCTAssertEqual(days, 5)
+    }
+
     func testOfflinePastGraceReturnsUnknown() {
         let captured = now.addingTimeInterval(-10 * 86_400) // beyond 7-day grace
         let cached = snapshot(status: .active, capturedAt: captured)

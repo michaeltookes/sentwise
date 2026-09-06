@@ -208,6 +208,23 @@ extension AppState {
         llmProviderKind != .managed || managedLicenseAllowsLLMRequests
     }
 
+    var shouldResumeWatchingAfterManagedLicenseRecovery: Bool {
+        llmProviderKind == .managed
+            && isManagedSignedIn
+            && isAccountConnected
+            && isLLMConnected
+            && !managedLicenseAllowsLLMRequests
+    }
+
+    func markManagedAccountStatusFresh(from status: ManagedAccountStatus) {
+        let defaultFreshUntil = Date().addingTimeInterval(managedAccountStatusFreshDuration)
+        if let trialEndsAt = trialFreshnessDeadline(from: status) {
+            managedAccountStatusFreshUntil = min(defaultFreshUntil, trialEndsAt)
+        } else {
+            managedAccountStatusFreshUntil = defaultFreshUntil
+        }
+    }
+
     func refreshManagedQuotaIfLicenseStatusStale() async {
         guard llmProviderKind == .managed,
               isManagedSignedIn,
@@ -237,7 +254,9 @@ extension AppState {
               let freshUntil = managedAccountStatusFreshUntil else {
             return
         }
-        let refreshAt = freshUntil.addingTimeInterval(-managedAccountStatusRefreshLeadTime)
+        let refreshAt = freshUntil == currentTrialFreshnessDeadline
+            ? freshUntil
+            : freshUntil.addingTimeInterval(-managedAccountStatusRefreshLeadTime)
         let delay = max(0, refreshAt.timeIntervalSinceNow)
         managedAccountStatusRefreshTask = Task { [weak self] in
             do {
@@ -257,7 +276,7 @@ extension AppState {
     /// Persists the last-known subscription/trial from a successful `/v1/me` so
     /// offline grace has something to fall back on.
     func recordSubscriptionSnapshot(from status: ManagedAccountStatus) {
-        let snapshot = SubscriptionSnapshot(subscription: status.subscription)
+        let snapshot = subscriptionSnapshot(from: status)
             ?? derivedTrialSubscriptionSnapshot(from: status)
         guard let snapshot else { return }
         cachedSubscriptionSnapshot = snapshot
@@ -297,9 +316,42 @@ extension AppState {
         await refreshManagedQuota()
     }
 
+    private var currentTrialFreshnessDeadline: Date? {
+        guard let status = managedAccountStatus else { return nil }
+        return trialFreshnessDeadline(from: status)
+    }
+
+    private func trialFreshnessDeadline(from status: ManagedAccountStatus) -> Date? {
+        guard let state = currentSubscriptionState(from: status),
+              state.plan == .trial,
+              state.status == .trialing else {
+            return nil
+        }
+        return status.trial?.endsAt
+    }
+
+    private func subscriptionSnapshot(from status: ManagedAccountStatus) -> SubscriptionSnapshot? {
+        guard let subscription = status.subscription else { return nil }
+        let renewsAt = subscription.renewsAt ?? (subscription.plan == .trial ? status.trial?.endsAt : nil)
+        return SubscriptionSnapshot(
+            plan: subscription.plan,
+            status: subscription.status,
+            renewsAt: renewsAt,
+            manageBillingURL: subscription.manageBillingURL,
+            capturedAt: Date()
+        )
+    }
+
     private func derivedTrialSubscriptionSnapshot(from status: ManagedAccountStatus) -> SubscriptionSnapshot? {
         guard let state = derivedTrialSubscriptionState(from: status) else { return nil }
-        return SubscriptionSnapshot(plan: state.plan, status: state.status, capturedAt: Date())
+        return SubscriptionSnapshot(plan: state.plan, status: state.status, renewsAt: status.trial?.endsAt, capturedAt: Date())
+    }
+
+    private func currentSubscriptionState(from status: ManagedAccountStatus) -> ManagedSubscriptionBillingState? {
+        if let subscription = status.subscription {
+            return (subscription.plan, subscription.status)
+        }
+        return derivedTrialSubscriptionState(from: status)
     }
 
     private func derivedTrialSubscriptionState(from status: ManagedAccountStatus) -> ManagedSubscriptionBillingState? {

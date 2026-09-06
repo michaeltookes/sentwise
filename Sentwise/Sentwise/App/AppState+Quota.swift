@@ -117,7 +117,7 @@ extension AppState {
                 // Subscription pane (item 73), even when `quota` is absent on an
                 // older Worker build.
                 managedAccountStatus = status
-                managedAccountStatusIsFresh = true
+                markManagedAccountStatusFresh(from: status)
                 scheduleManagedAccountStatusRefreshBeforeExpiry()
                 let resolvedAccountKey = backfillManagedAccountIDIfNeeded(
                     from: status,

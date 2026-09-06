@@ -192,6 +192,32 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertFalse(model.isProblemState)
     }
 
+    func testSnapshotTrialUsesStoredEndDate() {
+        let now = ManagedQuotaDate.date(from: "2026-08-10T00:00:00Z")!
+        let endsAt = ManagedQuotaDate.date(from: "2026-08-12T00:00:00Z")
+        let model = SubscriptionPaneModel.make(
+            from: nil,
+            snapshot: snapshot(plan: .trial, statusValue: .trialing, renewsAt: endsAt),
+            now: now
+        )
+
+        XCTAssertEqual(model.planText, "Trial — 2 days left")
+        XCTAssertFalse(model.isProblemState)
+    }
+
+    func testSnapshotTrialPastStoredEndShowsTrialEnded() {
+        let now = ManagedQuotaDate.date(from: "2026-08-12T01:00:00Z")!
+        let endsAt = ManagedQuotaDate.date(from: "2026-08-12T00:00:00Z")
+        let model = SubscriptionPaneModel.make(
+            from: nil,
+            snapshot: snapshot(plan: .trial, statusValue: .trialing, renewsAt: endsAt),
+            now: now
+        )
+
+        XCTAssertEqual(model.planText, "Trial ended")
+        XCTAssertTrue(model.isProblemState)
+    }
+
     func testStaleLiveStatusUsesSnapshotProblemState() {
         let live = ManagedSubscription(plan: .pro, status: .active)
         let model = SubscriptionPaneModel.make(

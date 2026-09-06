@@ -41,7 +41,10 @@ struct SubscriptionPaneModel: Equatable {
                 isProblemState: false
             )
         case .trialing:
-            return activeTrialModel(days: trialDays)
+            let days = effective.plan == .trial
+                ? trialDays ?? trialDaysRemaining(endsAt: effective.renewsAt, now: now)
+                : trialDays
+            return activeTrialModel(days: days)
         case .pastDue:
             return SubscriptionPaneModel(
                 planText: effective.plan.displayName,

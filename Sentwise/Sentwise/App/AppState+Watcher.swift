@@ -92,7 +92,7 @@ extension AppState {
         await refreshManagedQuotaIfLicenseStatusStale()
         guard canWatch else {
             DiagnosticLog.verbose("Inbox poll paused; account or AI provider is unavailable")
-            pauseWatching()
+            pauseWatching(resumeAfterManagedReauthentication: shouldResumeWatchingAfterManagedLicenseRecovery)
             return
         }
         // Offline (item 27): skip the poll rather than burn retries against an

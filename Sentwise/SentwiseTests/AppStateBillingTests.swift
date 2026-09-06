@@ -385,6 +385,26 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertEqual(appState.managedLicense, .entitled)
     }
 
+    func testTrialFreshnessDeadlineIsCappedAtKnownTrialEnd() {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm, cacheStore: InMemorySubscriptionCacheStore())
+        let endsAt = Date().addingTimeInterval(300)
+        let trialing = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            trial: ManagedTrial(endsAt: endsAt, active: true),
+            subscription: ManagedSubscription(plan: .trial, status: .trialing)
+        )
+
+        appState.markManagedAccountStatusFresh(from: trialing)
+
+        XCTAssertEqual(
+            appState.managedAccountStatusFreshUntil?.timeIntervalSince1970 ?? 0,
+            endsAt.timeIntervalSince1970,
+            accuracy: 0.001
+        )
+    }
+
     func testInitialWatchStartResumesAfterManagedLicenseRefresh() async {
         let llm = StatusLLM()
         llm.statusToReturn = status(plan: .pro, statusValue: .active)
@@ -397,6 +417,31 @@ final class AppStateBillingTests: XCTestCase {
         appState.startWatchingIfReady()
 
         XCTAssertEqual(appState.watchStatus, .idle)
+        XCTAssertTrue(appState.resumeWatchingAfterManagedReauth)
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.watchStatus, .watching)
+        XCTAssertFalse(appState.resumeWatchingAfterManagedReauth)
+        appState.stopWatching()
+    }
+
+    func testWatcherLicensePausePreservesResumeIntentAndRestartsAfterRecovery() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = status(plan: .pro, statusValue: .active)
+        let appState = makeSignedInAppState(llm: llm, cacheStore: InMemorySubscriptionCacheStore())
+        defer { appState.cancelScheduledManagedAccountStatusRefresh() }
+        appState.mailEmail = "me@gmail.com"
+        appState.mailAppPassword = "app-pw"
+        appState.isAccountConnected = true
+        let pastDue = status(plan: .pro, statusValue: .pastDue)
+        appState.managedAccountStatus = pastDue
+        appState.markManagedAccountStatusFresh(from: pastDue)
+        appState.watchStatus = .watching
+
+        await appState.pollInboxOnce()
+
+        XCTAssertEqual(appState.watchStatus, .paused)
         XCTAssertTrue(appState.resumeWatchingAfterManagedReauth)
 
         await appState.refreshManagedQuota()
