@@ -310,19 +310,20 @@ extension AppState {
     func recordSubscriptionSnapshot(from status: ManagedAccountStatus) {
         if let snapshot = subscriptionSnapshot(from: status)
             ?? derivedTrialSubscriptionSnapshot(from: status) {
-            cachedSubscriptionSnapshot = snapshot
-            subscriptionCacheStore.save(snapshot, accountKey: currentManagedUsageAccountKey)
+            cacheSubscriptionSnapshot(snapshot)
             return
         }
 
         guard let snapshot = legacyQuotaSubscriptionSnapshot(from: status) else { return }
-        if let existingSnapshot = effectiveSubscriptionSnapshot,
-           existingSnapshot.source != .legacyQuota {
+        if let existingSnapshot = refreshedManageableSubscriptionSnapshot(
+            from: effectiveSubscriptionSnapshot,
+            capturedAt: snapshot.capturedAt
+        ) {
+            cacheSubscriptionSnapshot(existingSnapshot)
             return
         }
 
-        cachedSubscriptionSnapshot = snapshot
-        subscriptionCacheStore.save(snapshot, accountKey: currentManagedUsageAccountKey)
+        cacheSubscriptionSnapshot(snapshot)
     }
 
     /// Clears the in-memory offline-grace snapshot (called on sign-out alongside
@@ -426,6 +427,32 @@ extension AppState {
             return nil
         }
         return SubscriptionSnapshot(plan: .unknown, status: .active, capturedAt: Date(), source: .legacyQuota)
+    }
+
+    private func refreshedManageableSubscriptionSnapshot(
+        from snapshot: SubscriptionSnapshot?,
+        capturedAt: Date
+    ) -> SubscriptionSnapshot? {
+        guard let snapshot,
+              snapshot.source != .legacyQuota,
+              !nonRecurringManagedSubscriptionPlans.contains(snapshot.plan),
+              !endedManagedSubscriptionStatuses.contains(snapshot.status) else {
+            return nil
+        }
+
+        return SubscriptionSnapshot(
+            plan: snapshot.plan,
+            status: snapshot.status,
+            renewsAt: snapshot.renewsAt,
+            manageBillingURL: snapshot.manageBillingURL,
+            capturedAt: capturedAt,
+            source: snapshot.source
+        )
+    }
+
+    private func cacheSubscriptionSnapshot(_ snapshot: SubscriptionSnapshot) {
+        cachedSubscriptionSnapshot = snapshot
+        subscriptionCacheStore.save(snapshot, accountKey: currentManagedUsageAccountKey)
     }
 
     private func currentSubscriptionState(from status: ManagedAccountStatus) -> ManagedSubscriptionBillingState? {

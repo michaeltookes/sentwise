@@ -123,16 +123,30 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
             plan: .pro,
             status: .active,
             manageBillingURL: "https://billing.example.com/session",
-            capturedAt: Date().addingTimeInterval(-60)
+            capturedAt: Date().addingTimeInterval(-8 * 86_400)
         )
         store.save(paidSnapshot, accountKey: accountKey)
 
+        let refreshStartedAt = Date()
         await appState.refreshManagedQuota()
 
-        XCTAssertNil(appState.cachedSubscriptionSnapshot)
-        XCTAssertEqual(store.saved[accountKey], paidSnapshot)
+        guard let refreshedSnapshot = appState.cachedSubscriptionSnapshot else {
+            return XCTFail("expected quota-only refresh to renew the paid snapshot")
+        }
+        XCTAssertEqual(refreshedSnapshot.plan, .pro)
+        XCTAssertEqual(refreshedSnapshot.status, .active)
+        XCTAssertEqual(refreshedSnapshot.source, .subscription)
+        XCTAssertEqual(refreshedSnapshot.manageBillingURL, "https://billing.example.com/session")
+        XCTAssertGreaterThanOrEqual(refreshedSnapshot.capturedAt, refreshStartedAt)
+        XCTAssertEqual(store.saved[accountKey], refreshedSnapshot)
         XCTAssertFalse(appState.shouldOfferSubscribe)
         XCTAssertEqual(appState.manageBillingURL?.absoluteString, "https://billing.example.com/session")
+
+        appState.isOnline = false
+        appState.managedAccountStatus = nil
+        guard case .grace = appState.managedLicense else {
+            return XCTFail("expected refreshed quota-only success to allow offline grace")
+        }
     }
 
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
