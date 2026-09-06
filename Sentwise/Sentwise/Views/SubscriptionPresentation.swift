@@ -31,7 +31,17 @@ struct SubscriptionPaneModel: Equatable {
     ) -> SubscriptionPaneModel {
         let trustedStatus = statusIsFresh ? status : nil
         let trialDays = trialDaysRemaining(endsAt: trustedStatus?.trial?.endsAt, now: now)
-        let effective = effectivePlanStatus(from: trustedStatus, snapshot: snapshot, trialDays: trialDays)
+        let snapshotForPresentation = presentationSnapshot(snapshot, now: now)
+        if !hasKnownPlanStatus(trustedStatus),
+           snapshot != nil,
+           snapshotForPresentation == nil {
+            return unconfirmedSubscriptionModel()
+        }
+        let effective = effectivePlanStatus(
+            from: trustedStatus,
+            snapshot: snapshotForPresentation,
+            trialDays: trialDays
+        )
 
         switch effective.status {
         case .active:
@@ -76,7 +86,7 @@ struct SubscriptionPaneModel: Equatable {
             // Signed in but the server sent a status this build doesn't know.
             // Fall back to the trial view when a trial is present, else a neutral
             // "Active" so the pane never shows a raw/empty value.
-            if trialDays != nil || status?.trial != nil {
+            if trialDays != nil || trustedStatus?.trial != nil {
                 return trialModel(days: trialDays)
             }
             return SubscriptionPaneModel(planText: "Active", secondaryText: nil, isProblemState: false)
@@ -106,7 +116,7 @@ struct SubscriptionPaneModel: Equatable {
         snapshot: SubscriptionSnapshot?,
         trialDays: Int?
     ) -> (plan: ManagedSubscription.Plan, status: ManagedSubscription.Status, renewsAt: Date?) {
-        if let subscription = status?.subscription {
+        if let subscription = status?.subscription, subscription.status != .unknown {
             return (subscription.plan, subscription.status, subscription.renewsAt)
         }
         if let trial = status?.trial {
@@ -117,6 +127,39 @@ struct SubscriptionPaneModel: Equatable {
             return (snapshot.plan, snapshot.status, snapshot.renewsAt)
         }
         return (.unknown, .unknown, nil)
+    }
+
+    private static func presentationSnapshot(_ snapshot: SubscriptionSnapshot?, now: Date) -> SubscriptionSnapshot? {
+        guard let snapshot else { return nil }
+        switch SubscriptionLicenseEvaluator.evaluate(liveStatus: nil, cached: snapshot, now: now) {
+        case .entitled, .grace, .notEntitled:
+            return snapshot
+        case .unknown:
+            guard snapshot.plan == .trial,
+                  snapshot.status == .trialing,
+                  let trialEndsAt = snapshot.renewsAt,
+                  now >= trialEndsAt else {
+                return nil
+            }
+            return snapshot
+        }
+    }
+
+    private static func hasKnownPlanStatus(_ status: ManagedAccountStatus?) -> Bool {
+        guard let status else { return false }
+        if let subscription = status.subscription {
+            return subscription.status != .unknown
+        }
+        return status.trial != nil
+    }
+
+    private static func unconfirmedSubscriptionModel() -> SubscriptionPaneModel {
+        SubscriptionPaneModel(
+            planText: "Subscription unavailable",
+            secondaryText: "We couldn't confirm your subscription, so managed drafting is paused. "
+                + "Drafting with your own AI key still works while you reconnect.",
+            isProblemState: true
+        )
     }
 
     private static func trialModel(days: Int?) -> SubscriptionPaneModel {

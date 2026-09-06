@@ -110,9 +110,10 @@ final class SubscriptionModelTests: XCTestCase {
     private func snapshot(
         plan: ManagedSubscription.Plan,
         statusValue: ManagedSubscription.Status,
-        renewsAt: Date? = nil
+        renewsAt: Date? = nil,
+        capturedAt: Date = Date()
     ) -> SubscriptionSnapshot {
-        SubscriptionSnapshot(plan: plan, status: statusValue, renewsAt: renewsAt, capturedAt: Date())
+        SubscriptionSnapshot(plan: plan, status: statusValue, renewsAt: renewsAt, capturedAt: capturedAt)
     }
 
     func testActivePlanShowsNameAndRenewal() {
@@ -190,6 +191,24 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertEqual(model.planText, "Pro")
         XCTAssertEqual(model.secondaryText?.hasPrefix("Renews"), true)
         XCTAssertFalse(model.isProblemState)
+    }
+
+    func testExpiredEntitledSnapshotShowsUnconfirmedProblemState() {
+        let now = ManagedQuotaDate.date(from: "2026-09-05T00:00:00Z")!
+        let model = SubscriptionPaneModel.make(
+            from: nil,
+            snapshot: snapshot(
+                plan: .pro,
+                statusValue: .active,
+                capturedAt: now.addingTimeInterval(-8 * 86_400)
+            ),
+            now: now
+        )
+
+        XCTAssertEqual(model.planText, "Subscription unavailable")
+        XCTAssertTrue(model.isProblemState)
+        XCTAssertTrue(model.showsOwnKeyFallback)
+        XCTAssertEqual(model.secondaryText?.contains("couldn't confirm") ?? false, true)
     }
 
     func testSnapshotTrialUsesStoredEndDate() {
