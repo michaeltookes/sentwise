@@ -133,7 +133,7 @@ extension AppState {
                 // older Worker build.
                 managedAccountStatus = status
                 markManagedAccountStatusFresh(from: status)
-                scheduleManagedAccountStatusRefreshBeforeExpiry()
+                scheduleManagedAccountStatusRefreshAfterSuccess(scheduleRetryIfStale: scheduleRetryOnFailure)
                 let resolvedAccountKey = backfillManagedAccountIDIfNeeded(
                     from: status,
                     replacing: accountKey

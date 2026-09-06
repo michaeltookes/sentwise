@@ -229,9 +229,13 @@ extension AppState {
             && !managedLicenseAllowsLLMRequests
     }
 
-    func markManagedAccountStatusFresh(from status: ManagedAccountStatus) {
-        let defaultFreshUntil = Date().addingTimeInterval(managedAccountStatusFreshDuration)
+    func markManagedAccountStatusFresh(from status: ManagedAccountStatus, now: Date = Date()) {
+        let defaultFreshUntil = now.addingTimeInterval(managedAccountStatusFreshDuration)
         if let trialEndsAt = trialFreshnessDeadline(from: status) {
+            guard trialEndsAt > now else {
+                managedAccountStatusFreshUntil = nil
+                return
+            }
             managedAccountStatusFreshUntil = min(defaultFreshUntil, trialEndsAt)
         } else {
             managedAccountStatusFreshUntil = defaultFreshUntil
@@ -258,6 +262,26 @@ extension AppState {
             return
         }
         resumeWatchingAfterManagedReauth = true
+    }
+
+    /// Restarts a watcher that was paused by managed auth/licensing once any
+    /// replacement provider is usable.
+    func resumeInboxWatchingAfterProviderRecoveryIfNeeded() {
+        guard resumeWatchingAfterManagedReauth,
+              watchStatus == .paused || watchStatus == .idle,
+              canWatch else {
+            return
+        }
+        resumeWatchingAfterManagedReauth = false
+        startWatching()
+    }
+
+    func scheduleManagedAccountStatusRefreshAfterSuccess(scheduleRetryIfStale: Bool) {
+        if managedAccountStatusIsFresh {
+            scheduleManagedAccountStatusRefreshBeforeExpiry()
+        } else if scheduleRetryIfStale {
+            scheduleManagedAccountStatusRefreshRetryAfterFailure()
+        }
     }
 
     func scheduleManagedAccountStatusRefreshBeforeExpiry() {

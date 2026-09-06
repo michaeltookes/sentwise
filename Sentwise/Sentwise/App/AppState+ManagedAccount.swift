@@ -360,8 +360,7 @@ extension AppState {
             }
             return
         }
-        resumeWatchingAfterManagedReauth = false
-        startWatching()
+        resumeInboxWatchingAfterProviderRecoveryIfNeeded()
     }
 
     func shouldResumeAfterManagedReauthentication(error: Error, provider: LLMProviderKind?) -> Bool {
