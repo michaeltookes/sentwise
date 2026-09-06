@@ -247,15 +247,24 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertTrue(appState.isOnActivePaidPlan)
     }
 
-    func testCompleteBillingCheckoutStopsAfterBoundedRetryBudget() async {
+    func testCompleteBillingCheckoutReconcilesAfterImmediateRetryBudget() async throws {
         let llm = StatusLLM()
-        llm.statusToReturn = status(plan: .trial, statusValue: .trialing)
+        llm.statusesToReturn = [
+            status(plan: .trial, statusValue: .trialing),
+            status(plan: .trial, statusValue: .trialing),
+            status(plan: .pro, statusValue: .active)
+        ]
         let appState = makeSignedInAppState(llm: llm)
+        defer { appState.cancelBillingCheckoutReconciliation() }
 
-        await appState.completeBillingCheckout(refreshRetryDelays: [0, 0])
+        await appState.completeBillingCheckout(refreshRetryDelays: [0], reconciliationRetryDelays: [0])
+        for _ in 0..<1_000 where llm.fetchCount < 3 {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
 
         XCTAssertEqual(llm.fetchCount, 3)
-        XCTAssertFalse(appState.isOnActivePaidPlan)
+        XCTAssertTrue(appState.isOnActivePaidPlan)
+        XCTAssertNil(appState.billingCheckoutReconciliationTask)
     }
 
     // MARK: - Offline license grace

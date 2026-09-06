@@ -81,33 +81,6 @@ extension AppState {
         )
     }
 
-    /// Called by the checkout sheet after a `checkout.completed` event so the
-    /// webhook-written subscription is reflected. Dismisses the sheet, then retries
-    /// `/v1/me` with bounded backoff until the paid subscription is visible.
-    func completeBillingCheckout(
-        refreshRetryDelays: [UInt64] = [
-            750_000_000,
-            1_500_000_000,
-            3_000_000_000,
-            6_000_000_000
-        ]
-    ) async {
-        billingCheckout = nil
-        await refreshManagedQuota()
-        guard isManagedSignedIn, !isOnActivePaidPlan else { return }
-
-        for delay in refreshRetryDelays {
-            do {
-                try await Task.sleep(nanoseconds: delay)
-            } catch {
-                return
-            }
-            guard isManagedSignedIn else { return }
-            await refreshManagedQuota()
-            if isOnActivePaidPlan { return }
-        }
-    }
-
     // MARK: - Manage billing
 
     /// The merchant-of-record billing-portal URL when the Worker provides one.
