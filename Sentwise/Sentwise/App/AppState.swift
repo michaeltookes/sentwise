@@ -112,6 +112,7 @@ final class AppState: ObservableObject {
     /// Instant until which the latest `/v1/me` response may be trusted as live.
     @Published var managedAccountStatusFreshUntil: Date?
     var managedAccountStatusRefreshTask: Task<Void, Never>?
+    var managedAccountStatusRefreshGeneration: UInt64 = 0 // Discards stale overlapping `/v1/me` results.
     /// True briefly after a successful account deletion so the signed-out
     /// Subscription pane can confirm it (item 73). Cleared on the next sign-in.
     @Published var didDeleteManagedAccount: Bool = false
@@ -408,7 +409,6 @@ final class AppState: ObservableObject {
 
     /// Pause between bulk-cleanup sweeps so rapid scans do not trip provider rate limits.
     var bulkSweepPacingNanoseconds: UInt64 = 1_200_000_000
-
     // MARK: - Initialization
 
     init(

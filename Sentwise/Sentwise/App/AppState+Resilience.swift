@@ -59,12 +59,12 @@ extension AppState {
         }
 
         managedAccountStatusIsFresh = false
+        Task { await resumeQueuedDraftsAfterReconnect() }
         Task {
             await refreshManagedQuota()
             if watchStatus == .watching {
                 resumeInboxWatcherAfterReachabilityConfirmed()
             }
-            await resumeQueuedDraftsAfterReconnect()
         }
     }
 
