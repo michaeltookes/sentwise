@@ -1,0 +1,111 @@
+import XCTest
+@testable import Sentwise
+
+@MainActor
+final class AppStateManagedCompatibilityTests: XCTestCase {
+
+    private final class StatusLLM: LLMProviding, @unchecked Sendable {
+        var statusToReturn: ManagedAccountStatus?
+
+        func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
+        func complete(_ request: LLMRequest, provider: LLMProviderKind, apiKey: String, baseURL: String?) async throws -> LLMResponse {
+            LLMResponse(text: "")
+        }
+        func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? { statusToReturn }
+        func fetchManagedQuota() async throws -> ManagedQuota? { statusToReturn?.quota }
+        func deleteManagedAccount() async throws {}
+    }
+
+    private func makeSignedInAppState(llm: LLMProviding) -> AppState {
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed",
+            llmModel: "",
+            llmVerifiedModel: "",
+            managedAccountEmail: "marcus@example.com",
+            managedAccountID: "clerk-user:user_marcus"
+        ))
+        let appState = AppState(
+            persistence: persistence,
+            secrets: secrets,
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: llm,
+            notifier: FakeDraftNotifier()
+        )
+        appState.subscriptionCacheStore = InMemorySubscriptionCacheStore()
+        return appState
+    }
+
+    private func status(
+        plan: ManagedSubscription.Plan,
+        statusValue: ManagedSubscription.Status
+    ) -> ManagedAccountStatus {
+        ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: plan, status: statusValue)
+        )
+    }
+
+    private func managedQuota() -> ManagedQuota {
+        ManagedQuota(
+            used: 1,
+            limit: 10,
+            remaining: 9,
+            resetsAt: Date().addingTimeInterval(86_400)
+        )
+    }
+
+    func testUnknownActiveSubscriptionBlocksNewCheckout() {
+        let scenarios: [(ManagedSubscription.Plan, ManagedSubscription.Status)] = [
+            (.unknown, .active),
+            (.pro, .unknown)
+        ]
+
+        for (plan, statusValue) in scenarios {
+            let llm = StatusLLM()
+            let appState = makeSignedInAppState(llm: llm)
+            appState.managedAccountStatus = status(plan: plan, statusValue: statusValue)
+
+            XCTAssertTrue(
+                appState.hasManageablePaidSubscription,
+                "plan \(plan.rawValue), status \(statusValue.rawValue) should be handled through billing management"
+            )
+            XCTAssertFalse(appState.shouldOfferSubscribe)
+
+            appState.presentBillingCheckout()
+            XCTAssertNil(appState.billingCheckout)
+        }
+    }
+
+    func testManagedLicenseAllowsFreshQuotaOnlyAccountStatus() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            quota: managedQuota()
+        )
+        let appState = makeSignedInAppState(llm: llm)
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.managedLicense, .entitled)
+        XCTAssertTrue(appState.managedLicenseAllowsLLMRequests)
+        XCTAssertNil(appState.cachedSubscriptionSnapshot)
+
+        appState.managedAccountStatusFreshUntil = Date().addingTimeInterval(-1)
+        XCTAssertEqual(appState.managedLicense, .unknown)
+    }
+
+    private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
+        private(set) var saved: [String: SubscriptionSnapshot] = [:]
+        func snapshot(accountKey: String) -> SubscriptionSnapshot? { saved[accountKey] }
+        func save(_ snapshot: SubscriptionSnapshot, accountKey: String) { saved[accountKey] = snapshot }
+        func clear(accountKey: String) { saved[accountKey] = nil }
+    }
+}

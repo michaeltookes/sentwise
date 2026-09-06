@@ -2,6 +2,8 @@ import AppKit
 import Foundation
 
 private let paidManagedSubscriptionPlans: Set<ManagedSubscription.Plan> = [.starter, .pro, .unlimited, .team]
+private let nonRecurringManagedSubscriptionPlans: Set<ManagedSubscription.Plan> = [.trial, .noPlan]
+private let endedManagedSubscriptionStatuses: Set<ManagedSubscription.Status> = [.canceled, .lapsed]
 private let managedAccountStatusFreshDuration = SubscriptionLicenseEvaluator.defaultGrace
 private let managedAccountStatusRefreshLeadTime: TimeInterval = 60 * 60
 private let managedAccountStatusRefreshRetryDelays: [UInt64] = [
@@ -143,19 +145,23 @@ extension AppState {
     }
 
     /// Whether there is an existing paid subscription that should be managed through
-    /// Paddle's portal instead of starting a new recurring checkout.
+    /// Paddle's portal instead of starting a new recurring checkout. Unknown plan or
+    /// lifecycle values are treated as existing subscriptions unless they are known
+    /// trial/no-plan or ended states, which prevents duplicate checkouts when the
+    /// Worker adds a paid tier or status before this app version knows that value.
     var hasManageablePaidSubscription: Bool {
         guard let state = currentSubscriptionBillingState,
-              paidManagedSubscriptionPlans.contains(state.plan) else {
+              !nonRecurringManagedSubscriptionPlans.contains(state.plan),
+              !endedManagedSubscriptionStatuses.contains(state.status) else {
             return false
         }
-        return state.status == .active || state.status == .pastDue
+        return true
     }
 
     /// Whether to offer the subscribe/upgrade CTA. Offered whenever the account is
-    /// not already tied to an active or recoverable paid subscription (trialing,
-    /// lapsed, canceled, none, or unknown) — i.e. any state a new checkout would move
-    /// forward without duplicating an existing Paddle subscription.
+    /// not already tied to a current or indeterminate paid subscription — i.e. only
+    /// when a new checkout can move the account forward without duplicating an
+    /// existing Paddle subscription.
     var shouldOfferSubscribe: Bool {
         isManagedSignedIn && !hasManageablePaidSubscription
     }
@@ -329,7 +335,13 @@ extension AppState {
         if let subscriptionStatus = status.subscription?.status {
             return subscriptionStatus
         }
-        return derivedTrialSubscriptionState(from: status)?.status
+        if let trialStatus = derivedTrialSubscriptionState(from: status)?.status {
+            return trialStatus
+        }
+        if status.quota != nil {
+            return .active
+        }
+        return nil
     }
 
     private func refreshManagedQuotaIfScheduled(freshUntil: Date) async {
