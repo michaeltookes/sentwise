@@ -10,7 +10,9 @@ extension AppState {
 
     /// Whether the prerequisites for learning are met (mail + a usable AI provider).
     var canLearnVoice: Bool {
-        isLLMConnected && currentLLMProviderAllowsRequests && mailCredentials.isComplete
+        isLLMConnected
+            && mailCredentials.isComplete
+            && (currentLLMProviderAllowsRequests || canAttemptStaleManagedLicenseRefresh)
     }
 
     /// Samples the Sent folder and derives a voice profile via the LLM.

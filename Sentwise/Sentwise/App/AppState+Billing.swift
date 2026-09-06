@@ -202,7 +202,6 @@ extension AppState {
             && isManagedSignedIn
             && isOnline
             && !managedAccountStatusIsFresh
-            && managedLicense == .unknown
     }
 
     var shouldResumeWatchingAfterManagedLicenseRecovery: Bool {
@@ -242,7 +241,7 @@ extension AppState {
               isAccountConnected,
               isLLMConnected,
               isManagedSignedIn,
-              managedLicense == .unknown else {
+              canAttemptStaleManagedLicenseRefresh else {
             return
         }
         resumeWatchingAfterManagedReauth = true

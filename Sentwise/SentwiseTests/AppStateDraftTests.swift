@@ -336,6 +336,7 @@ final class AppStateDraftTests: XCTestCase {
             subscription: ManagedSubscription(plan: .pro, status: .active)
         )
         let appState = AppState(persistence: persistence, secrets: secrets, mailProvider: provider, llm: llm)
+        appState.subscriptionCacheStore = EmptySubscriptionCacheStore()
         appState.mailAppPassword = "app-pw"
 
         XCTAssertEqual(appState.managedLicense, .unknown)
@@ -372,4 +373,10 @@ final class AppStateDraftTests: XCTestCase {
         XCTAssertEqual(AppState.replySubject(for: "Re: Lunch?"), "Re: Lunch?")
         XCTAssertEqual(AppState.replySubject(for: "Lunch?"), "Re: Lunch?")
     }
+}
+
+private final class EmptySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
+    func snapshot(accountKey: String) -> SubscriptionSnapshot? { nil }
+    func save(_ snapshot: SubscriptionSnapshot, accountKey: String) {}
+    func clear(accountKey: String) {}
 }

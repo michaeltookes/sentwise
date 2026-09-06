@@ -153,6 +153,37 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         XCTAssertNil(appState.billingReconciliationTask)
     }
 
+    func testInitialWatchStartRefreshesAndResumesAfterStaleNotEntitledLicenseRecovery() async {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(
+            plan: .pro,
+            status: .pastDue,
+            capturedAt: Date()
+        )
+        appState.mailEmail = "me@gmail.com"
+        appState.mailAppPassword = "app-pw"
+        appState.isAccountConnected = true
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+
+        XCTAssertEqual(appState.managedLicense, .notEntitled)
+        XCTAssertFalse(appState.canWatch)
+        appState.startWatchingIfReady()
+
+        for _ in 0..<1_000 where appState.watchStatus != .watching {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+
+        XCTAssertGreaterThanOrEqual(llm.fetchCount, 1)
+        XCTAssertEqual(appState.watchStatus, .watching)
+        XCTAssertFalse(appState.resumeWatchingAfterManagedReauth)
+        appState.stopWatching()
+    }
+
     func testFreshPastDueRefreshKeepsWatcherResumeIntent() async {
         let llm = StatusLLM()
         let appState = makeSignedInAppState(llm: llm)
