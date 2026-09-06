@@ -123,6 +123,19 @@ final class AppState: ObservableObject {
     /// Old -> new account-key aliases created during stable-ID backfill.
     var managedQuotaAccountKeyAliases: [String: String] = [:]
 
+    // MARK: - Billing / checkout (item 56c)
+
+    /// Presented Paddle overlay-checkout request; non-nil drives the checkout
+    /// sheet from the Subscription pane and the usage "buy more" CTA (item 56c).
+    @Published var billingCheckout: BillingCheckoutRequest?
+    /// Last-known subscription snapshot for offline license grace (item 56c),
+    /// refreshed on each successful `/v1/me` and read when the live status is
+    /// unavailable so the app doesn't hard-fail offline.
+    @Published var cachedSubscriptionSnapshot: SubscriptionSnapshot?
+    /// Durable per-account cache backing `cachedSubscriptionSnapshot`. A `var`
+    /// with a default so tests can substitute an in-memory store.
+    var subscriptionCacheStore: SubscriptionCacheStoring = UserDefaultsSubscriptionCacheStore()
+
     // MARK: - Workspace app-password guidance (item 75)
 
     /// The Google Workspace / Gmail policy failure from the last connect attempt.

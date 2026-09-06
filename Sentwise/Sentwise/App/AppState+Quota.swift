@@ -45,6 +45,7 @@ extension AppState {
         managedQuota = nil
         managedAccountStatus = nil
         managedQuotaAccountKey = nil
+        clearCachedSubscriptionSnapshot()
         // Account-key aliases are identity migrations, not quota display cache.
         // Delayed callbacks still need them after sign-out.
     }
@@ -121,6 +122,8 @@ extension AppState {
                 if let quota = status.quota {
                     ingestManagedQuota(quota, accountKey: resolvedAccountKey)
                 }
+                // Cache the last-known subscription for offline license grace (56c).
+                recordSubscriptionSnapshot(from: status)
             }
         } catch {
             // Metering is best-effort surfacing, never a blocking failure; a
