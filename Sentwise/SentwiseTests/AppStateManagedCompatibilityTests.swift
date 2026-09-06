@@ -83,7 +83,7 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         }
     }
 
-    func testManagedLicenseAllowsFreshQuotaOnlyAccountStatus() async {
+    func testManagedLicenseCachesQuotaOnlyAccountStatusForGrace() async {
         let llm = StatusLLM()
         llm.statusToReturn = ManagedAccountStatus(
             userID: "user_marcus",
@@ -96,10 +96,14 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
 
         XCTAssertEqual(appState.managedLicense, .entitled)
         XCTAssertTrue(appState.managedLicenseAllowsLLMRequests)
-        XCTAssertNil(appState.cachedSubscriptionSnapshot)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.source, .legacyQuota)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.status, .active)
+        XCTAssertTrue(appState.shouldOfferSubscribe)
 
         appState.managedAccountStatusFreshUntil = Date().addingTimeInterval(-1)
-        XCTAssertEqual(appState.managedLicense, .unknown)
+        guard case .grace = appState.managedLicense else {
+            return XCTFail("expected quota-only status to fall back to cached grace")
+        }
     }
 
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {

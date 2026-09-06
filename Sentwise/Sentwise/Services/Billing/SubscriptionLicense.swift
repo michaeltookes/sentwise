@@ -7,25 +7,36 @@ import Foundation
 /// rather than bricking the UI. Reuses the same lenient-Codable stance as
 /// `ManagedSubscription`: unknown raw values decode to `.unknown` and never throw.
 struct SubscriptionSnapshot: Codable, Equatable, Sendable {
+    enum Source: String, Codable, Equatable, Sendable {
+        case subscription
+        case trial
+        case legacyQuota
+    }
+
     let plan: ManagedSubscription.Plan
     let status: ManagedSubscription.Status
     let renewsAt: Date?
     let manageBillingURL: String?
     /// When this snapshot was captured locally (the successful `/v1/me` fetch).
     let capturedAt: Date
+    /// Where this snapshot came from. Missing in older caches and treated as a
+    /// normal subscription snapshot for backward compatibility.
+    let source: Source
 
     init(
         plan: ManagedSubscription.Plan,
         status: ManagedSubscription.Status,
         renewsAt: Date? = nil,
         manageBillingURL: String? = nil,
-        capturedAt: Date
+        capturedAt: Date,
+        source: Source = .subscription
     ) {
         self.plan = plan
         self.status = status
         self.renewsAt = renewsAt
         self.manageBillingURL = manageBillingURL
         self.capturedAt = capturedAt
+        self.source = source
     }
 
     /// Captures a snapshot from a live subscription. Returns nil when there is no
@@ -37,12 +48,13 @@ struct SubscriptionSnapshot: Codable, Equatable, Sendable {
             status: subscription.status,
             renewsAt: subscription.renewsAt,
             manageBillingURL: subscription.manageBillingURL,
-            capturedAt: capturedAt
+            capturedAt: capturedAt,
+            source: .subscription
         )
     }
 
     private enum CodingKeys: String, CodingKey {
-        case plan, status, renewsAt, manageBillingURL, capturedAt
+        case plan, status, renewsAt, manageBillingURL, capturedAt, source
     }
 
     init(from decoder: Decoder) throws {
@@ -54,6 +66,7 @@ struct SubscriptionSnapshot: Codable, Equatable, Sendable {
         renewsAt = try container.decodeIfPresent(Date.self, forKey: .renewsAt)
         manageBillingURL = try container.decodeIfPresent(String.self, forKey: .manageBillingURL)
         capturedAt = (try? container.decode(Date.self, forKey: .capturedAt)) ?? .distantPast
+        source = (try? container.decodeIfPresent(Source.self, forKey: .source)) ?? .subscription
     }
 }
 

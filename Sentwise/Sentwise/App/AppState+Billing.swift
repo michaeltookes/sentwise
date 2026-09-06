@@ -310,6 +310,7 @@ extension AppState {
     func recordSubscriptionSnapshot(from status: ManagedAccountStatus) {
         let snapshot = subscriptionSnapshot(from: status)
             ?? derivedTrialSubscriptionSnapshot(from: status)
+            ?? legacyQuotaSubscriptionSnapshot(from: status)
         guard let snapshot else { return }
         cachedSubscriptionSnapshot = snapshot
         subscriptionCacheStore.save(snapshot, accountKey: currentManagedUsageAccountKey)
@@ -326,7 +327,10 @@ extension AppState {
         if let subscription = managedAccountStatus?.subscription {
             return (subscription.plan, subscription.status)
         }
-        guard let snapshot = effectiveSubscriptionSnapshot else { return nil }
+        guard let snapshot = effectiveSubscriptionSnapshot,
+              snapshot.source != .legacyQuota else {
+            return nil
+        }
         return (snapshot.plan, snapshot.status)
     }
 
@@ -397,7 +401,22 @@ extension AppState {
 
     private func derivedTrialSubscriptionSnapshot(from status: ManagedAccountStatus) -> SubscriptionSnapshot? {
         guard let state = derivedTrialSubscriptionState(from: status) else { return nil }
-        return SubscriptionSnapshot(plan: state.plan, status: state.status, renewsAt: status.trial?.endsAt, capturedAt: Date())
+        return SubscriptionSnapshot(
+            plan: state.plan,
+            status: state.status,
+            renewsAt: status.trial?.endsAt,
+            capturedAt: Date(),
+            source: .trial
+        )
+    }
+
+    private func legacyQuotaSubscriptionSnapshot(from status: ManagedAccountStatus) -> SubscriptionSnapshot? {
+        guard status.subscription == nil,
+              status.trial == nil,
+              status.quota != nil else {
+            return nil
+        }
+        return SubscriptionSnapshot(plan: .unknown, status: .active, capturedAt: Date(), source: .legacyQuota)
     }
 
     private func currentSubscriptionState(from status: ManagedAccountStatus) -> ManagedSubscriptionBillingState? {

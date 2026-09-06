@@ -3,6 +3,12 @@ import os
 
 private let quotaLogger = Logger(subsystem: "com.tookes.Sentwise", category: "ManagedQuota")
 
+struct ManagedAccountStatusRefreshOrdering {
+    var startedGeneration: UInt64 = 0
+    var acceptedGeneration: UInt64 = 0
+    var successVersion: UInt64 = 0
+}
+
 /// Managed-inference usage metering on `AppState` (backlog item 56b): mirroring
 /// the latest quota into published state, refreshing it from `/v1/me`, and firing
 /// the 50/75/100% weekly-usage alerts idempotently. Kept in its own file so
@@ -45,7 +51,9 @@ extension AppState {
         managedQuota = nil
         managedAccountStatus = nil
         managedAccountStatusIsFresh = false
-        managedAccountStatusRefreshGeneration &+= 1
+        managedAccountStatusRefreshOrdering.startedGeneration &+= 1
+        managedAccountStatusRefreshOrdering.acceptedGeneration = managedAccountStatusRefreshOrdering.startedGeneration
+        managedAccountStatusRefreshOrdering.successVersion &+= 1
         cancelScheduledManagedAccountStatusRefresh()
         managedQuotaAccountKey = nil
         clearCachedSubscriptionSnapshot()
@@ -105,18 +113,21 @@ extension AppState {
         guard ProwlHuntRuntime.current.isEnabled || isManagedSignedIn else {
             return
         }
-        managedAccountStatusRefreshGeneration &+= 1
-        let refreshGeneration = managedAccountStatusRefreshGeneration
+        managedAccountStatusRefreshOrdering.startedGeneration &+= 1
+        let refreshGeneration = managedAccountStatusRefreshOrdering.startedGeneration
+        let successVersionAtStart = managedAccountStatusRefreshOrdering.successVersion
         let accountKey = currentManagedUsageAccountKey
         do {
             // The reporter path already routes the fetched quota through
             // `ingestManagedQuota`; still ingest the return value directly so an
             // injected LLM double without a wired relay updates state too.
             if let status = try await llm.fetchManagedAccountStatus() {
-                guard shouldAcceptManagedAccountStatusRefresh(
+                guard shouldAcceptManagedAccountStatusRefreshSuccess(
                     generation: refreshGeneration,
                     accountKey: accountKey
                 ) else { return }
+                managedAccountStatusRefreshOrdering.acceptedGeneration = refreshGeneration
+                managedAccountStatusRefreshOrdering.successVersion &+= 1
                 // Mirror the full status (email/trial/subscription) for the
                 // Subscription pane (item 73), even when `quota` is absent on an
                 // older Worker build.
@@ -135,19 +146,31 @@ extension AppState {
                 resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
                 retryDeferredTranscriptFolderDeliveriesAfterManagedLicenseRefreshIfNeeded()
             } else {
-                guard refreshGeneration == managedAccountStatusRefreshGeneration else { return }
+                guard shouldApplyManagedAccountStatusRefreshFailure(
+                    generation: refreshGeneration,
+                    accountKey: accountKey,
+                    successVersionAtStart: successVersionAtStart
+                ) else { return }
                 managedAccountStatusIsFresh = false
                 if scheduleRetryOnFailure {
                     scheduleManagedAccountStatusRefreshRetryAfterFailure()
                 }
             }
         } catch {
-            guard refreshGeneration == managedAccountStatusRefreshGeneration else { return }
+            guard shouldApplyManagedAccountStatusRefreshFailure(
+                generation: refreshGeneration,
+                accountKey: accountKey,
+                successVersionAtStart: successVersionAtStart
+            ) else { return }
             managedAccountStatusIsFresh = false
             // Metering is best-effort surfacing, never a blocking failure; a
             // managed 401 is reconciled by the normal draft/test paths.
             let signedOut = await reconcileManagedAccountState(after: error, provider: .managed)
-            if refreshGeneration == managedAccountStatusRefreshGeneration,
+            if shouldApplyManagedAccountStatusRefreshFailure(
+                generation: refreshGeneration,
+                accountKey: accountKey,
+                successVersionAtStart: successVersionAtStart
+            ),
                !signedOut,
                scheduleRetryOnFailure {
                 scheduleManagedAccountStatusRefreshRetryAfterFailure()
@@ -155,8 +178,23 @@ extension AppState {
         }
     }
 
-    private func shouldAcceptManagedAccountStatusRefresh(generation: UInt64, accountKey: String) -> Bool {
-        guard generation == managedAccountStatusRefreshGeneration else { return false }
+    private func shouldAcceptManagedAccountStatusRefreshSuccess(generation: UInt64, accountKey: String) -> Bool {
+        guard generation > managedAccountStatusRefreshOrdering.acceptedGeneration else { return false }
+        guard ProwlHuntRuntime.current.isEnabled else {
+            return isManagedSignedIn && accountKey == currentManagedUsageAccountKey
+        }
+        return true
+    }
+
+    private func shouldApplyManagedAccountStatusRefreshFailure(
+        generation: UInt64,
+        accountKey: String,
+        successVersionAtStart: UInt64
+    ) -> Bool {
+        guard managedAccountStatusRefreshOrdering.successVersion == successVersionAtStart,
+              generation > managedAccountStatusRefreshOrdering.acceptedGeneration else {
+            return false
+        }
         guard ProwlHuntRuntime.current.isEnabled else {
             return isManagedSignedIn && accountKey == currentManagedUsageAccountKey
         }

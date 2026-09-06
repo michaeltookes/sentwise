@@ -131,6 +131,52 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         XCTAssertEqual(appState.managedLicense, .entitled)
     }
 
+    func testOlderSuccessfulRefreshIsAcceptedAfterNewerFailure() async {
+        let llm = DeferredStatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        defer { appState.cancelScheduledManagedAccountStatusRefresh() }
+
+        let firstRefresh = Task { await appState.refreshManagedQuota() }
+        await waitUntil { llm.fetchCount == 1 }
+        let secondRefresh = Task { await appState.refreshManagedQuota() }
+        await waitUntil { llm.fetchCount == 2 }
+
+        llm.completeFetch(at: 1, with: .failure(NSError(domain: "StatusOrdering", code: 1)))
+        await secondRefresh.value
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
+
+        llm.completeFetch(at: 0, with: .success(status(plan: .pro, statusValue: .active)))
+        await firstRefresh.value
+
+        XCTAssertEqual(appState.managedAccountStatus?.subscription?.plan, .pro)
+        XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .active)
+        XCTAssertTrue(appState.managedAccountStatusIsFresh)
+        XCTAssertEqual(appState.managedLicense, .entitled)
+    }
+
+    func testNewerFailureDoesNotClearOverlappingSuccess() async {
+        let llm = DeferredStatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        defer { appState.cancelScheduledManagedAccountStatusRefresh() }
+
+        let firstRefresh = Task { await appState.refreshManagedQuota() }
+        await waitUntil { llm.fetchCount == 1 }
+        let secondRefresh = Task { await appState.refreshManagedQuota() }
+        await waitUntil { llm.fetchCount == 2 }
+
+        llm.completeFetch(at: 0, with: .success(status(plan: .pro, statusValue: .active)))
+        await firstRefresh.value
+        XCTAssertTrue(appState.managedAccountStatusIsFresh)
+
+        llm.completeFetch(at: 1, with: .failure(NSError(domain: "StatusOrdering", code: 1)))
+        await secondRefresh.value
+
+        XCTAssertEqual(appState.managedAccountStatus?.subscription?.plan, .pro)
+        XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .active)
+        XCTAssertTrue(appState.managedAccountStatusIsFresh)
+        XCTAssertEqual(appState.managedLicense, .entitled)
+    }
+
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
         private(set) var saved: [String: SubscriptionSnapshot] = [:]
 
