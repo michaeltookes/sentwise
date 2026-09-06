@@ -44,9 +44,11 @@ extension AppState {
     /// Opens the checkout sheet (item 56c). Pass a `plan` to jump straight to that
     /// tier, or nil to show the plan picker. No-op when not signed in — the
     /// webhook needs a Clerk account to attribute the purchase, so the pane surfaces
-    /// the sign-in controls instead.
+    /// the sign-in controls instead. Existing paid subscribers are routed through
+    /// Paddle's billing portal so they modify the current subscription rather than
+    /// opening a second recurring checkout.
     func presentBillingCheckout(plan: PaddlePlan? = nil) {
-        guard isManagedSignedIn else { return }
+        guard isManagedSignedIn, !isOnActivePaidPlan else { return }
         billingCheckout = BillingCheckoutRequest(plan: plan)
     }
 
@@ -62,11 +64,30 @@ extension AppState {
     }
 
     /// Called by the checkout sheet after a `checkout.completed` event so the
-    /// webhook-written subscription is reflected. Dismisses the sheet and refreshes
-    /// `/v1/me`.
-    func completeBillingCheckout() async {
+    /// webhook-written subscription is reflected. Dismisses the sheet, then retries
+    /// `/v1/me` with bounded backoff until the paid subscription is visible.
+    func completeBillingCheckout(
+        refreshRetryDelays: [UInt64] = [
+            750_000_000,
+            1_500_000_000,
+            3_000_000_000,
+            6_000_000_000
+        ]
+    ) async {
         billingCheckout = nil
         await refreshManagedQuota()
+        guard isManagedSignedIn, !isOnActivePaidPlan else { return }
+
+        for delay in refreshRetryDelays {
+            do {
+                try await Task.sleep(nanoseconds: delay)
+            } catch {
+                return
+            }
+            guard isManagedSignedIn else { return }
+            await refreshManagedQuota()
+            if isOnActivePaidPlan { return }
+        }
     }
 
     // MARK: - Manage billing
@@ -78,7 +99,9 @@ extension AppState {
         let raw = managedAccountStatus?.subscription?.manageBillingURL
             ?? effectiveSubscriptionSnapshot?.manageBillingURL
         guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
-              let url = URL(string: raw), url.scheme?.hasPrefix("http") == true else {
+              let url = URL(string: raw),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
             return nil
         }
         return url

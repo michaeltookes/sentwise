@@ -12,14 +12,20 @@ final class AppStateBillingTests: XCTestCase {
     /// An `LLMProviding` that returns a fixed `/v1/me` status.
     private final class StatusLLM: LLMProviding, @unchecked Sendable {
         var statusToReturn: ManagedAccountStatus?
+        var statusesToReturn: [ManagedAccountStatus?] = []
         var fetchError: Error?
+        private(set) var fetchCount = 0
 
         func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
         func complete(_ request: LLMRequest, provider: LLMProviderKind, apiKey: String, baseURL: String?) async throws -> LLMResponse {
             LLMResponse(text: "")
         }
         func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? {
+            fetchCount += 1
             if let fetchError { throw fetchError }
+            if !statusesToReturn.isEmpty {
+                return statusesToReturn.removeFirst()
+            }
             return statusToReturn
         }
         func fetchManagedQuota() async throws -> ManagedQuota? { statusToReturn?.quota }
@@ -118,6 +124,16 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertEqual(appState.billingCheckout?.plan, .unlimited)
     }
 
+    func testActivePaidPlanCannotPresentNewCheckout() {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountStatus = status(plan: .pro, statusValue: .active)
+
+        appState.presentBillingCheckout()
+
+        XCTAssertNil(appState.billingCheckout)
+    }
+
     func testCheckoutModelThreadsClerkIDAndEmail() {
         let llm = StatusLLM()
         let appState = makeSignedInAppState(llm: llm)
@@ -153,6 +169,49 @@ final class AppStateBillingTests: XCTestCase {
         let appState = makeSignedInAppState(llm: llm)
         appState.managedAccountStatus = status(plan: .pro, statusValue: .active, billingURL: "javascript:alert(1)")
         XCTAssertNil(appState.manageBillingURL)
+    }
+
+    func testManageBillingRequiresExactHTTPOrHTTPSScheme() {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+
+        appState.managedAccountStatus = status(plan: .pro, statusValue: .active, billingURL: "HTTPS://billing.example/portal")
+        XCTAssertEqual(appState.manageBillingURL?.scheme?.lowercased(), "https")
+
+        appState.managedAccountStatus = status(plan: .pro, statusValue: .active, billingURL: "httpx://billing.example/portal")
+        XCTAssertNil(appState.manageBillingURL)
+
+        appState.managedAccountStatus = status(plan: .pro, statusValue: .active, billingURL: "http-evil://billing.example/portal")
+        XCTAssertNil(appState.manageBillingURL)
+    }
+
+    // MARK: - Checkout completion refresh
+
+    func testCompleteBillingCheckoutRetriesUntilPaidSubscriptionVisible() async {
+        let llm = StatusLLM()
+        llm.statusesToReturn = [
+            status(plan: .trial, statusValue: .trialing),
+            status(plan: .pro, statusValue: .active)
+        ]
+        let appState = makeSignedInAppState(llm: llm)
+        appState.billingCheckout = BillingCheckoutRequest()
+
+        await appState.completeBillingCheckout(refreshRetryDelays: [0])
+
+        XCTAssertNil(appState.billingCheckout)
+        XCTAssertEqual(llm.fetchCount, 2)
+        XCTAssertTrue(appState.isOnActivePaidPlan)
+    }
+
+    func testCompleteBillingCheckoutStopsAfterBoundedRetryBudget() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = status(plan: .trial, statusValue: .trialing)
+        let appState = makeSignedInAppState(llm: llm)
+
+        await appState.completeBillingCheckout(refreshRetryDelays: [0, 0])
+
+        XCTAssertEqual(llm.fetchCount, 3)
+        XCTAssertFalse(appState.isOnActivePaidPlan)
     }
 
     // MARK: - Offline license grace

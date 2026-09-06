@@ -45,15 +45,22 @@ struct ManagedUsageView: View {
                 }
 
                 if appState.isManagedQuotaExhausted {
-                    Button("Upgrade for more drafts") {
-                        // Open the plan picker so the user can move to a higher tier
-                        // (item 56c). The Paddle checkout sheet is hosted by the
-                        // enclosing Subscription pane.
-                        appState.presentBillingCheckout()
+                    if appState.isOnActivePaidPlan {
+                        Button("Manage plan") {
+                            appState.openManageBilling()
+                        }
+                        .buttonStyle(.link)
+                        .disabled(!appState.canManageBilling)
+                        .accessibilityIdentifier("buyMoreUsage")
+                        .accessibilityLabel("Manage plan")
+                    } else if appState.shouldOfferSubscribe {
+                        Button("Upgrade for more drafts") {
+                            appState.presentBillingCheckout()
+                        }
+                        .buttonStyle(.link)
+                        .accessibilityIdentifier("buyMoreUsage")
+                        .accessibilityLabel("Upgrade for more drafts")
                     }
-                    .buttonStyle(.link)
-                    .accessibilityIdentifier("buyMoreUsage")
-                    .accessibilityLabel("Upgrade for more drafts")
                 }
 
                 Button("Need more? Use your own key for unlimited drafting.") {
