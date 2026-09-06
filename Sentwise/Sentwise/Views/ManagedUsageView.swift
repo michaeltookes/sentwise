@@ -10,7 +10,6 @@ import SwiftUI
 /// (avoids a double fetch on tab open).
 struct ManagedUsageView: View {
     @EnvironmentObject var appState: AppState
-    @State private var showBuyMorePlaceholder = false
 
     var body: some View {
         Group {
@@ -46,16 +45,15 @@ struct ManagedUsageView: View {
                 }
 
                 if appState.isManagedQuotaExhausted {
-                    Button("Buy more usage") { showBuyMorePlaceholder = true }
-                        .buttonStyle(.link)
-                        .accessibilityIdentifier("buyMoreUsage")
-                        .accessibilityLabel("Buy more usage")
-                    if showBuyMorePlaceholder {
-                        Text("Buying extra usage is coming soon.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("buyMoreUsagePlaceholderNote")
+                    Button("Upgrade for more drafts") {
+                        // Open the plan picker so the user can move to a higher tier
+                        // (item 56c). The Paddle checkout sheet is hosted by the
+                        // enclosing Subscription pane.
+                        appState.presentBillingCheckout()
                     }
+                    .buttonStyle(.link)
+                    .accessibilityIdentifier("buyMoreUsage")
+                    .accessibilityLabel("Upgrade for more drafts")
                 }
 
                 Button("Need more? Use your own key for unlimited drafting.") {

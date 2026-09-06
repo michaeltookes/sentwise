@@ -18,13 +18,6 @@ struct SubscriptionSettingsView: View {
         SubscriptionPaneModel.make(from: appState.managedAccountStatus)
     }
 
-    /// The billing-portal URL when the Worker provides one (nil until 56c).
-    private var manageBillingURL: URL? {
-        guard let raw = appState.managedAccountStatus?.subscription?.manageBillingURL,
-              !raw.isEmpty else { return nil }
-        return URL(string: raw)
-    }
-
     var body: some View {
         Form {
             if appState.isManagedSignedIn {
@@ -37,6 +30,12 @@ struct SubscriptionSettingsView: View {
         .accessibilityIdentifier("subscriptionTab")
         .sheet(isPresented: $showDeleteSheet) {
             DeleteAccountSheet()
+                .environmentObject(appState)
+        }
+        // Paddle overlay-checkout sheet (item 56c), presented from the Subscribe
+        // CTA here and the usage "buy more" CTA in `ManagedUsageView`.
+        .sheet(item: $appState.billingCheckout) { request in
+            PaddleCheckoutSheet(request: request)
                 .environmentObject(appState)
         }
         // Single status refresh on tab open — lives on the outer container (not
@@ -102,17 +101,25 @@ struct SubscriptionSettingsView: View {
         }
 
         Section("Billing") {
-            Button("Manage billing") {
-                if let url = manageBillingURL {
-                    NSWorkspace.shared.open(url)
+            if appState.shouldOfferSubscribe {
+                Button("Subscribe") {
+                    appState.presentBillingCheckout()
                 }
+                .accessibilityIdentifier("subscribeCTA")
+                .accessibilityLabel("Subscribe to a plan")
             }
-            .disabled(manageBillingURL == nil)
+
+            Button("Manage billing") {
+                appState.openManageBilling()
+            }
+            .disabled(!appState.canManageBilling)
             .accessibilityIdentifier("manageBilling")
             .accessibilityLabel("Manage billing")
 
-            if manageBillingURL == nil {
-                Text("Billing management arrives with checkout.")
+            if !appState.canManageBilling {
+                Text(appState.shouldOfferSubscribe
+                     ? "Subscribe to manage billing here."
+                     : "A billing portal link will appear here once your subscription is active.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("manageBillingUnavailable")
