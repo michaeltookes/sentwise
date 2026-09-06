@@ -294,6 +294,13 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertFalse(model.isProblemState)
     }
 
+    func testStaleNilStatusWithoutSnapshotShowsUnavailable() {
+        let model = SubscriptionPaneModel.make(from: nil, snapshot: nil, statusIsFresh: false)
+        XCTAssertEqual(model.planText, "Subscription unavailable")
+        XCTAssertTrue(model.isProblemState)
+        XCTAssertTrue(model.showsOwnKeyFallback)
+    }
+
     func testNilStatusIsNeutral() {
         let model = SubscriptionPaneModel.make(from: nil)
         XCTAssertEqual(model.planText, "Active")

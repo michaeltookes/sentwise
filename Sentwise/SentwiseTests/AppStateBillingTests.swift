@@ -405,7 +405,7 @@ final class AppStateBillingTests: XCTestCase {
         )
     }
 
-    func testInitialWatchStartResumesAfterManagedLicenseRefresh() async {
+    func testInitialWatchStartRefreshesAndResumesAfterManagedLicenseRecovery() async {
         let llm = StatusLLM()
         llm.statusToReturn = status(plan: .pro, statusValue: .active)
         let appState = makeSignedInAppState(llm: llm, cacheStore: InMemorySubscriptionCacheStore())
@@ -416,11 +416,11 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertFalse(appState.canWatch)
         appState.startWatchingIfReady()
 
-        XCTAssertEqual(appState.watchStatus, .idle)
-        XCTAssertTrue(appState.resumeWatchingAfterManagedReauth)
+        for _ in 0..<1_000 where appState.watchStatus != .watching {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
 
-        await appState.refreshManagedQuota()
-
+        XCTAssertGreaterThanOrEqual(llm.fetchCount, 1)
         XCTAssertEqual(appState.watchStatus, .watching)
         XCTAssertFalse(appState.resumeWatchingAfterManagedReauth)
         appState.stopWatching()

@@ -3,7 +3,6 @@ import Foundation
 import os
 
 private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "InboxWatcher")
-
 /// Inbox-watcher lifecycle and poll policy on `AppState`. The `InboxWatcher`
 /// owns the timer and sleep/wake handling; this file owns *what a poll does*.
 extension AppState {
@@ -21,6 +20,7 @@ extension AppState {
         guard watchStatus != .watching else { return }
         startWatching()
     }
+
     /// Begins watching the inbox (schedules polling + an immediate poll).
     func startWatching() {
         guard canWatch else {

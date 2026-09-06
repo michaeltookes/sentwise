@@ -33,8 +33,8 @@ struct SubscriptionPaneModel: Equatable {
         let trialDays = trialDaysRemaining(endsAt: trustedStatus?.trial?.endsAt, now: now)
         let snapshotForPresentation = presentationSnapshot(snapshot, now: now)
         if !hasKnownPlanStatus(trustedStatus),
-           snapshot != nil,
-           snapshotForPresentation == nil {
+           snapshotForPresentation == nil,
+           snapshot != nil || !statusIsFresh {
             return unconfirmedSubscriptionModel()
         }
         let effective = effectivePlanStatus(

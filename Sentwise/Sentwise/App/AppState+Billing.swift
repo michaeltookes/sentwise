@@ -265,6 +265,9 @@ extension AppState {
             return
         }
         resumeWatchingAfterManagedReauth = true
+        Task { [weak self] in
+            await self?.refreshManagedQuotaIfLicenseStatusStale()
+        }
     }
 
     /// Restarts a watcher that was paused by managed auth/licensing once any
