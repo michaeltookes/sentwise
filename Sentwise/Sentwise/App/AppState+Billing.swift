@@ -197,6 +197,14 @@ extension AppState {
         llmProviderKind != .managed || managedLicenseAllowsLLMRequests
     }
 
+    var canAttemptStaleManagedLicenseRefresh: Bool {
+        llmProviderKind == .managed
+            && isManagedSignedIn
+            && isOnline
+            && !managedAccountStatusIsFresh
+            && managedLicense == .unknown
+    }
+
     var shouldResumeWatchingAfterManagedLicenseRecovery: Bool {
         llmProviderKind == .managed
             && isManagedSignedIn
@@ -401,7 +409,10 @@ extension AppState {
     }
 
     private func subscriptionSnapshot(from status: ManagedAccountStatus) -> SubscriptionSnapshot? {
-        guard let subscription = status.subscription else { return nil }
+        guard let subscription = status.subscription,
+              subscription.status != .unknown else {
+            return nil
+        }
         let renewsAt = subscription.renewsAt ?? (subscription.plan == .trial ? status.trial?.endsAt : nil)
         return SubscriptionSnapshot(
             plan: subscription.plan,

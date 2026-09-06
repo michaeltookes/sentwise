@@ -7,7 +7,9 @@ extension AppState {
 
     /// Whether a draft can be generated (mail + a usable AI provider).
     var canGenerateDraft: Bool {
-        isLLMConnected && currentLLMProviderAllowsRequests && mailCredentials.isComplete
+        isLLMConnected
+            && mailCredentials.isComplete
+            && (currentLLMProviderAllowsRequests || canAttemptStaleManagedLicenseRefresh)
     }
 
     /// Fetches a message's body and generates a reply draft in the user's voice.
