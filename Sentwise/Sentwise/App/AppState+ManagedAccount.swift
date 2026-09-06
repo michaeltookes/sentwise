@@ -350,11 +350,16 @@ extension AppState {
 
     // MARK: - Watcher reauth (item 56a)
 
-    /// After a successful re-sign-in, restart a watcher that a managed 401 paused.
+    /// After a successful managed refresh, restart a watcher that auth/licensing paused.
     func resumeInboxWatchingAfterManagedReauthenticationIfNeeded() {
-        guard resumeWatchingAfterManagedReauth,
-              watchStatus == .paused,
-              canWatch else { return }
+        guard resumeWatchingAfterManagedReauth else { return }
+        guard watchStatus == .paused || watchStatus == .idle else { return }
+        guard canWatch else {
+            if managedAccountStatusIsFresh {
+                resumeWatchingAfterManagedReauth = false
+            }
+            return
+        }
         resumeWatchingAfterManagedReauth = false
         startWatching()
     }

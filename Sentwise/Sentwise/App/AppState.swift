@@ -110,8 +110,8 @@ final class AppState: ObservableObject {
 
     /// Latest `/v1/me` account status for the Subscription pane; nil until known or signed out.
     @Published var managedAccountStatus: ManagedAccountStatus?
-    /// True only after the latest `/v1/me` refresh succeeds; failures use snapshot grace.
-    @Published var managedAccountStatusIsFresh = false
+    /// Instant until which the latest `/v1/me` response may be trusted as live.
+    @Published var managedAccountStatusFreshUntil: Date?
     /// True briefly after a successful account deletion so the signed-out
     /// Subscription pane can confirm it (item 73). Cleared on the next sign-in.
     @Published var didDeleteManagedAccount: Bool = false
@@ -320,7 +320,7 @@ final class AppState: ObservableObject {
     /// Records a reconnect callback that arrived while the current queue drain
     /// was already running, so the drain can replay missed queued work once.
     var needsQueuedDraftDrainAfterCurrent = false
-    /// Set when a managed-auth failure paused the watcher; cleared on start/stop or after reauth resumes it.
+    /// Set when managed auth/license refresh should restart a previously intended watcher.
     var resumeWatchingAfterManagedReauth = false
 
     /// Observes reachability so the app can pause while offline and resume on

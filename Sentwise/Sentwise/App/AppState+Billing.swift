@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 
 private let paidManagedSubscriptionPlans: Set<ManagedSubscription.Plan> = [.starter, .pro, .unlimited, .team]
+private let managedAccountStatusFreshDuration = SubscriptionLicenseEvaluator.defaultGrace
 
 private typealias ManagedSubscriptionBillingState = (
     plan: ManagedSubscription.Plan,
@@ -153,6 +154,18 @@ extension AppState {
 
     // MARK: - Offline license grace
 
+    var managedAccountStatusIsFresh: Bool {
+        get {
+            guard let freshUntil = managedAccountStatusFreshUntil else { return false }
+            return Date() < freshUntil
+        }
+        set {
+            managedAccountStatusFreshUntil = newValue
+                ? Date().addingTimeInterval(managedAccountStatusFreshDuration)
+                : nil
+        }
+    }
+
     /// The last-known subscription snapshot for the current account: the freshly
     /// captured one when present, else the durable per-account cache. Backs the
     /// offline-grace evaluation so a signed-in account keeps its entitlement across
@@ -170,7 +183,7 @@ extension AppState {
     /// grace window, so the app/UI never hard-fails offline.
     var managedLicense: SubscriptionLicense {
         let liveStatus = isOnline && managedAccountStatusIsFresh
-            ? managedAccountStatus?.subscription?.status
+            ? currentLiveSubscriptionStatus
             : nil
         return SubscriptionLicenseEvaluator.evaluate(
             liveStatus: liveStatus,
@@ -194,11 +207,24 @@ extension AppState {
         llmProviderKind != .managed || managedLicenseAllowsLLMRequests
     }
 
-    /// Persists the last-known subscription from a successful `/v1/me` so offline
-    /// grace has something to fall back on. No-op when the status carries no
-    /// subscription block (older Worker).
+    func waitToStartWatchingAfterManagedLicenseRefreshIfNeeded() {
+        guard watchStatus == .idle,
+              llmProviderKind == .managed,
+              isAccountConnected,
+              isLLMConnected,
+              isManagedSignedIn,
+              managedLicense == .unknown else {
+            return
+        }
+        resumeWatchingAfterManagedReauth = true
+    }
+
+    /// Persists the last-known subscription/trial from a successful `/v1/me` so
+    /// offline grace has something to fall back on.
     func recordSubscriptionSnapshot(from status: ManagedAccountStatus) {
-        guard let snapshot = SubscriptionSnapshot(subscription: status.subscription) else { return }
+        let snapshot = SubscriptionSnapshot(subscription: status.subscription)
+            ?? derivedTrialSubscriptionSnapshot(from: status)
+        guard let snapshot else { return }
         cachedSubscriptionSnapshot = snapshot
         subscriptionCacheStore.save(snapshot, accountKey: currentManagedUsageAccountKey)
     }
@@ -216,5 +242,24 @@ extension AppState {
         }
         guard let snapshot = effectiveSubscriptionSnapshot else { return nil }
         return (snapshot.plan, snapshot.status)
+    }
+
+    private var currentLiveSubscriptionStatus: ManagedSubscription.Status? {
+        guard let status = managedAccountStatus else { return nil }
+        if let subscriptionStatus = status.subscription?.status {
+            return subscriptionStatus
+        }
+        return derivedTrialSubscriptionState(from: status)?.status
+    }
+
+    private func derivedTrialSubscriptionSnapshot(from status: ManagedAccountStatus) -> SubscriptionSnapshot? {
+        guard let state = derivedTrialSubscriptionState(from: status) else { return nil }
+        return SubscriptionSnapshot(plan: state.plan, status: state.status, capturedAt: Date())
+    }
+
+    private func derivedTrialSubscriptionState(from status: ManagedAccountStatus) -> ManagedSubscriptionBillingState? {
+        guard let trial = status.trial else { return nil }
+        let isActive = trial.active ?? trial.endsAt.map { $0 > Date() } ?? false
+        return (.trial, isActive ? .trialing : .lapsed)
     }
 }

@@ -226,6 +226,11 @@ final class AppStateVoiceTests: XCTestCase {
 
         XCTAssertTrue(appState.isManagedSignedIn)
         XCTAssertTrue(appState.isLLMConnected)
+        appState.managedAccountStatus = ManagedAccountStatus(
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+        appState.managedAccountStatusIsFresh = true
 
         let task = Task { await appState.learnVoiceProfile() }
         await fulfillment(of: [transport.didStartRequest], timeout: 1.0)

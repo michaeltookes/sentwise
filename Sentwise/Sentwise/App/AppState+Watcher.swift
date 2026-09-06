@@ -7,7 +7,6 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "InboxWa
 /// Inbox-watcher lifecycle and poll policy on `AppState`. The `InboxWatcher`
 /// owns the timer and sleep/wake handling; this file owns *what a poll does*.
 extension AppState {
-
     /// Whether watching can run: mail and a usable LLM provider must both be ready.
     var canWatch: Bool {
         isAccountConnected && isLLMConnected && currentLLMProviderAllowsRequests
@@ -15,10 +14,13 @@ extension AppState {
 
     /// Starts watching if ready — used at launch to auto-resume.
     func startWatchingIfReady() {
-        guard canWatch, watchStatus != .watching else { return }
+        guard canWatch else {
+            waitToStartWatchingAfterManagedLicenseRefreshIfNeeded()
+            return
+        }
+        guard watchStatus != .watching else { return }
         startWatching()
     }
-
     /// Begins watching the inbox (schedules polling + an immediate poll).
     func startWatching() {
         guard canWatch else {

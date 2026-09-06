@@ -40,7 +40,7 @@ final class ManagedProviderWatcherReauthTests: XCTestCase {
         await appState.startManagedSignIn()
         appState.managedCodeInput = "123456"
         await appState.verifyManagedCode()
-        for _ in 0..<100 where appState.watchStatus != .watching {
+        for _ in 0..<1_000 where appState.watchStatus != .watching {
             try await Task.sleep(nanoseconds: 1_000_000)
         }
 
@@ -94,7 +94,8 @@ final class ManagedProviderWatcherReauthTests: XCTestCase {
                     #"{"response":{"id":"sia_1","status":"complete","created_session_id":"sess_2"}}"#,
                     clientToken: "client_C"
                 ),
-                managedProviderClerkResponse(#"{"jwt":"session.jwt"}"#, clientToken: "client_D")
+                managedProviderClerkResponse(#"{"jwt":"session.jwt"}"#, clientToken: "client_D"),
+                managedProviderClerkResponse(#"{"jwt":"status.jwt"}"#, clientToken: "client_E")
             ])
         )
     }

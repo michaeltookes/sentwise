@@ -79,6 +79,14 @@ final class AppStateBillingTests: XCTestCase {
         )
     }
 
+    private func legacyTrialStatus(active: Bool) -> ManagedAccountStatus {
+        ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            trial: ManagedTrial(active: active)
+        )
+    }
+
     // MARK: - Clerk user id threading
 
     func testClerkUserIDPrefersLiveStatus() {
@@ -309,6 +317,54 @@ final class AppStateBillingTests: XCTestCase {
         }
         XCTAssertTrue(appState.managedLicenseAllowsLLMRequests)
         XCTAssertNotNil(appState.currentDraftLLMConfiguration)
+    }
+
+    func testManagedLicenseDerivesTrialEntitlementWhenSubscriptionIsOmitted() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = legacyTrialStatus(active: true)
+        let appState = makeSignedInAppState(llm: llm, cacheStore: InMemorySubscriptionCacheStore())
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.managedLicense, .entitled)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.plan, .trial)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.status, .trialing)
+    }
+
+    func testExpiredFreshStatusFallsBackToSnapshotGraceWindow() {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm, cacheStore: InMemorySubscriptionCacheStore())
+        appState.managedAccountStatus = status(plan: .pro, statusValue: .active)
+        appState.managedAccountStatusFreshUntil = Date().addingTimeInterval(-1)
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(
+            plan: .pro,
+            status: .active,
+            capturedAt: Date().addingTimeInterval(-8 * 86_400)
+        )
+
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
+        XCTAssertEqual(appState.managedLicense, .unknown)
+    }
+
+    func testInitialWatchStartResumesAfterManagedLicenseRefresh() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = status(plan: .pro, statusValue: .active)
+        let appState = makeSignedInAppState(llm: llm, cacheStore: InMemorySubscriptionCacheStore())
+        appState.mailEmail = "me@gmail.com"
+        appState.mailAppPassword = "app-pw"
+        appState.isAccountConnected = true
+
+        XCTAssertFalse(appState.canWatch)
+        appState.startWatchingIfReady()
+
+        XCTAssertEqual(appState.watchStatus, .idle)
+        XCTAssertTrue(appState.resumeWatchingAfterManagedReauth)
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.watchStatus, .watching)
+        XCTAssertFalse(appState.resumeWatchingAfterManagedReauth)
+        appState.stopWatching()
     }
 
     func testOfflineFallsBackToCachedSnapshotWithinGrace() async {
