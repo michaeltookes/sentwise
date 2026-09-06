@@ -230,19 +230,20 @@ variant (absent → `.distantPast`, treated as "reset unknown" by the display).
 
 In the Sentwise AI section when signed in: **"N of M drafts used this week ·
 resets \<weekday, time\>"** with a `ProgressView`, a subdued "Extra usage
-purchased: X" line only when `extraPurchased > 0`, a **"Buy more usage"**
-placeholder (56c wires purchase) shown when at/over limit, and the
-**own-key valve** pointing at the BYO section below (item 59). Hidden gracefully
-when `managedQuota == nil`. AX ids: `managedUsageSection`, `managedUsageSummary`,
-`managedUsageProgress`, `managedExtraPurchased`, `buyMoreUsage`,
-`managedOwnKeyValve`.
+purchased: X" line only when `extraPurchased > 0`, an **"Upgrade for more
+drafts"** button shown when at/over limit that opens the Paddle checkout plan
+picker (`AppState.presentBillingCheckout()`; 56c — the sheet is hosted by the
+enclosing Subscription pane), and the **own-key valve** pointing at the BYO
+section below (item 59). Hidden gracefully when `managedQuota == nil`. AX ids:
+`managedUsageSection`, `managedUsageSummary`, `managedUsageProgress`,
+`managedExtraPurchased`, `buyMoreUsage`, `managedOwnKeyValve`.
 
 ### Error mapping (`LLMError` + `AppState.llmMessage`)
 
 | Worker response | `LLMError` case | User copy |
 | --- | --- | --- |
 | `429` `rate_limited` (+`retryAfterSeconds`, `Retry-After` header) | `.managedRateLimited(retryAfter:)` | "You're drafting faster than Sentwise allows — try again in N seconds." |
-| `429` `quota_exceeded` (+`resetsAt`, hard mode only) | `.managedQuotaExceeded(resetsAt:)` | Explains the weekly reset, "Buy more usage in Settings → AI, or use your own key for unlimited drafting." |
+| `429` `quota_exceeded` (+`resetsAt`, hard mode only) | `.managedQuotaExceeded(resetsAt:)` | Explains the weekly reset, "Buy more usage in Settings → Subscription, or use your own key for unlimited drafting." |
 | `413` `request_too_large` | `.managedRequestTooLarge` | Suggests trimming the transcript/thread. |
 
 Body `retryAfterSeconds` takes precedence over the `Retry-After` header.
@@ -309,7 +310,7 @@ decoded directly by `ManagedInferenceClient.fetchAccountStatus`. It carries
   "email": String,
   "trial": { "startedAt": ISO8601, "endsAt": ISO8601, "active": Bool },
   "quota": { …56b… },
-  "subscription": { "plan": "trial"|"individual"|"team"|"none",
+  "subscription": { "plan": "trial"|"starter"|"pro"|"unlimited"|"team"|"none",
                     "status": "trialing"|"active"|"past_due"|"canceled"|"lapsed",
                     "renewsAt": ISO8601|null,
                     "manageBillingUrl": String|null } }
@@ -321,6 +322,14 @@ older Worker that omits any of them still parses. A present-but-malformed `quota
 `ManagedSubscription.Plan` and `.Status` both fall back to `.unknown` for any
 unrecognised raw value, so a new server-side plan/status never breaks decoding.
 Dates parse leniently via `ManagedQuotaDate` (fractional-seconds tolerant).
+
+The launch **plan** tiers (56c) are `starter`, `pro`, and `unlimited` (the
+purchasable paid tiers), plus `trial`, `team` (reserved — no checkout price
+wired), and `none` (signed in, no plan). No released builds existed when the
+tiers changed, so this replaced the earlier placeholder `individual` cleanly
+(no migration). `Plan.displayName` (`Views/SubscriptionPresentation.swift`) names
+each; `SubscriptionPaneModel` renders every tier against every status
+(trialing / active / past_due / canceled / lapsed).
 
 ### Derivation (pre-56c)
 
@@ -335,14 +344,73 @@ plan line, an optional detail/explanation line, and an `isProblemState` flag
 Trial days remaining round up (any time left reads as ≥ "1 day left") and clamp
 at 0 ("Trial ended").
 
-### Manage billing (stub until 56c)
+### Subscribe & manage billing (item 56c)
 
-The "Manage billing" button (`manageBilling`) opens
-`subscription.manageBillingUrl` when present; while it is `null` (pre-56c) the
-button is disabled with the caption "Billing management arrives with checkout."
-Lapsed / past-due / canceled states render an explanatory line and a link to the
-AI tab's "Use your own AI" section, because managed drafting pauses in those
-states while own-key drafting still works.
+The Billing section has two entry points, both driven by `AppState+Billing.swift`:
+
+- **Subscribe** (`subscribeCTA`) shows whenever the account is **not** on an
+  active paid plan (`shouldOfferSubscribe` — trialing, lapsed, past_due,
+  canceled, none, or unknown). It calls `presentBillingCheckout()` with no tier,
+  which opens the checkout sheet on the plan picker.
+- **Manage billing** (`manageBilling`) opens `subscription.manageBillingUrl` in
+  the default browser via `AppState.openManageBilling()`. It is **enabled**
+  whenever a portal URL is known (`canManageBilling`) — the live status, or the
+  cached snapshot as an offline fallback — and validated to an `http(s)` URL. When
+  no URL is known the button is disabled with a caption that adapts to the state
+  ("Subscribe to manage billing here." vs. "A billing portal link will appear here
+  once your subscription is active.").
+
+Lapsed / past-due / canceled states still render an explanatory line and a link
+to the AI tab's "Use your own AI" section, because managed drafting pauses in
+those states while own-key drafting still works.
+
+### Checkout (Paddle overlay, item 56c)
+
+Checkout is Paddle's **overlay checkout**, rendered by **Paddle.js inside a
+`WKWebView`** (`Views/PaddleCheckoutSheet.swift`) — chosen over a browser hand-off
+so the purchase completes without leaving the app. A browser hosted-checkout URL
+is the documented fallback if the in-app overlay ever proves infeasible.
+
+- **Config** (`Services/Billing/PaddleConfig.swift`) is the single source for the
+  Paddle client-side token and per-tier price ids, flagged `sandbox` vs
+  `production` so a production cutover is a one-line change of `PaddleConfig.active`.
+  Nothing in the UI hardcodes credentials. The sandbox client-side token is public
+  by design (frontend-scoped) so embedding it is safe. `priceID(for: PaddlePlan)`
+  maps `starter`/`pro`/`unlimited` to their price ids.
+- **Harness** (`Services/Billing/PaddleCheckoutHTML.swift`) is a bundled HTML
+  string that loads `https://cdn.paddle.com/paddle/v2/paddle.js`, calls
+  `Paddle.Environment.set("sandbox")` (sandbox only), `Paddle.Initialize({ token,
+  eventCallback })`, and exposes `window.sentwiseOpenCheckout(args)`. It bridges
+  events to Swift over the `sentwise` `WKScriptMessageHandler`, adding two
+  harness-level signals: `paddle.ready` (script loaded + initialized) and
+  `paddle.failed` (load/init error).
+- **Request** (`Services/Billing/PaddleCheckout.swift`) `PaddleCheckoutRequest`
+  encodes the exact `Paddle.Checkout.open(...)` argument:
+  `{ items:[{ priceId, quantity:1 }], customData:{ clerkUserId }, customer:{ email } }`.
+  The signed-in **Clerk user id** is threaded into `customData.clerkUserId` so the
+  `sentwise-service` webhook can map the Paddle customer back to the account; it is
+  resolved by `AppState.managedClerkUserID` (the `/v1/me` `userId`, falling back to
+  the persisted `clerk-user:<id>`), and a checkout is refused when it is unknown.
+  The account email is a best-effort prefill, omitted when blank.
+- **View-model** (`Services/Billing/PaddleCheckoutModel.swift`) is the pure phase
+  machine (`initializing → presenting → completed | closed | failed`). On
+  `checkout.completed` the sheet calls `AppState.completeBillingCheckout()`, which
+  dismisses the sheet and refreshes `/v1/me` so the webhook-written subscription is
+  reflected. A `checkout.closed` after a completion is ignored (Paddle's own
+  teardown), and a terminal failure is only overridden by a completion.
+
+### Offline license grace (item 56c)
+
+The "license" for managed drafting is the subscription **status** from `/v1/me`.
+On every successful fetch, `AppState.recordSubscriptionSnapshot` caches the
+last-known subscription (`SubscriptionSnapshot`) per hashed account key in a
+`UserDefaults`-backed `SubscriptionCacheStoring`. `AppState.managedLicense`
+evaluates entitlement via the pure `SubscriptionLicenseEvaluator`: the live status
+wins when online; when offline (or the status is unknown) it falls back to the
+cached snapshot within a **7-day grace window** (`.entitled` / `.grace(daysLeft)`
+/ `.notEntitled` / `.unknown`), so the app/UI never hard-fails offline. A
+not-entitled snapshot is never re-graced. Grace reuses the existing `isOnline`
+reachability signal (item 27) rather than a parallel network monitor.
 
 ### Delete account (`DELETE /v1/me`)
 
@@ -374,7 +442,7 @@ action now routes to the Subscription tab (usage moved there from AI).
 ### Prowl hunt mode
 
 `StubManagedInferenceClient.stubbedAccountStatus` returns a fixed active
-Individual status (no billing URL) with zero network, and
+Pro status (no billing URL) with zero network, and
 `LLMService.fetchManagedAccountStatus()` returns it in hunt mode so the pane
 renders deterministically. Delete is a zero-network no-op
 (`AppState.deleteManagedAccount(isHuntMode:)` returns success without teardown),
