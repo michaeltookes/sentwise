@@ -153,7 +153,9 @@ extension ManagedSubscription.Plan {
     var displayName: String {
         switch self {
         case .trial: return "Trial"
-        case .individual: return "Individual"
+        case .starter: return "Starter"
+        case .pro: return "Pro"
+        case .unlimited: return "Unlimited"
         case .team: return "Team"
         case .noPlan: return "No plan"
         case .unknown: return "Sentwise AI"

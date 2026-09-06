@@ -205,11 +205,18 @@ struct ManagedTrial: Codable, Sendable, Equatable {
 /// never fails decoding.
 struct ManagedSubscription: Codable, Sendable, Equatable {
 
-    /// The subscription plan. `.unknown` is the decode fallback for any raw value
-    /// this app version doesn't recognise.
+    /// The subscription plan. Extended to the launch tiers in 56c (checkout):
+    /// `starter | pro | unlimited` are the purchasable paid tiers, `team` is
+    /// reserved for a future seat-based plan, `trial` is the free trial, and
+    /// `none` means signed in but not on any plan. `.unknown` is the decode
+    /// fallback for any raw value this app version doesn't recognise, so a new
+    /// server-side plan never fails decoding.
     enum Plan: String, Codable, Sendable, Equatable {
         case trial
-        case individual
+        case starter
+        case pro
+        case unlimited
+        /// Reserved for a future seat-based plan; no checkout price wired yet.
         case team
         /// The wire value `"none"` — signed in but not on any plan.
         case noPlan = "none"

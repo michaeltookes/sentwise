@@ -30,7 +30,7 @@ final class SubscriptionModelTests: XCTestCase {
           "trial": {"startedAt":"2026-08-01T00:00:00Z","endsAt":"2026-08-15T00:00:00Z","active":true},
           "quota": {"unit":"drafts","used":3,"limit":50,"remaining":47,
                     "resetsAt":"2026-08-18T00:00:00Z","enforcement":"soft"},
-          "subscription": {"plan":"individual","status":"active",
+          "subscription": {"plan":"pro","status":"active",
                            "renewsAt":"2026-09-01T00:00:00Z",
                            "manageBillingUrl":"https://billing.example/portal"}
         }
@@ -39,7 +39,7 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertEqual(status.trial?.active, true)
         XCTAssertEqual(status.trial?.endsAt, ManagedQuotaDate.date(from: "2026-08-15T00:00:00Z"))
         XCTAssertEqual(status.quota?.used, 3)
-        XCTAssertEqual(status.subscription?.plan, .individual)
+        XCTAssertEqual(status.subscription?.plan, .pro)
         XCTAssertEqual(status.subscription?.status, .active)
         XCTAssertEqual(status.subscription?.manageBillingURL, "https://billing.example/portal")
     }
@@ -108,10 +108,10 @@ final class SubscriptionModelTests: XCTestCase {
     }
 
     func testActivePlanShowsNameAndRenewal() {
-        let sub = ManagedSubscription(plan: .individual, status: .active,
+        let sub = ManagedSubscription(plan: .pro, status: .active,
                                       renewsAt: ManagedQuotaDate.date(from: "2026-09-12T00:00:00Z"))
         let model = SubscriptionPaneModel.make(from: status(subscription: sub))
-        XCTAssertEqual(model.planText, "Individual")
+        XCTAssertEqual(model.planText, "Pro")
         XCTAssertEqual(model.secondaryText?.hasPrefix("Renews"), true)
         XCTAssertFalse(model.isProblemState)
         XCTAssertFalse(model.showsOwnKeyFallback)
@@ -154,26 +154,26 @@ final class SubscriptionModelTests: XCTestCase {
     }
 
     func testLapsedPaidPlanNamesThePlanNotTheTrial() {
-        // Post-56c: a former Individual subscriber whose plan lapsed must not be
+        // Post-56c: a former Pro subscriber whose plan lapsed must not be
         // told their "trial" ended.
-        let sub = ManagedSubscription(plan: .individual, status: .lapsed)
+        let sub = ManagedSubscription(plan: .pro, status: .lapsed)
         let model = SubscriptionPaneModel.make(from: status(subscription: sub))
-        XCTAssertEqual(model.planText, "Individual — lapsed")
+        XCTAssertEqual(model.planText, "Pro — lapsed")
         XCTAssertTrue(model.isProblemState)
         XCTAssertFalse(model.planText.contains("Trial"))
-        XCTAssertEqual(model.secondaryText?.contains("Individual plan has lapsed") ?? false, true)
+        XCTAssertEqual(model.secondaryText?.contains("Pro plan has lapsed") ?? false, true)
     }
 
     func testPastDueIsProblemStateWithPlanName() {
-        let sub = ManagedSubscription(plan: .individual, status: .pastDue)
+        let sub = ManagedSubscription(plan: .pro, status: .pastDue)
         let model = SubscriptionPaneModel.make(from: status(subscription: sub))
-        XCTAssertEqual(model.planText, "Individual")
+        XCTAssertEqual(model.planText, "Pro")
         XCTAssertTrue(model.isProblemState)
         XCTAssertEqual(model.secondaryText?.contains("payment") ?? false, true)
     }
 
     func testCanceledIsProblemState() {
-        let sub = ManagedSubscription(plan: .individual, status: .canceled)
+        let sub = ManagedSubscription(plan: .pro, status: .canceled)
         let model = SubscriptionPaneModel.make(from: status(subscription: sub))
         XCTAssertEqual(model.planText, "Canceled")
         XCTAssertTrue(model.isProblemState)

@@ -361,8 +361,8 @@ struct StubManagedInferenceClient: LLMClient {
 
     /// A plausible, fixed account status surfaced in Prowl hunt mode (backlog
     /// item 73) so the Subscription pane renders its plan/usage rows
-    /// deterministically with zero network. An active Individual plan with no
-    /// billing URL keeps "Manage billing" deterministically disabled.
+    /// deterministically with zero network. An active Pro plan with no billing
+    /// URL keeps "Manage billing" deterministically disabled.
     static var stubbedAccountStatus: ManagedAccountStatus {
         ManagedAccountStatus(
             userID: "hunt-user",
@@ -370,7 +370,7 @@ struct StubManagedInferenceClient: LLMClient {
             trial: nil,
             quota: stubbedQuota,
             subscription: ManagedSubscription(
-                plan: .individual,
+                plan: .pro,
                 status: .active,
                 renewsAt: Date(timeIntervalSince1970: 1_756_512_000), // fixed, deterministic
                 manageBillingURL: nil
