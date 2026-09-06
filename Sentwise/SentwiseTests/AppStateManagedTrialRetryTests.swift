@@ -83,6 +83,38 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         )
     }
 
+    func testBillingPortalReturnRefreshesManagedStatus() async {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        let portalURL = "https://billing.example/portal"
+        let pastDue = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .pastDue, manageBillingURL: portalURL)
+        )
+        appState.managedAccountStatus = pastDue
+        appState.markManagedAccountStatusFresh(from: pastDue)
+        var openedURL: URL?
+
+        appState.openManageBilling { openedURL = $0 }
+
+        XCTAssertEqual(openedURL?.absoluteString, portalURL)
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
+        XCTAssertTrue(appState.billingPortalRefreshPending)
+
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .active, manageBillingURL: portalURL)
+        )
+        await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded()
+
+        XCTAssertEqual(llm.fetchCount, 1)
+        XCTAssertFalse(appState.billingPortalRefreshPending)
+        XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .active)
+        XCTAssertEqual(appState.managedLicense, .entitled)
+    }
+
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
         func snapshot(accountKey: String) -> SubscriptionSnapshot? { nil }
         func save(_ snapshot: SubscriptionSnapshot, accountKey: String) {}

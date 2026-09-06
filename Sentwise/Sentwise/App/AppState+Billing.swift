@@ -129,9 +129,12 @@ extension AppState {
     var canManageBilling: Bool { manageBillingURL != nil }
 
     /// Opens the Paddle customer portal in the default browser (item 56c).
-    func openManageBilling() {
+    func openManageBilling(openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }) {
         guard let url = manageBillingURL else { return }
-        NSWorkspace.shared.open(url)
+        billingPortalRefreshPending = true
+        managedAccountStatusIsFresh = false
+        cancelScheduledManagedAccountStatusRefresh()
+        openURL(url)
     }
 
     // MARK: - Subscribe affordance

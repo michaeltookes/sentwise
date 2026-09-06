@@ -124,10 +124,9 @@ final class AppState: ObservableObject {
     var managedQuotaAccountKeyAliases: [String: String] = [:]
 
     // MARK: - Billing / checkout (item 56c). See AppState+Billing.
-    /// Non-nil drives the Paddle checkout sheet (Subscribe / "buy more" CTAs).
     @Published var billingCheckout: BillingCheckoutRequest?
-    /// Last-known subscription cached for offline license grace; see AppState+Billing.
     @Published var cachedSubscriptionSnapshot: SubscriptionSnapshot?
+    var billingPortalRefreshPending = false
     /// Durable per-account subscription cache (test-injectable) backing the above.
     var subscriptionCacheStore: SubscriptionCacheStoring = UserDefaultsSubscriptionCacheStore()
 

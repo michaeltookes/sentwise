@@ -33,4 +33,11 @@ extension AppState {
             self?.handleReachabilityChange(online)
         }
     }
+
+    func refreshManagedQuotaAfterBillingPortalReturnIfNeeded() async {
+        guard billingPortalRefreshPending else { return }
+        billingPortalRefreshPending = false
+        guard isManagedSignedIn else { return }
+        await refreshManagedQuota()
+    }
 }
