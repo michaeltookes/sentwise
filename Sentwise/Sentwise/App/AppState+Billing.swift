@@ -364,10 +364,10 @@ extension AppState {
         if let subscription = managedAccountStatus?.subscription {
             return (subscription.plan, subscription.status)
         }
-        guard let snapshot = effectiveSubscriptionSnapshot,
-              snapshot.source != .legacyQuota else {
-            return nil
-        }
+        guard let snapshot = effectiveSubscriptionSnapshot else { return nil }
+        if snapshot.source == .legacyQuota,
+           snapshot.plan == .unknown,
+           snapshot.manageBillingURL == nil { return nil }
         return (snapshot.plan, snapshot.status)
     }
 
@@ -461,19 +461,18 @@ extension AppState {
         capturedAt: Date
     ) -> SubscriptionSnapshot? {
         guard let snapshot,
-              snapshot.source != .legacyQuota,
               !nonRecurringManagedSubscriptionPlans.contains(snapshot.plan),
               !endedManagedSubscriptionStatuses.contains(snapshot.status) else {
             return nil
         }
-
+        let keepsStatus = SubscriptionLicenseEvaluator.isEntitled(snapshot.status)
         return SubscriptionSnapshot(
             plan: snapshot.plan,
-            status: snapshot.status,
+            status: keepsStatus ? snapshot.status : .active,
             renewsAt: snapshot.renewsAt,
             manageBillingURL: snapshot.manageBillingURL,
             capturedAt: capturedAt,
-            source: snapshot.source
+            source: keepsStatus ? snapshot.source : .legacyQuota
         )
     }
 

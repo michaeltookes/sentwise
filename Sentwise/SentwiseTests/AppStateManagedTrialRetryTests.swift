@@ -115,6 +115,24 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         XCTAssertEqual(appState.managedLicense, .entitled)
     }
 
+    func testFreshPastDueRefreshKeepsWatcherResumeIntent() async {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.watchStatus = .paused
+        appState.resumeWatchingAfterManagedReauth = true
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .pastDue)
+        )
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertTrue(appState.managedAccountStatusIsFresh)
+        XCTAssertEqual(appState.managedLicense, .notEntitled)
+        XCTAssertTrue(appState.resumeWatchingAfterManagedReauth)
+    }
+
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
         func snapshot(accountKey: String) -> SubscriptionSnapshot? { nil }
         func save(_ snapshot: SubscriptionSnapshot, accountKey: String) {}

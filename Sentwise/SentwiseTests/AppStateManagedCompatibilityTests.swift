@@ -149,6 +149,42 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         }
     }
 
+    func testQuotaOnlyAccountStatusUsesCompatibilityStatusForPastDueSnapshot() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            quota: managedQuota()
+        )
+        let store = InMemorySubscriptionCacheStore()
+        let appState = makeSignedInAppState(llm: llm, cacheStore: store)
+        let accountKey = appState.currentManagedUsageAccountKey
+        store.save(
+            SubscriptionSnapshot(
+                plan: .pro,
+                status: .pastDue,
+                manageBillingURL: "https://billing.example.com/session",
+                capturedAt: Date().addingTimeInterval(-8 * 86_400)
+            ),
+            accountKey: accountKey
+        )
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.plan, .pro)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.status, .active)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.source, .legacyQuota)
+        XCTAssertFalse(appState.shouldOfferSubscribe)
+        XCTAssertEqual(appState.manageBillingURL?.absoluteString, "https://billing.example.com/session")
+        let model = SubscriptionPaneModel.make(
+            from: appState.managedAccountStatus,
+            snapshot: appState.effectiveSubscriptionSnapshot,
+            statusIsFresh: appState.managedAccountStatusIsFresh
+        )
+        XCTAssertEqual(model.planText, "Pro")
+        XCTAssertFalse(model.isProblemState)
+    }
+
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
         private(set) var saved: [String: SubscriptionSnapshot] = [:]
         func snapshot(accountKey: String) -> SubscriptionSnapshot? { saved[accountKey] }

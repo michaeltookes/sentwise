@@ -354,12 +354,7 @@ extension AppState {
     func resumeInboxWatchingAfterManagedReauthenticationIfNeeded() {
         guard resumeWatchingAfterManagedReauth else { return }
         guard watchStatus == .paused || watchStatus == .idle else { return }
-        guard canWatch else {
-            if managedAccountStatusIsFresh {
-                resumeWatchingAfterManagedReauth = false
-            }
-            return
-        }
+        guard canWatch else { return }
         resumeInboxWatchingAfterProviderRecoveryIfNeeded()
     }
 
