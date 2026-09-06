@@ -39,7 +39,11 @@ struct PaddleCheckoutRequest: Equatable, Sendable {
     }
 
     func makeArgumentJSONString() throws -> String {
-        String(decoding: try makeArgumentJSON(), as: UTF8.self)
+        let data = try makeArgumentJSON()
+        guard let string = String(bytes: data, encoding: .utf8) else {
+            throw LLMError.invalidResponse("Couldn't encode the checkout arguments.")
+        }
+        return string
     }
 
     private struct Payload: Encodable {
