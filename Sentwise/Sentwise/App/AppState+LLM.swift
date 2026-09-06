@@ -134,6 +134,9 @@ extension AppState {
         resetDraftPreviewForLLMChange()
         llmError = nil
         saveSettings()
+        if transcriptWatchedFolderEnabled, canCreateFollowUp {
+            startTranscriptFolderWatchingIfEnabled()
+        }
         resumeInboxWatchingAfterProviderRecoveryIfNeeded()
     }
 

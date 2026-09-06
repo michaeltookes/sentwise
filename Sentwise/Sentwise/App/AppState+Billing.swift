@@ -418,7 +418,7 @@ extension AppState {
               state.status == .trialing else {
             return nil
         }
-        return status.trial?.endsAt
+        return status.trial?.endsAt ?? status.subscription?.renewsAt
     }
 
     private func subscriptionSnapshot(from status: ManagedAccountStatus) -> SubscriptionSnapshot? {

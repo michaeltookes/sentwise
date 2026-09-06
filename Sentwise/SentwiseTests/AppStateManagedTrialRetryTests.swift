@@ -64,6 +64,25 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         XCTAssertNil(appState.managedAccountStatusFreshUntil)
     }
 
+    func testTrialFreshnessDeadlineFallsBackToSubscriptionRenewalDate() {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        let renewsAt = Date().addingTimeInterval(300)
+        let trialing = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .trial, status: .trialing, renewsAt: renewsAt)
+        )
+
+        appState.markManagedAccountStatusFresh(from: trialing)
+
+        XCTAssertEqual(
+            appState.managedAccountStatusFreshUntil?.timeIntervalSince1970 ?? 0,
+            renewsAt.timeIntervalSince1970,
+            accuracy: 0.001
+        )
+    }
+
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
         func snapshot(accountKey: String) -> SubscriptionSnapshot? { nil }
         func save(_ snapshot: SubscriptionSnapshot, accountKey: String) {}
