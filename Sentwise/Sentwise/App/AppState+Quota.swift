@@ -56,6 +56,7 @@ extension AppState {
         managedAccountStatusRefreshOrdering.successVersion &+= 1
         cancelScheduledManagedAccountStatusRefresh()
         cancelBillingReconciliation()
+        billingReconciliationBaseline = nil
         managedQuotaAccountKey = nil
         clearCachedSubscriptionSnapshot()
         // Account-key aliases are identity migrations, not quota display cache.

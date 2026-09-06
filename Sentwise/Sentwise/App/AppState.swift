@@ -122,10 +122,10 @@ final class AppState: ObservableObject {
     var managedQuotaAccountKey: String?
     /// Old -> new account-key aliases created during stable-ID backfill.
     var managedQuotaAccountKeyAliases: [String: String] = [:]
-
     // MARK: - Billing / checkout (item 56c). See AppState+Billing.
     @Published var billingCheckout: BillingCheckoutRequest?
     var billingReconciliationTask: Task<Void, Never>?
+    var billingReconciliationBaseline: BillingReconciliationSnapshot?
     @Published var cachedSubscriptionSnapshot: SubscriptionSnapshot?
     var billingPortalRefreshPending = false
     /// Durable per-account subscription cache (test-injectable) backing the above.

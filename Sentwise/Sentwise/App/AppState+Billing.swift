@@ -5,6 +5,7 @@ private let paidManagedSubscriptionPlans: Set<ManagedSubscription.Plan> = [.star
 private let nonRecurringManagedSubscriptionPlans: Set<ManagedSubscription.Plan> = [.trial, .noPlan]
 private let endedManagedSubscriptionStatuses: Set<ManagedSubscription.Status> = [.canceled, .lapsed]
 private let managedAccountStatusFreshDuration = SubscriptionLicenseEvaluator.defaultGrace
+private let managedAccountStatusBlockingFreshDuration: TimeInterval = 5 * 60
 private let managedAccountStatusRefreshLeadTime: TimeInterval = 60 * 60
 private let managedAccountStatusRefreshRetryDelays: [UInt64] = [
     60_000_000_000,
@@ -14,10 +15,7 @@ private let managedAccountStatusRefreshRetryDelays: [UInt64] = [
     3_600_000_000_000
 ]
 
-private typealias ManagedSubscriptionBillingState = (
-    plan: ManagedSubscription.Plan,
-    status: ManagedSubscription.Status
-)
+private typealias ManagedSubscriptionBillingState = (plan: ManagedSubscription.Plan, status: ManagedSubscription.Status)
 
 /// A request to present the Paddle overlay-checkout sheet (backlog item 56c).
 /// `plan == nil` opens the sheet on the plan picker; a non-nil plan jumps
@@ -104,6 +102,7 @@ extension AppState {
     /// Opens the Paddle customer portal in the default browser (item 56c).
     func openManageBilling(openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }) {
         guard let url = manageBillingURL else { return }
+        billingReconciliationBaseline = currentBillingReconciliationSnapshot
         billingPortalRefreshPending = true
         managedAccountStatusIsFresh = false
         cancelScheduledManagedAccountStatusRefresh()
@@ -213,7 +212,8 @@ extension AppState {
     }
 
     func markManagedAccountStatusFresh(from status: ManagedAccountStatus, now: Date = Date()) {
-        let defaultFreshUntil = now.addingTimeInterval(managedAccountStatusFreshDuration)
+        let freshDuration = freshnessDuration(forManagedAccountStatus: status)
+        let defaultFreshUntil = now.addingTimeInterval(freshDuration)
         if let trialEndsAt = trialFreshnessDeadline(from: status) {
             guard trialEndsAt > now else {
                 managedAccountStatusFreshUntil = nil
@@ -279,7 +279,7 @@ extension AppState {
         }
         let refreshAt = freshUntil == currentTrialFreshnessDeadline
             ? freshUntil
-            : freshUntil.addingTimeInterval(-managedAccountStatusRefreshLeadTime)
+            : nonImmediateStatusRefreshDate(before: freshUntil)
         let delay = max(0, refreshAt.timeIntervalSinceNow)
         managedAccountStatusRefreshTask = Task { [weak self] in
             do {
@@ -356,6 +356,10 @@ extension AppState {
 
     private var currentLiveSubscriptionStatus: ManagedSubscription.Status? {
         guard let status = managedAccountStatus else { return nil }
+        return liveSubscriptionStatus(from: status)
+    }
+
+    private func liveSubscriptionStatus(from status: ManagedAccountStatus) -> ManagedSubscription.Status? {
         if let subscriptionStatus = status.subscription?.status {
             return subscriptionStatus
         }
@@ -366,6 +370,18 @@ extension AppState {
             return .active
         }
         return nil
+    }
+
+    private func freshnessDuration(forManagedAccountStatus status: ManagedAccountStatus) -> TimeInterval {
+        if let liveStatus = liveSubscriptionStatus(from: status),
+           SubscriptionLicenseEvaluator.isEntitled(liveStatus) { return managedAccountStatusFreshDuration }
+        return managedAccountStatusBlockingFreshDuration
+    }
+
+    private func nonImmediateStatusRefreshDate(before freshUntil: Date) -> Date {
+        freshUntil.timeIntervalSinceNow > managedAccountStatusRefreshLeadTime
+            ? freshUntil.addingTimeInterval(-managedAccountStatusRefreshLeadTime)
+            : freshUntil
     }
 
     private func refreshManagedQuotaIfScheduled(freshUntil: Date) async {

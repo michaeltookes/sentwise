@@ -15,6 +15,11 @@ private let billingReconciliationRetryDelays: [UInt64] = [
     3_600_000_000_000
 ]
 
+struct BillingReconciliationSnapshot: Equatable {
+    let subscription: ManagedSubscription?
+    let quota: ManagedQuota?
+}
+
 /// Checkout and billing-portal refreshes split out from `AppState+Billing` so
 /// Paddle webhook reconciliation can continue after the immediate retry budget.
 extension AppState {
@@ -23,9 +28,10 @@ extension AppState {
         reconciliationRetryDelays: [UInt64]? = nil
     ) async {
         cancelBillingReconciliation()
+        billingReconciliationBaseline = nil
         billingCheckout = nil
         await refreshManagedQuota()
-        guard isManagedSignedIn, !isOnActivePaidPlan else { return }
+        guard isManagedSignedIn, !billingReconciliationIsComplete else { return }
 
         for delay in refreshRetryDelays {
             do {
@@ -35,14 +41,21 @@ extension AppState {
             }
             guard isManagedSignedIn else { return }
             await refreshManagedQuota()
-            if isOnActivePaidPlan { return }
+            if billingReconciliationIsComplete { return }
         }
         scheduleBillingReconciliationIfNeeded(delays: reconciliationRetryDelays)
     }
 
     func scheduleBillingReconciliationIfNeeded(delays: [UInt64]? = nil) {
         let retryDelays = delays ?? billingReconciliationRetryDelays
-        guard isManagedSignedIn, !isOnActivePaidPlan, !retryDelays.isEmpty else { return }
+        guard isManagedSignedIn, !retryDelays.isEmpty else {
+            finishBillingReconciliation()
+            return
+        }
+        guard !billingReconciliationIsComplete else {
+            finishBillingReconciliation()
+            return
+        }
         cancelBillingReconciliation()
         billingReconciliationTask = Task { [weak self] in
             for delay in retryDelays {
@@ -65,14 +78,14 @@ extension AppState {
     }
 
     private func refreshManagedQuotaForBillingReconciliation() async -> Bool {
-        guard isManagedSignedIn, !isOnActivePaidPlan else {
-            billingReconciliationTask = nil
+        guard isManagedSignedIn, !billingReconciliationIsComplete else {
+            finishBillingReconciliation()
             return false
         }
         guard isOnline else { return true }
         await refreshManagedQuota(scheduleRetryOnFailure: false)
-        if !isManagedSignedIn || isOnActivePaidPlan {
-            billingReconciliationTask = nil
+        if !isManagedSignedIn || billingReconciliationIsComplete {
+            finishBillingReconciliation()
             return false
         }
         return true
@@ -80,5 +93,24 @@ extension AppState {
 
     private func finishBillingReconciliation() {
         billingReconciliationTask = nil
+        billingReconciliationBaseline = nil
+    }
+
+    private var billingReconciliationIsComplete: Bool {
+        guard let billingReconciliationBaseline else { return isOnActivePaidPlan }
+        return currentBillingReconciliationSnapshot != billingReconciliationBaseline
+    }
+
+    var currentBillingReconciliationSnapshot: BillingReconciliationSnapshot {
+        let subscription = managedAccountStatus?.subscription
+            ?? effectiveSubscriptionSnapshot.map {
+                ManagedSubscription(
+                    plan: $0.plan,
+                    status: $0.status,
+                    renewsAt: $0.renewsAt,
+                    manageBillingURL: $0.manageBillingURL
+                )
+            }
+        return BillingReconciliationSnapshot(subscription: subscription, quota: managedQuota)
     }
 }

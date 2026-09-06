@@ -49,6 +49,16 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         return appState
     }
 
+    private func quota(limit: Int, remaining: Int, extraPurchased: Int = 0) -> ManagedQuota {
+        ManagedQuota(
+            used: limit - remaining,
+            limit: limit,
+            remaining: remaining,
+            resetsAt: Date(timeIntervalSince1970: 1_800_000_000),
+            extraPurchased: extraPurchased
+        )
+    }
+
     func testExpiredTrialStatusSchedulesBoundedRetryInsteadOfImmediateLoop() async throws {
         let llm = StatusLLM()
         let appState = makeSignedInAppState(llm: llm)
@@ -153,6 +163,40 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         XCTAssertNil(appState.billingReconciliationTask)
     }
 
+    func testBillingPortalReturnReconcilesActivePlanUntilSubscriptionOrQuotaChanges() async throws {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        defer { appState.cancelBillingReconciliation() }
+        let portalURL = "https://billing.example/portal"
+        let oldStatus = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            quota: quota(limit: 50, remaining: 25),
+            subscription: ManagedSubscription(plan: .pro, status: .active, manageBillingURL: portalURL)
+        )
+        let upgradedStatus = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            quota: quota(limit: 100, remaining: 75, extraPurchased: 50),
+            subscription: ManagedSubscription(plan: .unlimited, status: .active, manageBillingURL: portalURL)
+        )
+        appState.managedAccountStatus = oldStatus
+        appState.managedQuota = oldStatus.quota
+        appState.markManagedAccountStatusFresh(from: oldStatus)
+        appState.openManageBilling { _ in }
+        llm.statusesToReturn = [oldStatus, upgradedStatus]
+
+        await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded(reconciliationRetryDelays: [0])
+        for _ in 0..<1_000 where llm.fetchCount < 2 {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+
+        XCTAssertEqual(llm.fetchCount, 2)
+        XCTAssertEqual(appState.managedAccountStatus?.subscription?.plan, .unlimited)
+        XCTAssertEqual(appState.managedQuota?.limit, 100)
+        XCTAssertNil(appState.billingReconciliationTask)
+    }
+
     func testInitialWatchStartRefreshesAndResumesAfterStaleNotEntitledLicenseRecovery() async {
         let llm = StatusLLM()
         let appState = makeSignedInAppState(llm: llm)
@@ -182,6 +226,25 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         XCTAssertEqual(appState.watchStatus, .watching)
         XCTAssertFalse(appState.resumeWatchingAfterManagedReauth)
         appState.stopWatching()
+    }
+
+    func testBlockingSubscriptionStatusUsesShortFreshnessWindow() {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        let now = Date()
+        let pastDue = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .pastDue)
+        )
+
+        appState.markManagedAccountStatusFresh(from: pastDue, now: now)
+
+        XCTAssertEqual(
+            appState.managedAccountStatusFreshUntil?.timeIntervalSince1970 ?? 0,
+            now.addingTimeInterval(300).timeIntervalSince1970,
+            accuracy: 0.001
+        )
     }
 
     func testFreshPastDueRefreshKeepsWatcherResumeIntent() async {
