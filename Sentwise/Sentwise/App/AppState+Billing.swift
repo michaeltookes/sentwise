@@ -308,10 +308,19 @@ extension AppState {
     /// Persists the last-known subscription/trial from a successful `/v1/me` so
     /// offline grace has something to fall back on.
     func recordSubscriptionSnapshot(from status: ManagedAccountStatus) {
-        let snapshot = subscriptionSnapshot(from: status)
-            ?? derivedTrialSubscriptionSnapshot(from: status)
-            ?? legacyQuotaSubscriptionSnapshot(from: status)
-        guard let snapshot else { return }
+        if let snapshot = subscriptionSnapshot(from: status)
+            ?? derivedTrialSubscriptionSnapshot(from: status) {
+            cachedSubscriptionSnapshot = snapshot
+            subscriptionCacheStore.save(snapshot, accountKey: currentManagedUsageAccountKey)
+            return
+        }
+
+        guard let snapshot = legacyQuotaSubscriptionSnapshot(from: status) else { return }
+        if let existingSnapshot = effectiveSubscriptionSnapshot,
+           existingSnapshot.source != .legacyQuota {
+            return
+        }
+
         cachedSubscriptionSnapshot = snapshot
         subscriptionCacheStore.save(snapshot, accountKey: currentManagedUsageAccountKey)
     }

@@ -16,7 +16,10 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         func deleteManagedAccount() async throws {}
     }
 
-    private func makeSignedInAppState(llm: LLMProviding) -> AppState {
+    private func makeSignedInAppState(
+        llm: LLMProviding,
+        cacheStore: SubscriptionCacheStoring? = nil
+    ) -> AppState {
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",
             .managedSessionID: "sess_X"
@@ -37,7 +40,7 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
             llm: llm,
             notifier: FakeDraftNotifier()
         )
-        appState.subscriptionCacheStore = InMemorySubscriptionCacheStore()
+        appState.subscriptionCacheStore = cacheStore ?? InMemorySubscriptionCacheStore()
         return appState
     }
 
@@ -104,6 +107,32 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         guard case .grace = appState.managedLicense else {
             return XCTFail("expected quota-only status to fall back to cached grace")
         }
+    }
+
+    func testQuotaOnlyAccountStatusPreservesPaidSubscriptionSnapshot() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            quota: managedQuota()
+        )
+        let store = InMemorySubscriptionCacheStore()
+        let appState = makeSignedInAppState(llm: llm, cacheStore: store)
+        let accountKey = appState.currentManagedUsageAccountKey
+        let paidSnapshot = SubscriptionSnapshot(
+            plan: .pro,
+            status: .active,
+            manageBillingURL: "https://billing.example.com/session",
+            capturedAt: Date().addingTimeInterval(-60)
+        )
+        store.save(paidSnapshot, accountKey: accountKey)
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertNil(appState.cachedSubscriptionSnapshot)
+        XCTAssertEqual(store.saved[accountKey], paidSnapshot)
+        XCTAssertFalse(appState.shouldOfferSubscribe)
+        XCTAssertEqual(appState.manageBillingURL?.absoluteString, "https://billing.example.com/session")
     }
 
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
