@@ -45,6 +45,7 @@ extension AppState {
         managedQuota = nil
         managedAccountStatus = nil
         managedAccountStatusIsFresh = false
+        cancelScheduledManagedAccountStatusRefresh()
         managedQuotaAccountKey = nil
         clearCachedSubscriptionSnapshot()
         // Account-key aliases are identity migrations, not quota display cache.
@@ -117,6 +118,7 @@ extension AppState {
                 // older Worker build.
                 managedAccountStatus = status
                 managedAccountStatusIsFresh = true
+                scheduleManagedAccountStatusRefreshBeforeExpiry()
                 let resolvedAccountKey = backfillManagedAccountIDIfNeeded(
                     from: status,
                     replacing: accountKey
@@ -129,9 +131,11 @@ extension AppState {
                 resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
             } else {
                 managedAccountStatusIsFresh = false
+                cancelScheduledManagedAccountStatusRefresh()
             }
         } catch {
             managedAccountStatusIsFresh = false
+            cancelScheduledManagedAccountStatusRefresh()
             // Metering is best-effort surfacing, never a blocking failure; a
             // managed 401 is reconciled by the normal draft/test paths.
             await reconcileManagedAccountState(after: error, provider: .managed)

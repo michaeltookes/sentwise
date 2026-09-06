@@ -107,6 +107,14 @@ final class SubscriptionModelTests: XCTestCase {
         ManagedAccountStatus(userID: "u", email: "m@example.com", trial: trial, quota: nil, subscription: subscription)
     }
 
+    private func snapshot(
+        plan: ManagedSubscription.Plan,
+        statusValue: ManagedSubscription.Status,
+        renewsAt: Date? = nil
+    ) -> SubscriptionSnapshot {
+        SubscriptionSnapshot(plan: plan, status: statusValue, renewsAt: renewsAt, capturedAt: Date())
+    }
+
     func testActivePlanShowsNameAndRenewal() {
         let sub = ManagedSubscription(plan: .pro, status: .active,
                                       renewsAt: ManagedQuotaDate.date(from: "2026-09-12T00:00:00Z"))
@@ -170,6 +178,44 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertEqual(model.planText, "Pro")
         XCTAssertTrue(model.isProblemState)
         XCTAssertEqual(model.secondaryText?.contains("payment") ?? false, true)
+    }
+
+    func testSnapshotRendersWhenLiveStatusUnavailable() {
+        let renewsAt = ManagedQuotaDate.date(from: "2026-09-12T00:00:00Z")
+        let model = SubscriptionPaneModel.make(
+            from: nil,
+            snapshot: snapshot(plan: .pro, statusValue: .active, renewsAt: renewsAt)
+        )
+
+        XCTAssertEqual(model.planText, "Pro")
+        XCTAssertEqual(model.secondaryText?.hasPrefix("Renews"), true)
+        XCTAssertFalse(model.isProblemState)
+    }
+
+    func testStaleLiveStatusUsesSnapshotProblemState() {
+        let live = ManagedSubscription(plan: .pro, status: .active)
+        let model = SubscriptionPaneModel.make(
+            from: status(subscription: live),
+            snapshot: snapshot(plan: .pro, statusValue: .pastDue),
+            statusIsFresh: false
+        )
+
+        XCTAssertEqual(model.planText, "Pro")
+        XCTAssertTrue(model.isProblemState)
+        XCTAssertTrue(model.showsOwnKeyFallback)
+        XCTAssertEqual(model.secondaryText?.contains("payment") ?? false, true)
+    }
+
+    func testFreshLiveStatusWinsOverSnapshot() {
+        let live = ManagedSubscription(plan: .starter, status: .active)
+        let model = SubscriptionPaneModel.make(
+            from: status(subscription: live),
+            snapshot: snapshot(plan: .pro, statusValue: .pastDue),
+            statusIsFresh: true
+        )
+
+        XCTAssertEqual(model.planText, "Starter")
+        XCTAssertFalse(model.isProblemState)
     }
 
     func testCanceledIsProblemState() {

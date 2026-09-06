@@ -17,6 +17,7 @@ extension AppState {
     func learnVoiceProfile() async {
         voiceError = nil
 
+        await refreshManagedQuotaIfLicenseStatusStale()
         guard let llmConfiguration = currentVoiceLLMConfiguration else {
             voiceError = "Connect an AI provider first (Test Connection above)."
             return

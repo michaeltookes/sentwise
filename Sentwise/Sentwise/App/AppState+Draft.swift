@@ -13,13 +13,13 @@ extension AppState {
     /// Fetches a message's body and generates a reply draft in the user's voice.
     @discardableResult
     func generateDraft(for message: MailMessage, mailbox: Mailbox = .inbox) async -> Draft? {
-        let requestGeneration = nextDraftGeneration()
-        resetDraftPreviewForGeneration()
+        let requestGeneration = prepareDraftGeneration()
 
         guard mailbox.supportsReplyDrafting else {
             draftError = Self.draftMessage(for: DraftError.unsupportedSourceMailbox)
             return nil
         }
+        await refreshManagedQuotaIfLicenseStatusStale()
         guard let llmConfiguration = currentDraftLLMConfiguration else {
             draftError = "Connect an AI provider first (Test Connection above)."
             return nil
@@ -89,6 +89,7 @@ extension AppState {
         guard mailbox.supportsReplyDrafting else {
             throw DraftError.unsupportedSourceMailbox
         }
+        await refreshManagedQuotaIfLicenseStatusStale()
         guard let llmConfiguration = currentDraftLLMConfiguration else {
             throw DraftError.emptyDraft
         }
@@ -170,6 +171,12 @@ extension AppState {
         bodyError = nil
         clearDraftPreview()
         isGeneratingDraft = false
+    }
+
+    private func prepareDraftGeneration() -> Int {
+        let requestGeneration = nextDraftGeneration()
+        resetDraftPreviewForGeneration()
+        return requestGeneration
     }
 
     var currentDraftLLMConfiguration: DraftLLMConfiguration? {

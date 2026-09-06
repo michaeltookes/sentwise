@@ -87,6 +87,7 @@ final class ManagedProviderWatcherReauthTests: XCTestCase {
         return ClerkClient(
             frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
             transport: ManagedProviderQueueClerkTransport([
+                managedProviderClerkResponse(#"{"jwt":"status.jwt"}"#, clientToken: "client_W"),
                 managedProviderClerkResponse(#"{"jwt":"draft.jwt"}"#, clientToken: "client_Y"),
                 managedProviderClerkResponse(signInCreatedBody, clientToken: "client_A"),
                 managedProviderClerkResponse(#"{"response":{"id":"sia_1"}}"#, clientToken: "client_B"),

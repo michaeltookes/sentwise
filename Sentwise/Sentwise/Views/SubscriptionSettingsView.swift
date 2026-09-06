@@ -15,7 +15,11 @@ struct SubscriptionSettingsView: View {
     /// Presentation for the plan/trial/renewal rows, recomputed from the latest
     /// status each render (its day math reads "now" at render time).
     private var model: SubscriptionPaneModel {
-        SubscriptionPaneModel.make(from: appState.managedAccountStatus)
+        SubscriptionPaneModel.make(
+            from: appState.managedAccountStatus,
+            snapshot: appState.effectiveSubscriptionSnapshot,
+            statusIsFresh: appState.managedAccountStatusIsFresh
+        )
     }
 
     var body: some View {

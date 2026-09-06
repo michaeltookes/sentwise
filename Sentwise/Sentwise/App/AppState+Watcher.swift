@@ -89,6 +89,7 @@ extension AppState {
             DiagnosticLog.verbose("Inbox poll skipped; watcher is not active")
             return
         }
+        await refreshManagedQuotaIfLicenseStatusStale()
         guard canWatch else {
             DiagnosticLog.verbose("Inbox poll paused; account or AI provider is unavailable")
             pauseWatching()
@@ -439,7 +440,6 @@ extension AppState {
     static func parsedMessageDate(_ value: String) -> Date? {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }
-
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)

@@ -37,6 +37,7 @@ extension AppState {
         subject: String? = nil,
         shouldCommit: (() -> Bool)? = nil
     ) async throws -> Draft {
+        await refreshManagedQuotaIfLicenseStatusStale()
         guard let llmConfiguration = currentDraftLLMConfiguration else {
             throw DraftError.llmUnavailable
         }

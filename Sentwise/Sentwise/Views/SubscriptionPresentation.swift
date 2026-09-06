@@ -23,18 +23,21 @@ struct SubscriptionPaneModel: Equatable {
 
     static func make(
         from status: ManagedAccountStatus?,
+        snapshot: SubscriptionSnapshot? = nil,
+        statusIsFresh: Bool = true,
         now: Date = Date(),
         calendar: Calendar = .current,
         locale: Locale = .current
     ) -> SubscriptionPaneModel {
-        let trialDays = trialDaysRemaining(endsAt: status?.trial?.endsAt, now: now)
-        let effective = effectivePlanStatus(from: status, trialDays: trialDays)
+        let trustedStatus = statusIsFresh ? status : nil
+        let trialDays = trialDaysRemaining(endsAt: trustedStatus?.trial?.endsAt, now: now)
+        let effective = effectivePlanStatus(from: trustedStatus, snapshot: snapshot, trialDays: trialDays)
 
         switch effective.status {
         case .active:
             return SubscriptionPaneModel(
                 planText: effective.plan.displayName,
-                secondaryText: renewalLine(status?.subscription?.renewsAt, calendar: calendar, locale: locale),
+                secondaryText: renewalLine(effective.renewsAt, calendar: calendar, locale: locale),
                 isProblemState: false
             )
         case .trialing:
@@ -97,16 +100,20 @@ struct SubscriptionPaneModel: Equatable {
     /// block so pre-56c installs still render.
     private static func effectivePlanStatus(
         from status: ManagedAccountStatus?,
+        snapshot: SubscriptionSnapshot?,
         trialDays: Int?
-    ) -> (plan: ManagedSubscription.Plan, status: ManagedSubscription.Status) {
+    ) -> (plan: ManagedSubscription.Plan, status: ManagedSubscription.Status, renewsAt: Date?) {
         if let subscription = status?.subscription {
-            return (subscription.plan, subscription.status)
+            return (subscription.plan, subscription.status, subscription.renewsAt)
         }
         if let trial = status?.trial {
             let active = trial.active ?? ((trialDays ?? 0) > 0)
-            return (.trial, active ? .trialing : .lapsed)
+            return (.trial, active ? .trialing : .lapsed, nil)
         }
-        return (.unknown, .unknown)
+        if let snapshot {
+            return (snapshot.plan, snapshot.status, snapshot.renewsAt)
+        }
+        return (.unknown, .unknown, nil)
     }
 
     private static func trialModel(days: Int?) -> SubscriptionPaneModel {

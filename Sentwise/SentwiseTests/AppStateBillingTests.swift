@@ -346,6 +346,45 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertEqual(appState.managedLicense, .unknown)
     }
 
+    func testStaleOnlineManagedLicenseRefreshesBeforeRequestGating() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = status(plan: .pro, statusValue: .active)
+        let appState = makeSignedInAppState(llm: llm, cacheStore: InMemorySubscriptionCacheStore())
+        defer { appState.cancelScheduledManagedAccountStatusRefresh() }
+        appState.managedAccountStatus = status(plan: .pro, statusValue: .active)
+        appState.managedAccountStatusFreshUntil = Date().addingTimeInterval(-1)
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(
+            plan: .pro,
+            status: .active,
+            capturedAt: Date().addingTimeInterval(-8 * 86_400)
+        )
+
+        XCTAssertEqual(appState.managedLicense, .unknown)
+
+        await appState.refreshManagedQuotaIfLicenseStatusStale()
+
+        XCTAssertEqual(llm.fetchCount, 1)
+        XCTAssertTrue(appState.managedAccountStatusIsFresh)
+        XCTAssertEqual(appState.managedLicense, .entitled)
+    }
+
+    func testScheduledManagedStatusRefreshRunsWhenFreshnessIsNearExpiry() async throws {
+        let llm = StatusLLM()
+        llm.statusToReturn = status(plan: .pro, statusValue: .active)
+        let appState = makeSignedInAppState(llm: llm, cacheStore: InMemorySubscriptionCacheStore())
+        defer { appState.cancelScheduledManagedAccountStatusRefresh() }
+        appState.managedAccountStatusFreshUntil = Date().addingTimeInterval(0.01)
+
+        appState.scheduleManagedAccountStatusRefreshBeforeExpiry()
+
+        for _ in 0..<100 where llm.fetchCount == 0 {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTAssertEqual(llm.fetchCount, 1)
+        XCTAssertTrue(appState.managedAccountStatusIsFresh)
+        XCTAssertEqual(appState.managedLicense, .entitled)
+    }
+
     func testInitialWatchStartResumesAfterManagedLicenseRefresh() async {
         let llm = StatusLLM()
         llm.statusToReturn = status(plan: .pro, statusValue: .active)

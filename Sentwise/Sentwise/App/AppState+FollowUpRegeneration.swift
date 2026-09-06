@@ -11,6 +11,7 @@ extension AppState {
             approvalError = Self.draftMessage(for: DraftError.sourceMessageUnavailable)
             return
         }
+        await refreshManagedQuotaIfLicenseStatusStale()
         guard let llmConfiguration = currentDraftLLMConfiguration else {
             approvalError = Self.draftMessage(for: DraftError.llmUnavailable)
             return

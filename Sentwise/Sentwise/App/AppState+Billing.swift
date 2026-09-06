@@ -3,6 +3,7 @@ import Foundation
 
 private let paidManagedSubscriptionPlans: Set<ManagedSubscription.Plan> = [.starter, .pro, .unlimited, .team]
 private let managedAccountStatusFreshDuration = SubscriptionLicenseEvaluator.defaultGrace
+private let managedAccountStatusRefreshLeadTime: TimeInterval = 60 * 60
 
 private typealias ManagedSubscriptionBillingState = (
     plan: ManagedSubscription.Plan,
@@ -207,6 +208,16 @@ extension AppState {
         llmProviderKind != .managed || managedLicenseAllowsLLMRequests
     }
 
+    func refreshManagedQuotaIfLicenseStatusStale() async {
+        guard llmProviderKind == .managed,
+              isManagedSignedIn,
+              isOnline,
+              !managedAccountStatusIsFresh else {
+            return
+        }
+        await refreshManagedQuota()
+    }
+
     func waitToStartWatchingAfterManagedLicenseRefreshIfNeeded() {
         guard watchStatus == .idle,
               llmProviderKind == .managed,
@@ -217,6 +228,30 @@ extension AppState {
             return
         }
         resumeWatchingAfterManagedReauth = true
+    }
+
+    func scheduleManagedAccountStatusRefreshBeforeExpiry() {
+        cancelScheduledManagedAccountStatusRefresh()
+        guard isManagedSignedIn,
+              isOnline,
+              let freshUntil = managedAccountStatusFreshUntil else {
+            return
+        }
+        let refreshAt = freshUntil.addingTimeInterval(-managedAccountStatusRefreshLeadTime)
+        let delay = max(0, refreshAt.timeIntervalSinceNow)
+        managedAccountStatusRefreshTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            } catch {
+                return
+            }
+            await self?.refreshManagedQuotaIfScheduled(freshUntil: freshUntil)
+        }
+    }
+
+    func cancelScheduledManagedAccountStatusRefresh() {
+        managedAccountStatusRefreshTask?.cancel()
+        managedAccountStatusRefreshTask = nil
     }
 
     /// Persists the last-known subscription/trial from a successful `/v1/me` so
@@ -250,6 +285,16 @@ extension AppState {
             return subscriptionStatus
         }
         return derivedTrialSubscriptionState(from: status)?.status
+    }
+
+    private func refreshManagedQuotaIfScheduled(freshUntil: Date) async {
+        guard managedAccountStatusFreshUntil == freshUntil,
+              isManagedSignedIn,
+              isOnline else {
+            return
+        }
+        managedAccountStatusRefreshTask = nil
+        await refreshManagedQuota()
     }
 
     private func derivedTrialSubscriptionSnapshot(from status: ManagedAccountStatus) -> SubscriptionSnapshot? {

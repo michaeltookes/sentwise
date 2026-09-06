@@ -8,7 +8,6 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "AppStat
 /// Central application state container and single source of truth for observed app state.
 @MainActor
 final class AppState: ObservableObject {
-
     // MARK: - Watch State
 
     /// Current watcher status. Drives the menu-bar status line.
@@ -112,6 +111,7 @@ final class AppState: ObservableObject {
     @Published var managedAccountStatus: ManagedAccountStatus?
     /// Instant until which the latest `/v1/me` response may be trusted as live.
     @Published var managedAccountStatusFreshUntil: Date?
+    var managedAccountStatusRefreshTask: Task<Void, Never>?
     /// True briefly after a successful account deletion so the signed-out
     /// Subscription pane can confirm it (item 73). Cleared on the next sign-in.
     @Published var didDeleteManagedAccount: Bool = false
