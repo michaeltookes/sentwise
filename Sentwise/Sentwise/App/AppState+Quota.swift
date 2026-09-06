@@ -97,10 +97,10 @@ extension AppState {
 
     /// Refreshes the quota from `/v1/me`. Called at launch, on sign-in, and when
     /// the AI Provider settings pane opens. No-ops (silently) when there is no
-    /// signed-in managed account, or on any transient error — the display simply
-    /// keeps its last known value. In Prowl hunt mode the LLM service returns the
-    /// deterministic stub with zero network.
-    func refreshManagedQuota() async {
+    /// signed-in managed account. Transient errors keep the last known display
+    /// value and schedule a bounded retry. In Prowl hunt mode the LLM service
+    /// returns the deterministic stub with zero network.
+    func refreshManagedQuota(scheduleRetryOnFailure: Bool = true) async {
         guard ProwlHuntRuntime.current.isEnabled || isManagedSignedIn else {
             return
         }
@@ -129,16 +129,21 @@ extension AppState {
                 // Cache the last-known subscription for offline license grace (56c).
                 recordSubscriptionSnapshot(from: status)
                 resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
+                retryDeferredTranscriptFolderDeliveriesAfterManagedLicenseRefreshIfNeeded()
             } else {
                 managedAccountStatusIsFresh = false
-                cancelScheduledManagedAccountStatusRefresh()
+                if scheduleRetryOnFailure {
+                    scheduleManagedAccountStatusRefreshRetryAfterFailure()
+                }
             }
         } catch {
             managedAccountStatusIsFresh = false
-            cancelScheduledManagedAccountStatusRefresh()
             // Metering is best-effort surfacing, never a blocking failure; a
             // managed 401 is reconciled by the normal draft/test paths.
-            await reconcileManagedAccountState(after: error, provider: .managed)
+            let signedOut = await reconcileManagedAccountState(after: error, provider: .managed)
+            if !signedOut, scheduleRetryOnFailure {
+                scheduleManagedAccountStatusRefreshRetryAfterFailure()
+            }
         }
     }
 

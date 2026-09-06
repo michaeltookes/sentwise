@@ -83,6 +83,13 @@ extension AppState {
         transcriptFolderSource = nil
     }
 
+    /// After a managed-account refresh restores entitlement, retry any transcript
+    /// delivery that was deferred while the license status was unavailable.
+    func retryDeferredTranscriptFolderDeliveriesAfterManagedLicenseRefreshIfNeeded() {
+        guard llmProviderKind == .managed, canCreateFollowUp else { return }
+        startTranscriptFolderWatchingIfEnabled()
+    }
+
     /// Enables/disables the watched folder from the UI, persisting and (re)starting
     /// or stopping the watcher to match.
     func setTranscriptWatchedFolderEnabled(_ enabled: Bool) {

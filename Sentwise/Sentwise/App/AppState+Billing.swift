@@ -4,6 +4,13 @@ import Foundation
 private let paidManagedSubscriptionPlans: Set<ManagedSubscription.Plan> = [.starter, .pro, .unlimited, .team]
 private let managedAccountStatusFreshDuration = SubscriptionLicenseEvaluator.defaultGrace
 private let managedAccountStatusRefreshLeadTime: TimeInterval = 60 * 60
+private let managedAccountStatusRefreshRetryDelays: [UInt64] = [
+    60_000_000_000,
+    300_000_000_000,
+    900_000_000_000,
+    1_800_000_000_000,
+    3_600_000_000_000
+]
 
 private typealias ManagedSubscriptionBillingState = (
     plan: ManagedSubscription.Plan,
@@ -268,6 +275,25 @@ extension AppState {
         }
     }
 
+    func scheduleManagedAccountStatusRefreshRetryAfterFailure(delays: [UInt64]? = nil) {
+        cancelScheduledManagedAccountStatusRefresh()
+        let retryDelays = delays ?? managedAccountStatusRefreshRetryDelays
+        guard isManagedSignedIn, isOnline, !retryDelays.isEmpty else { return }
+        managedAccountStatusRefreshTask = Task { [weak self] in
+            for delay in retryDelays {
+                do {
+                    try await Task.sleep(nanoseconds: delay)
+                } catch {
+                    return
+                }
+                guard let self else { return }
+                let shouldContinue = await self.refreshManagedQuotaForRetry()
+                if !shouldContinue { return }
+            }
+            await self?.finishManagedAccountStatusRefreshRetry()
+        }
+    }
+
     func cancelScheduledManagedAccountStatusRefresh() {
         managedAccountStatusRefreshTask?.cancel()
         managedAccountStatusRefreshTask = nil
@@ -314,6 +340,21 @@ extension AppState {
         }
         managedAccountStatusRefreshTask = nil
         await refreshManagedQuota()
+    }
+
+    private func refreshManagedQuotaForRetry() async -> Bool {
+        guard isManagedSignedIn, isOnline, !managedAccountStatusIsFresh else {
+            managedAccountStatusRefreshTask = nil
+            return false
+        }
+        await refreshManagedQuota(scheduleRetryOnFailure: false)
+        return isManagedSignedIn && isOnline && !managedAccountStatusIsFresh
+    }
+
+    private func finishManagedAccountStatusRefreshRetry() {
+        if !managedAccountStatusIsFresh {
+            managedAccountStatusRefreshTask = nil
+        }
     }
 
     private var currentTrialFreshnessDeadline: Date? {
