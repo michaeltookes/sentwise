@@ -152,6 +152,24 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertTrue(appState.canManageBilling)
     }
 
+    func testCachedPaidSubscriptionBlocksNewCheckoutWhenLiveStatusUnavailable() {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm, cacheStore: InMemorySubscriptionCacheStore())
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(
+            plan: .pro,
+            status: .active,
+            manageBillingURL: "https://billing.example/portal",
+            capturedAt: Date()
+        )
+
+        XCTAssertTrue(appState.hasManageablePaidSubscription)
+        XCTAssertFalse(appState.shouldOfferSubscribe)
+
+        appState.presentBillingCheckout()
+        XCTAssertNil(appState.billingCheckout)
+        XCTAssertTrue(appState.canManageBilling)
+    }
+
     func testCheckoutModelThreadsClerkIDAndEmail() {
         let llm = StatusLLM()
         let appState = makeSignedInAppState(llm: llm)
@@ -268,6 +286,29 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertFalse(appState.managedAccountStatusIsFresh)
         XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .active)
         XCTAssertEqual(appState.managedLicense, .unknown)
+    }
+
+    func testManagedLLMRequestsRequireEntitledOrGraceLicense() {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm, cacheStore: InMemorySubscriptionCacheStore())
+        XCTAssertTrue(appState.isLLMConnected)
+
+        appState.managedAccountStatus = status(plan: .pro, statusValue: .pastDue)
+        appState.managedAccountStatusIsFresh = true
+
+        XCTAssertEqual(appState.managedLicense, .notEntitled)
+        XCTAssertFalse(appState.managedLicenseAllowsLLMRequests)
+        XCTAssertNil(appState.currentDraftLLMConfiguration)
+
+        appState.managedAccountStatus = nil
+        appState.managedAccountStatusIsFresh = false
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(plan: .pro, status: .active, capturedAt: Date())
+
+        guard case .grace = appState.managedLicense else {
+            return XCTFail("expected cached active subscription to allow grace")
+        }
+        XCTAssertTrue(appState.managedLicenseAllowsLLMRequests)
+        XCTAssertNotNil(appState.currentDraftLLMConfiguration)
     }
 
     func testOfflineFallsBackToCachedSnapshotWithinGrace() async {

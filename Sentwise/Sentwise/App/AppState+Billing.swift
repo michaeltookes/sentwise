@@ -3,6 +3,11 @@ import Foundation
 
 private let paidManagedSubscriptionPlans: Set<ManagedSubscription.Plan> = [.starter, .pro, .unlimited, .team]
 
+private typealias ManagedSubscriptionBillingState = (
+    plan: ManagedSubscription.Plan,
+    status: ManagedSubscription.Status
+)
+
 /// A request to present the Paddle overlay-checkout sheet (backlog item 56c).
 /// `plan == nil` opens the sheet on the plan picker; a non-nil plan jumps
 /// straight to that tier's checkout. `Identifiable` so it drives `.sheet(item:)`.
@@ -124,18 +129,18 @@ extension AppState {
     /// pane shows "Subscribe/Upgrade" (not on a paid plan) vs. "Manage billing"
     /// (on a paid plan).
     var isOnActivePaidPlan: Bool {
-        guard let sub = managedAccountStatus?.subscription else { return false }
-        return sub.status == .active && paidManagedSubscriptionPlans.contains(sub.plan)
+        guard let state = currentSubscriptionBillingState else { return false }
+        return state.status == .active && paidManagedSubscriptionPlans.contains(state.plan)
     }
 
     /// Whether there is an existing paid subscription that should be managed through
     /// Paddle's portal instead of starting a new recurring checkout.
     var hasManageablePaidSubscription: Bool {
-        guard let sub = managedAccountStatus?.subscription,
-              paidManagedSubscriptionPlans.contains(sub.plan) else {
+        guard let state = currentSubscriptionBillingState,
+              paidManagedSubscriptionPlans.contains(state.plan) else {
             return false
         }
-        return sub.status == .active || sub.status == .pastDue
+        return state.status == .active || state.status == .pastDue
     }
 
     /// Whether to offer the subscribe/upgrade CTA. Offered whenever the account is
@@ -173,6 +178,22 @@ extension AppState {
         )
     }
 
+    /// Whether the active managed license permits LLM-backed app work. Grace is
+    /// allowed; problem/unknown states are blocked before a managed request is made.
+    var managedLicenseAllowsLLMRequests: Bool {
+        guard !ProwlHuntRuntime.current.isEnabled else { return true }
+        switch managedLicense {
+        case .entitled, .grace:
+            return true
+        case .notEntitled, .unknown:
+            return false
+        }
+    }
+
+    var currentLLMProviderAllowsRequests: Bool {
+        llmProviderKind != .managed || managedLicenseAllowsLLMRequests
+    }
+
     /// Persists the last-known subscription from a successful `/v1/me` so offline
     /// grace has something to fall back on. No-op when the status carries no
     /// subscription block (older Worker).
@@ -187,5 +208,13 @@ extension AppState {
     /// re-sign-in on the same account can still read its last-known entitlement.
     func clearCachedSubscriptionSnapshot() {
         cachedSubscriptionSnapshot = nil
+    }
+
+    private var currentSubscriptionBillingState: ManagedSubscriptionBillingState? {
+        if let subscription = managedAccountStatus?.subscription {
+            return (subscription.plan, subscription.status)
+        }
+        guard let snapshot = effectiveSubscriptionSnapshot else { return nil }
+        return (snapshot.plan, snapshot.status)
     }
 }

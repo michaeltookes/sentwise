@@ -5,9 +5,9 @@ import Foundation
 /// stays within the file/type length limits.
 extension AppState {
 
-    /// Whether a draft can be generated (mail + AI connected).
+    /// Whether a draft can be generated (mail + a usable AI provider).
     var canGenerateDraft: Bool {
-        isLLMConnected && mailCredentials.isComplete
+        isLLMConnected && currentLLMProviderAllowsRequests && mailCredentials.isComplete
     }
 
     /// Fetches a message's body and generates a reply draft in the user's voice.
@@ -173,7 +173,7 @@ extension AppState {
     }
 
     var currentDraftLLMConfiguration: DraftLLMConfiguration? {
-        guard isLLMConnected else { return nil }
+        guard isLLMConnected, currentLLMProviderAllowsRequests else { return nil }
         let key = Self.storedLLMAPIKey(
             provider: llmProviderKind,
             baseURL: currentLLMBaseURL,

@@ -8,9 +8,9 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "InboxWa
 /// owns the timer and sleep/wake handling; this file owns *what a poll does*.
 extension AppState {
 
-    /// Whether watching can run: an account and an LLM must both be connected.
+    /// Whether watching can run: mail and a usable LLM provider must both be ready.
     var canWatch: Bool {
-        isAccountConnected && isLLMConnected
+        isAccountConnected && isLLMConnected && currentLLMProviderAllowsRequests
     }
 
     /// Starts watching if ready — used at launch to auto-resume.

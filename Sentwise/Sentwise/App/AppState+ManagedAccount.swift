@@ -352,9 +352,10 @@ extension AppState {
 
     /// After a successful re-sign-in, restart a watcher that a managed 401 paused.
     func resumeInboxWatchingAfterManagedReauthenticationIfNeeded() {
-        guard resumeWatchingAfterManagedReauth else { return }
+        guard resumeWatchingAfterManagedReauth,
+              watchStatus == .paused,
+              canWatch else { return }
         resumeWatchingAfterManagedReauth = false
-        guard watchStatus == .paused, canWatch else { return }
         startWatching()
     }
 

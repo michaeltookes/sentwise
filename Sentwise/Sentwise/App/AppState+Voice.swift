@@ -8,9 +8,9 @@ extension AppState {
     /// How many recent Sent messages to sample when learning.
     static let voiceSampleLimit = 12
 
-    /// Whether the prerequisites for learning are met (mail + AI connected).
+    /// Whether the prerequisites for learning are met (mail + a usable AI provider).
     var canLearnVoice: Bool {
-        isLLMConnected && mailCredentials.isComplete
+        isLLMConnected && currentLLMProviderAllowsRequests && mailCredentials.isComplete
     }
 
     /// Samples the Sent folder and derives a voice profile via the LLM.
@@ -106,7 +106,7 @@ extension AppState {
     }
 
     private var currentVoiceLLMConfiguration: VoiceLLMConfiguration? {
-        guard isLLMConnected else { return nil }
+        guard isLLMConnected, currentLLMProviderAllowsRequests else { return nil }
         let key = Self.storedLLMAPIKey(
             provider: llmProviderKind,
             baseURL: currentLLMBaseURL,

@@ -126,6 +126,7 @@ extension AppState {
                 }
                 // Cache the last-known subscription for offline license grace (56c).
                 recordSubscriptionSnapshot(from: status)
+                resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
             } else {
                 managedAccountStatusIsFresh = false
             }

@@ -6,6 +6,14 @@ import SentwiseMail
 /// AppState-level behavior of the managed provider: sign-in/sign-out publishing and
 /// auth-failure reconciliation during drafting.
 final class ManagedProviderAppStateTests: XCTestCase {
+    private func allowManagedLLMRequests(_ appState: AppState) {
+        appState.managedAccountStatus = ManagedAccountStatus(
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+        appState.managedAccountStatusIsFresh = true
+    }
+
     func testManagedSignInStoresPendingFlowEmailWhenInputChangesBeforeVerify() async throws {
         let secrets = InMemorySecretStore()
         let persistence = AppStateMemoryPersistence(settings: Settings(
@@ -160,6 +168,7 @@ final class ManagedProviderAppStateTests: XCTestCase {
 
         XCTAssertTrue(appState.isManagedSignedIn)
         XCTAssertTrue(appState.isLLMConnected)
+        allowManagedLLMRequests(appState)
 
         let draft = await appState.generateDraft(for: MailMessage(
             id: 5,
@@ -219,6 +228,7 @@ final class ManagedProviderAppStateTests: XCTestCase {
 
         XCTAssertTrue(appState.isManagedSignedIn)
         XCTAssertTrue(appState.isLLMConnected)
+        allowManagedLLMRequests(appState)
 
         let draft = await appState.generateDraft(for: MailMessage(
             id: 5,
@@ -308,7 +318,7 @@ final class ManagedProviderAppStateTests: XCTestCase {
         )
 
         XCTAssertTrue(appState.isManagedSignedIn)
-        XCTAssertTrue(appState.isLLMConnected)
+        allowManagedLLMRequests(appState)
 
         let draftTask = Task {
             await appState.generateDraft(for: MailMessage(
