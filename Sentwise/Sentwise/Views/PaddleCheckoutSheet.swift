@@ -297,7 +297,9 @@ private struct PaddleCheckoutWebView: NSViewRepresentable {
             // Diagnostic (56c): surface Paddle's raw event + full error payload,
             // which the generic UI message otherwise swallows. `.public` so it is
             // readable in Console/`log stream`; errors at .error, the rest at .debug.
-            if name == "checkout.error" || name == "paddle.failed" {
+            if name == "paddle.errorPayload" {
+                checkoutLogger.error("Paddle checkout payload: \(detail ?? "<no detail>", privacy: .public)")
+            } else if name == "checkout.error" || name == "paddle.failed" {
                 checkoutLogger.error("Paddle checkout error: \(detail ?? "<no detail>", privacy: .public)")
             } else {
                 checkoutLogger.debug("Paddle checkout event: \(name, privacy: .public)")

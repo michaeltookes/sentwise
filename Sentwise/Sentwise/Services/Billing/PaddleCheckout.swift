@@ -72,12 +72,55 @@ enum PaddleBridgeEvent: Equatable, Sendable {
             return .completed
         case "checkout.closed":
             return .closed
-        case "paddle.failed", "checkout.error":
-            return .failed(detail?.isEmpty == false
-                ? detail!
-                : "Checkout couldn't be completed. Please try again.")
+        case "paddle.failed":
+            return .failed(nonEmptyMessage(detail) ?? genericCheckoutFailureMessage)
+        case "checkout.error":
+            return .failed(checkoutErrorMessage(from: detail))
         default:
             return .ignored(name)
         }
+    }
+
+    private static let genericCheckoutFailureMessage = "Checkout couldn't be completed. Please try again."
+
+    private static func checkoutErrorMessage(from detail: String?) -> String {
+        guard let message = nonEmptyMessage(detail) else {
+            return genericCheckoutFailureMessage
+        }
+        if let extracted = messageFromSerializedPaddleError(message) {
+            return extracted
+        }
+        if looksLikeSerializedPayload(message) {
+            return genericCheckoutFailureMessage
+        }
+        if message == "[object Object]" {
+            return genericCheckoutFailureMessage
+        }
+        return message
+    }
+
+    private static func messageFromSerializedPaddleError(_ message: String) -> String? {
+        guard let data = message.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        if let error = object["error"] as? [String: Any] {
+            return nonEmptyMessage(error["detail"] as? String)
+                ?? nonEmptyMessage(error["message"] as? String)
+        }
+        return nonEmptyMessage(object["detail"] as? String)
+            ?? nonEmptyMessage(object["message"] as? String)
+    }
+
+    private static func nonEmptyMessage(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private static func looksLikeSerializedPayload(_ message: String) -> Bool {
+        guard let first = message.first else { return false }
+        return first == "{" || first == "["
     }
 }

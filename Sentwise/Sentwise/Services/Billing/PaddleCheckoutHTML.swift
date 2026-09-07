@@ -79,6 +79,29 @@ enum PaddleCheckoutHTML {
           if (el) { el.textContent = text; }
         }
 
+        function checkoutErrorDetail(data) {
+          var detail = "";
+          if (data && data.error) {
+            detail = checkoutErrorText(data.error.detail) || checkoutErrorText(data.error.message);
+          }
+          if (!detail && data) {
+            detail = checkoutErrorText(data.detail) || checkoutErrorText(data.message);
+          }
+          return detail || "Checkout couldn't be completed. Please try again.";
+        }
+
+        function checkoutErrorText(value) {
+          return typeof value === "string" ? value.trim() : "";
+        }
+
+        function checkoutErrorDiagnostic(data) {
+          try { return JSON.stringify(data); }
+          catch (e) {
+            return "Could not serialize checkout.error payload: "
+              + (e && e.message ? e.message : String(e));
+          }
+        }
+
         // Swift calls this with the Paddle.Checkout.open argument object.
         window.sentwiseOpenCheckout = function (args) {
           __pendingArgs = args;
@@ -118,15 +141,9 @@ enum PaddleCheckoutHTML {
                 if (name === "checkout.completed") { post("checkout.completed"); }
                 else if (name === "checkout.closed") { post("checkout.closed"); }
                 else if (name === "checkout.error") {
-                  // Paddle nests the reason unpredictably; serialize the whole event
-                  // object so nothing is lost, falling back to the known fields.
-                  var detail = "";
-                  try { detail = JSON.stringify(data); }
-                  catch (e) {
-                    detail = (data && data.error && (data.error.detail || data.error.message))
-                      || String(e);
-                  }
-                  post("checkout.error", detail);
+                  var diagnostic = checkoutErrorDiagnostic(data);
+                  if (diagnostic) { post("paddle.errorPayload", diagnostic); }
+                  post("checkout.error", checkoutErrorDetail(data));
                 }
               }
             });

@@ -63,6 +63,22 @@ final class PaddleCheckoutTests: XCTestCase {
         }
     }
 
+    func testBridgeCheckoutErrorExtractsMessageFromSerializedPayload() {
+        let payload = #"""
+        {"name":"checkout.error","error":{"detail":"card declined","message":"declined"},"customer":{"email":"marcus@example.com"}}
+        """#
+        XCTAssertEqual(PaddleBridgeEvent.make(name: "checkout.error", detail: payload), .failed("card declined"))
+    }
+
+    func testBridgeCheckoutErrorHidesSerializedPayloadWithoutMessage() {
+        let payload = #"{"name":"checkout.error","customer":{"email":"marcus@example.com"}}"#
+        guard case .failed(let message) = PaddleBridgeEvent.make(name: "checkout.error", detail: payload) else {
+            return XCTFail("expected .failed")
+        }
+        XCTAssertEqual(message, "Checkout couldn't be completed. Please try again.")
+        XCTAssertFalse(message.contains("marcus@example.com"))
+    }
+
     func testBridgeErrorWithoutDetailStillHasUserSafeMessage() {
         guard case .failed(let message) = PaddleBridgeEvent.make(name: "paddle.failed") else {
             return XCTFail("expected .failed")
@@ -262,5 +278,7 @@ final class PaddleCheckoutTests: XCTestCase {
         XCTAssertTrue(html.contains("messageHandlers.sentwise"))
         // The overlay-open signal the app now relies on to mark "presenting".
         XCTAssertTrue(html.contains("paddle.opened"))
+        XCTAssertTrue(html.contains("paddle.errorPayload"))
+        XCTAssertTrue(html.contains(#"post("checkout.error", checkoutErrorDetail(data));"#))
     }
 }
