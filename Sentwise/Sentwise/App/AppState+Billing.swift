@@ -67,14 +67,22 @@ extension AppState {
         billingCheckout = BillingCheckoutRequest(plan: plan)
     }
 
-    /// Builds the checkout model for a chosen tier, threading in the signed-in
-    /// account's Clerk user id and email.
+    /// Builds the checkout model for a chosen tier (item 56c). Injects the authed
+    /// transaction-minting call: the model calls this to hit
+    /// `POST /v1/paddle/checkout` under the account session (the same authed path
+    /// as `/v1/me`), then opens the overlay with the returned transaction id. The
+    /// Worker binds the account to the transaction with a signed `custom_data`, so
+    /// the purchase is attributed reliably — no client-side `customData`/`clerkUserId`.
     func makeCheckoutModel(for plan: PaddlePlan) -> PaddleCheckoutModel {
-        PaddleCheckoutModel(
+        // Capture the Sendable `LLMProviding` (not `self`) so the mint closure is
+        // Sendable and runs off the main actor for the network call.
+        let llm = self.llm
+        return PaddleCheckoutModel(
             config: .active,
             plan: plan,
-            clerkUserID: managedClerkUserID,
-            email: managedAccountDisplayEmail
+            createTransaction: { priceID in
+                try await llm.createPaddleCheckoutTransaction(priceID: priceID)
+            }
         )
     }
 
