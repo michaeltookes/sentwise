@@ -15,6 +15,10 @@ final class AppStateBillingTests: XCTestCase {
         var statusesToReturn: [ManagedAccountStatus?] = []
         var fetchError: Error?
         private(set) var fetchCount = 0
+        /// Checkout-transaction wiring (item 56c).
+        var checkoutTransactionToReturn = PaddleCheckoutTransaction(transactionID: "txn_default")
+        var checkoutError: Error?
+        private(set) var checkoutPriceIDs: [String] = []
 
         func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
         func complete(_ request: LLMRequest, provider: LLMProviderKind, apiKey: String, baseURL: String?) async throws -> LLMResponse {
@@ -30,6 +34,11 @@ final class AppStateBillingTests: XCTestCase {
         }
         func fetchManagedQuota() async throws -> ManagedQuota? { statusToReturn?.quota }
         func deleteManagedAccount() async throws {}
+        func createPaddleCheckoutTransaction(priceID: String) async throws -> PaddleCheckoutTransaction {
+            checkoutPriceIDs.append(priceID)
+            if let checkoutError { throw checkoutError }
+            return checkoutTransactionToReturn
+        }
     }
 
     // MARK: - Fixture
@@ -179,13 +188,15 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertNil(appState.manageBillingURL)
     }
 
-    func testCheckoutModelThreadsClerkIDAndEmail() {
+    func testCheckoutModelRoutesTierPriceAndCanOpen() {
         let llm = StatusLLM()
         let appState = makeSignedInAppState(llm: llm)
         appState.managedAccountStatus = status(userID: "user_abc", plan: .trial, statusValue: .trialing)
         let model = appState.makeCheckoutModel(for: .starter)
-        XCTAssertEqual(model.clerkUserID, "user_abc")
-        XCTAssertEqual(model.email, "marcus@example.com")
+        // The Clerk id + email are no longer threaded client-side (item 56c): the
+        // server-minted transaction carries the signed binding. The model just
+        // routes the price and can open via the injected authed mint closure.
+        XCTAssertTrue(model.canOpenCheckout)
         XCTAssertEqual(model.priceID, PaddleConfig.active.priceID(for: .starter))
     }
 
@@ -266,6 +277,50 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertEqual(llm.fetchCount, 3)
         XCTAssertTrue(appState.isOnActivePaidPlan)
         XCTAssertNil(appState.billingReconciliationTask)
+    }
+
+    func testReconcileAfterCheckoutPollsWithoutDismissingTheSheet() async {
+        let llm = StatusLLM()
+        llm.statusesToReturn = [
+            status(plan: .trial, statusValue: .trialing),
+            status(plan: .starter, statusValue: .active)
+        ]
+        let appState = makeSignedInAppState(llm: llm)
+        appState.billingCheckout = BillingCheckoutRequest(plan: .starter)
+
+        await appState.reconcileSubscriptionAfterCheckout(refreshRetryDelays: [0])
+
+        XCTAssertNotNil(appState.billingCheckout, "reconcile must NOT dismiss — the sheet shows the success state")
+        XCTAssertEqual(llm.fetchCount, 2)
+        XCTAssertTrue(appState.isOnActivePaidPlan)
+    }
+
+    // MARK: - makeCheckoutModel wiring
+
+    func testMakeCheckoutModelMintsTransactionThroughAuthedLLM() async {
+        let llm = StatusLLM()
+        llm.checkoutTransactionToReturn = PaddleCheckoutTransaction(transactionID: "txn_from_worker")
+        let appState = makeSignedInAppState(llm: llm)
+
+        let model = appState.makeCheckoutModel(for: .pro)
+        XCTAssertTrue(model.canOpenCheckout)
+
+        await model.prepare()
+        model.pageDidLoad()
+
+        XCTAssertEqual(llm.checkoutPriceIDs, [PaddleConfig.active.priceID(for: .pro)])
+        XCTAssertEqual(model.openArgumentJSON, #"{"transactionId":"txn_from_worker"}"#)
+    }
+
+    func testMakeCheckoutModelSurfacesWorkerErrorAsFailure() async {
+        let llm = StatusLLM()
+        llm.checkoutError = LLMError.managedCheckoutFailed("Checkout is not configured.")
+        let appState = makeSignedInAppState(llm: llm)
+
+        let model = appState.makeCheckoutModel(for: .pro)
+        await model.prepare()
+
+        XCTAssertEqual(model.phase, .failed("Checkout is not configured."))
     }
 
     // MARK: - Offline license grace

@@ -139,6 +139,27 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertFalse(model.showsOwnKeyFallback)
     }
 
+    func testActivePaidTiersEachShowTheirNameAndRenewal() {
+        // Item 56c: after a purchase the pane must read cleanly for every
+        // purchasable tier (starter/pro/unlimited), naming the tier + renewal.
+        let cases: [(ManagedSubscription.Plan, String)] = [
+            (.starter, "Starter"),
+            (.pro, "Pro"),
+            (.unlimited, "Unlimited")
+        ]
+        for (plan, expectedName) in cases {
+            let sub = ManagedSubscription(
+                plan: plan,
+                status: .active,
+                renewsAt: ManagedQuotaDate.date(from: "2026-09-12T00:00:00Z")
+            )
+            let model = SubscriptionPaneModel.make(from: status(subscription: sub))
+            XCTAssertEqual(model.planText, expectedName)
+            XCTAssertEqual(model.secondaryText?.hasPrefix("Renews"), true, "expected renewal line for \(expectedName)")
+            XCTAssertFalse(model.isProblemState, "\(expectedName) active must not be a problem state")
+        }
+    }
+
     func testTrialingShowsDaysLeft() {
         let now = ManagedQuotaDate.date(from: "2026-08-10T00:00:00Z")!
         let trial = ManagedTrial(endsAt: ManagedQuotaDate.date(from: "2026-08-15T00:00:00Z"), active: true)
