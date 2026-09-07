@@ -124,4 +124,19 @@ struct LLMService: LLMProviding {
         )
         try await client.deleteAccount()
     }
+
+    /// Mints a server-side Paddle checkout transaction via
+    /// `POST /v1/paddle/checkout` (item 56c). In Prowl hunt mode returns a
+    /// deterministic stub transaction with zero network so hunts stay offline-safe
+    /// (the overlay is never actually opened in a hunt).
+    func createPaddleCheckoutTransaction(priceID: String) async throws -> PaddleCheckoutTransaction {
+        if isProwlHuntMode {
+            return PaddleCheckoutTransaction(transactionID: "txn_hunt_stub")
+        }
+        let client = ManagedInferenceClient(
+            sessionProvider: managedSessionProvider,
+            transport: transport
+        )
+        return try await client.createCheckoutTransaction(priceID: priceID)
+    }
 }

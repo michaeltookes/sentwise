@@ -260,6 +260,12 @@ enum LLMError: Error, Equatable, Sendable {
     /// account_deletion_failed`). Carries the server's plain, user-facing
     /// message; the account is kept and the user can retry.
     case managedAccountDeletionFailed(String)
+    /// Minting a server-side Paddle checkout transaction via
+    /// `POST /v1/paddle/checkout` failed (backlog item 56c). Carries the
+    /// Worker's plain, user-facing message (already scrubbed of upstream detail),
+    /// e.g. an unsupported price, an ineligible account, or checkout not
+    /// configured. Surfaced in the checkout sheet as a `.failed` phase.
+    case managedCheckoutFailed(String)
 }
 
 /// A single-provider adapter: turns an `LLMRequest` into a completion by calling
@@ -306,6 +312,16 @@ protocol LLMProviding: Sendable {
     /// 73). Throws `LLMError` on failure. Providers without a managed-account
     /// concept get the default, which reports "not signed in".
     func deleteManagedAccount() async throws
+
+    /// Mints a server-side Paddle checkout transaction for `priceID` via the
+    /// authenticated `POST /v1/paddle/checkout` (backlog item 56c). The Worker
+    /// binds the signed-in Clerk account to the transaction with a signed
+    /// `custom_data` the Paddle webhook trusts, so the app opens the overlay by
+    /// transaction id alone and the purchase is attributed reliably. Throws
+    /// `LLMError` (`.managedNotSignedIn`, `.managedCheckoutFailed`, …) on failure.
+    /// Providers without a managed-account concept get the default, which reports
+    /// "not signed in".
+    func createPaddleCheckoutTransaction(priceID: String) async throws -> PaddleCheckoutTransaction
 }
 
 extension LLMProviding {
@@ -322,6 +338,12 @@ extension LLMProviding {
     /// Default: no managed account to delete. Only `LLMService` overrides this to
     /// hit `DELETE /v1/me`.
     func deleteManagedAccount() async throws {
+        throw LLMError.managedNotSignedIn
+    }
+
+    /// Default: no managed checkout. Only `LLMService` overrides this to hit
+    /// `POST /v1/paddle/checkout` under the account session.
+    func createPaddleCheckoutTransaction(priceID: String) async throws -> PaddleCheckoutTransaction {
         throw LLMError.managedNotSignedIn
     }
 

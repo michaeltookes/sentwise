@@ -85,9 +85,11 @@ enum ResilienceClassifier {
             // when the server supplies it (item 56b).
             return .transient
         case .invalidResponse, .invalidBaseURL, .managedQuotaExceeded, .managedRequestTooLarge,
-             .managedAccountDeletionFailed:
-            // Quota-exhausted (until the window resets), too-large requests, and a
-            // failed account deletion (item 73) won't succeed on a blind retry.
+             .managedAccountDeletionFailed, .managedCheckoutFailed:
+            // Quota-exhausted (until the window resets), too-large requests, a
+            // failed account deletion (item 73), and a refused checkout (item 56c —
+            // bad price, ineligible account, checkout unavailable) won't succeed on
+            // a blind retry.
             return .permanent
         }
     }
