@@ -185,6 +185,38 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         XCTAssertEqual(store.saved[stableKey]?.manageBillingURL, "https://billing.example.com/session")
     }
 
+    func testUnknownSubscriptionStatusMigratesPaidSnapshotAcrossAccountKeyBackfill() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .unknown)
+        )
+        let store = InMemorySubscriptionCacheStore()
+        let appState = makeSignedInAppState(llm: llm, cacheStore: store)
+        appState.managedAccountID = "clerk-session:sess_X"
+        let sessionKey = appState.currentManagedUsageAccountKey
+        store.save(
+            SubscriptionSnapshot(
+                plan: .pro,
+                status: .active,
+                manageBillingURL: "https://billing.example.com/session",
+                capturedAt: Date().addingTimeInterval(-86_400)
+            ),
+            accountKey: sessionKey
+        )
+
+        await appState.refreshManagedQuota()
+
+        let stableKey = appState.currentManagedUsageAccountKey
+        XCTAssertNotEqual(sessionKey, stableKey)
+        XCTAssertEqual(appState.managedAccountID, "clerk-user:user_marcus")
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.plan, .pro)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.status, .active)
+        XCTAssertEqual(store.saved[stableKey]?.plan, .pro)
+        XCTAssertEqual(store.saved[stableKey]?.status, .active)
+    }
+
     func testUnknownSubscriptionStatusPreservesCachedEntitlement() async {
         let llm = StatusLLM()
         llm.statusToReturn = ManagedAccountStatus(

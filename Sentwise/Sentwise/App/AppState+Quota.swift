@@ -174,11 +174,12 @@ extension AppState {
                 managedAccountStatus = status
                 markManagedAccountStatusFresh(from: status)
                 scheduleManagedAccountStatusRefreshAfterSuccess(scheduleRetryIfStale: scheduleRetryOnFailure)
-                let resolvedAccountKey = backfillManagedAccountIDIfNeeded(
-                    from: status,
-                    replacing: accountKey
+                let resolvedAccountKey = backfillManagedAccountIDIfNeeded(from: status, replacing: accountKey)
+                preserveSubscriptionSnapshot(
+                    snapshotBeforeBackfill: snapshotBeforeAccountKeyBackfill,
+                    originalAccountKey: accountKey,
+                    resolvedAccountKey: resolvedAccountKey
                 )
-                cachedSubscriptionSnapshot = cachedSubscriptionSnapshot ?? snapshotBeforeAccountKeyBackfill
                 if let quota = status.quota {
                     ingestManagedQuota(quota, accountKey: resolvedAccountKey, source: .statusRefresh)
                 }
@@ -216,6 +217,19 @@ extension AppState {
                scheduleRetryOnFailure {
                 scheduleManagedAccountStatusRefreshRetryAfterFailure()
             }
+        }
+    }
+
+    private func preserveSubscriptionSnapshot(
+        snapshotBeforeBackfill: SubscriptionSnapshot?,
+        originalAccountKey: String,
+        resolvedAccountKey: String
+    ) {
+        let snapshot = cachedSubscriptionSnapshot ?? snapshotBeforeBackfill
+        if originalAccountKey != resolvedAccountKey, let snapshot {
+            cacheSubscriptionSnapshot(snapshot)
+        } else {
+            cachedSubscriptionSnapshot = snapshot
         }
     }
 
