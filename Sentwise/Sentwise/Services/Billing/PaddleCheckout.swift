@@ -60,7 +60,7 @@ enum PaddleBridgeEvent: Equatable, Sendable {
     /// A checkout or harness error, carrying a user-safe message.
     case failed(String)
     /// An event we don't act on (e.g. `checkout.warning`, `paddle.ready`,
-    /// `paddle.debug`).
+    /// `paddle.debug`, `paddle.errorMeta`).
     case ignored(String)
 
     /// Maps a raw JS event name (+ optional detail) to a bridge event.

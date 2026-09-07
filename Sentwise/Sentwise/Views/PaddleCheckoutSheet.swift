@@ -294,13 +294,19 @@ private struct PaddleCheckoutWebView: NSViewRepresentable {
             guard let dict = message.body as? [String: Any],
                   let name = dict["name"] as? String else { return }
             let detail = dict["detail"] as? String
-            // Diagnostic (56c): surface Paddle's raw event + full error payload,
-            // which the generic UI message otherwise swallows. `.public` so it is
-            // readable in Console/`log stream`; errors at .error, the rest at .debug.
+            // Keep raw Paddle error payloads debug-only and private. Default logs
+            // retain only allowlisted metadata plus the private user-facing copy.
             if name == "paddle.errorPayload" {
-                checkoutLogger.error("Paddle checkout payload: \(detail ?? "<no detail>", privacy: .public)")
+                #if DEBUG
+                checkoutLogger.debug("Paddle checkout payload: \(detail ?? "<no detail>", privacy: .private)")
+                #endif
+                return
+            } else if name == "paddle.errorMeta" {
+                checkoutLogger.error("Paddle checkout error code: \(detail ?? "<none>", privacy: .public)")
             } else if name == "checkout.error" || name == "paddle.failed" {
-                checkoutLogger.error("Paddle checkout error: \(detail ?? "<no detail>", privacy: .public)")
+                checkoutLogger.error(
+                    "Paddle checkout error event: \(name, privacy: .public); message: \(detail ?? "<no detail>", privacy: .private)"
+                )
             } else {
                 checkoutLogger.debug("Paddle checkout event: \(name, privacy: .public)")
             }

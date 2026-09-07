@@ -24,8 +24,14 @@ enum PaddleCheckoutHTML {
         let environmentSetup = config.environment == .sandbox
             ? #"Paddle.Environment.set("sandbox");"#
             : ""
+        #if DEBUG
+        let rawErrorPayloadCapture = "true"
+        #else
+        let rawErrorPayloadCapture = "false"
+        #endif
         return template
             .replacingOccurrences(of: "__ENV_SETUP__", with: environmentSetup)
+            .replacingOccurrences(of: "__RAW_ERROR_PAYLOAD__", with: rawErrorPayloadCapture)
             .replacingOccurrences(of: "__TOKEN__", with: escapeForJSString(config.clientSideToken))
     }
 
@@ -65,6 +71,7 @@ enum PaddleCheckoutHTML {
       <script>
         var __paddleReady = false;
         var __pendingArgs = null;
+        var __captureRawErrorPayload = __RAW_ERROR_PAYLOAD__;
 
         function post(name, detail) {
           try {
@@ -92,6 +99,16 @@ enum PaddleCheckoutHTML {
 
         function checkoutErrorText(value) {
           return typeof value === "string" ? value.trim() : "";
+        }
+
+        function checkoutErrorCode(data) {
+          if (data && data.error) {
+            return checkoutErrorText(data.error.code) || checkoutErrorText(data.error.type);
+          }
+          if (data) {
+            return checkoutErrorText(data.code) || checkoutErrorText(data.type);
+          }
+          return "";
         }
 
         function checkoutErrorDiagnostic(data) {
@@ -141,8 +158,12 @@ enum PaddleCheckoutHTML {
                 if (name === "checkout.completed") { post("checkout.completed"); }
                 else if (name === "checkout.closed") { post("checkout.closed"); }
                 else if (name === "checkout.error") {
-                  var diagnostic = checkoutErrorDiagnostic(data);
-                  if (diagnostic) { post("paddle.errorPayload", diagnostic); }
+                  var code = checkoutErrorCode(data);
+                  if (code) { post("paddle.errorMeta", code); }
+                  if (__captureRawErrorPayload) {
+                    var diagnostic = checkoutErrorDiagnostic(data);
+                    if (diagnostic) { post("paddle.errorPayload", diagnostic); }
+                  }
                   post("checkout.error", checkoutErrorDetail(data));
                 }
               }

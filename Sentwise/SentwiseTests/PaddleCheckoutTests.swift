@@ -278,6 +278,8 @@ final class PaddleCheckoutTests: XCTestCase {
         XCTAssertTrue(html.contains("messageHandlers.sentwise"))
         // The overlay-open signal the app now relies on to mark "presenting".
         XCTAssertTrue(html.contains("paddle.opened"))
+        XCTAssertTrue(html.contains("__captureRawErrorPayload"))
+        XCTAssertTrue(html.contains("paddle.errorMeta"))
         XCTAssertTrue(html.contains("paddle.errorPayload"))
         XCTAssertTrue(html.contains(#"post("checkout.error", checkoutErrorDetail(data));"#))
     }
