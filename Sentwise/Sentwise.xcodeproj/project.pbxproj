@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -28,16 +28,8 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		AA0000000000000000000004 /* Sentwise */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Sentwise;
-			sourceTree = "<group>";
-		};
-		BB0000000000000000000001 /* SentwiseTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = SentwiseTests;
-			sourceTree = "<group>";
-		};
+		AA0000000000000000000004 /* Sentwise */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Sentwise; sourceTree = "<group>"; };
+		BB0000000000000000000001 /* SentwiseTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = SentwiseTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,7 +155,6 @@
 				CC0000000000000000000001 /* XCLocalSwiftPackageReference "../Packages/SentwiseMail" */,
 				DD0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
-			preferredProjectObjectVersion = 77;
 			productRefGroup = AA0000000000000000000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -173,42 +164,6 @@
 			);
 		};
 /* End PBXProject section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		CC0000000000000000000001 /* XCLocalSwiftPackageReference "../Packages/SentwiseMail" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../Packages/SentwiseMail;
-		};
-/* End XCLocalSwiftPackageReference section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		DD0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle";
-			requirement = {
-				kind = exactVersion;
-				version = 2.9.5;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		CC0000000000000000000002 /* SentwiseMail */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CC0000000000000000000001 /* XCLocalSwiftPackageReference "../Packages/SentwiseMail" */;
-			productName = SentwiseMail;
-		};
-		CC0000000000000000000005 /* SentwiseMail */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CC0000000000000000000001 /* XCLocalSwiftPackageReference "../Packages/SentwiseMail" */;
-			productName = SentwiseMail;
-		};
-		DD0000000000000000000002 /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = DD0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
-			productName = Sparkle;
-		};
-/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		AA0000000000000000000009 /* Resources */ = {
@@ -382,7 +337,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Sentwise";
+				INFOPLIST_KEY_CFBundleDisplayName = Sentwise;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Michael Tookes. MIT License.";
@@ -406,7 +361,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Sentwise";
+				INFOPLIST_KEY_CFBundleDisplayName = Sentwise;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Michael Tookes. MIT License.";
@@ -488,6 +443,42 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		CC0000000000000000000001 /* XCLocalSwiftPackageReference "../Packages/SentwiseMail" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/SentwiseMail;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DD0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.9.5;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CC0000000000000000000002 /* SentwiseMail */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC0000000000000000000001 /* XCLocalSwiftPackageReference "../Packages/SentwiseMail" */;
+			productName = SentwiseMail;
+		};
+		CC0000000000000000000005 /* SentwiseMail */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC0000000000000000000001 /* XCLocalSwiftPackageReference "../Packages/SentwiseMail" */;
+			productName = SentwiseMail;
+		};
+		DD0000000000000000000002 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DD0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AA0000000000000000000001 /* Project object */;
 }

@@ -19,10 +19,6 @@ struct PaddleCheckoutRequest: Equatable, Sendable {
     /// The server-minted Paddle transaction id (e.g. `txn_...`).
     let transactionID: String
 
-    init(transactionID: String) {
-        self.transactionID = transactionID
-    }
-
     /// The `Paddle.Checkout.open(...)` argument object as JSON. Keys are sorted so
     /// tests can assert the serialized shape deterministically.
     func makeArgumentJSON() throws -> Data {
