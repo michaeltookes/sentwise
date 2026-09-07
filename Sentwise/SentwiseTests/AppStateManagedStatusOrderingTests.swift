@@ -177,6 +177,34 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         XCTAssertEqual(appState.managedLicense, .entitled)
     }
 
+    func testManagedEntitlementErrorSupersedesInFlightStatusRefresh() async {
+        let llm = DeferredStatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        defer { appState.cancelScheduledManagedAccountStatusRefresh() }
+        let active = status(plan: .pro, statusValue: .active)
+        appState.managedAccountStatus = active
+        appState.markManagedAccountStatusFresh(from: active)
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(plan: .pro, status: .active, capturedAt: Date())
+
+        let refresh = Task { await appState.refreshManagedQuota() }
+        await waitUntil { llm.fetchCount == 1 }
+
+        let changed = await appState.reconcileManagedAccountState(
+            after: LLMError.managedTrialExpired("Payment required."),
+            provider: .managed
+        )
+        XCTAssertTrue(changed)
+        XCTAssertNil(appState.managedAccountStatus)
+        XCTAssertEqual(appState.managedLicense, .notEntitled)
+
+        llm.completeFetch(at: 0, with: .success(active))
+        await refresh.value
+
+        XCTAssertNil(appState.managedAccountStatus)
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
+        XCTAssertEqual(appState.managedLicense, .notEntitled)
+    }
+
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
         private(set) var saved: [String: SubscriptionSnapshot] = [:]
 

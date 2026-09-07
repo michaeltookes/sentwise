@@ -233,6 +233,10 @@ extension AppState {
         }
     }
 
+    func supersedeInFlightManagedAccountStatusRefreshes() {
+        managedAccountStatusRefreshOrdering.acceptedGeneration = managedAccountStatusRefreshOrdering.startedGeneration
+    }
+
     private func shouldAcceptManagedAccountStatusRefreshSuccess(generation: UInt64, accountKey: String) -> Bool {
         guard generation > managedAccountStatusRefreshOrdering.acceptedGeneration else { return false }
         guard ProwlHuntRuntime.current.isEnabled else {

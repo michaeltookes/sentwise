@@ -481,6 +481,7 @@ extension AppState {
     func reconcileManagedAccountState(after error: Error, provider: LLMProviderKind) async -> Bool {
         guard provider == .managed else { return false }
         if case LLMError.managedTrialExpired = error {
+            supersedeInFlightManagedAccountStatusRefreshes()
             recordManagedEntitlementBlockedSnapshot()
             managedAccountStatus = nil
             managedAccountStatusIsFresh = false
