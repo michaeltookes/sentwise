@@ -9,6 +9,11 @@ struct ManagedAccountStatusRefreshOrdering {
     var successVersion: UInt64 = 0
 }
 
+private enum ManagedQuotaIngestionSource {
+    case draftReport
+    case statusRefresh
+}
+
 /// Managed-inference usage metering on `AppState` (backlog item 56b): mirroring
 /// the latest quota into published state, refreshing it from `/v1/me`, and firing
 /// the 50/75/100% weekly-usage alerts idempotently. Kept in its own file so
@@ -70,11 +75,19 @@ extension AppState {
     /// Prowl hunt mode so hunts stay side-effect free; the display value still
     /// updates so the pane renders deterministically.
     func ingestManagedQuota(_ quota: ManagedQuota, accountKey explicitAccountKey: String? = nil) {
+        ingestManagedQuota(quota, accountKey: explicitAccountKey, source: .draftReport)
+    }
+
+    private func ingestManagedQuota(
+        _ quota: ManagedQuota,
+        accountKey explicitAccountKey: String?,
+        source: ManagedQuotaIngestionSource
+    ) {
         let accountKey = resolvedManagedQuotaAccountKey(explicitAccountKey ?? currentManagedUsageAccountKey)
         guard ProwlHuntRuntime.current.isEnabled
             || (isManagedSignedIn && accountKey == currentManagedUsageAccountKey)
         else { return }
-        guard shouldAcceptManagedQuota(quota, for: accountKey) else { return }
+        guard shouldAcceptManagedQuota(quota, for: accountKey, source: source) else { return }
 
         managedQuotaAccountKey = accountKey
         managedQuota = quota
@@ -89,7 +102,11 @@ extension AppState {
         }
     }
 
-    private func shouldAcceptManagedQuota(_ quota: ManagedQuota, for accountKey: String) -> Bool {
+    private func shouldAcceptManagedQuota(
+        _ quota: ManagedQuota,
+        for accountKey: String,
+        source: ManagedQuotaIngestionSource
+    ) -> Bool {
         guard managedQuotaAccountKey == accountKey, let current = managedQuota else {
             return true
         }
@@ -97,6 +114,12 @@ extension AppState {
             return false
         }
         if quota.resetsAt == current.resetsAt {
+            if source == .draftReport && quotaHasStaleCapacityMetadata(quota, comparedWith: current) {
+                return false
+            }
+            if source == .draftReport && quota.used < current.used {
+                return false
+            }
             if quota.unit != current.unit
                 || quota.limit != current.limit
                 || quota.tokenLimit != current.tokenLimit
@@ -109,6 +132,13 @@ extension AppState {
             }
         }
         return true
+    }
+
+    private func quotaHasStaleCapacityMetadata(_ quota: ManagedQuota, comparedWith current: ManagedQuota) -> Bool {
+        quota.limit < current.limit
+            || quota.tokenLimit < current.tokenLimit
+            || quota.extraPurchased < current.extraPurchased
+            || (current.enforcement == .hard && quota.enforcement == .soft)
     }
 
     private func resolvedManagedQuotaAccountKey(_ accountKey: String) -> String {
@@ -152,7 +182,7 @@ extension AppState {
                 )
                 cachedSubscriptionSnapshot = cachedSubscriptionSnapshot ?? snapshotBeforeAccountKeyBackfill
                 if let quota = status.quota {
-                    ingestManagedQuota(quota, accountKey: resolvedAccountKey)
+                    ingestManagedQuota(quota, accountKey: resolvedAccountKey, source: .statusRefresh)
                 }
                 // Cache the last-known subscription for offline license grace (56c).
                 recordSubscriptionSnapshot(from: status)

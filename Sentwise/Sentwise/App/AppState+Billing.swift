@@ -237,14 +237,11 @@ extension AppState {
 
     func waitToStartWatchingAfterManagedLicenseRefreshIfNeeded() {
         guard watchStatus == .idle,
-              llmProviderKind == .managed,
-              isAccountConnected,
-              isLLMConnected,
-              isManagedSignedIn,
-              canAttemptStaleManagedLicenseRefresh else {
+              shouldResumeWatchingAfterManagedLicenseRecovery else {
             return
         }
         resumeWatchingAfterManagedReauth = true
+        guard canAttemptStaleManagedLicenseRefresh else { return }
         Task { [weak self] in
             await self?.refreshManagedQuotaIfLicenseStatusStale()
         }
