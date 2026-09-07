@@ -360,8 +360,12 @@ extension AppState {
 
     func shouldResumeAfterManagedReauthentication(error: Error, provider: LLMProviderKind?) -> Bool {
         guard provider == .managed else { return false }
-        guard case LLMError.managedNotSignedIn = error else { return false }
-        return true
+        switch error {
+        case LLMError.managedNotSignedIn, LLMError.managedTrialExpired:
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - Migration (item 56a)
@@ -476,6 +480,14 @@ extension AppState {
     @discardableResult
     func reconcileManagedAccountState(after error: Error, provider: LLMProviderKind) async -> Bool {
         guard provider == .managed else { return false }
+        if case LLMError.managedTrialExpired = error {
+            managedAccountStatus = nil
+            managedAccountStatusIsFresh = false
+            clearCachedSubscriptionSnapshot()
+            subscriptionCacheStore.clear(accountKey: currentManagedUsageAccountKey)
+            scheduleManagedAccountStatusRefreshRetryAfterFailure()
+            return false
+        }
         guard case LLMError.managedNotSignedIn = error else { return false }
         guard !(await managedAccount.isSignedIn) else { return false }
 

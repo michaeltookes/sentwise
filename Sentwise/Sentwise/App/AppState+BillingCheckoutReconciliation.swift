@@ -15,9 +15,17 @@ private let billingReconciliationRetryDelays: [UInt64] = [
     3_600_000_000_000
 ]
 
+struct BillingReconciliationQuotaSnapshot: Equatable {
+    let unit: String
+    let limit: Int
+    let tokenLimit: Int
+    let enforcement: ManagedQuota.Enforcement
+    let extraPurchased: Int
+}
+
 struct BillingReconciliationSnapshot: Equatable {
     let subscription: ManagedSubscription?
-    let quota: ManagedQuota?
+    let quota: BillingReconciliationQuotaSnapshot?
 }
 
 /// Checkout and billing-portal refreshes split out from `AppState+Billing` so
@@ -111,6 +119,17 @@ extension AppState {
                     manageBillingURL: $0.manageBillingURL
                 )
             }
-        return BillingReconciliationSnapshot(subscription: subscription, quota: managedQuota)
+        return BillingReconciliationSnapshot(
+            subscription: subscription,
+            quota: managedQuota.map {
+                BillingReconciliationQuotaSnapshot(
+                    unit: $0.unit,
+                    limit: $0.limit,
+                    tokenLimit: $0.tokenLimit,
+                    enforcement: $0.enforcement,
+                    extraPurchased: $0.extraPurchased
+                )
+            }
+        )
     }
 }

@@ -180,11 +180,17 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
             quota: quota(limit: 100, remaining: 75, extraPurchased: 50),
             subscription: ManagedSubscription(plan: .unlimited, status: .active, manageBillingURL: portalURL)
         )
+        let usageDriftStatus = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            quota: quota(limit: 50, remaining: 20),
+            subscription: ManagedSubscription(plan: .pro, status: .active, manageBillingURL: portalURL)
+        )
         appState.managedAccountStatus = oldStatus
         appState.managedQuota = oldStatus.quota
         appState.markManagedAccountStatusFresh(from: oldStatus)
         appState.openManageBilling { _ in }
-        llm.statusesToReturn = [oldStatus, upgradedStatus]
+        llm.statusesToReturn = [usageDriftStatus, upgradedStatus]
 
         await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded(reconciliationRetryDelays: [0])
         for _ in 0..<1_000 where llm.fetchCount < 2 {
@@ -226,6 +232,32 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         XCTAssertEqual(appState.watchStatus, .watching)
         XCTAssertFalse(appState.resumeWatchingAfterManagedReauth)
         appState.stopWatching()
+    }
+
+    func testManagedEntitlementErrorInvalidatesCachedActiveStateAndPreservesWatcherIntent() async {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        defer { appState.cancelScheduledManagedAccountStatusRefresh() }
+        let active = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+        appState.managedAccountStatus = active
+        appState.markManagedAccountStatusFresh(from: active)
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(plan: .pro, status: .active, capturedAt: Date())
+        appState.watchStatus = .watching
+        let error = LLMError.managedTrialExpired("Payment required.")
+
+        let signedOut = await appState.reconcileManagedAccountState(after: error, provider: .managed)
+        appState.handleWatcherDraftError(error, draftProvider: .managed)
+
+        XCTAssertFalse(signedOut)
+        XCTAssertNil(appState.managedAccountStatus)
+        XCTAssertEqual(appState.managedLicense, .unknown)
+        XCTAssertEqual(appState.watchStatus, .paused)
+        XCTAssertTrue(appState.resumeWatchingAfterManagedReauth)
+        XCTAssertNotNil(appState.managedAccountStatusRefreshTask)
     }
 
     func testBlockingSubscriptionStatusUsesShortFreshnessWindow() {
