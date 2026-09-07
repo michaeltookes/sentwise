@@ -350,18 +350,22 @@ extension AppState {
 
     // MARK: - Watcher reauth (item 56a)
 
-    /// After a successful re-sign-in, restart a watcher that a managed 401 paused.
+    /// After a successful managed refresh, restart a watcher that auth/licensing paused.
     func resumeInboxWatchingAfterManagedReauthenticationIfNeeded() {
         guard resumeWatchingAfterManagedReauth else { return }
-        resumeWatchingAfterManagedReauth = false
-        guard watchStatus == .paused, canWatch else { return }
-        startWatching()
+        guard watchStatus == .paused || watchStatus == .idle else { return }
+        guard canWatch else { return }
+        resumeInboxWatchingAfterProviderRecoveryIfNeeded()
     }
 
     func shouldResumeAfterManagedReauthentication(error: Error, provider: LLMProviderKind?) -> Bool {
         guard provider == .managed else { return false }
-        guard case LLMError.managedNotSignedIn = error else { return false }
-        return true
+        switch error {
+        case LLMError.managedNotSignedIn, LLMError.managedTrialExpired:
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - Migration (item 56a)
@@ -470,12 +474,20 @@ extension AppState {
 
     /// If the managed account actor invalidated stored credentials while minting a
     /// session token, mirror that state back into the published AppState flags.
-    /// Returns `true` when this call signed the account out, so callers whose
-    /// staleness guards would otherwise swallow the error can still surface it —
-    /// the configuration changed *because of* this failure, not under the user.
+    /// Returns `true` when this call changed auth or licensing state, so callers
+    /// whose staleness guards would otherwise swallow the error can still surface
+    /// it — the configuration changed *because of* this failure, not under the user.
     @discardableResult
     func reconcileManagedAccountState(after error: Error, provider: LLMProviderKind) async -> Bool {
         guard provider == .managed else { return false }
+        if case LLMError.managedTrialExpired = error {
+            supersedeInFlightManagedAccountStatusRefreshes()
+            recordManagedEntitlementBlockedSnapshot()
+            managedAccountStatus = nil
+            managedAccountStatusIsFresh = false
+            scheduleManagedAccountStatusRefreshRetryAfterFailure()
+            return true
+        }
         guard case LLMError.managedNotSignedIn = error else { return false }
         guard !(await managedAccount.isSignedIn) else { return false }
 

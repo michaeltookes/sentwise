@@ -5,6 +5,29 @@ import XCTest
 @MainActor
 final class AppStateDraftTests: XCTestCase {
 
+    private final class ManagedStatusLLM: LLMProviding, @unchecked Sendable {
+        var statusToReturn: ManagedAccountStatus?
+        private(set) var statusFetchCount = 0
+        private(set) var lastRequest: LLMRequest?
+
+        func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
+        func complete(
+            _ request: LLMRequest,
+            provider: LLMProviderKind,
+            apiKey: String,
+            baseURL: String?
+        ) async throws -> LLMResponse {
+            lastRequest = request
+            return LLMResponse(text: "Sure, Thursday works!")
+        }
+        func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? {
+            statusFetchCount += 1
+            return statusToReturn
+        }
+        func fetchManagedQuota() async throws -> ManagedQuota? { statusToReturn?.quota }
+        func deleteManagedAccount() async throws {}
+    }
+
     private func inboxMessage(id: UInt32 = 5) -> MailMessage {
         MailMessage(
             id: id,
@@ -291,6 +314,41 @@ final class AppStateDraftTests: XCTestCase {
         XCTAssertNotNil(appState.draftError)
     }
 
+    func testCanGenerateDraftAllowsStaleManagedLicenseRecovery() async {
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            mailEmail: "me@gmail.com",
+            llmProvider: "managed",
+            llmVerifiedModel: LLMProviderKind.managed.defaultModel,
+            managedAccountEmail: "marcus@example.com",
+            managedAccountID: "clerk-user:user_marcus"
+        ))
+        let provider = FakeAppMailProvider(result: .success(()), bodyResult: .success(Data("Hi".utf8)))
+        let llm = ManagedStatusLLM()
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+        let appState = AppState(persistence: persistence, secrets: secrets, mailProvider: provider, llm: llm)
+        appState.subscriptionCacheStore = EmptySubscriptionCacheStore()
+        appState.mailAppPassword = "app-pw"
+
+        XCTAssertEqual(appState.managedLicense, .unknown)
+        XCTAssertTrue(appState.canGenerateDraft)
+        let draft = await appState.generateDraft(for: inboxMessage())
+
+        XCTAssertNotNil(draft)
+        XCTAssertEqual(llm.statusFetchCount, 1)
+        XCTAssertEqual(appState.managedLicense, .entitled)
+        XCTAssertNotNil(llm.lastRequest)
+    }
+
     func testGenerateDraftSurfacesLLMError() async {
         let (appState, _) = makeConnectedAppState(
             completion: .failure(.http(status: 429, message: "slow down"))
@@ -315,4 +373,10 @@ final class AppStateDraftTests: XCTestCase {
         XCTAssertEqual(AppState.replySubject(for: "Re: Lunch?"), "Re: Lunch?")
         XCTAssertEqual(AppState.replySubject(for: "Lunch?"), "Re: Lunch?")
     }
+}
+
+private final class EmptySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
+    func snapshot(accountKey: String) -> SubscriptionSnapshot? { nil }
+    func save(_ snapshot: SubscriptionSnapshot, accountKey: String) {}
+    func clear(accountKey: String) {}
 }

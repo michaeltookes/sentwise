@@ -10,6 +10,30 @@ final class AppStateVoiceTests: XCTestCase {
      "averageLength":"short","commonPhrases":["Sounds good"],"summary":"Brief and warm."}
     """#
 
+    private final class ManagedStatusLLM: LLMProviding, @unchecked Sendable {
+        var statusToReturn: ManagedAccountStatus?
+        var responseText = ""
+        private(set) var statusFetchCount = 0
+        private(set) var lastRequest: LLMRequest?
+
+        func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
+        func complete(
+            _ request: LLMRequest,
+            provider: LLMProviderKind,
+            apiKey: String,
+            baseURL: String?
+        ) async throws -> LLMResponse {
+            lastRequest = request
+            return LLMResponse(text: responseText)
+        }
+        func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? {
+            statusFetchCount += 1
+            return statusToReturn
+        }
+        func fetchManagedQuota() async throws -> ManagedQuota? { statusToReturn?.quota }
+        func deleteManagedAccount() async throws {}
+    }
+
     private func sentMessage(id: UInt32 = 1) -> MailMessage {
         MailMessage(id: id, from: MailAddress(email: "me@gmail.com"), subject: "Re: Plan", date: "")
     }
@@ -52,6 +76,50 @@ final class AppStateVoiceTests: XCTestCase {
         XCTAssertFalse(appState.isLearningVoice)
         XCTAssertEqual(llm.lastProvider, .anthropic)
         XCTAssertEqual(llm.lastAPIKey, "sk-live")
+    }
+
+    func testCanLearnVoiceAllowsStaleManagedLicenseRecovery() async {
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            mailEmail: "me@gmail.com",
+            llmProvider: "managed",
+            llmVerifiedModel: LLMProviderKind.managed.defaultModel,
+            managedAccountEmail: "marcus@example.com",
+            managedAccountID: "clerk-user:user_marcus"
+        ))
+        let provider = FakeAppMailProvider(
+            result: .success(()),
+            fetchResult: .success([sentMessage()]),
+            bodyResult: .success(Data("Hi,\n\nSounds good.\n\nBest,\nMichael".utf8))
+        )
+        let llm = ManagedStatusLLM()
+        llm.responseText = profileJSON
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+        let appState = AppState(persistence: persistence, secrets: secrets, mailProvider: provider, llm: llm)
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(
+            plan: .pro,
+            status: .pastDue,
+            capturedAt: Date()
+        )
+        appState.mailAppPassword = "app-pw"
+
+        XCTAssertEqual(appState.managedLicense, .notEntitled)
+        XCTAssertTrue(appState.canLearnVoice)
+        await appState.learnVoiceProfile()
+
+        XCTAssertEqual(llm.statusFetchCount, 1)
+        XCTAssertEqual(appState.managedLicense, .entitled)
+        XCTAssertEqual(appState.voiceProfile?.summary, "Brief and warm.")
+        XCTAssertNotNil(llm.lastRequest)
     }
 
     func testLearnVoiceProfileWithNoSentMessagesSurfacesError() async {
@@ -226,6 +294,11 @@ final class AppStateVoiceTests: XCTestCase {
 
         XCTAssertTrue(appState.isManagedSignedIn)
         XCTAssertTrue(appState.isLLMConnected)
+        appState.managedAccountStatus = ManagedAccountStatus(
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+        appState.managedAccountStatusIsFresh = true
 
         let task = Task { await appState.learnVoiceProfile() }
         await fulfillment(of: [transport.didStartRequest], timeout: 1.0)

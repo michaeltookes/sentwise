@@ -23,22 +23,38 @@ struct SubscriptionPaneModel: Equatable {
 
     static func make(
         from status: ManagedAccountStatus?,
+        snapshot: SubscriptionSnapshot? = nil,
+        statusIsFresh: Bool = true,
         now: Date = Date(),
         calendar: Calendar = .current,
         locale: Locale = .current
     ) -> SubscriptionPaneModel {
-        let trialDays = trialDaysRemaining(endsAt: status?.trial?.endsAt, now: now)
-        let effective = effectivePlanStatus(from: status, trialDays: trialDays)
+        let trustedStatus = statusIsFresh ? status : nil
+        let trialDays = trialDaysRemaining(endsAt: trustedStatus?.trial?.endsAt, now: now)
+        let snapshotForPresentation = presentationSnapshot(snapshot, now: now)
+        if !hasKnownPlanStatus(trustedStatus),
+           snapshotForPresentation == nil,
+           snapshot != nil || !statusIsFresh {
+            return unconfirmedSubscriptionModel()
+        }
+        let effective = effectivePlanStatus(
+            from: trustedStatus,
+            snapshot: snapshotForPresentation,
+            trialDays: trialDays
+        )
 
         switch effective.status {
         case .active:
             return SubscriptionPaneModel(
                 planText: effective.plan.displayName,
-                secondaryText: renewalLine(status?.subscription?.renewsAt, calendar: calendar, locale: locale),
+                secondaryText: renewalLine(effective.renewsAt, calendar: calendar, locale: locale),
                 isProblemState: false
             )
         case .trialing:
-            return activeTrialModel(days: trialDays)
+            let days = effective.plan == .trial
+                ? trialDays ?? trialDaysRemaining(endsAt: effective.renewsAt, now: now)
+                : trialDays
+            return activeTrialModel(days: days)
         case .pastDue:
             return SubscriptionPaneModel(
                 planText: effective.plan.displayName,
@@ -70,7 +86,7 @@ struct SubscriptionPaneModel: Equatable {
             // Signed in but the server sent a status this build doesn't know.
             // Fall back to the trial view when a trial is present, else a neutral
             // "Active" so the pane never shows a raw/empty value.
-            if trialDays != nil || status?.trial != nil {
+            if trialDays != nil || trustedStatus?.trial != nil {
                 return trialModel(days: trialDays)
             }
             return SubscriptionPaneModel(planText: "Active", secondaryText: nil, isProblemState: false)
@@ -97,16 +113,58 @@ struct SubscriptionPaneModel: Equatable {
     /// block so pre-56c installs still render.
     private static func effectivePlanStatus(
         from status: ManagedAccountStatus?,
+        snapshot: SubscriptionSnapshot?,
         trialDays: Int?
-    ) -> (plan: ManagedSubscription.Plan, status: ManagedSubscription.Status) {
-        if let subscription = status?.subscription {
-            return (subscription.plan, subscription.status)
+    ) -> (plan: ManagedSubscription.Plan, status: ManagedSubscription.Status, renewsAt: Date?) {
+        if let subscription = status?.subscription, subscription.status != .unknown {
+            return (subscription.plan, subscription.status, subscription.renewsAt)
         }
         if let trial = status?.trial {
             let active = trial.active ?? ((trialDays ?? 0) > 0)
-            return (.trial, active ? .trialing : .lapsed)
+            if active || status?.quota == nil {
+                return (.trial, active ? .trialing : .lapsed, nil)
+            }
         }
-        return (.unknown, .unknown)
+        if let snapshot {
+            return (snapshot.plan, snapshot.status, snapshot.renewsAt)
+        }
+        if status?.quota != nil {
+            return (.unknown, .active, nil)
+        }
+        return (.unknown, .unknown, nil)
+    }
+
+    private static func presentationSnapshot(_ snapshot: SubscriptionSnapshot?, now: Date) -> SubscriptionSnapshot? {
+        guard let snapshot else { return nil }
+        switch SubscriptionLicenseEvaluator.evaluate(liveStatus: nil, cached: snapshot, now: now) {
+        case .entitled, .grace, .notEntitled:
+            return snapshot
+        case .unknown:
+            guard snapshot.plan == .trial,
+                  snapshot.status == .trialing,
+                  let trialEndsAt = snapshot.renewsAt,
+                  now >= trialEndsAt else {
+                return nil
+            }
+            return snapshot
+        }
+    }
+
+    private static func hasKnownPlanStatus(_ status: ManagedAccountStatus?) -> Bool {
+        guard let status else { return false }
+        if let subscription = status.subscription {
+            return subscription.status != .unknown
+        }
+        return status.trial != nil
+    }
+
+    private static func unconfirmedSubscriptionModel() -> SubscriptionPaneModel {
+        SubscriptionPaneModel(
+            planText: "Subscription unavailable",
+            secondaryText: "We couldn't confirm your subscription, so managed drafting is paused. "
+                + "Drafting with your own AI key still works while you reconnect.",
+            isProblemState: true
+        )
     }
 
     private static func trialModel(days: Int?) -> SubscriptionPaneModel {
@@ -153,7 +211,9 @@ extension ManagedSubscription.Plan {
     var displayName: String {
         switch self {
         case .trial: return "Trial"
-        case .individual: return "Individual"
+        case .starter: return "Starter"
+        case .pro: return "Pro"
+        case .unlimited: return "Unlimited"
         case .team: return "Team"
         case .noPlan: return "No plan"
         case .unknown: return "Sentwise AI"

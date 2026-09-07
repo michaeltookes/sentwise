@@ -99,6 +99,7 @@ extension AppState {
         resetDraftPreviewForLLMChange()
         saveSettings()
         startTranscriptFolderWatchingIfEnabled()
+        resumeInboxWatchingAfterProviderRecoveryIfNeeded()
     }
 
     /// Completes provisioning from the redirect `code`: exchanges it (with the
@@ -158,6 +159,7 @@ extension AppState {
         resetDraftPreviewForLLMChange()
         saveSettings()
         startTranscriptFolderWatchingIfEnabled()
+        resumeInboxWatchingAfterProviderRecoveryIfNeeded()
         logger.info("OpenRouter key provisioned; OpenAI-compatible provider activated")
     }
 

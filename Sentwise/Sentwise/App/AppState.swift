@@ -8,7 +8,6 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "AppStat
 /// Central application state container and single source of truth for observed app state.
 @MainActor
 final class AppState: ObservableObject {
-
     // MARK: - Watch State
 
     /// Current watcher status. Drives the menu-bar status line.
@@ -40,8 +39,8 @@ final class AppState: ObservableObject {
     var mailHostExplicitlyEditedBeforeEmail = false
 
     /// Accounts the user has connected and can switch between without re-entering
-    /// credentials (item 48). The active account is the one whose email matches
-    /// `mailEmail`; each account's app password lives in its own Keychain item.
+    /// credentials (item 48). The active account matches `mailEmail`; each
+    /// account's app password lives in its own Keychain item.
     @Published var savedAccounts: [SavedMailAccount] = []
 
     // MARK: - Recent Messages (preview)
@@ -78,9 +77,8 @@ final class AppState: ObservableObject {
     @Published var isLLMConnected: Bool = false
     /// Whether an LLM connection test is in progress.
     @Published var isTestingLLM: Bool = false
-    /// Whether OpenRouter provisioning has opened the browser and is waiting for
-    /// the callback. Backed by the persisted PKCE verifier so relaunches keep the
-    /// button from starting a second flow over the first.
+    /// Whether OpenRouter provisioning has opened the browser and is awaiting the
+    /// callback. Backed by the persisted PKCE verifier so relaunches don't restart it.
     @Published var isOpenRouterProvisioning: Bool = false
     /// A user-facing message describing the last LLM error, if any.
     @Published var llmError: String?
@@ -109,10 +107,12 @@ final class AppState: ObservableObject {
     var pendingManagedSignInEmail: String?
     var pendingManagedSignInActivatesProvider = true
 
-    /// Latest full managed-account status from `/v1/me` (email, trial,
-    /// subscription, quota) driving the Subscription pane (item 73); `nil` until
-    /// known or when signed out.
+    /// Latest `/v1/me` account status for the Subscription pane; nil until known or signed out.
     @Published var managedAccountStatus: ManagedAccountStatus?
+    /// Instant until which the latest `/v1/me` response may be trusted as live.
+    @Published var managedAccountStatusFreshUntil: Date?
+    var managedAccountStatusRefreshTask: Task<Void, Never>?
+    var managedAccountStatusRefreshOrdering = ManagedAccountStatusRefreshOrdering()
     /// True briefly after a successful account deletion so the signed-out
     /// Subscription pane can confirm it (item 73). Cleared on the next sign-in.
     @Published var didDeleteManagedAccount: Bool = false
@@ -122,6 +122,14 @@ final class AppState: ObservableObject {
     var managedQuotaAccountKey: String?
     /// Old -> new account-key aliases created during stable-ID backfill.
     var managedQuotaAccountKeyAliases: [String: String] = [:]
+    // MARK: - Billing / checkout (item 56c). See AppState+Billing.
+    @Published var billingCheckout: BillingCheckoutRequest?
+    var billingReconciliationTask: Task<Void, Never>?
+    var billingReconciliationBaseline: BillingReconciliationSnapshot?
+    @Published var cachedSubscriptionSnapshot: SubscriptionSnapshot?
+    var billingPortalRefreshPending = false
+    /// Durable per-account subscription cache (test-injectable) backing the above.
+    var subscriptionCacheStore: SubscriptionCacheStoring = UserDefaultsSubscriptionCacheStore()
 
     // MARK: - Workspace app-password guidance (item 75)
 
@@ -221,9 +229,8 @@ final class AppState: ObservableObject {
     let loadedSettingsPredateOnboardingCompletion: Bool
 
     /// Whether the one-time reply-worthiness sweep of pre-gate pending drafts has
-    /// already run (item 80). Seeded from settings at launch; flipped to `true`
-    /// and persisted once the sweep completes so it never runs again. Not
-    /// `@Published` — it drives no UI, only the launch-time guard.
+    /// already run (item 80). Seeded from settings at launch; flipped to `true` and
+    /// persisted once it completes so it never runs again. Not `@Published`.
     var hasRunPreGateDraftSweep: Bool = false
 
     // MARK: - Transcript Watched Folder (item 51)
@@ -271,20 +278,18 @@ final class AppState: ObservableObject {
     @Published var pendingStaleWarnings: [String: StaleThreadReason] = [:]
 
     /// Remaining seconds on an in-progress auto-send countdown (item 23), keyed by
-    /// draft identity. Presence means that draft is counting down; the review UI
-    /// shows "Sending in Ns…" with a Cancel button while an entry exists.
+    /// draft identity (review UI shows "Sending in Ns…" with a Cancel button).
     @Published var pendingSendCountdowns: [String: Int] = [:]
 
-    /// The live per-draft countdown tasks (item 23), keyed by draft identity.
-    /// Cancelling one stops its send; the draft remains pending untouched.
+    /// The live per-draft countdown tasks (item 23). Cancelling one stops its send.
     var sendCountdownTasks: [String: Task<Void, Never>] = [:]
 
-    /// Countdown draft identities that originated from notification approval and
-    /// need explicit user feedback if the delayed dispatch is blocked.
+    /// Countdown draft identities from notification approval needing explicit
+    /// feedback if the delayed dispatch is blocked.
     var sendCountdownNotificationApprovalIDs: Set<String> = []
 
-    /// One countdown tick, in nanoseconds. Overridable so tests can drive the
-    /// window without waiting real seconds (mirrors `bulkSweepPacingNanoseconds`).
+    /// One countdown tick, in nanoseconds. Overridable so tests drive the window
+    /// without real waits (mirrors `bulkSweepPacingNanoseconds`).
     var sendCountdownTickNanoseconds: UInt64 = 1_000_000_000
 
     /// A user-facing message describing the last inbox-poll error, if any.
@@ -293,23 +298,21 @@ final class AppState: ObservableObject {
     // MARK: - Resilience (item 27)
 
     /// Whether the network currently appears reachable. Drives the offline-pause
-    /// of the poll loop and the "waiting for network" draft state. Starts `true`
-    /// so headless/test construction behaves as online until told otherwise.
+    /// of the poll loop and the "waiting for network" draft state. Starts `true`.
     @Published var isOnline: Bool = true
 
     /// Identities of approved drafts deferred because the network was offline at
     /// dispatch time (item 27). They stay in `pendingDrafts` — that reuse *is* the
-    /// offline queue — and dispatch on reconnect. Hydrated from each draft's
-    /// persisted, still-waiting `offlineQueuedDispatch` intent at launch.
+    /// offline queue — and dispatch on reconnect, hydrated from each draft's
+    /// persisted `offlineQueuedDispatch` intent at launch.
     @Published var draftsWaitingForNetwork: Set<String> = []
 
     /// The intended dispatch for each offline-queued draft, so reconnect
     /// re-dispatches send-vs-save and force overrides exactly as approved.
     var offlineQueuedDispatch: [String: OfflineQueuedDraftDispatch] = [:]
 
-    /// The shared exponential-backoff driver for resilient operations (send,
-    /// save, poll-fetch, watcher draft). Overridable so tests drive backoff
-    /// deterministically without real waits (mirrors `sendCountdownTickNanoseconds`).
+    /// The shared exponential-backoff driver for resilient operations. Overridable
+    /// so tests drive backoff deterministically without real waits.
     var retryRunner = RetryRunner()
     /// Set after the reachability monitor delivers its first concrete path.
     var hasConfirmedReachability = false
@@ -318,7 +321,7 @@ final class AppState: ObservableObject {
     /// Records a reconnect callback that arrived while the current queue drain
     /// was already running, so the drain can replay missed queued work once.
     var needsQueuedDraftDrainAfterCurrent = false
-    /// Set when a managed-auth failure paused the watcher; cleared on start/stop or after reauth resumes it.
+    /// Set when managed auth/license refresh should restart a previously intended watcher.
     var resumeWatchingAfterManagedReauth = false
 
     /// Observes reachability so the app can pause while offline and resume on
@@ -337,11 +340,10 @@ final class AppState: ObservableObject {
     /// User-facing activity history (item 21), newest first; see `AppState+Activity`.
     @Published var activityEvents: [ActivityEvent] = []
 
-    /// On-device approval-signal feedback store (item 83), newest first; loaded at
-    /// launch. See `AppState+ApprovalFeedback` / `AppState+DenyReasonFlow`.
+    /// On-device approval-signal feedback store (item 83); see `AppState+ApprovalFeedback`.
     var draftFeedbackRecords: [DraftFeedbackRecord] = []
-    /// Deny-reason picker state + session memory (item 83): the pending deny, the
-    /// last-used reason (pre-selected default), and a per-session "don't ask again".
+    /// Deny-reason picker state + session memory (item 83): pending deny, last-used
+    /// reason, and a per-session "don't ask again".
     @Published var denyReasonPrompt: DenyReasonPrompt?
     var lastUsedDenyReason: DenyReason?
     var denyReasonPromptSuppressedThisSession = false
@@ -387,14 +389,13 @@ final class AppState: ObservableObject {
     let googleOAuthInterestClient: GoogleOAuthInterestRegistering
     /// Durable local "already registered" record so the button isn't re-offered.
     var googleOAuthInterestStore: GoogleOAuthInterestStoring = UserDefaultsGoogleOAuthInterestStore()
-    /// Set by the menu-bar controller so a notification "open" action (or a
-    /// menu click) can surface the review window.
+    /// Set by the menu-bar controller so a notification "open" (or menu click)
+    /// surfaces the review window.
     var openReviewHandler: (() -> Void)?
-    /// Set by the menu-bar controller so a usage-alert "open" action (or the
-    /// managed pane's controls) can surface Settings on a given tab (item 56b).
+    /// Set by the menu-bar controller so a usage-alert "open" (or the managed
+    /// pane's controls) surfaces Settings on a given tab (item 56b).
     var openSettingsHandler: ((SettingsTab) -> Void)?
-    /// Set by the menu-bar controller so the app can surface the first-run
-    /// onboarding window at launch or from the menu.
+    /// Set by the menu-bar controller to surface first-run onboarding.
     var openOnboardingHandler: (() -> Void)?
     let settingsDebouncer = Debouncer(delay: 0.5)
     /// Internal (not private) so `AppState+SettingsPersistence` can wire the
@@ -408,7 +409,6 @@ final class AppState: ObservableObject {
 
     /// Pause between bulk-cleanup sweeps so rapid scans do not trip provider rate limits.
     var bulkSweepPacingNanoseconds: UInt64 = 1_200_000_000
-
     // MARK: - Initialization
 
     init(

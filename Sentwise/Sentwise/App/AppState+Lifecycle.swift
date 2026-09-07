@@ -33,4 +33,12 @@ extension AppState {
             self?.handleReachabilityChange(online)
         }
     }
+
+    func refreshManagedQuotaAfterBillingPortalReturnIfNeeded(reconciliationRetryDelays: [UInt64]? = nil) async {
+        guard billingPortalRefreshPending else { return }
+        billingPortalRefreshPending = false
+        guard isManagedSignedIn else { return }
+        await refreshManagedQuota()
+        scheduleBillingReconciliationIfNeeded(delays: reconciliationRetryDelays)
+    }
 }

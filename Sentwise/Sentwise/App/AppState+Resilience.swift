@@ -50,10 +50,22 @@ extension AppState {
         } else {
             logger.info("Network online — draining restored offline queue")
         }
-        if watchStatus == .watching {
-            resumeInboxWatcherAfterReachabilityConfirmed()
+        guard llmProviderKind == .managed, isManagedSignedIn else {
+            if watchStatus == .watching {
+                resumeInboxWatcherAfterReachabilityConfirmed()
+            }
+            Task { await resumeQueuedDraftsAfterReconnect() }
+            return
         }
+
+        managedAccountStatusIsFresh = false
         Task { await resumeQueuedDraftsAfterReconnect() }
+        Task {
+            await refreshManagedQuota()
+            if watchStatus == .watching {
+                resumeInboxWatcherAfterReachabilityConfirmed()
+            }
+        }
     }
 
     // MARK: - Offline queue (reuses the pending-draft store)

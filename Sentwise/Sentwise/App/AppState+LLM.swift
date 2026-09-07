@@ -134,6 +134,10 @@ extension AppState {
         resetDraftPreviewForLLMChange()
         llmError = nil
         saveSettings()
+        if transcriptWatchedFolderEnabled, canCreateFollowUp {
+            startTranscriptFolderWatchingIfEnabled()
+        }
+        resumeInboxWatchingAfterProviderRecoveryIfNeeded()
     }
 
     /// Verifies the API key with a live test call and, on success, stores it.
@@ -201,6 +205,7 @@ extension AppState {
         // Now that drafting is possible, catch up any transcript that arrived in
         // the watched folder while the provider was disconnected (item 51).
         startTranscriptFolderWatchingIfEnabled()
+        resumeInboxWatchingAfterProviderRecoveryIfNeeded()
     }
 
     /// Disconnects a BYO provider by clearing its stored API key. Defaults to the

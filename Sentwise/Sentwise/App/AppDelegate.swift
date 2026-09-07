@@ -141,7 +141,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// switched back sees the hint appear — or clear — without relaunching.
     func applicationDidBecomeActive(_ notification: Notification) {
         guard runtime.allowsStartupSideEffects, let appState else { return }
-        Task { await appState.refreshNotificationPermission() }
+        Task {
+            await appState.refreshNotificationPermission()
+            await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

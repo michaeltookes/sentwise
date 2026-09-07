@@ -5,21 +5,23 @@ import Foundation
 /// stays within the file/type length limits.
 extension AppState {
 
-    /// Whether a draft can be generated (mail + AI connected).
+    /// Whether a draft can be generated (mail + a usable AI provider).
     var canGenerateDraft: Bool {
-        isLLMConnected && mailCredentials.isComplete
+        isLLMConnected
+            && mailCredentials.isComplete
+            && (currentLLMProviderAllowsRequests || canAttemptStaleManagedLicenseRefresh)
     }
 
     /// Fetches a message's body and generates a reply draft in the user's voice.
     @discardableResult
     func generateDraft(for message: MailMessage, mailbox: Mailbox = .inbox) async -> Draft? {
-        let requestGeneration = nextDraftGeneration()
-        resetDraftPreviewForGeneration()
+        let requestGeneration = prepareDraftGeneration()
 
         guard mailbox.supportsReplyDrafting else {
             draftError = Self.draftMessage(for: DraftError.unsupportedSourceMailbox)
             return nil
         }
+        await refreshManagedQuotaIfLicenseStatusStale()
         guard let llmConfiguration = currentDraftLLMConfiguration else {
             draftError = "Connect an AI provider first (Test Connection above)."
             return nil
@@ -89,6 +91,7 @@ extension AppState {
         guard mailbox.supportsReplyDrafting else {
             throw DraftError.unsupportedSourceMailbox
         }
+        await refreshManagedQuotaIfLicenseStatusStale()
         guard let llmConfiguration = currentDraftLLMConfiguration else {
             throw DraftError.emptyDraft
         }
@@ -172,8 +175,14 @@ extension AppState {
         isGeneratingDraft = false
     }
 
+    private func prepareDraftGeneration() -> Int {
+        let requestGeneration = nextDraftGeneration()
+        resetDraftPreviewForGeneration()
+        return requestGeneration
+    }
+
     var currentDraftLLMConfiguration: DraftLLMConfiguration? {
-        guard isLLMConnected else { return nil }
+        guard isLLMConnected, currentLLMProviderAllowsRequests else { return nil }
         let key = Self.storedLLMAPIKey(
             provider: llmProviderKind,
             baseURL: currentLLMBaseURL,

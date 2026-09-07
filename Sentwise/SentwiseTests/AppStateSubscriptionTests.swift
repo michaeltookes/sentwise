@@ -200,14 +200,14 @@ final class AppStateSubscriptionTests: XCTestCase {
             email: "marcus@example.com",
             trial: ManagedTrial(endsAt: ManagedQuotaDate.date(from: "2026-09-01T00:00:00Z"), active: true),
             quota: nil,
-            subscription: ManagedSubscription(plan: .individual, status: .active,
+            subscription: ManagedSubscription(plan: .pro, status: .active,
                                                renewsAt: ManagedQuotaDate.date(from: "2026-10-01T00:00:00Z"))
         )
         let (appState, _) = makeSignedInAppState(llm: llm)
 
         await appState.refreshManagedQuota()
 
-        XCTAssertEqual(appState.managedAccountStatus?.subscription?.plan, .individual)
+        XCTAssertEqual(appState.managedAccountStatus?.subscription?.plan, .pro)
         XCTAssertEqual(appState.managedAccountStatus?.email, "marcus@example.com")
     }
 

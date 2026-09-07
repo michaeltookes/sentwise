@@ -3,19 +3,21 @@ import Foundation
 import os
 
 private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "InboxWatcher")
-
 /// Inbox-watcher lifecycle and poll policy on `AppState`. The `InboxWatcher`
 /// owns the timer and sleep/wake handling; this file owns *what a poll does*.
 extension AppState {
-
-    /// Whether watching can run: an account and an LLM must both be connected.
+    /// Whether watching can run: mail and a usable LLM provider must both be ready.
     var canWatch: Bool {
-        isAccountConnected && isLLMConnected
+        isAccountConnected && isLLMConnected && currentLLMProviderAllowsRequests
     }
 
     /// Starts watching if ready — used at launch to auto-resume.
     func startWatchingIfReady() {
-        guard canWatch, watchStatus != .watching else { return }
+        guard canWatch else {
+            waitToStartWatchingAfterManagedLicenseRefreshIfNeeded()
+            return
+        }
+        guard watchStatus != .watching else { return }
         startWatching()
     }
 
@@ -87,9 +89,10 @@ extension AppState {
             DiagnosticLog.verbose("Inbox poll skipped; watcher is not active")
             return
         }
+        await refreshManagedQuotaIfLicenseStatusStale()
         guard canWatch else {
             DiagnosticLog.verbose("Inbox poll paused; account or AI provider is unavailable")
-            pauseWatching()
+            pauseWatching(resumeAfterManagedReauthentication: shouldResumeWatchingAfterManagedLicenseRecovery)
             return
         }
         // Offline (item 27): skip the poll rather than burn retries against an
@@ -437,7 +440,6 @@ extension AppState {
     static func parsedMessageDate(_ value: String) -> Date? {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }
-
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)

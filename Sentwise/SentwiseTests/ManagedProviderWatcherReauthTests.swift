@@ -2,6 +2,24 @@ import XCTest
 import SentwiseMail
 @testable import Sentwise
 
+private final class WatcherReauthLLMTransport: LLMHTTPTransport, @unchecked Sendable {
+    func postJSON(_ url: URL, headers: [String: String], body: Data) async throws -> HTTPResponse {
+        HTTPResponse(
+            statusCode: 401,
+            body: Data(#"{"error":{"type":"unauthenticated","message":"Sign in."}}"#.utf8)
+        )
+    }
+
+    func getJSON(_ url: URL, headers: [String: String]) async throws -> HTTPResponse {
+        HTTPResponse(
+            statusCode: 200,
+            body: Data(
+                #"{"userId":"user_marcus","email":"marcus@example.com","subscription":{"plan":"pro","status":"active"}}"#.utf8
+            )
+        )
+    }
+}
+
 /// A managed 401 mid-watch pauses the inbox watcher; re-signing in resumes it.
 @MainActor
 final class ManagedProviderWatcherReauthTests: XCTestCase {
@@ -22,6 +40,9 @@ final class ManagedProviderWatcherReauthTests: XCTestCase {
         await appState.startManagedSignIn()
         appState.managedCodeInput = "123456"
         await appState.verifyManagedCode()
+        for _ in 0..<1_000 where appState.watchStatus != .watching {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
 
         XCTAssertEqual(appState.watchStatus, .watching)
         XCTAssertTrue(appState.isManagedSignedIn)
@@ -66,6 +87,7 @@ final class ManagedProviderWatcherReauthTests: XCTestCase {
         return ClerkClient(
             frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
             transport: ManagedProviderQueueClerkTransport([
+                managedProviderClerkResponse(#"{"jwt":"status.jwt"}"#, clientToken: "client_W"),
                 managedProviderClerkResponse(#"{"jwt":"draft.jwt"}"#, clientToken: "client_Y"),
                 managedProviderClerkResponse(signInCreatedBody, clientToken: "client_A"),
                 managedProviderClerkResponse(#"{"response":{"id":"sia_1"}}"#, clientToken: "client_B"),
@@ -73,7 +95,8 @@ final class ManagedProviderWatcherReauthTests: XCTestCase {
                     #"{"response":{"id":"sia_1","status":"complete","created_session_id":"sess_2"}}"#,
                     clientToken: "client_C"
                 ),
-                managedProviderClerkResponse(#"{"jwt":"session.jwt"}"#, clientToken: "client_D")
+                managedProviderClerkResponse(#"{"jwt":"session.jwt"}"#, clientToken: "client_D"),
+                managedProviderClerkResponse(#"{"jwt":"status.jwt"}"#, clientToken: "client_E")
             ])
         )
     }
@@ -90,10 +113,7 @@ final class ManagedProviderWatcherReauthTests: XCTestCase {
         let clerk = watcherReauthClerk()
         let managedAccount = ManagedAccountService(secrets: secrets, clerk: clerk)
         let llm = LLMService(
-            transport: FakeLLMTransport(response: HTTPResponse(
-                statusCode: 401,
-                body: Data(#"{"error":{"type":"unauthenticated","message":"Sign in."}}"#.utf8)
-            )),
+            transport: WatcherReauthLLMTransport(),
             managedSessionProvider: managedAccount
         )
         let appState = AppState(
@@ -118,6 +138,11 @@ final class ManagedProviderWatcherReauthTests: XCTestCase {
             reachability: FakeReachabilityMonitor(isOnline: true, hasCurrentPath: false)
         )
         appState.retryRunner = .immediate
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(
+            plan: .pro,
+            status: .active,
+            capturedAt: Date()
+        )
         return (appState, secrets)
     }
 }

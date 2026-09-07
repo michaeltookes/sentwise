@@ -20,10 +20,12 @@ enum FollowUpCommitError: LocalizedError {
 /// approval → send/save pipeline as an *authored* draft (no source message).
 extension AppState {
 
-    /// Whether a follow-up can be drafted right now (mail + AI connected),
+    /// Whether a follow-up can be drafted right now (mail + a usable AI provider),
     /// mirroring `canGenerateDraft`.
     var canCreateFollowUp: Bool {
-        isLLMConnected && mailCredentials.isComplete
+        isLLMConnected
+            && mailCredentials.isComplete
+            && (currentLLMProviderAllowsRequests || canAttemptStaleManagedLicenseRefresh)
     }
 
     /// Drafts a follow-up from an ingested transcript and enqueues it for review.
@@ -37,6 +39,7 @@ extension AppState {
         subject: String? = nil,
         shouldCommit: (() -> Bool)? = nil
     ) async throws -> Draft {
+        await refreshManagedQuotaIfLicenseStatusStale()
         guard let llmConfiguration = currentDraftLLMConfiguration else {
             throw DraftError.llmUnavailable
         }

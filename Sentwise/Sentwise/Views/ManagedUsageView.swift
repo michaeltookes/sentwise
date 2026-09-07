@@ -10,7 +10,6 @@ import SwiftUI
 /// (avoids a double fetch on tab open).
 struct ManagedUsageView: View {
     @EnvironmentObject var appState: AppState
-    @State private var showBuyMorePlaceholder = false
 
     var body: some View {
         Group {
@@ -46,15 +45,21 @@ struct ManagedUsageView: View {
                 }
 
                 if appState.isManagedQuotaExhausted {
-                    Button("Buy more usage") { showBuyMorePlaceholder = true }
+                    if appState.hasManageablePaidSubscription {
+                        Button("Manage plan") {
+                            Task { await appState.openManageBilling() }
+                        }
+                        .buttonStyle(.link)
+                        .disabled(!appState.canManageBilling)
+                        .accessibilityIdentifier("buyMoreUsage")
+                        .accessibilityLabel("Manage plan")
+                    } else if appState.shouldOfferSubscribe {
+                        Button("Upgrade for more drafts") {
+                            appState.presentBillingCheckout()
+                        }
                         .buttonStyle(.link)
                         .accessibilityIdentifier("buyMoreUsage")
-                        .accessibilityLabel("Buy more usage")
-                    if showBuyMorePlaceholder {
-                        Text("Buying extra usage is coming soon.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("buyMoreUsagePlaceholderNote")
+                        .accessibilityLabel("Upgrade for more drafts")
                     }
                 }
 
