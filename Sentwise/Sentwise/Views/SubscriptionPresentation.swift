@@ -121,10 +121,15 @@ struct SubscriptionPaneModel: Equatable {
         }
         if let trial = status?.trial {
             let active = trial.active ?? ((trialDays ?? 0) > 0)
-            return (.trial, active ? .trialing : .lapsed, nil)
+            if active || status?.quota == nil {
+                return (.trial, active ? .trialing : .lapsed, nil)
+            }
         }
         if let snapshot {
             return (snapshot.plan, snapshot.status, snapshot.renewsAt)
+        }
+        if status?.quota != nil {
+            return (.unknown, .active, nil)
         }
         return (.unknown, .unknown, nil)
     }

@@ -103,8 +103,12 @@ final class SubscriptionModelTests: XCTestCase {
 
     // MARK: - Presentation mapping
 
-    private func status(trial: ManagedTrial? = nil, subscription: ManagedSubscription? = nil) -> ManagedAccountStatus {
-        ManagedAccountStatus(userID: "u", email: "m@example.com", trial: trial, quota: nil, subscription: subscription)
+    private func status(
+        trial: ManagedTrial? = nil,
+        quota: ManagedQuota? = nil,
+        subscription: ManagedSubscription? = nil
+    ) -> ManagedAccountStatus {
+        ManagedAccountStatus(userID: "u", email: "m@example.com", trial: trial, quota: quota, subscription: subscription)
     }
 
     private func snapshot(
@@ -114,6 +118,15 @@ final class SubscriptionModelTests: XCTestCase {
         capturedAt: Date = Date()
     ) -> SubscriptionSnapshot {
         SubscriptionSnapshot(plan: plan, status: statusValue, renewsAt: renewsAt, capturedAt: capturedAt)
+    }
+
+    private func quota() -> ManagedQuota {
+        ManagedQuota(
+            used: 1,
+            limit: 10,
+            remaining: 9,
+            resetsAt: ManagedQuotaDate.date(from: "2026-08-18T00:00:00Z")!
+        )
     }
 
     func testActivePlanShowsNameAndRenewal() {
@@ -285,6 +298,16 @@ final class SubscriptionModelTests: XCTestCase {
         let model = SubscriptionPaneModel.make(from: status(trial: trial))
         XCTAssertEqual(model.planText, "Trial ended")
         XCTAssertTrue(model.isProblemState)
+    }
+
+    func testInactiveTrialWithLegacyQuotaUsesPaidSnapshotWhenSubscriptionAbsent() {
+        let trial = ManagedTrial(endsAt: ManagedQuotaDate.date(from: "2026-08-01T00:00:00Z"), active: false)
+        let model = SubscriptionPaneModel.make(
+            from: status(trial: trial, quota: quota()),
+            snapshot: snapshot(plan: .pro, statusValue: .active)
+        )
+        XCTAssertEqual(model.planText, "Pro")
+        XCTAssertFalse(model.isProblemState)
     }
 
     func testUnknownSubscriptionWithNoTrialFallsBackToActive() {

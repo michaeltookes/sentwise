@@ -150,6 +150,45 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         }
     }
 
+    func testLegacyQuotaWithInactiveTrialPreservesPaidSubscriptionSnapshot() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            trial: ManagedTrial(endsAt: Date().addingTimeInterval(-86_400), active: false),
+            quota: managedQuota()
+        )
+        let store = InMemorySubscriptionCacheStore()
+        let appState = makeSignedInAppState(llm: llm, cacheStore: store)
+        let accountKey = appState.currentManagedUsageAccountKey
+        store.save(
+            SubscriptionSnapshot(
+                plan: .pro,
+                status: .active,
+                manageBillingURL: "https://billing.example.com/session",
+                capturedAt: Date().addingTimeInterval(-86_400)
+            ),
+            accountKey: accountKey
+        )
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.managedLicense, .entitled)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.plan, .pro)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.status, .active)
+        XCTAssertEqual(store.saved[accountKey]?.status, .active)
+        XCTAssertFalse(appState.shouldOfferSubscribe)
+        XCTAssertTrue(appState.canManageBilling)
+        XCTAssertNil(appState.manageBillingURL)
+        let model = SubscriptionPaneModel.make(
+            from: appState.managedAccountStatus,
+            snapshot: appState.effectiveSubscriptionSnapshot,
+            statusIsFresh: appState.managedAccountStatusIsFresh
+        )
+        XCTAssertEqual(model.planText, "Pro")
+        XCTAssertFalse(model.isProblemState)
+    }
+
     func testQuotaOnlyAccountStatusMigratesPaidSnapshotAcrossAccountKeyBackfill() async {
         let llm = StatusLLM()
         llm.statusToReturn = ManagedAccountStatus(

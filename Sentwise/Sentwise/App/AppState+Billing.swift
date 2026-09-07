@@ -329,7 +329,8 @@ extension AppState {
         if let subscriptionStatus = status.subscription?.status {
             return subscriptionStatus
         }
-        if let trialStatus = derivedTrialSubscriptionState(from: status)?.status {
+        if let trialStatus = derivedTrialSubscriptionState(from: status)?.status,
+           trialStatus == .trialing || status.quota == nil {
             return trialStatus
         }
         if status.quota != nil {
@@ -407,6 +408,7 @@ extension AppState {
     private func derivedTrialSubscriptionSnapshot(from status: ManagedAccountStatus) -> SubscriptionSnapshot? {
         guard status.subscription == nil || status.trial?.active == true,
               let state = derivedTrialSubscriptionState(from: status) else { return nil }
+        guard state.status == .trialing || status.quota == nil else { return nil }
         return SubscriptionSnapshot(
             plan: state.plan,
             status: state.status,
@@ -418,7 +420,6 @@ extension AppState {
 
     private func legacyQuotaSubscriptionSnapshot(from status: ManagedAccountStatus) -> SubscriptionSnapshot? {
         guard status.subscription == nil,
-              status.trial == nil,
               status.quota != nil else {
             return nil
         }
