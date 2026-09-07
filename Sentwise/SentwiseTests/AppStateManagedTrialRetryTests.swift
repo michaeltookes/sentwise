@@ -238,14 +238,20 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         let llm = StatusLLM()
         let appState = makeSignedInAppState(llm: llm)
         defer { appState.cancelScheduledManagedAccountStatusRefresh() }
+        let portalURL = "https://billing.example/portal"
         let active = ManagedAccountStatus(
             userID: "user_marcus",
             email: "marcus@example.com",
-            subscription: ManagedSubscription(plan: .pro, status: .active)
+            subscription: ManagedSubscription(plan: .pro, status: .active, manageBillingURL: portalURL)
         )
         appState.managedAccountStatus = active
         appState.markManagedAccountStatusFresh(from: active)
-        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(plan: .pro, status: .active, capturedAt: Date())
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(
+            plan: .pro,
+            status: .active,
+            manageBillingURL: portalURL,
+            capturedAt: Date()
+        )
         appState.watchStatus = .watching
         let error = LLMError.managedTrialExpired("Payment required.")
 
@@ -254,7 +260,15 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
 
         XCTAssertFalse(signedOut)
         XCTAssertNil(appState.managedAccountStatus)
-        XCTAssertEqual(appState.managedLicense, .unknown)
+        XCTAssertEqual(appState.managedLicense, .notEntitled)
+        XCTAssertTrue(appState.canManageBilling)
+        XCTAssertFalse(appState.shouldOfferSubscribe)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.status, .pastDue)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.manageBillingURL, portalURL)
+        XCTAssertEqual(
+            appState.subscriptionCacheStore.snapshot(accountKey: appState.currentManagedUsageAccountKey)?.status,
+            .pastDue
+        )
         XCTAssertEqual(appState.watchStatus, .paused)
         XCTAssertTrue(appState.resumeWatchingAfterManagedReauth)
         XCTAssertNotNil(appState.managedAccountStatusRefreshTask)
@@ -298,8 +312,10 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
     }
 
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
-        func snapshot(accountKey: String) -> SubscriptionSnapshot? { nil }
-        func save(_ snapshot: SubscriptionSnapshot, accountKey: String) {}
-        func clear(accountKey: String) {}
+        private var snapshots: [String: SubscriptionSnapshot] = [:]
+
+        func snapshot(accountKey: String) -> SubscriptionSnapshot? { snapshots[accountKey] }
+        func save(_ snapshot: SubscriptionSnapshot, accountKey: String) { snapshots[accountKey] = snapshot }
+        func clear(accountKey: String) { snapshots.removeValue(forKey: accountKey) }
     }
 }

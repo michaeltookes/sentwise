@@ -478,7 +478,7 @@ extension AppState {
         )
     }
 
-    private func cacheSubscriptionSnapshot(_ snapshot: SubscriptionSnapshot) {
+    func cacheSubscriptionSnapshot(_ snapshot: SubscriptionSnapshot) {
         cachedSubscriptionSnapshot = snapshot
         subscriptionCacheStore.save(snapshot, accountKey: currentManagedUsageAccountKey)
     }
