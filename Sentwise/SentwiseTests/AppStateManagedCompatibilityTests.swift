@@ -213,6 +213,41 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         }
     }
 
+    func testUnknownSubscriptionStatusWithExpiredTrialPreservesPaidSnapshot() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            trial: ManagedTrial(endsAt: Date().addingTimeInterval(-86_400), active: false),
+            subscription: ManagedSubscription(plan: .pro, status: .unknown)
+        )
+        let store = InMemorySubscriptionCacheStore()
+        let appState = makeSignedInAppState(llm: llm, cacheStore: store)
+        let accountKey = appState.currentManagedUsageAccountKey
+        store.save(
+            SubscriptionSnapshot(
+                plan: .pro,
+                status: .active,
+                manageBillingURL: "https://billing.example.com/session",
+                capturedAt: Date().addingTimeInterval(-86_400)
+            ),
+            accountKey: accountKey
+        )
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.plan, .pro)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.status, .active)
+        XCTAssertEqual(appState.cachedSubscriptionSnapshot?.manageBillingURL, "https://billing.example.com/session")
+        XCTAssertEqual(store.saved[accountKey]?.plan, .pro)
+        XCTAssertEqual(store.saved[accountKey]?.status, .active)
+        XCTAssertFalse(appState.shouldOfferSubscribe)
+        XCTAssertEqual(appState.manageBillingURL?.absoluteString, "https://billing.example.com/session")
+        guard case .grace = appState.managedLicense else {
+            return XCTFail("expected expired trial history not to replace paid entitlement grace")
+        }
+    }
+
     func testQuotaOnlyAccountStatusUsesCompatibilityStatusForPastDueSnapshot() async {
         let llm = StatusLLM()
         llm.statusToReturn = ManagedAccountStatus(

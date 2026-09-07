@@ -439,7 +439,8 @@ extension AppState {
     }
 
     private func derivedTrialSubscriptionSnapshot(from status: ManagedAccountStatus) -> SubscriptionSnapshot? {
-        guard let state = derivedTrialSubscriptionState(from: status) else { return nil }
+        guard status.subscription == nil || status.trial?.active == true,
+              let state = derivedTrialSubscriptionState(from: status) else { return nil }
         return SubscriptionSnapshot(
             plan: state.plan,
             status: state.status,
