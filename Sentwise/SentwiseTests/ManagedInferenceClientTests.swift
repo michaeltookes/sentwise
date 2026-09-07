@@ -391,4 +391,5 @@ final class ManagedInferenceClientTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
 }

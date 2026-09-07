@@ -179,16 +179,6 @@ final class AppStateBillingTests: XCTestCase {
         XCTAssertNil(appState.manageBillingURL)
     }
 
-    func testCheckoutModelThreadsClerkIDAndEmail() {
-        let llm = StatusLLM()
-        let appState = makeSignedInAppState(llm: llm)
-        appState.managedAccountStatus = status(userID: "user_abc", plan: .trial, statusValue: .trialing)
-        let model = appState.makeCheckoutModel(for: .starter)
-        XCTAssertEqual(model.clerkUserID, "user_abc")
-        XCTAssertEqual(model.email, "marcus@example.com")
-        XCTAssertEqual(model.priceID, PaddleConfig.active.priceID(for: .starter))
-    }
-
     // MARK: - Manage billing enable/disable
 
     func testManageBillingDisabledWhenNoURL() {

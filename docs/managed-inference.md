@@ -371,33 +371,61 @@ Checkout is Paddle's **overlay checkout**, rendered by **Paddle.js inside a
 so the purchase completes without leaving the app. A browser hosted-checkout URL
 is the documented fallback if the in-app overlay ever proves infeasible.
 
+**The overlay is opened by a server-minted transaction id, not by client-side
+`customData`.** An earlier build opened checkout with raw `items` + an *unsigned*
+`customData.clerkUserId`; live sandbox verification showed the `sentwise-service`
+webhook (correctly) refuses to attribute a purchase from an unsigned id for a
+first-time Paddle customer — it returns `{ ok:true, mapped:false }` and writes no
+subscription, so the account never left trial. The fix is to mint the transaction
+**server-side**, where the Worker binds the account to it with a **signed**
+`custom_data` the webhook trusts, and open the overlay with the transaction id
+alone.
+
 - **Config** (`Services/Billing/PaddleConfig.swift`) is the single source for the
   Paddle client-side token and per-tier price ids, flagged `sandbox` vs
   `production` so a production cutover is a one-line change of `PaddleConfig.active`.
   Nothing in the UI hardcodes credentials. The sandbox client-side token is public
   by design (frontend-scoped) so embedding it is safe. `priceID(for: PaddlePlan)`
   maps `starter`/`pro`/`unlimited` to their price ids.
+- **Authed transaction mint** — when the user picks a tier, the app calls the
+  authenticated `POST /v1/paddle/checkout` with `{ priceId, quantity:1 }` under the
+  **same Clerk session bearer** as `/v1/me` and `/v1/draft`
+  (`LLMProviding.createPaddleCheckoutTransaction(priceID:)` →
+  `ManagedInferenceClient.createCheckoutTransaction` in
+  `Services/LLM/ManagedInferenceCheckout.swift`). The Worker returns
+  `{ transactionId, checkoutUrl }`; the app opens the overlay with the transaction
+  id. `401` → `LLMError.managedNotSignedIn`; other non-2xx →
+  `LLMError.managedCheckoutFailed` carrying the Worker's plain message (bad price,
+  ineligible account, checkout unavailable). `AppState.makeCheckoutModel(for:)`
+  injects this call into the model. No Clerk id / email is sent client-side.
 - **Harness** (`Services/Billing/PaddleCheckoutHTML.swift`) is a bundled HTML
   string that loads `https://cdn.paddle.com/paddle/v2/paddle.js`, calls
   `Paddle.Environment.set("sandbox")` (sandbox only), `Paddle.Initialize({ token,
   eventCallback })`, and exposes `window.sentwiseOpenCheckout(args)`. It bridges
-  events to Swift over the `sentwise` `WKScriptMessageHandler`, adding two
-  harness-level signals: `paddle.ready` (script loaded + initialized) and
-  `paddle.failed` (load/init error).
-- **Request** (`Services/Billing/PaddleCheckout.swift`) `PaddleCheckoutRequest`
-  encodes the exact `Paddle.Checkout.open(...)` argument:
-  `{ items:[{ priceId, quantity:1 }], customData:{ clerkUserId }, customer:{ email } }`.
-  The signed-in **Clerk user id** is threaded into `customData.clerkUserId` so the
-  `sentwise-service` webhook can map the Paddle customer back to the account; it is
-  resolved by `AppState.managedClerkUserID` (the `/v1/me` `userId`, falling back to
-  the persisted `clerk-user:<id>`), and a checkout is refused when it is unknown.
-  The account email is a best-effort prefill, omitted when blank.
+  events to Swift over the `sentwise` `WKScriptMessageHandler`, adding three
+  harness-level signals: `paddle.ready` (script loaded + initialized),
+  `paddle.opened` (posted right after `Paddle.Checkout.open` succeeds — the signal
+  the app now uses to mark "presenting", since with the async mint `paddle.ready`
+  can fire long before the overlay opens), and `paddle.failed` (load/init error).
+- **Open argument** (`Services/Billing/PaddleCheckout.swift`) `PaddleCheckoutRequest`
+  encodes only `{ transactionId }` for `Paddle.Checkout.open(...)` — no
+  `items` / `customData` / `customer`. It carries no client-side binding
+  precisely because the unsigned binding is what the webhook refuses.
 - **View-model** (`Services/Billing/PaddleCheckoutModel.swift`) is the pure phase
-  machine (`initializing → presenting → completed | closed | failed`). On
-  `checkout.completed` the sheet calls `AppState.completeBillingCheckout()`, which
-  dismisses the sheet and refreshes `/v1/me` so the webhook-written subscription is
-  reflected. A `checkout.closed` after a completion is ignored (Paddle's own
-  teardown), and a terminal failure is only overridden by a completion.
+  machine (`initializing → preparing → presenting → completed | closed | failed`).
+  It is async: `prepare()` mints the transaction via the injected authed call, then
+  publishes the `{ transactionId }` open argument once **both** the transaction is
+  minted and the harness page has loaded (either order); the sheet opens the
+  overlay when that publishes. Endpoint errors surface as `.failed(message)` with
+  friendly, billing-only copy. On `checkout.completed` the sheet keeps itself open,
+  calls `AppState.reconcileSubscriptionAfterCheckout()` (polls `/v1/me` roughly
+  every ~2s for ~15–20s, stopping early once the paid tier is visible — the webhook
+  write can lag Paddle's completion by a second or two), then shows a
+  **"You're on \<tier\> — you're all set."** confirmation with a Done button before
+  dismissal. `completeBillingCheckout()` (dismiss + reconcile) is retained for other
+  callers. A `checkout.closed` after a completion is ignored (Paddle's own
+  teardown), and a terminal failure is only overridden by a completion. In Prowl
+  hunt mode there is no network and no poll.
 
 ### Offline license grace (item 56c)
 

@@ -1,41 +1,30 @@
 import Foundation
 
 /// The argument object handed to `Paddle.Checkout.open(...)` (backlog item 56c).
-/// Encodes to exactly the JSON the Paddle.js overlay expects:
+/// Encodes to exactly the JSON the Paddle.js overlay expects for a server-minted
+/// transaction:
 ///
 /// ```json
-/// { "items": [{"priceId": "...", "quantity": 1}],
-///   "customData": {"clerkUserId": "..."},
-///   "customer": {"email": "..."} }
+/// { "transactionId": "txn_..." }
 /// ```
 ///
-/// `customData.clerkUserId` is how the `sentwise-service` webhook maps the Paddle
-/// customer back to the Clerk account, so it is required to open a checkout; the
-/// customer email is a best-effort prefill and is omitted when unknown.
+/// The transaction is minted server-side by the authenticated
+/// `POST /v1/paddle/checkout` endpoint, which binds the signed-in Clerk account
+/// to it via a **signed** `custom_data` the Paddle webhook trusts. That is why
+/// the app opens by transaction id alone and no longer passes raw
+/// `items` / `customData` / `customer` client-side: an unsigned `customData`
+/// binding is refused by the webhook for first-time Paddle customers, so a
+/// client-side checkout could never attribute the purchase.
 struct PaddleCheckoutRequest: Equatable, Sendable {
-    let priceID: String
-    let quantity: Int
-    /// The signed-in Clerk user id (bare id, e.g. `user_123`), threaded into
-    /// `customData.clerkUserId`. Required — the webhook needs it to attribute the
-    /// purchase to the right account.
-    let clerkUserID: String
-    /// Prefill email; omitted from the payload when nil/empty.
-    let email: String?
-
-    init(priceID: String, clerkUserID: String, email: String? = nil, quantity: Int = 1) {
-        self.priceID = priceID
-        self.clerkUserID = clerkUserID
-        let trimmed = email?.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.email = (trimmed?.isEmpty == false) ? trimmed : nil
-        self.quantity = quantity
-    }
+    /// The server-minted Paddle transaction id (e.g. `txn_...`).
+    let transactionID: String
 
     /// The `Paddle.Checkout.open(...)` argument object as JSON. Keys are sorted so
     /// tests can assert the serialized shape deterministically.
     func makeArgumentJSON() throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(Payload(request: self))
+        return try encoder.encode(Payload(transactionId: transactionID))
     }
 
     func makeArgumentJSONString() throws -> String {
@@ -47,28 +36,7 @@ struct PaddleCheckoutRequest: Equatable, Sendable {
     }
 
     private struct Payload: Encodable {
-        let items: [Item]
-        let customData: CustomData
-        let customer: Customer?
-
-        init(request: PaddleCheckoutRequest) {
-            items = [Item(priceId: request.priceID, quantity: request.quantity)]
-            customData = CustomData(clerkUserId: request.clerkUserID)
-            customer = request.email.map(Customer.init(email:))
-        }
-
-        struct Item: Encodable {
-            let priceId: String
-            let quantity: Int
-        }
-
-        struct CustomData: Encodable {
-            let clerkUserId: String
-        }
-
-        struct Customer: Encodable {
-            let email: String
-        }
+        let transactionId: String
     }
 }
 
@@ -78,7 +46,12 @@ struct PaddleCheckoutRequest: Equatable, Sendable {
 /// (`paddle.ready` when init + open succeeds, `paddle.failed` when the script or
 /// initialization fails to load).
 enum PaddleBridgeEvent: Equatable, Sendable {
-    /// Paddle initialized and the checkout overlay opened.
+    /// The checkout overlay actually opened — `paddle.opened` (posted by the
+    /// harness right after `Paddle.Checkout.open(...)` succeeds) or Paddle's own
+    /// `checkout.loaded`. Drives the transition to `.presenting`. Note: the
+    /// harness's `paddle.ready` (fired on `Paddle.Initialize`, before any overlay
+    /// is opened) is intentionally *not* mapped here — with the async
+    /// transaction fetch it can fire long before the overlay opens.
     case ready
     /// The transaction completed successfully (`checkout.completed`).
     case completed
@@ -86,24 +59,68 @@ enum PaddleBridgeEvent: Equatable, Sendable {
     case closed
     /// A checkout or harness error, carrying a user-safe message.
     case failed(String)
-    /// An event we don't act on (e.g. `checkout.warning`, `checkout.loaded`).
+    /// An event we don't act on (e.g. `checkout.warning`, `paddle.ready`,
+    /// `paddle.debug`, `paddle.errorMeta`).
     case ignored(String)
 
     /// Maps a raw JS event name (+ optional detail) to a bridge event.
     static func make(name: String, detail: String? = nil) -> PaddleBridgeEvent {
         switch name {
-        case "paddle.ready", "checkout.loaded":
+        case "paddle.opened", "checkout.loaded":
             return .ready
         case "checkout.completed":
             return .completed
         case "checkout.closed":
             return .closed
-        case "paddle.failed", "checkout.error":
-            return .failed(detail?.isEmpty == false
-                ? detail!
-                : "Checkout couldn't be completed. Please try again.")
+        case "paddle.failed":
+            return .failed(nonEmptyMessage(detail) ?? genericCheckoutFailureMessage)
+        case "checkout.error":
+            return .failed(checkoutErrorMessage(from: detail))
         default:
             return .ignored(name)
         }
+    }
+
+    private static let genericCheckoutFailureMessage = "Checkout couldn't be completed. Please try again."
+
+    private static func checkoutErrorMessage(from detail: String?) -> String {
+        guard let message = nonEmptyMessage(detail) else {
+            return genericCheckoutFailureMessage
+        }
+        if let extracted = messageFromSerializedPaddleError(message) {
+            return extracted
+        }
+        if looksLikeSerializedPayload(message) {
+            return genericCheckoutFailureMessage
+        }
+        if message == "[object Object]" {
+            return genericCheckoutFailureMessage
+        }
+        return message
+    }
+
+    private static func messageFromSerializedPaddleError(_ message: String) -> String? {
+        guard let data = message.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        if let error = object["error"] as? [String: Any] {
+            return nonEmptyMessage(error["detail"] as? String)
+                ?? nonEmptyMessage(error["message"] as? String)
+        }
+        return nonEmptyMessage(object["detail"] as? String)
+            ?? nonEmptyMessage(object["message"] as? String)
+    }
+
+    private static func nonEmptyMessage(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private static func looksLikeSerializedPayload(_ message: String) -> Bool {
+        guard let first = message.first else { return false }
+        return first == "{" || first == "["
     }
 }

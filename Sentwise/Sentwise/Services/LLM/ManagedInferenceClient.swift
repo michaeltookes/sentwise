@@ -21,6 +21,10 @@ enum ManagedInference {
 
     static var draftEndpoint: URL { baseURL.appendingPathComponent("v1/draft") }
     static var meEndpoint: URL { baseURL.appendingPathComponent("v1/me") }
+    /// Authenticated server-side Paddle checkout endpoint (backlog item 56c).
+    /// `POST /v1/paddle/checkout` mints a Paddle transaction bound to the account
+    /// with a signed `custom_data` the webhook trusts.
+    static var paddleCheckoutEndpoint: URL { baseURL.appendingPathComponent("v1/paddle/checkout") }
     /// Demand-capture endpoint for "notify me when sign-in with Google is
     /// available" (backlog item 75). `POST /v1/interest` with `{"topic":…}`.
     static var interestEndpoint: URL { baseURL.appendingPathComponent("v1/interest") }

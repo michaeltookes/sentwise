@@ -7,11 +7,12 @@ import Foundation
 /// `window.webkit.messageHandlers.sentwise` message handler.
 ///
 /// The page exposes `window.sentwiseOpenCheckout(argsObject)`, which Swift calls
-/// (via `evaluateJavaScript`) with the `PaddleCheckoutRequest` argument once the
-/// view is ready — this keeps user-supplied values (email) out of the HTML source
-/// and off any injection surface. The harness also emits two non-Paddle signals:
-/// `paddle.ready` (script loaded + initialized) and `paddle.failed` (load or init
-/// error), so the Swift model can distinguish a wiring failure from a user close.
+/// (via `evaluateJavaScript`) with the `{ transactionId }` argument once the
+/// server has minted the transaction and the page is ready. The harness emits
+/// three non-Paddle signals: `paddle.ready` (script loaded + initialized),
+/// `paddle.opened` (the overlay was actually opened), and `paddle.failed` (load
+/// or init error), so the Swift model can tell a wiring failure from a user close
+/// and only mark the checkout "presenting" once the overlay truly opens.
 enum PaddleCheckoutHTML {
 
     /// The full HTML document string for `config`. Load it into a WKWebView with
@@ -23,8 +24,14 @@ enum PaddleCheckoutHTML {
         let environmentSetup = config.environment == .sandbox
             ? #"Paddle.Environment.set("sandbox");"#
             : ""
+        #if DEBUG
+        let rawErrorPayloadCapture = "true"
+        #else
+        let rawErrorPayloadCapture = "false"
+        #endif
         return template
             .replacingOccurrences(of: "__ENV_SETUP__", with: environmentSetup)
+            .replacingOccurrences(of: "__RAW_ERROR_PAYLOAD__", with: rawErrorPayloadCapture)
             .replacingOccurrences(of: "__TOKEN__", with: escapeForJSString(config.clientSideToken))
     }
 
@@ -64,6 +71,7 @@ enum PaddleCheckoutHTML {
       <script>
         var __paddleReady = false;
         var __pendingArgs = null;
+        var __captureRawErrorPayload = __RAW_ERROR_PAYLOAD__;
 
         function post(name, detail) {
           try {
@@ -78,6 +86,39 @@ enum PaddleCheckoutHTML {
           if (el) { el.textContent = text; }
         }
 
+        function checkoutErrorDetail(data) {
+          var detail = "";
+          if (data && data.error) {
+            detail = checkoutErrorText(data.error.detail) || checkoutErrorText(data.error.message);
+          }
+          if (!detail && data) {
+            detail = checkoutErrorText(data.detail) || checkoutErrorText(data.message);
+          }
+          return detail || "Checkout couldn't be completed. Please try again.";
+        }
+
+        function checkoutErrorText(value) {
+          return typeof value === "string" ? value.trim() : "";
+        }
+
+        function checkoutErrorCode(data) {
+          if (data && data.error) {
+            return checkoutErrorText(data.error.code) || checkoutErrorText(data.error.type);
+          }
+          if (data) {
+            return checkoutErrorText(data.code) || checkoutErrorText(data.type);
+          }
+          return "";
+        }
+
+        function checkoutErrorDiagnostic(data) {
+          try { return JSON.stringify(data); }
+          catch (e) {
+            return "Could not serialize checkout.error payload: "
+              + (e && e.message ? e.message : String(e));
+          }
+        }
+
         // Swift calls this with the Paddle.Checkout.open argument object.
         window.sentwiseOpenCheckout = function (args) {
           __pendingArgs = args;
@@ -90,6 +131,10 @@ enum PaddleCheckoutHTML {
             Paddle.Checkout.open(__pendingArgs);
             __pendingArgs = null;
             setStatus("Complete your purchase in the checkout window.");
+            // Signal that the overlay actually opened. With the server-minted
+            // transaction the open is async from init, so this — not paddle.ready
+            // (init only) — is what advances the app to the presenting state.
+            post("paddle.opened");
           } catch (e) {
             post("paddle.failed", e && e.message ? e.message : e);
           }
@@ -107,11 +152,19 @@ enum PaddleCheckoutHTML {
               token: "__TOKEN__",
               eventCallback: function (data) {
                 var name = (data && data.name) ? data.name : "";
+                // Diagnostic (56c): emit the name of every Paddle event so the app
+                // can log the sequence. Name only here — no PII from completed events.
+                post("paddle.debug", name);
                 if (name === "checkout.completed") { post("checkout.completed"); }
                 else if (name === "checkout.closed") { post("checkout.closed"); }
                 else if (name === "checkout.error") {
-                  var detail = (data && data.error && (data.error.detail || data.error.message)) || "";
-                  post("checkout.error", detail);
+                  var code = checkoutErrorCode(data);
+                  if (code) { post("paddle.errorMeta", code); }
+                  if (__captureRawErrorPayload) {
+                    var diagnostic = checkoutErrorDiagnostic(data);
+                    if (diagnostic) { post("paddle.errorPayload", diagnostic); }
+                  }
+                  post("checkout.error", checkoutErrorDetail(data));
                 }
               }
             });

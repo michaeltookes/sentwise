@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import os
 
 /// The Paddle overlay-checkout sheet (backlog item 56c). When the request carries
 /// a tier it goes straight to that checkout; otherwise it shows a small plan
@@ -18,11 +19,7 @@ struct PaddleCheckoutSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             if let plan = activePlan {
-                PaddleCheckoutRunner(
-                    plan: plan,
-                    clerkUserID: appState.managedClerkUserID,
-                    email: appState.managedAccountDisplayEmail
-                )
+                PaddleCheckoutRunner(model: appState.makeCheckoutModel(for: plan))
             } else {
                 planPicker
             }
@@ -84,23 +81,23 @@ struct PaddleCheckoutSheet: View {
     }
 }
 
-/// Drives one checkout attempt: owns the `PaddleCheckoutModel`, hosts the web
-/// view, and reacts to phase changes (complete → refresh account + dismiss;
-/// close → dismiss; failed → error panel). Split out so the model is created
-/// exactly once via `@StateObject`.
+/// Drives one checkout attempt (item 56c): owns the `PaddleCheckoutModel`, mints
+/// the server-side transaction, hosts the web view, and reacts to phase changes
+/// (complete → reconcile the account + show a success confirmation; close →
+/// dismiss; failed → error panel). Split out so the model is created exactly once
+/// via `@StateObject`.
 private struct PaddleCheckoutRunner: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var model: PaddleCheckoutModel
-    let plan: PaddlePlan
+    /// Post-purchase reconciliation state, so the success panel shows a spinner
+    /// while `/v1/me` catches up, then confirms the tier.
+    @State private var isReconciling = false
 
-    init(plan: PaddlePlan, clerkUserID: String?, email: String?) {
-        self.plan = plan
-        _model = StateObject(wrappedValue: PaddleCheckoutModel(
-            plan: plan,
-            clerkUserID: clerkUserID,
-            email: email
-        ))
+    init(model: PaddleCheckoutModel) {
+        _model = StateObject(wrappedValue: model)
     }
+
+    private var plan: PaddlePlan { model.plan }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -108,17 +105,24 @@ private struct PaddleCheckoutRunner: View {
             Divider()
             content
         }
-        .onAppear {
-            // Guard against opening an unattributable checkout (no Clerk account).
-            if !model.canOpenCheckout { model.failToPrepare() }
+        .task {
+            // Mint the server-side transaction (authed POST /v1/paddle/checkout),
+            // then the web view opens the overlay by transaction id.
+            await model.prepare()
         }
         .onChange(of: model.phase) { _, newPhase in
             switch newPhase {
             case .completed:
-                Task { await appState.completeBillingCheckout() }
+                // Keep the sheet open and reconcile so the pane flips to the paid
+                // tier and we can show a success confirmation before dismissal.
+                isReconciling = true
+                Task {
+                    await appState.reconcileSubscriptionAfterCheckout()
+                    isReconciling = false
+                }
             case .closed:
                 appState.billingCheckout = nil
-            case .initializing, .presenting, .failed:
+            case .initializing, .preparing, .presenting, .failed:
                 break
             }
         }
@@ -152,17 +156,59 @@ private struct PaddleCheckoutRunner: View {
         switch model.phase {
         case .failed(let message):
             errorPanel(message)
-        case .initializing, .presenting, .completed, .closed:
+        case .completed:
+            confirmationPanel
+        case .initializing, .preparing, .presenting, .closed:
             ZStack {
                 PaddleCheckoutWebView(model: model)
                     .accessibilityIdentifier("paddleCheckoutWebView")
-                if model.phase == .initializing {
-                    ProgressView("Loading secure checkout…")
+                if model.phase.isPreOpen {
+                    ProgressView("Preparing secure checkout…")
                         .padding()
                         .accessibilityIdentifier("paddleCheckoutLoading")
                 }
             }
         }
+    }
+
+    /// Post-purchase success confirmation (item 56c). Shows a spinner while
+    /// `/v1/me` catches up, then confirms the tier. Billing-only copy.
+    private var confirmationPanel: some View {
+        VStack(spacing: 14) {
+            if isReconciling {
+                ProgressView()
+                    .controlSize(.large)
+                Text("Completing your purchase…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("paddleCheckoutReconciling")
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.green)
+                Text("You're on \(confirmedTierName) — you're all set.")
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("paddleCheckoutSuccess")
+                Button("Done") {
+                    appState.billingCheckout = nil
+                }
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("paddleCheckoutSuccessDone")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+    }
+
+    /// The tier to name in the success copy: the live subscription plan once the
+    /// account has flipped to a paid tier, else the tier that was purchased.
+    private var confirmedTierName: String {
+        if appState.isOnActivePaidPlan,
+           let livePlan = appState.managedAccountStatus?.subscription?.plan {
+            return livePlan.displayName
+        }
+        return plan.displayName
     }
 
     private func errorPanel(_ message: String) -> some View {
@@ -185,12 +231,15 @@ private struct PaddleCheckoutRunner: View {
     }
 }
 
+private let checkoutLogger = Logger(subsystem: "com.tookes.Sentwise", category: "PaddleCheckout")
+
 /// Hosts the Paddle.js overlay checkout in a `WKWebView` (backlog item 56c).
-/// Loads the bundled harness page, opens the checkout once the page finishes
-/// loading, and forwards Paddle's events back into the model over the
-/// `sentwise` message handler.
+/// Loads the bundled harness page, tells the model when the page has finished
+/// loading, opens the overlay once the model publishes the server-minted
+/// transaction argument, and forwards Paddle's events back into the model over
+/// the `sentwise` message handler.
 private struct PaddleCheckoutWebView: NSViewRepresentable {
-    let model: PaddleCheckoutModel
+    @ObservedObject var model: PaddleCheckoutModel
 
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
 
@@ -202,6 +251,11 @@ private struct PaddleCheckoutWebView: NSViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
+        #if DEBUG
+        // Diagnostic (56c): allow Safari Web Inspector to attach to the checkout
+        // webview in debug builds so Paddle.js errors can be read directly.
+        if #available(macOS 13.3, *) { webView.isInspectable = true }
+        #endif
         webView.loadHTMLString(
             PaddleCheckoutHTML.page(config: model.config),
             baseURL: model.config.checkoutOrigin
@@ -209,7 +263,14 @@ private struct PaddleCheckoutWebView: NSViewRepresentable {
         return webView
     }
 
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
+    func updateNSView(_ nsView: WKWebView, context: Context) {
+        // The model publishes the `{ transactionId }` argument once the server has
+        // minted the transaction AND the page has loaded. Open the overlay exactly
+        // once when it appears.
+        guard let json = model.openArgumentJSON, !context.coordinator.didOpen else { return }
+        context.coordinator.didOpen = true
+        nsView.evaluateJavaScript("window.sentwiseOpenCheckout(\(json));", completionHandler: nil)
+    }
 
     static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
         nsView.configuration.userContentController.removeScriptMessageHandler(forName: "sentwise")
@@ -217,6 +278,8 @@ private struct PaddleCheckoutWebView: NSViewRepresentable {
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         private let model: PaddleCheckoutModel
+        /// Guards `sentwiseOpenCheckout` to a single evaluation.
+        var didOpen = false
 
         init(model: PaddleCheckoutModel) {
             self.model = model
@@ -231,20 +294,34 @@ private struct PaddleCheckoutWebView: NSViewRepresentable {
             guard let dict = message.body as? [String: Any],
                   let name = dict["name"] as? String else { return }
             let detail = dict["detail"] as? String
+            // Keep raw Paddle error payloads debug-only and private. Default logs
+            // retain only allowlisted metadata plus the private user-facing copy.
+            if name == "paddle.errorPayload" {
+                #if DEBUG
+                checkoutLogger.debug("Paddle checkout payload: \(detail ?? "<no detail>", privacy: .private)")
+                #endif
+                return
+            } else if name == "paddle.errorMeta" {
+                checkoutLogger.error("Paddle checkout error code: \(detail ?? "<none>", privacy: .public)")
+            } else if name == "checkout.error" || name == "paddle.failed" {
+                checkoutLogger.error(
+                    "Paddle checkout error event: \(name, privacy: .public); message: \(detail ?? "<no detail>", privacy: .private)"
+                )
+            } else {
+                checkoutLogger.debug("Paddle checkout event: \(name, privacy: .public)")
+            }
             let event = PaddleBridgeEvent.make(name: name, detail: detail)
             MainActor.assumeIsolated { model.handle(event) }
         }
 
-        // MARK: Navigation → open the checkout once loaded
+        // MARK: Navigation → tell the model the page is ready
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            // The harness page is loaded; `window.sentwiseOpenCheckout` now exists.
+            // The model opens the overlay (via `openArgumentJSON` → `updateNSView`)
+            // once the server-minted transaction is also in hand.
             MainActor.assumeIsolated {
-                guard let request = model.makeCheckoutRequest(),
-                      let json = try? request.makeArgumentJSONString() else {
-                    model.failToPrepare()
-                    return
-                }
-                webView.evaluateJavaScript("window.sentwiseOpenCheckout(\(json));", completionHandler: nil)
+                model.pageDidLoad()
             }
         }
 
