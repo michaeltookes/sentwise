@@ -96,8 +96,17 @@ extension AppState {
         if quota.resetsAt < current.resetsAt {
             return false
         }
-        if quota.resetsAt == current.resetsAt, quota.used < current.used {
-            return false
+        if quota.resetsAt == current.resetsAt {
+            if quota.unit != current.unit
+                || quota.limit != current.limit
+                || quota.tokenLimit != current.tokenLimit
+                || quota.enforcement != current.enforcement
+                || quota.extraPurchased != current.extraPurchased {
+                return true
+            }
+            if quota.used < current.used {
+                return false
+            }
         }
         return true
     }
