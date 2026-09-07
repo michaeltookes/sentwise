@@ -81,7 +81,12 @@ extension AppState {
             config: .active,
             plan: plan,
             createTransaction: { priceID in
-                try await llm.createPaddleCheckoutTransaction(priceID: priceID)
+                do {
+                    return try await llm.createPaddleCheckoutTransaction(priceID: priceID)
+                } catch {
+                    await self.reconcileManagedAccountState(after: error, provider: .managed)
+                    throw error
+                }
             }
         )
     }

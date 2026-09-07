@@ -38,7 +38,12 @@ final class AppStateCheckoutModelTests: XCTestCase {
         }
     }
 
-    private func makeSignedInAppState(llm: LLMProviding) -> AppState {
+    private struct SignedInFixture {
+        let appState: AppState
+        let secrets: InMemorySecretStore
+    }
+
+    private func makeSignedInFixture(llm: LLMProviding) -> SignedInFixture {
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",
             .managedSessionID: "sess_X"
@@ -52,13 +57,18 @@ final class AppStateCheckoutModelTests: XCTestCase {
             managedAccountEmail: "marcus@example.com",
             managedAccountID: "clerk-user:user_marcus"
         ))
-        return AppState(
+        let appState = AppState(
             persistence: persistence,
             secrets: secrets,
             mailProvider: FakeAppMailProvider(result: .success(())),
             llm: llm,
             notifier: FakeDraftNotifier()
         )
+        return SignedInFixture(appState: appState, secrets: secrets)
+    }
+
+    private func makeSignedInAppState(llm: LLMProviding) -> AppState {
+        makeSignedInFixture(llm: llm).appState
     }
 
     private func status(
@@ -127,5 +137,25 @@ final class AppStateCheckoutModelTests: XCTestCase {
         await model.prepare()
 
         XCTAssertEqual(model.phase, .failed("Checkout is not configured."))
+    }
+
+    func testMakeCheckoutModelReconcilesAuthFailureBeforeSurfacingFailure() async {
+        let llm = CheckoutLLM()
+        llm.checkoutError = LLMError.managedNotSignedIn
+        let fixture = makeSignedInFixture(llm: llm)
+        let appState = fixture.appState
+        appState.managedAccountStatus = status(plan: .trial, statusValue: .trialing)
+        XCTAssertTrue(appState.isManagedSignedIn)
+        XCTAssertNoThrow(try fixture.secrets.remove(.managedClientToken))
+        XCTAssertNoThrow(try fixture.secrets.remove(.managedSessionID))
+
+        let model = appState.makeCheckoutModel(for: .pro)
+        await model.prepare()
+
+        XCTAssertEqual(model.phase, .failed("Sign in to Sentwise AI before subscribing."))
+        XCTAssertEqual(llm.checkoutPriceIDs, [PaddleConfig.active.priceID(for: .pro)])
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertTrue(appState.managedAccountEmail.isEmpty)
+        XCTAssertNil(appState.managedAccountStatus)
     }
 }
