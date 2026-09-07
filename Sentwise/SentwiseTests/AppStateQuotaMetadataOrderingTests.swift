@@ -40,14 +40,14 @@ final class AppStateQuotaMetadataOrderingTests: XCTestCase {
 
     func testDraftQuotaReportDoesNotUpgradeCapacityMetadataAfterStatusRefreshReduction() async {
         let notifier = FakeDraftNotifier()
-        let reduced = quota(used: 25, limit: 50, tokenLimit: 5_000, enforcement: .soft, extraPurchased: 0)
+        let reduced = quota(used: 20, limit: 50, tokenLimit: 5_000, enforcement: .soft, extraPurchased: 0)
         let llm = QuotaLLMProvider(quota: reduced)
         let appState = makeSignedInAppState(notifier: notifier, llm: llm)
 
         await appState.refreshManagedQuota()
-        appState.ingestManagedQuota(quota(used: 26, limit: 100, tokenLimit: 10_000, enforcement: .hard, extraPurchased: 50))
+        appState.ingestManagedQuota(quota(used: 21, limit: 100, tokenLimit: 10_000, enforcement: .hard, extraPurchased: 50))
 
-        XCTAssertEqual(appState.managedQuota?.used, 25)
+        XCTAssertEqual(appState.managedQuota?.used, 20)
         XCTAssertEqual(appState.managedQuota?.limit, 50)
         XCTAssertEqual(appState.managedQuota?.tokenLimit, 5_000)
         XCTAssertEqual(appState.managedQuota?.enforcement, .soft)
