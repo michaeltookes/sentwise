@@ -107,10 +107,20 @@ enum PaddleCheckoutHTML {
               token: "__TOKEN__",
               eventCallback: function (data) {
                 var name = (data && data.name) ? data.name : "";
+                // Diagnostic (56c): emit the name of every Paddle event so the app
+                // can log the sequence. Name only here — no PII from completed events.
+                post("paddle.debug", name);
                 if (name === "checkout.completed") { post("checkout.completed"); }
                 else if (name === "checkout.closed") { post("checkout.closed"); }
                 else if (name === "checkout.error") {
-                  var detail = (data && data.error && (data.error.detail || data.error.message)) || "";
+                  // Paddle nests the reason unpredictably; serialize the whole event
+                  // object so nothing is lost, falling back to the known fields.
+                  var detail = "";
+                  try { detail = JSON.stringify(data); }
+                  catch (e) {
+                    detail = (data && data.error && (data.error.detail || data.error.message))
+                      || String(e);
+                  }
                   post("checkout.error", detail);
                 }
               }

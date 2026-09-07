@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import os
 
 /// The Paddle overlay-checkout sheet (backlog item 56c). When the request carries
 /// a tier it goes straight to that checkout; otherwise it shows a small plan
@@ -185,6 +186,8 @@ private struct PaddleCheckoutRunner: View {
     }
 }
 
+private let checkoutLogger = Logger(subsystem: "com.tookes.Sentwise", category: "PaddleCheckout")
+
 /// Hosts the Paddle.js overlay checkout in a `WKWebView` (backlog item 56c).
 /// Loads the bundled harness page, opens the checkout once the page finishes
 /// loading, and forwards Paddle's events back into the model over the
@@ -202,6 +205,11 @@ private struct PaddleCheckoutWebView: NSViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
+        #if DEBUG
+        // Diagnostic (56c): allow Safari Web Inspector to attach to the checkout
+        // webview in debug builds so Paddle.js errors can be read directly.
+        if #available(macOS 13.3, *) { webView.isInspectable = true }
+        #endif
         webView.loadHTMLString(
             PaddleCheckoutHTML.page(config: model.config),
             baseURL: model.config.checkoutOrigin
@@ -231,6 +239,14 @@ private struct PaddleCheckoutWebView: NSViewRepresentable {
             guard let dict = message.body as? [String: Any],
                   let name = dict["name"] as? String else { return }
             let detail = dict["detail"] as? String
+            // Diagnostic (56c): surface Paddle's raw event + full error payload,
+            // which the generic UI message otherwise swallows. `.public` so it is
+            // readable in Console/`log stream`; errors at .error, the rest at .debug.
+            if name == "checkout.error" || name == "paddle.failed" {
+                checkoutLogger.error("Paddle checkout error: \(detail ?? "<no detail>", privacy: .public)")
+            } else {
+                checkoutLogger.debug("Paddle checkout event: \(name, privacy: .public)")
+            }
             let event = PaddleBridgeEvent.make(name: name, detail: detail)
             MainActor.assumeIsolated { model.handle(event) }
         }
