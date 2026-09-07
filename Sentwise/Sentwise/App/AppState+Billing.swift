@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 
 private let paidManagedSubscriptionPlans: Set<ManagedSubscription.Plan> = [.starter, .pro, .unlimited, .team]
@@ -77,36 +76,6 @@ extension AppState {
             clerkUserID: managedClerkUserID,
             email: managedAccountDisplayEmail
         )
-    }
-
-    // MARK: - Manage billing
-
-    /// The merchant-of-record billing-portal URL when the Worker provides one.
-    /// Prefers the live status; falls back to the cached snapshot so the button
-    /// still works from a last-known value while offline (item 56c).
-    var manageBillingURL: URL? {
-        let raw = managedAccountStatus?.subscription?.manageBillingURL
-            ?? effectiveSubscriptionSnapshot?.manageBillingURL
-        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
-              let url = URL(string: raw),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else {
-            return nil
-        }
-        return url
-    }
-
-    /// Whether "Manage billing" should be enabled — a portal URL is known.
-    var canManageBilling: Bool { manageBillingURL != nil }
-
-    /// Opens the Paddle customer portal in the default browser (item 56c).
-    func openManageBilling(openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }) {
-        guard let url = manageBillingURL else { return }
-        billingReconciliationBaseline = currentBillingReconciliationSnapshot
-        billingPortalRefreshPending = true
-        managedAccountStatusIsFresh = false
-        cancelScheduledManagedAccountStatusRefresh()
-        openURL(url)
     }
 
     // MARK: - Subscribe affordance

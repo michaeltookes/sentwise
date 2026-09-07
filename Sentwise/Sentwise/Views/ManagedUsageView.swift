@@ -47,7 +47,7 @@ struct ManagedUsageView: View {
                 if appState.isManagedQuotaExhausted {
                     if appState.hasManageablePaidSubscription {
                         Button("Manage plan") {
-                            appState.openManageBilling()
+                            Task { await appState.openManageBilling() }
                         }
                         .buttonStyle(.link)
                         .disabled(!appState.canManageBilling)

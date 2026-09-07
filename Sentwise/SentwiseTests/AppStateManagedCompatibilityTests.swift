@@ -140,7 +140,8 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(refreshedSnapshot.capturedAt, refreshStartedAt)
         XCTAssertEqual(store.saved[accountKey], refreshedSnapshot)
         XCTAssertFalse(appState.shouldOfferSubscribe)
-        XCTAssertEqual(appState.manageBillingURL?.absoluteString, "https://billing.example.com/session")
+        XCTAssertTrue(appState.canManageBilling)
+        XCTAssertNil(appState.manageBillingURL)
 
         appState.isOnline = false
         appState.managedAccountStatus = nil
@@ -178,7 +179,8 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         XCTAssertEqual(appState.cachedSubscriptionSnapshot?.plan, .pro)
         XCTAssertEqual(appState.cachedSubscriptionSnapshot?.status, .active)
         XCTAssertFalse(appState.shouldOfferSubscribe)
-        XCTAssertEqual(appState.manageBillingURL?.absoluteString, "https://billing.example.com/session")
+        XCTAssertTrue(appState.canManageBilling)
+        XCTAssertNil(appState.manageBillingURL)
         XCTAssertEqual(store.saved[stableKey]?.plan, .pro)
         XCTAssertEqual(store.saved[stableKey]?.manageBillingURL, "https://billing.example.com/session")
     }
@@ -242,7 +244,8 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         XCTAssertEqual(store.saved[accountKey]?.plan, .pro)
         XCTAssertEqual(store.saved[accountKey]?.status, .active)
         XCTAssertFalse(appState.shouldOfferSubscribe)
-        XCTAssertEqual(appState.manageBillingURL?.absoluteString, "https://billing.example.com/session")
+        XCTAssertTrue(appState.canManageBilling)
+        XCTAssertNil(appState.manageBillingURL)
         guard case .grace = appState.managedLicense else {
             return XCTFail("expected expired trial history not to replace paid entitlement grace")
         }
@@ -274,7 +277,8 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         XCTAssertEqual(appState.cachedSubscriptionSnapshot?.status, .active)
         XCTAssertEqual(appState.cachedSubscriptionSnapshot?.source, .legacyQuota)
         XCTAssertFalse(appState.shouldOfferSubscribe)
-        XCTAssertEqual(appState.manageBillingURL?.absoluteString, "https://billing.example.com/session")
+        XCTAssertTrue(appState.canManageBilling)
+        XCTAssertNil(appState.manageBillingURL)
         let model = SubscriptionPaneModel.make(
             from: appState.managedAccountStatus,
             snapshot: appState.effectiveSubscriptionSnapshot,

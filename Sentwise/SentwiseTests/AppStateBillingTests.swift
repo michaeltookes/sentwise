@@ -176,6 +176,7 @@ final class AppStateBillingTests: XCTestCase {
         appState.presentBillingCheckout()
         XCTAssertNil(appState.billingCheckout)
         XCTAssertTrue(appState.canManageBilling)
+        XCTAssertNil(appState.manageBillingURL)
     }
 
     func testCheckoutModelThreadsClerkIDAndEmail() {

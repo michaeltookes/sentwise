@@ -23,8 +23,14 @@ struct BillingReconciliationQuotaSnapshot: Equatable {
     let extraPurchased: Int
 }
 
+struct BillingSubscriptionSnapshot: Equatable {
+    let plan: ManagedSubscription.Plan
+    let status: ManagedSubscription.Status
+    let renewsAt: Date?
+}
+
 struct BillingReconciliationSnapshot: Equatable {
-    let subscription: ManagedSubscription?
+    let subscription: BillingSubscriptionSnapshot?
     let quota: BillingReconciliationQuotaSnapshot?
 }
 
@@ -110,13 +116,18 @@ extension AppState {
     }
 
     var currentBillingReconciliationSnapshot: BillingReconciliationSnapshot {
-        let subscription = managedAccountStatus?.subscription
+        let subscription = managedAccountStatus?.subscription.map {
+            BillingSubscriptionSnapshot(
+                plan: $0.plan,
+                status: $0.status,
+                renewsAt: $0.renewsAt
+            )
+        }
             ?? effectiveSubscriptionSnapshot.map {
-                ManagedSubscription(
+                BillingSubscriptionSnapshot(
                     plan: $0.plan,
                     status: $0.status,
-                    renewsAt: $0.renewsAt,
-                    manageBillingURL: $0.manageBillingURL
+                    renewsAt: $0.renewsAt
                 )
             }
         return BillingReconciliationSnapshot(

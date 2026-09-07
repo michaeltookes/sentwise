@@ -109,10 +109,12 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         appState.managedAccountStatus = pastDue
         appState.markManagedAccountStatusFresh(from: pastDue)
         var openedURL: URL?
+        llm.statusToReturn = pastDue
 
-        appState.openManageBilling { openedURL = $0 }
+        await appState.openManageBilling { openedURL = $0 }
 
         XCTAssertEqual(openedURL?.absoluteString, portalURL)
+        XCTAssertEqual(llm.fetchCount, 1)
         XCTAssertFalse(appState.managedAccountStatusIsFresh)
         XCTAssertTrue(appState.billingPortalRefreshPending)
 
@@ -123,7 +125,7 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         )
         await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded()
 
-        XCTAssertEqual(llm.fetchCount, 1)
+        XCTAssertEqual(llm.fetchCount, 2)
         XCTAssertFalse(appState.billingPortalRefreshPending)
         XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .active)
         XCTAssertEqual(appState.managedLicense, .entitled)
@@ -141,7 +143,8 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         )
         appState.managedAccountStatus = pastDue
         appState.markManagedAccountStatusFresh(from: pastDue)
-        appState.openManageBilling { _ in }
+        llm.statusToReturn = pastDue
+        await appState.openManageBilling { _ in }
         llm.statusesToReturn = [
             pastDue,
             ManagedAccountStatus(
@@ -152,11 +155,11 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         ]
 
         await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded(reconciliationRetryDelays: [0])
-        for _ in 0..<1_000 where llm.fetchCount < 2 {
+        for _ in 0..<1_000 where llm.fetchCount < 3 {
             try await Task.sleep(nanoseconds: 1_000_000)
         }
 
-        XCTAssertEqual(llm.fetchCount, 2)
+        XCTAssertEqual(llm.fetchCount, 3)
         XCTAssertFalse(appState.billingPortalRefreshPending)
         XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .active)
         XCTAssertEqual(appState.managedLicense, .entitled)
@@ -184,20 +187,21 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
             userID: "user_marcus",
             email: "marcus@example.com",
             quota: quota(limit: 50, remaining: 20),
-            subscription: ManagedSubscription(plan: .pro, status: .active, manageBillingURL: portalURL)
+            subscription: ManagedSubscription(plan: .pro, status: .active, manageBillingURL: "https://billing.example/new-session")
         )
         appState.managedAccountStatus = oldStatus
         appState.managedQuota = oldStatus.quota
         appState.markManagedAccountStatusFresh(from: oldStatus)
-        appState.openManageBilling { _ in }
+        llm.statusToReturn = oldStatus
+        await appState.openManageBilling { _ in }
         llm.statusesToReturn = [usageDriftStatus, upgradedStatus]
 
         await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded(reconciliationRetryDelays: [0])
-        for _ in 0..<1_000 where llm.fetchCount < 2 {
+        for _ in 0..<1_000 where llm.fetchCount < 3 {
             try await Task.sleep(nanoseconds: 1_000_000)
         }
 
-        XCTAssertEqual(llm.fetchCount, 2)
+        XCTAssertEqual(llm.fetchCount, 3)
         XCTAssertEqual(appState.managedAccountStatus?.subscription?.plan, .unlimited)
         XCTAssertEqual(appState.managedQuota?.limit, 100)
         XCTAssertNil(appState.billingReconciliationTask)

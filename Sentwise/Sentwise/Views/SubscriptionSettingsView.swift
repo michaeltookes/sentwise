@@ -114,7 +114,7 @@ struct SubscriptionSettingsView: View {
             }
 
             Button("Manage billing") {
-                appState.openManageBilling()
+                Task { await appState.openManageBilling() }
             }
             .disabled(!appState.canManageBilling)
             .accessibilityIdentifier("manageBilling")
