@@ -114,17 +114,14 @@ extension AppState {
             return false
         }
         if quota.resetsAt == current.resetsAt {
-            if source == .draftReport && quotaHasStaleCapacityMetadata(quota, comparedWith: current) {
-                return false
-            }
             if source == .draftReport && quota.used < current.used {
                 return false
             }
-            if quota.unit != current.unit
-                || quota.limit != current.limit
-                || quota.tokenLimit != current.tokenLimit
-                || quota.enforcement != current.enforcement
-                || quota.extraPurchased != current.extraPurchased {
+            let hasCapacityMetadataDifference = quotaHasCapacityMetadataDifference(quota, comparedWith: current)
+            if source == .draftReport && hasCapacityMetadataDifference {
+                return false
+            }
+            if hasCapacityMetadataDifference {
                 return true
             }
             if quota.used < current.used {
@@ -134,11 +131,12 @@ extension AppState {
         return true
     }
 
-    private func quotaHasStaleCapacityMetadata(_ quota: ManagedQuota, comparedWith current: ManagedQuota) -> Bool {
-        quota.limit < current.limit
-            || quota.tokenLimit < current.tokenLimit
-            || quota.extraPurchased < current.extraPurchased
-            || (current.enforcement == .hard && quota.enforcement == .soft)
+    private func quotaHasCapacityMetadataDifference(_ quota: ManagedQuota, comparedWith current: ManagedQuota) -> Bool {
+        quota.unit != current.unit
+            || quota.limit != current.limit
+            || quota.tokenLimit != current.tokenLimit
+            || quota.enforcement != current.enforcement
+            || quota.extraPurchased != current.extraPurchased
     }
 
     private func resolvedManagedQuotaAccountKey(_ accountKey: String) -> String {
