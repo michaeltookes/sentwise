@@ -7,11 +7,12 @@ import Foundation
 /// `window.webkit.messageHandlers.sentwise` message handler.
 ///
 /// The page exposes `window.sentwiseOpenCheckout(argsObject)`, which Swift calls
-/// (via `evaluateJavaScript`) with the `PaddleCheckoutRequest` argument once the
-/// view is ready — this keeps user-supplied values (email) out of the HTML source
-/// and off any injection surface. The harness also emits two non-Paddle signals:
-/// `paddle.ready` (script loaded + initialized) and `paddle.failed` (load or init
-/// error), so the Swift model can distinguish a wiring failure from a user close.
+/// (via `evaluateJavaScript`) with the `{ transactionId }` argument once the
+/// server has minted the transaction and the page is ready. The harness emits
+/// three non-Paddle signals: `paddle.ready` (script loaded + initialized),
+/// `paddle.opened` (the overlay was actually opened), and `paddle.failed` (load
+/// or init error), so the Swift model can tell a wiring failure from a user close
+/// and only mark the checkout "presenting" once the overlay truly opens.
 enum PaddleCheckoutHTML {
 
     /// The full HTML document string for `config`. Load it into a WKWebView with
@@ -90,6 +91,10 @@ enum PaddleCheckoutHTML {
             Paddle.Checkout.open(__pendingArgs);
             __pendingArgs = null;
             setStatus("Complete your purchase in the checkout window.");
+            // Signal that the overlay actually opened. With the server-minted
+            // transaction the open is async from init, so this — not paddle.ready
+            // (init only) — is what advances the app to the presenting state.
+            post("paddle.opened");
           } catch (e) {
             post("paddle.failed", e && e.message ? e.message : e);
           }
