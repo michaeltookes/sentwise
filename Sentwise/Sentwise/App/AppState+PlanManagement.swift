@@ -58,7 +58,18 @@ extension AppState {
     /// the account is on one of the purchasable tiers, so a trialing / lapsed /
     /// unknown account keeps the Subscribe entry point instead.
     var showsPlanManagement: Bool {
-        isManagedSignedIn && hasManageablePaidSubscription && currentSubscriptionPlanTier != nil
+        hasPlanChangeablePaidSubscription
+    }
+
+    /// Whether direct in-app plan switching can start. Billing management remains
+    /// available for indeterminate paid subscriptions; plan changes require a
+    /// lifecycle status the confirmation/reconciliation path can validate.
+    var canChangeManagedPlan: Bool {
+        isManagedSignedIn
+            && isOnline
+            && !isChangingPlan
+            && !isManagingBilling
+            && hasPlanChangeablePaidSubscription
     }
 
     /// Switches the subscription to `tier` (item 90). No-op when not signed in,
@@ -72,8 +83,7 @@ extension AppState {
         reconcileRetryDelays: [UInt64] = planChangeReconcileRetryDelays,
         backgroundReconcileRetryDelays: [UInt64] = planChangeBackgroundReconcileRetryDelays
     ) async {
-        guard isManagedSignedIn, isOnline, !isChangingPlan, !isManagingBilling,
-              hasManageablePaidSubscription,
+        guard canChangeManagedPlan,
               let current = currentSubscriptionPlanTier, current != tier else {
             return
         }
@@ -349,6 +359,28 @@ extension AppState {
             return false
         }
         return true
+    }
+
+    private var hasPlanChangeablePaidSubscription: Bool {
+        guard isManagedSignedIn,
+              hasManageablePaidSubscription,
+              currentSubscriptionPlanTier != nil,
+              let status = currentPlanManagementSubscriptionStatus,
+              successfulPlanChangeStatuses.contains(status) else {
+            return false
+        }
+        return true
+    }
+
+    private var currentPlanManagementSubscriptionStatus: ManagedSubscription.Status? {
+        if let subscription = managedAccountStatus?.subscription {
+            return subscription.status
+        }
+        guard let snapshot = effectiveSubscriptionSnapshot,
+              PaddlePlan(subscriptionPlan: snapshot.plan) != nil else {
+            return nil
+        }
+        return snapshot.status
     }
 
     /// A short confirm prompt for switching to `tier` (item 90). Billing-only —

@@ -9,6 +9,7 @@ final class AppStateBillingPortalTests: XCTestCase {
         var manageBillingURLToReturn = URL(string: "https://billing.example/fresh")!
         var manageBillingError: Error?
         private(set) var manageBillingFetchCount = 0
+        private(set) var changePlanCount = 0
 
         func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
         func complete(_ request: LLMRequest, provider: LLMProviderKind, apiKey: String, baseURL: String?) async throws
@@ -22,6 +23,10 @@ final class AppStateBillingPortalTests: XCTestCase {
             manageBillingFetchCount += 1
             if let manageBillingError { throw manageBillingError }
             return manageBillingURLToReturn
+        }
+        func changeManagedPlan(priceID: String, expectedAccountKey: String?) async throws -> PaddlePlanChange {
+            changePlanCount += 1
+            throw LLMError.managedNotSignedIn
         }
     }
 
@@ -87,6 +92,22 @@ final class AppStateBillingPortalTests: XCTestCase {
         await appState.changePlan(to: .pro)
 
         XCTAssertEqual(appState.currentSubscriptionPlanTier, .starter)
+        XCTAssertNil(appState.planChangeMessage)
+    }
+
+    func testUnknownPaidLifecycleKeepsBillingPortalButBlocksPlanSwitching() async {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountStatus = status(plan: .pro, statusValue: .unknown, billingURL: nil)
+
+        XCTAssertTrue(appState.hasManageablePaidSubscription)
+        XCTAssertTrue(appState.canManageBilling)
+        XCTAssertFalse(appState.showsPlanManagement)
+        XCTAssertFalse(appState.canChangeManagedPlan)
+
+        await appState.changePlan(to: .unlimited)
+
+        XCTAssertEqual(llm.changePlanCount, 0)
         XCTAssertNil(appState.planChangeMessage)
     }
 
