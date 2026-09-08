@@ -69,6 +69,27 @@ final class AppStateBillingPortalTests: XCTestCase {
         XCTAssertFalse(appState.isManagingBilling)
     }
 
+    func testCanManageBillingIsFalseDuringPlanChange() {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountStatus = status(plan: .pro, statusValue: .active, billingURL: nil)
+        appState.isChangingPlan = true
+
+        XCTAssertFalse(appState.canManageBilling)
+    }
+
+    func testChangePlanIsNoOpWhileManageBillingIsInFlight() async {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountStatus = status(plan: .starter, statusValue: .active, billingURL: nil)
+        appState.isManagingBilling = true
+
+        await appState.changePlan(to: .pro)
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .starter)
+        XCTAssertNil(appState.planChangeMessage)
+    }
+
     private func makeSignedInAppState(llm: LLMProviding) -> AppState {
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",

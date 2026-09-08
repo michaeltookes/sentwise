@@ -66,7 +66,7 @@ extension AppState {
         reconcileRetryDelays: [UInt64] = planChangeReconcileRetryDelays,
         backgroundReconcileRetryDelays: [UInt64] = planChangeBackgroundReconcileRetryDelays
     ) async {
-        guard isManagedSignedIn, isOnline, !isChangingPlan,
+        guard isManagedSignedIn, isOnline, !isChangingPlan, !isManagingBilling,
               hasManageablePaidSubscription,
               let current = currentSubscriptionPlanTier, current != tier else {
             return

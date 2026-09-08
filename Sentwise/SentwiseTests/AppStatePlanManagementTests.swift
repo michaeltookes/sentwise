@@ -145,7 +145,8 @@ final class AppStatePlanManagementTests: XCTestCase {
         let llm = PlanLLM()
         let appState = makeSignedInAppState(llm: llm)
         setStatus(appState, plan: .starter, status: .active)
-        llm.statusAfterChange = status(plan: .pro, status: .active)
+        let quota = ManagedQuota(used: 5, limit: 120, remaining: 115, resetsAt: Date(), tokenLimit: 1_200)
+        llm.statusAfterChange = status(plan: .pro, status: .active, quota: quota)
 
         XCTAssertEqual(appState.currentSubscriptionPlanTier, .starter)
 
@@ -157,6 +158,7 @@ final class AppStatePlanManagementTests: XCTestCase {
         XCTAssertFalse(appState.planChangeFailed)
         XCTAssertFalse(appState.isChangingPlan)
         XCTAssertNil(appState.changingPlanTier)
+        XCTAssertNil(appState.planChangeReconciliationTask)
     }
 
     func testChangePlanAppliesValidatedResponseWhenStatusPollDoesNotFlipTier() async {
@@ -378,8 +380,8 @@ final class AppStatePlanManagementTests: XCTestCase {
         XCTAssertEqual(PaddlePlan.starter.monthlyPrice, "$9")
         XCTAssertEqual(PaddlePlan.pro.monthlyPrice, "$19")
         XCTAssertEqual(PaddlePlan.unlimited.monthlyPrice, "$39")
-        XCTAssertEqual(PaddlePlan.starter.allowanceSummary, "30 follow-ups a month")
-        XCTAssertEqual(PaddlePlan.pro.allowanceSummary, "120 follow-ups a month")
+        XCTAssertEqual(PaddlePlan.starter.allowanceSummary, "30 follow-ups a week")
+        XCTAssertEqual(PaddlePlan.pro.allowanceSummary, "120 follow-ups a week")
         XCTAssertEqual(PaddlePlan.unlimited.allowanceSummary, "Unlimited follow-ups")
         XCTAssertTrue(PaddlePlan.pro.isFeatured)
         XCTAssertFalse(PaddlePlan.starter.isFeatured)

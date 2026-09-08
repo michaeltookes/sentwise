@@ -52,12 +52,12 @@ enum PaddlePlan: String, CaseIterable, Identifiable, Sendable, Equatable {
         }
     }
 
-    /// The plan's monthly allowance headline (item 90), matching the marketing
-    /// site's owner-confirmed caps. Billing-only copy.
+    /// The plan's weekly allowance headline (item 90), matching the enforced
+    /// quota window. Billing-only copy.
     var allowanceSummary: String {
         switch self {
-        case .starter: return "30 follow-ups a month"
-        case .pro: return "120 follow-ups a month"
+        case .starter: return "30 follow-ups a week"
+        case .pro: return "120 follow-ups a week"
         case .unlimited: return "Unlimited follow-ups"
         }
     }

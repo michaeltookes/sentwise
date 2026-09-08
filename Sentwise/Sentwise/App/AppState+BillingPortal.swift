@@ -11,12 +11,12 @@ extension AppState {
         validatedManageBillingURL(from: managedAccountStatus?.subscription?.manageBillingURL)
     }
 
-    /// Whether "Manage billing" should be enabled. Driven purely by whether the
-    /// account has a manageable paid subscription (item 90) — no longer gated on a
-    /// stored URL, because the URL is fetched fresh on tap. The disabled+caption
-    /// state remains for non-paid accounts.
+    /// Whether "Manage billing" should be enabled. Driven by whether the account
+    /// has a manageable paid subscription and no billing operation is in flight
+    /// (item 90) — no longer gated on a stored URL, because the URL is fetched
+    /// fresh on tap.
     var canManageBilling: Bool {
-        isOnline && hasManageablePaidSubscription && !isManagingBilling
+        isOnline && hasManageablePaidSubscription && !isManagingBilling && !isChangingPlan
     }
 
     /// Opens the Paddle customer portal in the default browser (items 56c, 90).
@@ -29,7 +29,7 @@ extension AppState {
         action: PaddleBillingAction? = nil,
         openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
     ) async {
-        guard isManagedSignedIn, isOnline, hasManageablePaidSubscription, !isManagingBilling else { return }
+        guard isManagedSignedIn, canManageBilling else { return }
         let accountKey = currentManagedUsageAccountKey
         manageBillingOperationGeneration &+= 1
         let operationGeneration = manageBillingOperationGeneration

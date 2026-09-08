@@ -137,7 +137,7 @@ struct SubscriptionSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
                     .accessibilityIdentifier("manageBillingMessage")
-            } else if !appState.canManageBilling, !appState.isManagingBilling {
+            } else if !appState.canManageBilling, !appState.isManagingBilling, !appState.isChangingPlan {
                 Text(appState.shouldOfferSubscribe
                      ? "Subscribe to manage billing here."
                      : "A billing portal link will appear here once your subscription is active.")

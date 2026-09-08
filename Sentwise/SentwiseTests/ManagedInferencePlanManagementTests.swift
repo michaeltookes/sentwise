@@ -119,6 +119,28 @@ final class ManagedInferencePlanManagementTests: XCTestCase {
         XCTAssertEqual(change.status, .active)
     }
 
+    func testChangePlanDecodesUnknownStatusAsFallback() async throws {
+        let transport = FakeLLMTransport(response: json(#"{"ok":true,"plan":"pro","status":"mystery"}"#))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+
+        let change = try await client.changePlan(priceID: "pri_x")
+        XCTAssertEqual(change.plan, .pro)
+        XCTAssertEqual(change.status, .unknown)
+    }
+
+    func testChangePlanRejectsOkFalse() async {
+        let transport = FakeLLMTransport(response: json(#"{"ok":false,"plan":"pro","status":"active"}"#))
+        let client = ManagedInferenceClient(sessionProvider: StubSessionProvider(), transport: transport)
+        do {
+            _ = try await client.changePlan(priceID: "pri_pro")
+            XCTFail("Expected change-plan-failed error")
+        } catch LLMError.managedChangePlanFailed {
+            // expected
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testChangePlanMaps401ToNotSignedInAndInvalidates() async {
         let sessionProvider = RecordingSessionProvider()
         let transport = FakeLLMTransport(response: json(#"{"error":{"type":"unauthenticated","message":"Sign in."}}"#, status: 401))

@@ -23,7 +23,7 @@ struct PlanManagementView: View {
                     tier: tier,
                     isCurrent: tier == currentTier,
                     isChanging: appState.changingPlanTier == tier,
-                    changeDisabled: appState.isChangingPlan || !appState.isOnline,
+                    changeDisabled: appState.isChangingPlan || appState.isManagingBilling || !appState.isOnline,
                     upgrade: currentTier.map { tier.isUpgrade(from: $0) } ?? true
                 ) {
                     pendingTier = tier

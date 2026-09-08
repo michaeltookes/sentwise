@@ -133,8 +133,11 @@ extension ManagedInferenceClient {
         } catch {
             throw LLMError.invalidResponse("Unexpected change-plan response shape. (\(error))")
         }
+        guard decoded.ok == true else {
+            throw Self.mapChangePlanError(status: response.statusCode, body: response.body)
+        }
         let plan = decoded.plan.flatMap(ManagedSubscription.Plan.init(rawValue:)) ?? .unknown
-        let status = decoded.status.flatMap(ManagedSubscription.Status.init(rawValue:)) ?? .active
+        let status = decoded.status.flatMap(ManagedSubscription.Status.init(rawValue:)) ?? .unknown
         return PaddlePlanChange(plan: plan, status: status)
     }
 
