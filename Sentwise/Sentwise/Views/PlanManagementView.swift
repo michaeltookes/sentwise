@@ -107,7 +107,6 @@ private struct PlanTierRow: View {
         )
         .accessibilityIdentifier("planCard_\(tier.rawValue)")
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(accessibilityLabel)
     }
 
     @ViewBuilder
@@ -127,8 +126,4 @@ private struct PlanTierRow: View {
         }
     }
 
-    private var accessibilityLabel: String {
-        let status = isCurrent ? "Current plan. " : ""
-        return "\(tier.displayName). \(status)\(tier.monthlyPrice) per month. \(tier.allowanceSummary)."
-    }
 }
