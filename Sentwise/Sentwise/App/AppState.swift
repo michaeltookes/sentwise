@@ -131,13 +131,13 @@ final class AppState: ObservableObject {
     @Published var isChangingPlan: Bool = false
     @Published var changingPlanTier: PaddlePlan?
     @Published var planChangeMessage: String?
+    var planChangeConfirmationTier: PaddlePlan?
     @Published var planChangeFailed: Bool = false
     var planChangeOperationGeneration: UInt64 = 0
     var planChangeReconciliationTask: Task<Void, Never>?
     var planChangeReconciliationGeneration: UInt64 = 0
     var pendingPlanChangeReconciliation: PendingPlanChangeReconciliation?
     var subscriptionCacheStore: SubscriptionCacheStoring = UserDefaultsSubscriptionCacheStore()
-
     // MARK: - Workspace app-password guidance (item 75)
 
     @Published var workspaceAuthFailure: WorkspaceAuthFailure = .none

@@ -265,6 +265,7 @@ extension AppState {
         }
         recordSubscriptionSnapshot(from: status)
         finishPendingPlanChangeReconciliationIfConfirmed(by: status)
+        clearStalePlanChangeConfirmationIfNeeded(after: status)
         resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
         retryDeferredTranscriptFolderDeliveriesAfterManagedLicenseRefreshIfNeeded()
         return true

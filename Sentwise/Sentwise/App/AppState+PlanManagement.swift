@@ -92,6 +92,7 @@ extension AppState {
         let operationGeneration = planChangeOperationGeneration
         cancelPlanChangeReconciliation()
         planChangeMessage = nil
+        planChangeConfirmationTier = nil
         planChangeFailed = false
         isChangingPlan = true
         changingPlanTier = tier
@@ -113,6 +114,7 @@ extension AppState {
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
             planChangeFailed = true
             planChangeMessage = Self.changePlanErrorMessage(for: error)
+            planChangeConfirmationTier = nil
             return
         }
         guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
@@ -128,6 +130,7 @@ extension AppState {
             guard applyValidatedPlanChange(change, expectedTier: tier, accountKey: accountKey) else {
                 planChangeFailed = true
                 planChangeMessage = Self.changePlanConfirmationPendingMessage()
+                planChangeConfirmationTier = nil
                 return
             }
             schedulePlanChangeReconciliation(
@@ -139,6 +142,7 @@ extension AppState {
         }
         planChangeFailed = false
         planChangeMessage = Self.changePlanConfirmation(for: tier)
+        planChangeConfirmationTier = tier
     }
 
     /// Polls `/v1/me` after a successful change-plan call until the account's tier
@@ -227,6 +231,7 @@ extension AppState {
         isChangingPlan = false
         changingPlanTier = nil
         planChangeMessage = nil
+        planChangeConfirmationTier = nil
         planChangeFailed = false
     }
 
@@ -302,6 +307,7 @@ extension AppState {
         if isFinalAttempt {
             planChangeFailed = true
             planChangeMessage = Self.changePlanConfirmationPendingMessage()
+            planChangeConfirmationTier = nil
             pendingPlanChangeReconciliation = PendingPlanChangeReconciliation(
                 tier: tier,
                 accountKey: accountKey,
@@ -349,6 +355,25 @@ extension AppState {
         finishPlanChangeReconciliation(generation: pending.generation)
         planChangeFailed = false
         planChangeMessage = Self.changePlanConfirmation(for: pending.tier)
+        planChangeConfirmationTier = pending.tier
+    }
+
+    func clearStalePlanChangeConfirmationIfNeeded(after status: ManagedAccountStatus) {
+        guard let confirmedTier = planChangeConfirmationTier else {
+            return
+        }
+        guard let subscription = status.subscription,
+              PaddlePlan(subscriptionPlan: subscription.plan) == confirmedTier,
+              successfulPlanChangeStatuses.contains(subscription.status) else {
+            clearPlanChangeConfirmation()
+            return
+        }
+    }
+
+    private func clearPlanChangeConfirmation() {
+        planChangeMessage = nil
+        planChangeConfirmationTier = nil
+        planChangeFailed = false
     }
 
     func statusConfirmsTrackedPlanChange(_ status: ManagedAccountStatus) -> Bool {
