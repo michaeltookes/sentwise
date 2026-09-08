@@ -106,7 +106,7 @@ private struct PlanTierRow: View {
                               lineWidth: isCurrent ? 2 : 1)
         )
         .accessibilityIdentifier("planCard_\(tier.rawValue)")
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)
     }
 
