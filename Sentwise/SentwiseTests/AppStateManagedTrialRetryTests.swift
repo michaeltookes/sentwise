@@ -8,6 +8,10 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         var statusToReturn: ManagedAccountStatus?
         var statusesToReturn: [ManagedAccountStatus?] = []
         private(set) var fetchCount = 0
+        /// The fresh management URL returned by the on-demand endpoint (item 90).
+        /// `openManageBilling` now fetches this instead of refreshing `/v1/me`, so
+        /// it no longer bumps `fetchCount`.
+        var manageBillingURLToReturn = URL(string: "https://billing.example/portal")!
 
         func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
         func complete(_ request: LLMRequest, provider: LLMProviderKind, apiKey: String, baseURL: String?) async throws -> LLMResponse {
@@ -22,6 +26,7 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         }
         func fetchManagedQuota() async throws -> ManagedQuota? { statusToReturn?.quota }
         func deleteManagedAccount() async throws {}
+        func fetchManageBillingURL(action: PaddleBillingAction?) async throws -> URL { manageBillingURLToReturn }
     }
 
     private func makeSignedInAppState(llm: LLMProviding) -> AppState {
@@ -113,8 +118,10 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
 
         await appState.openManageBilling { openedURL = $0 }
 
+        // The URL is now fetched on demand from the dedicated endpoint, so opening
+        // the portal does not refresh /v1/me (fetchCount stays 0).
         XCTAssertEqual(openedURL?.absoluteString, portalURL)
-        XCTAssertEqual(llm.fetchCount, 1)
+        XCTAssertEqual(llm.fetchCount, 0)
         XCTAssertFalse(appState.managedAccountStatusIsFresh)
         XCTAssertTrue(appState.billingPortalRefreshPending)
 
@@ -125,7 +132,7 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         )
         await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded()
 
-        XCTAssertEqual(llm.fetchCount, 2)
+        XCTAssertEqual(llm.fetchCount, 1)
         XCTAssertFalse(appState.billingPortalRefreshPending)
         XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .active)
         XCTAssertEqual(appState.managedLicense, .entitled)
@@ -155,11 +162,13 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         ]
 
         await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded(reconciliationRetryDelays: [0])
-        for _ in 0..<1_000 where llm.fetchCount < 3 {
+        for _ in 0..<1_000 where llm.fetchCount < 2 {
             try await Task.sleep(nanoseconds: 1_000_000)
         }
 
-        XCTAssertEqual(llm.fetchCount, 3)
+        // Opening no longer refreshes /v1/me, so the reconcile-after-return does
+        // two fetches (past-due, then active) rather than three.
+        XCTAssertEqual(llm.fetchCount, 2)
         XCTAssertFalse(appState.billingPortalRefreshPending)
         XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .active)
         XCTAssertEqual(appState.managedLicense, .entitled)
@@ -197,11 +206,13 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         llm.statusesToReturn = [usageDriftStatus, upgradedStatus]
 
         await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded(reconciliationRetryDelays: [0])
-        for _ in 0..<1_000 where llm.fetchCount < 3 {
+        for _ in 0..<1_000 where llm.fetchCount < 2 {
             try await Task.sleep(nanoseconds: 1_000_000)
         }
 
-        XCTAssertEqual(llm.fetchCount, 3)
+        // Opening no longer refreshes /v1/me, so the reconcile-after-return does
+        // two fetches (usage drift, then the upgrade) rather than three.
+        XCTAssertEqual(llm.fetchCount, 2)
         XCTAssertEqual(appState.managedAccountStatus?.subscription?.plan, .unlimited)
         XCTAssertEqual(appState.managedQuota?.limit, 100)
         XCTAssertNil(appState.billingReconciliationTask)
