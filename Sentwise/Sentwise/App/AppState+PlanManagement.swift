@@ -25,6 +25,12 @@ private let planChangeBackgroundReconcileRetryDelays: [UInt64] = [
 
 private let successfulPlanChangeStatuses: Set<ManagedSubscription.Status> = [.active, .pastDue]
 
+struct PendingPlanChangeReconciliation {
+    let tier: PaddlePlan
+    let accountKey: String
+    let generation: UInt64
+}
+
 /// In-app plan management on `AppState` (backlog item 90): the account's current
 /// purchasable tier, the upgrade/downgrade change-plan flow (a Paddle
 /// subscription update with proration, reconciled against `/v1/me`), and the
@@ -194,6 +200,7 @@ extension AppState {
         planChangeReconciliationGeneration &+= 1
         planChangeReconciliationTask?.cancel()
         planChangeReconciliationTask = nil
+        pendingPlanChangeReconciliation = nil
     }
 
     func resetPlanManagementState() {
@@ -228,6 +235,11 @@ extension AppState {
         guard managedAccountMatches(accountKey), !retryDelays.isEmpty else { return }
         planChangeReconciliationGeneration &+= 1
         let generation = planChangeReconciliationGeneration
+        pendingPlanChangeReconciliation = PendingPlanChangeReconciliation(
+            tier: tier,
+            accountKey: accountKey,
+            generation: generation
+        )
         planChangeReconciliationTask = Task { [weak self] in
             for delay in retryDelays {
                 do {
@@ -273,7 +285,43 @@ extension AppState {
 
     private func finishPlanChangeReconciliation(generation: UInt64) {
         guard planChangeReconciliationGeneration == generation else { return }
+        planChangeReconciliationTask?.cancel()
         planChangeReconciliationTask = nil
+        if pendingPlanChangeReconciliation?.generation == generation {
+            pendingPlanChangeReconciliation = nil
+        }
+    }
+
+    func shouldDeferStatusRefreshForPendingPlanChange(_ status: ManagedAccountStatus) -> Bool {
+        guard let pending = pendingPlanChangeReconciliation,
+              pending.generation == planChangeReconciliationGeneration,
+              managedAccountMatches(pending.accountKey) else {
+            return false
+        }
+        return !statusConfirmsPendingPlanChange(status, pending: pending)
+    }
+
+    func finishPendingPlanChangeReconciliationIfConfirmed(by status: ManagedAccountStatus) {
+        guard let pending = pendingPlanChangeReconciliation,
+              pending.generation == planChangeReconciliationGeneration,
+              managedAccountMatches(pending.accountKey),
+              statusConfirmsPendingPlanChange(status, pending: pending) else {
+            return
+        }
+        finishPlanChangeReconciliation(generation: pending.generation)
+    }
+
+    private func statusConfirmsPendingPlanChange(
+        _ status: ManagedAccountStatus,
+        pending: PendingPlanChangeReconciliation
+    ) -> Bool {
+        guard let subscription = status.subscription,
+              PaddlePlan(subscriptionPlan: subscription.plan) == pending.tier,
+              successfulPlanChangeStatuses.contains(subscription.status),
+              status.quota != nil else {
+            return false
+        }
+        return true
     }
 
     private func hasFreshLivePlanAndQuota(_ tier: PaddlePlan) -> Bool {

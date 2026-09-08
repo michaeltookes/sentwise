@@ -237,6 +237,59 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         XCTAssertFalse(appState.managedAccountStatusIsFresh)
     }
 
+    func testPendingPlanChangeReconciliationDefersLaterOldTierRefresh() async {
+        let llm = DeferredStatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        defer {
+            appState.cancelScheduledManagedAccountStatusRefresh()
+            appState.cancelPlanChangeReconciliation()
+        }
+        let starter = status(plan: .starter, statusValue: .active)
+        appState.managedAccountStatus = starter
+        appState.markManagedAccountStatusFresh(from: starter)
+
+        let change = Task {
+            await appState.changePlan(
+                to: .pro,
+                reconcileRetryDelays: [],
+                backgroundReconcileRetryDelays: [1_000_000_000]
+            )
+        }
+        await waitUntil { llm.fetchCount == 1 }
+        llm.completeFetch(at: 0, with: .success(starter))
+        await change.value
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
+        XCTAssertNotNil(appState.planChangeReconciliationTask)
+
+        let laterRefresh = Task { await appState.refreshManagedQuota() }
+        await waitUntil { llm.fetchCount == 2 }
+        llm.completeFetch(at: 1, with: .success(starter))
+        await laterRefresh.value
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
+        XCTAssertNotNil(appState.planChangeReconciliationTask)
+
+        let quota = ManagedQuota(used: 2, limit: 120, remaining: 118, resetsAt: Date(), tokenLimit: 1_200)
+        let target = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            quota: quota,
+            subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+        let confirmingRefresh = Task { await appState.refreshManagedQuota() }
+        await waitUntil { llm.fetchCount == 3 }
+        llm.completeFetch(at: 2, with: .success(target))
+        await confirmingRefresh.value
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+        XCTAssertTrue(appState.managedAccountStatusIsFresh)
+        XCTAssertEqual(appState.managedQuota, quota)
+        XCTAssertNil(appState.planChangeReconciliationTask)
+    }
+
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
         private(set) var saved: [String: SubscriptionSnapshot] = [:]
 

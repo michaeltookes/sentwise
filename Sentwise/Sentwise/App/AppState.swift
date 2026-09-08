@@ -135,6 +135,7 @@ final class AppState: ObservableObject {
     var planChangeOperationGeneration: UInt64 = 0
     var planChangeReconciliationTask: Task<Void, Never>?
     var planChangeReconciliationGeneration: UInt64 = 0
+    var pendingPlanChangeReconciliation: PendingPlanChangeReconciliation?
     var subscriptionCacheStore: SubscriptionCacheStoring = UserDefaultsSubscriptionCacheStore()
 
     // MARK: - Workspace app-password guidance (item 75)
@@ -489,7 +490,6 @@ final class AppState: ObservableObject {
             interval: { [weak self] in TimeInterval(self?.pollIntervalSeconds ?? 300) },
             onTick: { [weak self] in await self?.pollInboxOnce() }
         )
-
         installExternalActionHandlers()
     }
 

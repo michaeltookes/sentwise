@@ -163,32 +163,12 @@ extension AppState {
             // `ingestManagedQuota`; still ingest the return value directly so an
             // injected LLM double without a wired relay updates state too.
             if let status = try await llm.fetchManagedAccountStatus() {
-                guard shouldAcceptManagedAccountStatusRefreshSuccess(
+                applyManagedAccountStatusRefreshSuccess(
+                    status,
                     generation: refreshGeneration,
-                    accountKey: accountKey
-                ) else { return }
-                managedAccountStatusRefreshOrdering.acceptedGeneration = refreshGeneration
-                managedAccountStatusRefreshOrdering.successVersion &+= 1
-                let snapshotBeforeAccountKeyBackfill = effectiveSubscriptionSnapshot
-                // Mirror the full status (email/trial/subscription) for the
-                // Subscription pane (item 73), even when `quota` is absent on an
-                // older Worker build.
-                managedAccountStatus = status
-                markManagedAccountStatusFresh(from: status)
-                scheduleManagedAccountStatusRefreshAfterSuccess(scheduleRetryIfStale: scheduleRetryOnFailure)
-                let resolvedAccountKey = backfillManagedAccountIDIfNeeded(from: status, replacing: accountKey)
-                preserveSubscriptionSnapshot(
-                    snapshotBeforeBackfill: snapshotBeforeAccountKeyBackfill,
-                    originalAccountKey: accountKey,
-                    resolvedAccountKey: resolvedAccountKey
+                    accountKey: accountKey,
+                    scheduleRetryOnFailure: scheduleRetryOnFailure
                 )
-                if let quota = status.quota {
-                    ingestManagedQuota(quota, accountKey: resolvedAccountKey, source: .statusRefresh)
-                }
-                // Cache the last-known subscription for offline license grace (56c).
-                recordSubscriptionSnapshot(from: status)
-                resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
-                retryDeferredTranscriptFolderDeliveriesAfterManagedLicenseRefreshIfNeeded()
             } else {
                 guard shouldApplyManagedAccountStatusRefreshFailure(
                     generation: refreshGeneration,
@@ -220,6 +200,42 @@ extension AppState {
                 scheduleManagedAccountStatusRefreshRetryAfterFailure()
             }
         }
+    }
+
+    private func applyManagedAccountStatusRefreshSuccess(
+        _ status: ManagedAccountStatus,
+        generation: UInt64,
+        accountKey: String,
+        scheduleRetryOnFailure: Bool
+    ) {
+        guard shouldAcceptManagedAccountStatusRefreshSuccess(generation: generation, accountKey: accountKey) else {
+            return
+        }
+        if shouldDeferStatusRefreshForPendingPlanChange(status) {
+            managedAccountStatusIsFresh = false
+            return
+        }
+        managedAccountStatusRefreshOrdering.acceptedGeneration = generation
+        managedAccountStatusRefreshOrdering.successVersion &+= 1
+        let snapshotBeforeAccountKeyBackfill = effectiveSubscriptionSnapshot
+        // Mirror the full status for the Subscription pane (item 73), even when
+        // `quota` is absent on an older Worker build.
+        managedAccountStatus = status
+        markManagedAccountStatusFresh(from: status)
+        scheduleManagedAccountStatusRefreshAfterSuccess(scheduleRetryIfStale: scheduleRetryOnFailure)
+        let resolvedAccountKey = backfillManagedAccountIDIfNeeded(from: status, replacing: accountKey)
+        preserveSubscriptionSnapshot(
+            snapshotBeforeBackfill: snapshotBeforeAccountKeyBackfill,
+            originalAccountKey: accountKey,
+            resolvedAccountKey: resolvedAccountKey
+        )
+        if let quota = status.quota {
+            ingestManagedQuota(quota, accountKey: resolvedAccountKey, source: .statusRefresh)
+        }
+        recordSubscriptionSnapshot(from: status)
+        finishPendingPlanChangeReconciliationIfConfirmed(by: status)
+        resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
+        retryDeferredTranscriptFolderDeliveriesAfterManagedLicenseRefreshIfNeeded()
     }
 
     private func preserveSubscriptionSnapshot(
