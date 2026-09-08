@@ -182,6 +182,7 @@ extension AppState {
             quota: previousStatus?.quota ?? managedQuota,
             subscription: subscription
         )
+        supersedeInFlightManagedAccountStatusRefreshes()
         managedAccountStatus = status
         managedAccountStatusIsFresh = false
         cancelScheduledManagedAccountStatusRefresh()

@@ -42,6 +42,9 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
 
         func fetchManagedQuota() async throws -> ManagedQuota? { nil }
         func deleteManagedAccount() async throws {}
+        func changeManagedPlan(priceID: String) async throws -> PaddlePlanChange {
+            PaddlePlanChange(plan: .pro, status: .active)
+        }
 
         func completeFetch(at index: Int, with result: Result<ManagedAccountStatus?, Error>) {
             lock.lock()
@@ -203,6 +206,35 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         XCTAssertNil(appState.managedAccountStatus)
         XCTAssertFalse(appState.managedAccountStatusIsFresh)
         XCTAssertEqual(appState.managedLicense, .notEntitled)
+    }
+
+    func testPlanChangeFallbackSupersedesOlderInFlightStatusRefresh() async {
+        let llm = DeferredStatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        defer {
+            appState.cancelScheduledManagedAccountStatusRefresh()
+            appState.cancelPlanChangeReconciliation()
+        }
+        let starter = status(plan: .starter, statusValue: .active)
+        appState.managedAccountStatus = starter
+        appState.markManagedAccountStatusFresh(from: starter)
+
+        let oldRefresh = Task { await appState.refreshManagedQuota() }
+        await waitUntil { llm.fetchCount == 1 }
+        let change = Task {
+            await appState.changePlan(to: .pro, reconcileRetryDelays: [], backgroundReconcileRetryDelays: [])
+        }
+        await waitUntil { llm.fetchCount == 2 }
+
+        llm.completeFetch(at: 1, with: .failure(NSError(domain: "StatusOrdering", code: 1)))
+        await change.value
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+
+        llm.completeFetch(at: 0, with: .success(starter))
+        await oldRefresh.value
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
     }
 
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
