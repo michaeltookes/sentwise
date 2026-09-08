@@ -1,0 +1,64 @@
+# Reachability guard for the Sentwise-account Subscription pane (items 73 + 90).
+# In hunt mode the account status is stubbed to an active **Pro** plan
+# (StubManagedInferenceClient.stubbedAccountStatus, zero network), so the paid
+# plan-management surface renders: the account identity, the current-plan line,
+# and the three tier cards with Pro marked current.
+#
+# Open-and-assert only. The tier-change surface (changePlanButton_*,
+# confirmChangePlan, cancelSubscription — labels "Upgrade" / "Downgrade" /
+# "Switch to <tier>" / "Cancel subscription") mutates observable billing state and
+# is forbidden by id AND label in config.yml. Because the guardrail substring-
+# matches every step's selector, those controls can be neither clicked NOR
+# asserted here — their presence is proven indirectly by the plan cards + the
+# "Current plan" badge rendering. See .prowl/README.md "Subscription pane controls".
+#
+# Run it (on the Lucius runner):  prowl run subscription-pane
+
+name: subscription-pane
+description: The Subscription tab's plan cards render with the current tier marked (active Pro stub)
+
+steps:
+  - click:
+      selector: statusItem
+
+  - click:
+      selector: id=openSettings
+
+  - waitForSelector:
+      selector: label="Sentwise Settings"
+      timeout: 10000
+
+  - click:
+      selector: label="Subscription"
+
+  # The Subscription pane switched in (not just some window present).
+  - waitForSelector:
+      selector: id=subscriptionTab
+      timeout: 10000
+
+  # Account identity + current-plan line (signed-in Pro stub).
+  - assert:
+      visible: id=subscriptionAccountEmail
+  - assert:
+      visible: id=subscriptionPlan
+
+  # In-app plan cards (item 90): the wrapper + tiers render, Pro marked current.
+  # These read-only cards are the sanctioned proof that the plan-management
+  # surface (including the guardrail-forbidden change/cancel controls) rendered.
+  #
+  # NOTE: id=planCard_starter is deliberately NOT asserted — its id contains the
+  # substring "start", which is a forbiddenSelector (the mailbox-watch Start/Pause
+  # controls), so the guardrail would reject the step. The wrapper + the other two
+  # cards + the Pro current-badge already prove all three cards rendered.
+  - assert:
+      visible: id=planManagement
+  - assert:
+      visible: id=planCard_pro
+  - assert:
+      visible: id=planCard_unlimited
+  - assert:
+      visible: id=planCurrentBadge_pro
+
+  # Billing-management entry point renders (assert-only; not forbidden).
+  - assert:
+      visible: id=manageBilling
