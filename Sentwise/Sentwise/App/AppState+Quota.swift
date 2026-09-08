@@ -52,6 +52,13 @@ extension AppState {
         return ManagedUsageAccountKey.make(from: "display:\(managedAccountEmail)")
     }
 
+    var currentManagedSessionAccountKey: String? {
+        let sessionID = ((try? secrets.value(for: .managedSessionID)) ?? nil)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let sessionID, !sessionID.isEmpty else { return nil }
+        return ManagedUsageAccountKey.make(from: "clerk-session:\(sessionID)")
+    }
+
     func clearManagedQuotaCache() {
         resetPlanManagementState()
         managedQuota = nil

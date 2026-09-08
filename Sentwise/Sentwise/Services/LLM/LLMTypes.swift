@@ -344,7 +344,7 @@ protocol LLMProviding: Sendable {
     /// update with proration, not a second checkout. Returns the tier/status after
     /// the update. Throws `LLMError` on failure. Providers without a
     /// managed-account concept get the default, which reports "not signed in".
-    func changeManagedPlan(priceID: String) async throws -> PaddlePlanChange
+    func changeManagedPlan(priceID: String, expectedAccountKey: String?) async throws -> PaddlePlanChange
 }
 
 extension LLMProviding {
@@ -378,7 +378,7 @@ extension LLMProviding {
 
     /// Default: no managed subscription to change. Only `LLMService` overrides
     /// this to hit `POST /v1/paddle/change-plan` under the account session.
-    func changeManagedPlan(priceID: String) async throws -> PaddlePlanChange {
+    func changeManagedPlan(priceID: String, expectedAccountKey: String?) async throws -> PaddlePlanChange {
         throw LLMError.managedNotSignedIn
     }
 

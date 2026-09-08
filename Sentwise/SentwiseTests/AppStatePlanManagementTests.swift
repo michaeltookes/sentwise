@@ -26,6 +26,7 @@ final class AppStatePlanManagementTests: XCTestCase {
         var statusAfterChange: ManagedAccountStatus?
         var changeResult: PaddlePlanChange?
         private(set) var changedPriceIDs: [String] = []
+        private(set) var changedExpectedAccountKeys: [String?] = []
 
         func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
         func complete(_ request: LLMRequest, provider: LLMProviderKind, apiKey: String, baseURL: String?) async throws
@@ -49,8 +50,9 @@ final class AppStatePlanManagementTests: XCTestCase {
             return manageBillingURLToReturn
         }
 
-        func changeManagedPlan(priceID: String) async throws -> PaddlePlanChange {
+        func changeManagedPlan(priceID: String, expectedAccountKey: String?) async throws -> PaddlePlanChange {
             changedPriceIDs.append(priceID)
+            changedExpectedAccountKeys.append(expectedAccountKey)
             if let changeError { throw changeError }
             if let statusAfterChange { statusToReturn = statusAfterChange }
             if let changeResult { return changeResult }
@@ -153,6 +155,9 @@ final class AppStatePlanManagementTests: XCTestCase {
         await appState.changePlan(to: .pro)
 
         XCTAssertEqual(llm.changedPriceIDs, [PaddleConfig.active.priceID(for: .pro)])
+        XCTAssertEqual(llm.changedExpectedAccountKeys, [
+            ManagedUsageAccountKey.make(from: "clerk-session:sess_X")
+        ])
         XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro, "reconcile should flip the pane to the new tier")
         XCTAssertEqual(appState.planChangeMessage, AppState.changePlanConfirmation(for: .pro))
         XCTAssertFalse(appState.planChangeFailed)

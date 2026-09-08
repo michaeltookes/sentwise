@@ -7,7 +7,11 @@ final class ManagedInferencePlanManagementTests: XCTestCase {
 
     private struct StubSessionProvider: ManagedSessionProviding {
         var token: String = "session-jwt"
+        var accountKey: String?
         func currentSessionToken() async throws -> String { token }
+        func currentManagedSession() async throws -> ManagedSessionToken {
+            ManagedSessionToken(jwt: token, accountKey: accountKey)
+        }
     }
 
     private actor RecordingSessionProvider: ManagedSessionProviding {
@@ -108,6 +112,23 @@ final class ManagedInferencePlanManagementTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertEqual(object["priceId"] as? String, "pri_pro")
         XCTAssertEqual(change, PaddlePlanChange(plan: .pro, status: .active))
+    }
+
+    func testChangePlanRejectsMismatchedExpectedAccountBeforePosting() async {
+        let transport = FakeLLMTransport(response: json(#"{"ok":true,"plan":"pro","status":"active"}"#))
+        let client = ManagedInferenceClient(
+            sessionProvider: StubSessionProvider(token: "tok-cp", accountKey: "account-b"),
+            transport: transport
+        )
+
+        do {
+            _ = try await client.changePlan(priceID: "pri_pro", expectedAccountKey: "account-a")
+            XCTFail("Expected not-signed-in error")
+        } catch LLMError.managedNotSignedIn {
+            XCTAssertNil(transport.lastMethod)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
     }
 
     func testChangePlanDecodesUnknownPlanAsFallback() async throws {

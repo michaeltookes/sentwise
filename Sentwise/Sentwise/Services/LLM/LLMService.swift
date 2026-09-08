@@ -158,7 +158,7 @@ struct LLMService: LLMProviding {
     /// Switches the managed subscription's tier via `POST /v1/paddle/change-plan`
     /// (item 90). In Prowl hunt mode returns a deterministic, zero-network result
     /// for the requested tier so the confirm→reconcile flow is walkable offline.
-    func changeManagedPlan(priceID: String) async throws -> PaddlePlanChange {
+    func changeManagedPlan(priceID: String, expectedAccountKey: String?) async throws -> PaddlePlanChange {
         if isProwlHuntMode {
             let plan = PaddleConfig.active.plan(forPriceID: priceID)?.subscriptionPlan ?? .unknown
             return PaddlePlanChange(plan: plan, status: .active)
@@ -167,6 +167,6 @@ struct LLMService: LLMProviding {
             sessionProvider: managedSessionProvider,
             transport: transport
         )
-        return try await client.changePlan(priceID: priceID)
+        return try await client.changePlan(priceID: priceID, expectedAccountKey: expectedAccountKey)
     }
 }

@@ -94,8 +94,9 @@ extension AppState {
 
         let priceID = PaddleConfig.active.priceID(for: tier)
         let change: PaddlePlanChange
+        let sessionAccountKey = currentManagedSessionAccountKey ?? accountKey
         do {
-            change = try await llm.changeManagedPlan(priceID: priceID)
+            change = try await llm.changeManagedPlan(priceID: priceID, expectedAccountKey: sessionAccountKey)
         } catch {
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
             await reconcileManagedAccountState(after: error, provider: .managed)
@@ -345,6 +346,7 @@ extension AppState {
               let subscription = status.subscription,
               let currentTier = PaddlePlan(subscriptionPlan: subscription.plan),
               currentTier == tier,
+              successfulPlanChangeStatuses.contains(subscription.status),
               status.quota != nil else {
             return false
         }

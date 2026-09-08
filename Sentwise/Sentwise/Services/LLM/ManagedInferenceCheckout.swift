@@ -99,9 +99,13 @@ extension ManagedInferenceClient {
     /// `404 billing_subscription_not_found`, `502`, `503 checkout_unavailable`).
     func changePlan(
         priceID: String,
+        expectedAccountKey: String? = nil,
         endpoint: URL = ManagedInference.paddleChangePlanEndpoint
     ) async throws -> PaddlePlanChange {
         let session = try await sessionProvider.currentManagedSession()
+        if let expectedAccountKey, session.accountKey != expectedAccountKey {
+            throw LLMError.managedNotSignedIn
+        }
         let headers = [
             "authorization": "Bearer \(session.jwt)",
             "content-type": "application/json"

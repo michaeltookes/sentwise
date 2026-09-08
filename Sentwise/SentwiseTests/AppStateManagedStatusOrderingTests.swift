@@ -8,6 +8,7 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         private let lock = NSLock()
         private var pendingFetches: [CheckedContinuation<ManagedAccountStatus?, Error>?] = []
         private var fetchCallCount = 0
+        var planChange = PaddlePlanChange(plan: .pro, status: .active)
 
         var fetchCount: Int {
             lock.lock()
@@ -42,8 +43,8 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
 
         func fetchManagedQuota() async throws -> ManagedQuota? { nil }
         func deleteManagedAccount() async throws {}
-        func changeManagedPlan(priceID: String) async throws -> PaddlePlanChange {
-            PaddlePlanChange(plan: .pro, status: .active)
+        func changeManagedPlan(priceID: String, expectedAccountKey: String?) async throws -> PaddlePlanChange {
+            planChange
         }
 
         func completeFetch(at index: Int, with result: Result<ManagedAccountStatus?, Error>) {
@@ -235,6 +236,41 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
 
         XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
         XCTAssertFalse(appState.managedAccountStatusIsFresh)
+    }
+
+    func testTargetTierRequiresSuccessfulStatusBeforePlanChangeConfirms() async {
+        let llm = DeferredStatusLLM()
+        llm.planChange = PaddlePlanChange(plan: .pro, status: .canceled)
+        let appState = makeSignedInAppState(llm: llm)
+        defer {
+            appState.cancelScheduledManagedAccountStatusRefresh()
+            appState.cancelPlanChangeReconciliation()
+        }
+        let starter = status(plan: .starter, statusValue: .active)
+        appState.managedAccountStatus = starter
+        appState.markManagedAccountStatusFresh(from: starter)
+        let quota = ManagedQuota(used: 1, limit: 120, remaining: 119, resetsAt: Date(), tokenLimit: 1_200)
+        let canceledTarget = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            quota: quota,
+            subscription: ManagedSubscription(plan: .pro, status: .canceled)
+        )
+
+        let change = Task {
+            await appState.changePlan(
+                to: .pro,
+                reconcileRetryDelays: [],
+                backgroundReconcileRetryDelays: []
+            )
+        }
+        await waitUntil { llm.fetchCount == 1 }
+        llm.completeFetch(at: 0, with: .success(canceledTarget))
+        await change.value
+
+        XCTAssertTrue(appState.planChangeFailed)
+        XCTAssertEqual(appState.planChangeMessage, AppState.changePlanConfirmationPendingMessage())
+        XCTAssertEqual(appState.managedAccountStatus?.subscription?.status, .canceled)
     }
 
     func testPendingPlanChangeReconciliationDefersLaterOldTierRefresh() async {
