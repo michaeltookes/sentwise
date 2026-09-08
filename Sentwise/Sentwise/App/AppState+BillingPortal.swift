@@ -30,6 +30,7 @@ extension AppState {
         openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
     ) async {
         guard isManagedSignedIn, isOnline, hasManageablePaidSubscription, !isManagingBilling else { return }
+        let accountKey = currentManagedUsageAccountKey
         manageBillingMessage = nil
         isManagingBilling = true
         defer { isManagingBilling = false }
@@ -38,10 +39,13 @@ extension AppState {
         do {
             url = try await llm.fetchManageBillingURL(action: action)
         } catch {
+            guard managedAccountMatches(accountKey) else { return }
             await reconcileManagedAccountState(after: error, provider: .managed)
+            guard managedAccountMatches(accountKey) else { return }
             manageBillingMessage = Self.manageBillingErrorMessage(for: error)
             return
         }
+        guard managedAccountMatches(accountKey) else { return }
 
         // In a Prowl accessibility hunt the URL is a deterministic stub and we must
         // not actually launch a browser; the control is still reachable/labelled.

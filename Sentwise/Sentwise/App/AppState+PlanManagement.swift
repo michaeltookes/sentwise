@@ -15,6 +15,14 @@ private let planChangeReconcileRetryDelays: [UInt64] = [
     3_000_000_000
 ]
 
+private let planChangeBackgroundReconcileRetryDelays: [UInt64] = [
+    30_000_000_000,
+    120_000_000_000,
+    300_000_000_000,
+    900_000_000_000,
+    1_800_000_000_000
+]
+
 private let successfulPlanChangeStatuses: Set<ManagedSubscription.Status> = [.active, .pastDue]
 
 /// In-app plan management on `AppState` (backlog item 90): the account's current
@@ -55,13 +63,16 @@ extension AppState {
     /// copy in `planChangeMessage`.
     func changePlan(
         to tier: PaddlePlan,
-        reconcileRetryDelays: [UInt64] = planChangeReconcileRetryDelays
+        reconcileRetryDelays: [UInt64] = planChangeReconcileRetryDelays,
+        backgroundReconcileRetryDelays: [UInt64] = planChangeBackgroundReconcileRetryDelays
     ) async {
         guard isManagedSignedIn, isOnline, !isChangingPlan,
               hasManageablePaidSubscription,
               let current = currentSubscriptionPlanTier, current != tier else {
             return
         }
+        let accountKey = currentManagedUsageAccountKey
+        cancelPlanChangeReconciliation()
         planChangeMessage = nil
         planChangeFailed = false
         isChangingPlan = true
@@ -76,19 +87,33 @@ extension AppState {
         do {
             change = try await llm.changeManagedPlan(priceID: priceID)
         } catch {
+            guard managedAccountMatches(accountKey) else { return }
             await reconcileManagedAccountState(after: error, provider: .managed)
+            guard managedAccountMatches(accountKey) else { return }
             planChangeFailed = true
             planChangeMessage = Self.changePlanErrorMessage(for: error)
             return
         }
+        guard managedAccountMatches(accountKey) else { return }
 
-        let observedTargetTier = await reconcilePlanChange(to: tier, retryDelays: reconcileRetryDelays)
+        let observedTargetTier = await reconcilePlanChange(
+            to: tier,
+            accountKey: accountKey,
+            retryDelays: reconcileRetryDelays
+        )
+        guard managedAccountMatches(accountKey) else { return }
         if !observedTargetTier {
-            guard applyValidatedPlanChange(change, expectedTier: tier) else {
+            guard applyValidatedPlanChange(change, expectedTier: tier, accountKey: accountKey) else {
                 planChangeFailed = true
                 planChangeMessage = Self.changePlanConfirmationPendingMessage()
                 return
             }
+            schedulePlanChangeReconciliation(
+                to: tier,
+                accountKey: accountKey,
+                validatedChange: change,
+                retryDelays: backgroundReconcileRetryDelays
+            )
         }
         planChangeFailed = false
         planChangeMessage = Self.changePlanConfirmation(for: tier)
@@ -98,9 +123,10 @@ extension AppState {
     /// becomes `tier` (item 90), so the pane reflects the new plan. Stops early
     /// once the tier flips. In Prowl hunt mode `refreshManagedQuota` is a
     /// deterministic no-op, so this neither polls the network nor blocks.
-    func reconcilePlanChange(to tier: PaddlePlan, retryDelays: [UInt64]) async -> Bool {
+    func reconcilePlanChange(to tier: PaddlePlan, accountKey: String, retryDelays: [UInt64]) async -> Bool {
         await refreshManagedQuota()
-        if currentSubscriptionPlanTier == tier { return true }
+        guard managedAccountMatches(accountKey) else { return false }
+        if hasFreshLivePlanAndQuota(tier) { return true }
         // Hunt mode never flips the deterministic stub tier — don't spin the poll.
         guard !ProwlHuntRuntime.current.isEnabled else { return false }
 
@@ -110,16 +136,22 @@ extension AppState {
             } catch {
                 return false
             }
-            guard isManagedSignedIn, isOnline else { return false }
+            guard managedAccountMatches(accountKey), isOnline else { return false }
             await refreshManagedQuota()
-            if currentSubscriptionPlanTier == tier { return true }
+            guard managedAccountMatches(accountKey) else { return false }
+            if hasFreshLivePlanAndQuota(tier) { return true }
         }
         return false
     }
 
     @discardableResult
-    private func applyValidatedPlanChange(_ change: PaddlePlanChange, expectedTier tier: PaddlePlan) -> Bool {
-        guard let changedTier = PaddlePlan(subscriptionPlan: change.plan),
+    private func applyValidatedPlanChange(
+        _ change: PaddlePlanChange,
+        expectedTier tier: PaddlePlan,
+        accountKey: String
+    ) -> Bool {
+        guard managedAccountMatches(accountKey),
+              let changedTier = PaddlePlan(subscriptionPlan: change.plan),
               changedTier == tier,
               successfulPlanChangeStatuses.contains(change.status) else {
             return false
@@ -140,8 +172,101 @@ extension AppState {
             subscription: subscription
         )
         managedAccountStatus = status
-        markManagedAccountStatusFresh(from: status)
+        managedAccountStatusIsFresh = false
+        cancelScheduledManagedAccountStatusRefresh()
         recordSubscriptionSnapshot(from: status)
+        return true
+    }
+
+    func cancelPlanChangeReconciliation() {
+        planChangeReconciliationGeneration &+= 1
+        planChangeReconciliationTask?.cancel()
+        planChangeReconciliationTask = nil
+    }
+
+    func resetPlanManagementState() {
+        cancelPlanChangeReconciliation()
+        isManagingBilling = false
+        manageBillingMessage = nil
+        isChangingPlan = false
+        changingPlanTier = nil
+        planChangeMessage = nil
+        planChangeFailed = false
+    }
+
+    func managedAccountMatches(_ accountKey: String) -> Bool {
+        guard isManagedSignedIn else { return false }
+        let currentAccountKey = currentManagedUsageAccountKey
+        return accountKey == currentAccountKey || managedQuotaAccountKeyAliases[accountKey] == currentAccountKey
+    }
+
+    private func schedulePlanChangeReconciliation(
+        to tier: PaddlePlan,
+        accountKey: String,
+        validatedChange change: PaddlePlanChange,
+        retryDelays: [UInt64]
+    ) {
+        cancelPlanChangeReconciliation()
+        guard managedAccountMatches(accountKey), !retryDelays.isEmpty else { return }
+        planChangeReconciliationGeneration &+= 1
+        let generation = planChangeReconciliationGeneration
+        planChangeReconciliationTask = Task { [weak self] in
+            for delay in retryDelays {
+                do {
+                    try await Task.sleep(nanoseconds: delay)
+                } catch {
+                    return
+                }
+                guard let self else { return }
+                let shouldContinue = await self.refreshPlanChangeReconciliation(
+                    to: tier,
+                    accountKey: accountKey,
+                    validatedChange: change,
+                    generation: generation
+                )
+                if !shouldContinue { return }
+            }
+            self?.finishPlanChangeReconciliation(generation: generation)
+        }
+    }
+
+    private func refreshPlanChangeReconciliation(
+        to tier: PaddlePlan,
+        accountKey: String,
+        validatedChange change: PaddlePlanChange,
+        generation: UInt64
+    ) async -> Bool {
+        guard planChangeReconciliationGeneration == generation,
+              managedAccountMatches(accountKey) else { return false }
+        guard isOnline else { return true }
+        await refreshManagedQuota(scheduleRetryOnFailure: false)
+        guard planChangeReconciliationGeneration == generation,
+              managedAccountMatches(accountKey) else { return false }
+        if hasFreshLivePlanAndQuota(tier) {
+            finishPlanChangeReconciliation(generation: generation)
+            return false
+        }
+        guard applyValidatedPlanChange(change, expectedTier: tier, accountKey: accountKey) else {
+            finishPlanChangeReconciliation(generation: generation)
+            return false
+        }
+        return true
+    }
+
+    private func finishPlanChangeReconciliation(generation: UInt64) {
+        guard planChangeReconciliationGeneration == generation else { return }
+        planChangeReconciliationTask = nil
+    }
+
+    private func hasFreshLivePlanAndQuota(_ tier: PaddlePlan) -> Bool {
+        guard managedAccountStatusIsFresh,
+              let status = managedAccountStatus,
+              let subscription = status.subscription,
+              let currentTier = PaddlePlan(subscriptionPlan: subscription.plan),
+              currentTier == tier,
+              status.quota != nil else {
+            return false
+        }
         return true
     }
 

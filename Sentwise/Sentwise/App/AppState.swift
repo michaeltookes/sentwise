@@ -131,6 +131,8 @@ final class AppState: ObservableObject {
     @Published var changingPlanTier: PaddlePlan?
     @Published var planChangeMessage: String?
     @Published var planChangeFailed: Bool = false
+    var planChangeReconciliationTask: Task<Void, Never>?
+    var planChangeReconciliationGeneration: UInt64 = 0
     var subscriptionCacheStore: SubscriptionCacheStoring = UserDefaultsSubscriptionCacheStore()
 
     // MARK: - Workspace app-password guidance (item 75)
@@ -138,9 +140,7 @@ final class AppState: ObservableObject {
     @Published var workspaceAuthFailure: WorkspaceAuthFailure = .none
     var workspaceAuthFailureAccountID: String?
     var workspaceAuthIsCustomDomain: Bool = false
-    /// Whether this account already registered "Sign in with Google" interest.
     @Published var googleOAuthInterestRegistered: Bool = false
-    /// Whether an interest-registration request is in flight.
     @Published var isRegisteringGoogleOAuthInterest: Bool = false
     @Published var googleOAuthInterestError: String?
 

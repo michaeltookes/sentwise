@@ -53,6 +53,7 @@ extension AppState {
     }
 
     func clearManagedQuotaCache() {
+        resetPlanManagementState()
         managedQuota = nil
         managedAccountStatus = nil
         managedAccountStatusIsFresh = false
@@ -62,6 +63,7 @@ extension AppState {
         cancelScheduledManagedAccountStatusRefresh()
         cancelBillingReconciliation()
         billingReconciliationBaseline = nil
+        billingPortalRefreshPending = false
         managedQuotaAccountKey = nil
         clearCachedSubscriptionSnapshot()
         // Account-key aliases are identity migrations, not quota display cache.

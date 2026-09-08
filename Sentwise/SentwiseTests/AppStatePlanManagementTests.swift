@@ -11,6 +11,7 @@ final class AppStatePlanManagementTests: XCTestCase {
     /// and lets a test drive the account status the reconcile poll reads back.
     private final class PlanLLM: LLMProviding, @unchecked Sendable {
         var statusToReturn: ManagedAccountStatus?
+        var statusesToReturn: [ManagedAccountStatus] = []
 
         // Manage billing
         var manageBillingURLToReturn = URL(string: "https://billing.example/portal")!
@@ -28,7 +29,12 @@ final class AppStatePlanManagementTests: XCTestCase {
         func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
         func complete(_ request: LLMRequest, provider: LLMProviderKind, apiKey: String, baseURL: String?) async throws
             -> LLMResponse { LLMResponse(text: "") }
-        func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? { statusToReturn }
+        func fetchManagedAccountStatus() async throws -> ManagedAccountStatus? {
+            if !statusesToReturn.isEmpty {
+                statusToReturn = statusesToReturn.removeFirst()
+            }
+            return statusToReturn
+        }
         func fetchManagedQuota() async throws -> ManagedQuota? { statusToReturn?.quota }
         func deleteManagedAccount() async throws {}
 
@@ -129,13 +135,39 @@ final class AppStatePlanManagementTests: XCTestCase {
         setStatus(appState, plan: .starter, status: .active)
         llm.changeResult = PaddlePlanChange(plan: .pro, status: .active)
 
-        await appState.changePlan(to: .pro, reconcileRetryDelays: [])
+        await appState.changePlan(
+            to: .pro,
+            reconcileRetryDelays: [],
+            backgroundReconcileRetryDelays: [1_000_000_000]
+        )
 
         XCTAssertEqual(llm.changedPriceIDs, [PaddleConfig.active.priceID(for: .pro)])
         XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
         XCTAssertEqual(appState.managedAccountStatus?.subscription?.plan, .pro)
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
+        XCTAssertNotNil(appState.planChangeReconciliationTask)
         XCTAssertEqual(appState.planChangeMessage, AppState.changePlanConfirmation(for: .pro))
         XCTAssertFalse(appState.planChangeFailed)
+        appState.cancelPlanChangeReconciliation()
+    }
+
+    func testPlanChangeBackgroundReconciliationMarksFreshWhenTargetQuotaArrives() async {
+        let llm = PlanLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        let quota = ManagedQuota(used: 4, limit: 120, remaining: 116, resetsAt: Date(), tokenLimit: 1_200)
+        setStatus(appState, plan: .starter, status: .active)
+        llm.changeResult = PaddlePlanChange(plan: .pro, status: .active)
+        llm.statusesToReturn = [
+            status(plan: .starter, status: .active),
+            status(plan: .pro, status: .active, quota: quota)
+        ]
+
+        await appState.changePlan(to: .pro, reconcileRetryDelays: [], backgroundReconcileRetryDelays: [0])
+        await waitUntil { appState.planChangeReconciliationTask == nil }
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+        XCTAssertTrue(appState.managedAccountStatusIsFresh)
+        XCTAssertEqual(appState.managedQuota, quota)
     }
 
     func testChangePlanDoesNotConfirmWhenResponseAndPollMissTargetTier() async {
@@ -149,6 +181,38 @@ final class AppStatePlanManagementTests: XCTestCase {
         XCTAssertEqual(appState.currentSubscriptionPlanTier, .starter)
         XCTAssertTrue(appState.planChangeFailed)
         XCTAssertEqual(appState.planChangeMessage, AppState.changePlanConfirmationPendingMessage())
+    }
+
+    func testChangePlanDoesNotApplyResponseAfterAccountChangesDuringPoll() async {
+        let llm = PlanLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        setStatus(appState, plan: .starter, status: .active)
+        llm.changeResult = PaddlePlanChange(plan: .pro, status: .active)
+
+        let change = Task {
+            await appState.changePlan(
+                to: .pro,
+                reconcileRetryDelays: [200_000_000],
+                backgroundReconcileRetryDelays: []
+            )
+        }
+        await waitUntil { appState.isChangingPlan }
+        let otherAccount = status(
+            plan: .starter,
+            status: .active,
+            userID: "user_other",
+            email: "other@example.com"
+        )
+        appState.managedAccountID = "clerk-user:user_other"
+        appState.managedAccountEmail = "other@example.com"
+        appState.managedAccountStatus = otherAccount
+        appState.markManagedAccountStatusFresh(from: otherAccount)
+
+        await change.value
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .starter)
+        XCTAssertNil(appState.planChangeMessage)
+        XCTAssertFalse(appState.planChangeFailed)
     }
 
     func testChangePlanIsNoOpWhenAlreadyOnTargetTier() async {
@@ -220,6 +284,32 @@ final class AppStatePlanManagementTests: XCTestCase {
         XCTAssertFalse(appState.showsPlanManagement)
     }
 
+    func testClearingManagedAccountStateResetsBillingFeedback() {
+        let llm = PlanLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.isManagingBilling = true
+        appState.manageBillingMessage = "No active subscription to manage."
+        appState.isChangingPlan = true
+        appState.changingPlanTier = .pro
+        appState.planChangeMessage = AppState.changePlanConfirmation(for: .pro)
+        appState.planChangeFailed = true
+        appState.billingPortalRefreshPending = true
+        appState.planChangeReconciliationTask = Task {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+
+        appState.clearManagedQuotaCache()
+
+        XCTAssertFalse(appState.isManagingBilling)
+        XCTAssertNil(appState.manageBillingMessage)
+        XCTAssertFalse(appState.isChangingPlan)
+        XCTAssertNil(appState.changingPlanTier)
+        XCTAssertNil(appState.planChangeMessage)
+        XCTAssertFalse(appState.planChangeFailed)
+        XCTAssertFalse(appState.billingPortalRefreshPending)
+        XCTAssertNil(appState.planChangeReconciliationTask)
+    }
+
     func testPlanCatalogValuesMatchOwnerConfirmedPricing() {
         XCTAssertEqual(PaddlePlan.starter.monthlyPrice, "$9")
         XCTAssertEqual(PaddlePlan.pro.monthlyPrice, "$19")
@@ -256,12 +346,33 @@ final class AppStatePlanManagementTests: XCTestCase {
         appState.markManagedAccountStatusFresh(from: value)
     }
 
-    private func status(plan: ManagedSubscription.Plan, status: ManagedSubscription.Status) -> ManagedAccountStatus {
+    private func status(
+        plan: ManagedSubscription.Plan,
+        status: ManagedSubscription.Status,
+        userID: String = "user_marcus",
+        email: String = "marcus@example.com",
+        quota: ManagedQuota? = nil
+    ) -> ManagedAccountStatus {
         ManagedAccountStatus(
-            userID: "user_marcus",
-            email: "marcus@example.com",
+            userID: userID,
+            email: email,
+            quota: quota,
             subscription: ManagedSubscription(plan: plan, status: status, renewsAt: nil, manageBillingURL: nil)
         )
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 1,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        condition: @escaping () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(condition(), file: file, line: line)
     }
 
     private func makeSignedInAppState(llm: LLMProviding) -> AppState {
