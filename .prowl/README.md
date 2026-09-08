@@ -293,10 +293,24 @@ faked sign-in the AI tab's Status row shows `activeProviderBadge`.
 
 The Settings → **Subscription** tab (`label="Subscription"` toolbar tab) is the
 Sentwise-account home. In hunt mode the account status is stubbed
-(`StubManagedInferenceClient.stubbedAccountStatus` — active Individual plan, no
+(`StubManagedInferenceClient.stubbedAccountStatus` — active **Pro** plan, no
 billing URL, zero network) and delete is a no-op. The destructive controls are
 walkable but their activation is already blocked by the `"delete"`/`"Delete"`
 forbidden selectors (delete) and `"Sign out"` is safe/harmless in hunt mode.
+
+Because the stub plan is Pro/active, the **in-app plan cards (item 90)** render
+in hunt mode: `id=planManagement` wraps three `id=planCard_<tier>` cards
+(`starter`/`pro`/`unlimited`) with `id=planCurrentBadge_pro` marking the current
+tier. The cards are assert-only. Every control that would switch, confirm, or
+cancel a subscription — `id=changePlanButton_<tier>` (labels "Upgrade" /
+"Downgrade"), `id=confirmChangePlan` ("Switch to <tier>", also caught by the
+existing `"Switch to"` forbid), and `id=cancelSubscription` ("Cancel
+subscription") — is forbidden by id **and** label. In hunt mode these are already
+zero-network (the change/manage calls are deterministic stubs and the browser
+open is gated off), but they mutate observable billing state, so they stay
+forbidden like Deny/Sign out. `id=manageBilling` stays assert-only: in hunt mode
+tapping it fetches a deterministic stub URL and the browser open is suppressed,
+so it never leaves the app.
 
 | Identifier | Control | Clickable in hunts |
 |---|---|---|
@@ -305,8 +319,16 @@ forbidden selectors (delete) and `"Sign out"` is safe/harmless in hunt mode.
 | `id=subscriptionPlan` | Plan line ("Trial — N days left" / plan name) | assert-only |
 | `id=subscriptionPlanDetail` | Renewal / lapsed explanation line | assert-only |
 | `id=subscriptionOwnKeyFallback` | "Use your own AI key instead" (problem states) | assert-only |
-| `id=manageBilling` | "Manage billing" (disabled until 56c) | assert-only |
-| `id=manageBillingUnavailable` | "Billing management arrives with checkout." caption | assert-only |
+| `id=planManagement` | Wrapper for the three plan cards (item 90) | assert-only |
+| `id=planCard_<tier>` | Starter / Pro / Unlimited tier card | assert-only |
+| `id=planCurrentBadge_<tier>` | "Current plan" badge on the active tier | assert-only |
+| `id=changePlanButton_<tier>` | "Upgrade" / "Downgrade" to a tier | no (forbidden: id + "Upgrade"/"Downgrade") |
+| `id=confirmChangePlan` | Confirm the tier switch | no (forbidden: id + "Switch to") |
+| `id=planChangeMessage` | Plan-change confirmation / error line | assert-only |
+| `id=manageBilling` | "Manage billing" (fetches a fresh portal URL on tap) | assert-only |
+| `id=manageBillingMessage` | Inline billing-portal error line | assert-only |
+| `id=manageBillingUnavailable` | Caption when billing can't be managed yet | assert-only |
+| `id=cancelSubscription` | "Cancel subscription" (opens Paddle cancel flow) | no (forbidden: id + "Cancel subscription") |
 | `id=subscriptionSignOut` | "Sign out" of the Sentwise account | assert-only |
 | `id=deleteAccount` | "Delete account" (opens the confirm sheet) | no (forbidden: "delete") |
 | `id=deleteAccountConfirmField` | Type-DELETE confirm field | no (forbidden: "delete") |

@@ -128,6 +128,23 @@ final class AppState: ObservableObject {
     var billingReconciliationBaseline: BillingReconciliationSnapshot?
     @Published var cachedSubscriptionSnapshot: SubscriptionSnapshot?
     var billingPortalRefreshPending = false
+    // MARK: - In-app plan management (item 90). See AppState+BillingPortal / +PlanManagement.
+    /// In-flight flag for the on-demand manage-billing / cancel fetch, so the pane
+    /// can show progress and disable the control while a URL is being fetched.
+    @Published var isManagingBilling: Bool = false
+    /// Inline, billing-only message shown when the on-demand manage-billing fetch
+    /// fails or returns nothing — so the pane never presents an enabled no-op.
+    @Published var manageBillingMessage: String?
+    /// In-flight flag for a plan change (upgrade/downgrade) request + reconcile.
+    @Published var isChangingPlan: Bool = false
+    /// The tier whose change request is in flight, so the pane can show the spinner
+    /// on the right card and keep the others disabled.
+    @Published var changingPlanTier: PaddlePlan?
+    /// Inline confirmation ("You're on Pro.") or billing-only error for a plan
+    /// change. Cleared when a new change starts.
+    @Published var planChangeMessage: String?
+    /// Whether the last `planChangeMessage` is an error (drives red styling).
+    @Published var planChangeFailed: Bool = false
     /// Durable per-account subscription cache (test-injectable) backing the above.
     var subscriptionCacheStore: SubscriptionCacheStoring = UserDefaultsSubscriptionCacheStore()
 

@@ -238,3 +238,19 @@ guardrails:
     - "useManagedInference"
     - "getAPIKeyButton"
     - "Get an API key"
+    # In-app plan management (item 90). The stub account status is Pro/active, so
+    # the three plan cards render in hunt mode. The cards themselves and the
+    # "Current plan" badge are read-only (asserted via planCard_* /
+    # planCurrentBadge_*), but every control that would switch, confirm, or cancel
+    # a subscription — or open the Paddle billing portal in a browser — stays
+    # forbidden by AX id and by label. In hunt mode these are already zero-network
+    # (the change/manage calls are deterministic stubs and the browser open is
+    # gated off), but they mutate observable billing state, so they are forbidden
+    # exactly like Deny/Sign out. "Switch to <tier>" is additionally caught by the
+    # existing "Switch to" forbid.
+    - "changePlanButton"
+    - "confirmChangePlan"
+    - "Upgrade"
+    - "Downgrade"
+    - "cancelSubscription"
+    - "Cancel subscription"
