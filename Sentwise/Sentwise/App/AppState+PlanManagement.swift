@@ -241,18 +241,20 @@ extension AppState {
             generation: generation
         )
         planChangeReconciliationTask = Task { [weak self] in
-            for delay in retryDelays {
+            for (index, delay) in retryDelays.enumerated() {
                 do {
                     try await Task.sleep(nanoseconds: delay)
                 } catch {
                     return
                 }
                 guard let self else { return }
+                let isFinalAttempt = index == retryDelays.count - 1
                 let shouldContinue = await self.refreshPlanChangeReconciliation(
                     to: tier,
                     accountKey: accountKey,
                     validatedChange: change,
-                    generation: generation
+                    generation: generation,
+                    isFinalAttempt: isFinalAttempt
                 )
                 if !shouldContinue { return }
             }
@@ -264,16 +266,29 @@ extension AppState {
         to tier: PaddlePlan,
         accountKey: String,
         validatedChange change: PaddlePlanChange,
-        generation: UInt64
+        generation: UInt64,
+        isFinalAttempt: Bool
     ) async -> Bool {
         guard planChangeReconciliationGeneration == generation,
               managedAccountMatches(accountKey) else { return false }
         guard isOnline else { return true }
-        await refreshManagedQuota(scheduleRetryOnFailure: false)
+        await refreshManagedQuota(
+            scheduleRetryOnFailure: false,
+            deferPendingPlanChangeStatus: !isFinalAttempt
+        )
         guard planChangeReconciliationGeneration == generation,
               managedAccountMatches(accountKey) else { return false }
         if hasFreshLivePlanAndQuota(tier) {
             finishPlanChangeReconciliation(generation: generation)
+            return false
+        }
+        if isFinalAttempt {
+            planChangeFailed = true
+            planChangeMessage = Self.changePlanConfirmationPendingMessage()
+            finishPlanChangeReconciliation(generation: generation)
+            if !managedAccountStatusIsFresh {
+                scheduleManagedAccountStatusRefreshRetryAfterFailure()
+            }
             return false
         }
         guard applyValidatedPlanChange(change, expectedTier: tier, accountKey: accountKey) else {

@@ -150,7 +150,10 @@ extension AppState {
     /// signed-in managed account. Transient errors keep the last known display
     /// value and schedule a bounded retry. In Prowl hunt mode the LLM service
     /// returns the deterministic stub with zero network.
-    func refreshManagedQuota(scheduleRetryOnFailure: Bool = true) async {
+    func refreshManagedQuota(
+        scheduleRetryOnFailure: Bool = true,
+        deferPendingPlanChangeStatus: Bool = true
+    ) async {
         guard ProwlHuntRuntime.current.isEnabled || isManagedSignedIn else {
             return
         }
@@ -167,7 +170,8 @@ extension AppState {
                     status,
                     generation: refreshGeneration,
                     accountKey: accountKey,
-                    scheduleRetryOnFailure: scheduleRetryOnFailure
+                    scheduleRetryOnFailure: scheduleRetryOnFailure,
+                    deferPendingPlanChangeStatus: deferPendingPlanChangeStatus
                 )
             } else {
                 guard shouldApplyManagedAccountStatusRefreshFailure(
@@ -206,12 +210,13 @@ extension AppState {
         _ status: ManagedAccountStatus,
         generation: UInt64,
         accountKey: String,
-        scheduleRetryOnFailure: Bool
+        scheduleRetryOnFailure: Bool,
+        deferPendingPlanChangeStatus: Bool
     ) {
         guard shouldAcceptManagedAccountStatusRefreshSuccess(generation: generation, accountKey: accountKey) else {
             return
         }
-        if shouldDeferStatusRefreshForPendingPlanChange(status) {
+        if deferPendingPlanChangeStatus, shouldDeferStatusRefreshForPendingPlanChange(status) {
             managedAccountStatusIsFresh = false
             return
         }

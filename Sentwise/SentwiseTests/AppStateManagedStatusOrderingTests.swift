@@ -290,6 +290,44 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         XCTAssertNil(appState.planChangeReconciliationTask)
     }
 
+    func testPlanChangeBackgroundReconciliationAppliesOldTierWhenRetriesExpire() async {
+        let llm = DeferredStatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        defer {
+            appState.cancelScheduledManagedAccountStatusRefresh()
+            appState.cancelPlanChangeReconciliation()
+        }
+        let starter = status(plan: .starter, statusValue: .active)
+        appState.managedAccountStatus = starter
+        appState.markManagedAccountStatusFresh(from: starter)
+
+        let change = Task {
+            await appState.changePlan(
+                to: .pro,
+                reconcileRetryDelays: [],
+                backgroundReconcileRetryDelays: [0, 0]
+            )
+        }
+        await waitUntil { llm.fetchCount == 1 }
+        llm.completeFetch(at: 0, with: .success(starter))
+        await change.value
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+
+        await waitUntil { llm.fetchCount == 2 }
+        llm.completeFetch(at: 1, with: .success(starter))
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
+
+        await waitUntil { llm.fetchCount == 3 }
+        llm.completeFetch(at: 2, with: .success(starter))
+        await waitUntil { appState.planChangeReconciliationTask == nil }
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .starter)
+        XCTAssertTrue(appState.managedAccountStatusIsFresh)
+        XCTAssertTrue(appState.planChangeFailed)
+        XCTAssertEqual(appState.planChangeMessage, AppState.changePlanConfirmationPendingMessage())
+    }
+
     private final class InMemorySubscriptionCacheStore: SubscriptionCacheStoring, @unchecked Sendable {
         private(set) var saved: [String: SubscriptionSnapshot] = [:]
 
