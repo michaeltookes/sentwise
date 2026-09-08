@@ -143,7 +143,7 @@ extension AppState {
     ) async -> Bool {
         await refreshManagedQuota()
         guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return false }
-        if hasFreshLivePlanAndQuota(tier) { return true }
+        if hasFreshConfirmedPlanChange(tier) { return true }
         // Hunt mode never flips the deterministic stub tier — don't spin the poll.
         guard !ProwlHuntRuntime.current.isEnabled else { return false }
 
@@ -157,7 +157,7 @@ extension AppState {
                   isOnline else { return false }
             await refreshManagedQuota()
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return false }
-            if hasFreshLivePlanAndQuota(tier) { return true }
+            if hasFreshConfirmedPlanChange(tier) { return true }
         }
         return false
     }
@@ -279,7 +279,7 @@ extension AppState {
         )
         guard planChangeReconciliationGeneration == generation,
               managedAccountMatches(accountKey) else { return false }
-        if hasFreshLivePlanAndQuota(tier) {
+        if hasFreshConfirmedPlanChange(tier) {
             finishPlanChangeReconciliation(generation: generation)
             return false
         }
@@ -333,21 +333,19 @@ extension AppState {
     ) -> Bool {
         guard let subscription = status.subscription,
               PaddlePlan(subscriptionPlan: subscription.plan) == pending.tier,
-              successfulPlanChangeStatuses.contains(subscription.status),
-              status.quota != nil else {
+              successfulPlanChangeStatuses.contains(subscription.status) else {
             return false
         }
         return true
     }
 
-    private func hasFreshLivePlanAndQuota(_ tier: PaddlePlan) -> Bool {
+    private func hasFreshConfirmedPlanChange(_ tier: PaddlePlan) -> Bool {
         guard managedAccountStatusIsFresh,
               let status = managedAccountStatus,
               let subscription = status.subscription,
               let currentTier = PaddlePlan(subscriptionPlan: subscription.plan),
               currentTier == tier,
-              successfulPlanChangeStatuses.contains(subscription.status),
-              status.quota != nil else {
+              successfulPlanChangeStatuses.contains(subscription.status) else {
             return false
         }
         return true
