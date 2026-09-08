@@ -87,11 +87,24 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         plan: ManagedSubscription.Plan,
         statusValue: ManagedSubscription.Status
     ) -> ManagedAccountStatus {
+        status(plan: plan, statusValue: statusValue, quota: defaultQuota())
+    }
+
+    private func status(
+        plan: ManagedSubscription.Plan,
+        statusValue: ManagedSubscription.Status,
+        quota: ManagedQuota?
+    ) -> ManagedAccountStatus {
         ManagedAccountStatus(
             userID: "user_marcus",
             email: "marcus@example.com",
+            quota: quota,
             subscription: ManagedSubscription(plan: plan, status: statusValue)
         )
+    }
+
+    private func defaultQuota() -> ManagedQuota {
+        ManagedQuota(used: 1, limit: 120, remaining: 119, resetsAt: Date(), tokenLimit: 1_200)
     }
 
     private func waitUntil(
@@ -116,9 +129,9 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         let appState = makeSignedInAppState(llm: llm)
         defer { appState.cancelScheduledManagedAccountStatusRefresh() }
 
-        let firstRefresh = Task { await appState.refreshManagedQuota() }
+        let firstRefresh = Task { _ = await appState.refreshManagedQuota() }
         await waitUntil { llm.fetchCount == 1 }
-        let secondRefresh = Task { await appState.refreshManagedQuota() }
+        let secondRefresh = Task { _ = await appState.refreshManagedQuota() }
         await waitUntil { llm.fetchCount == 2 }
 
         llm.completeFetch(at: 1, with: .success(status(plan: .pro, statusValue: .active)))
@@ -140,9 +153,9 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         let appState = makeSignedInAppState(llm: llm)
         defer { appState.cancelScheduledManagedAccountStatusRefresh() }
 
-        let firstRefresh = Task { await appState.refreshManagedQuota() }
+        let firstRefresh = Task { _ = await appState.refreshManagedQuota() }
         await waitUntil { llm.fetchCount == 1 }
-        let secondRefresh = Task { await appState.refreshManagedQuota() }
+        let secondRefresh = Task { _ = await appState.refreshManagedQuota() }
         await waitUntil { llm.fetchCount == 2 }
 
         llm.completeFetch(at: 1, with: .failure(NSError(domain: "StatusOrdering", code: 1)))
@@ -163,9 +176,9 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         let appState = makeSignedInAppState(llm: llm)
         defer { appState.cancelScheduledManagedAccountStatusRefresh() }
 
-        let firstRefresh = Task { await appState.refreshManagedQuota() }
+        let firstRefresh = Task { _ = await appState.refreshManagedQuota() }
         await waitUntil { llm.fetchCount == 1 }
-        let secondRefresh = Task { await appState.refreshManagedQuota() }
+        let secondRefresh = Task { _ = await appState.refreshManagedQuota() }
         await waitUntil { llm.fetchCount == 2 }
 
         llm.completeFetch(at: 0, with: .success(status(plan: .pro, statusValue: .active)))
@@ -190,7 +203,7 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         appState.markManagedAccountStatusFresh(from: active)
         appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(plan: .pro, status: .active, capturedAt: Date())
 
-        let refresh = Task { await appState.refreshManagedQuota() }
+        let refresh = Task { _ = await appState.refreshManagedQuota() }
         await waitUntil { llm.fetchCount == 1 }
 
         let changed = await appState.reconcileManagedAccountState(
@@ -220,7 +233,7 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         appState.managedAccountStatus = starter
         appState.markManagedAccountStatusFresh(from: starter)
 
-        let oldRefresh = Task { await appState.refreshManagedQuota() }
+        let oldRefresh = Task { _ = await appState.refreshManagedQuota() }
         await waitUntil { llm.fetchCount == 1 }
         let change = Task {
             await appState.changePlan(to: .pro, reconcileRetryDelays: [], backgroundReconcileRetryDelays: [])
@@ -281,7 +294,7 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
             appState.cancelPlanChangeReconciliation()
         }
         let starter = status(plan: .starter, statusValue: .active)
-        let target = status(plan: .pro, statusValue: .active)
+        let target = status(plan: .pro, statusValue: .active, quota: nil)
         appState.managedAccountStatus = starter
         appState.markManagedAccountStatusFresh(from: starter)
 
@@ -304,7 +317,8 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
         XCTAssertEqual(appState.planChangeMessage, AppState.changePlanConfirmation(for: .pro))
         XCTAssertFalse(appState.planChangeFailed)
-        XCTAssertTrue(appState.managedAccountStatusIsFresh)
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
+        XCTAssertNotNil(appState.managedAccountStatusRefreshTask)
     }
 
     func testPendingPlanChangeReconciliationDefersLaterOldTierRefresh() async {
@@ -333,7 +347,7 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
         XCTAssertFalse(appState.managedAccountStatusIsFresh)
         XCTAssertNotNil(appState.planChangeReconciliationTask)
 
-        let laterRefresh = Task { await appState.refreshManagedQuota() }
+        let laterRefresh = Task { _ = await appState.refreshManagedQuota() }
         await waitUntil { llm.fetchCount == 2 }
         llm.completeFetch(at: 1, with: .success(starter))
         await laterRefresh.value
@@ -349,7 +363,7 @@ final class AppStateManagedStatusOrderingTests: XCTestCase {
             quota: quota,
             subscription: ManagedSubscription(plan: .pro, status: .active)
         )
-        let confirmingRefresh = Task { await appState.refreshManagedQuota() }
+        let confirmingRefresh = Task { _ = await appState.refreshManagedQuota() }
         await waitUntil { llm.fetchCount == 3 }
         llm.completeFetch(at: 2, with: .success(target))
         await confirmingRefresh.value
