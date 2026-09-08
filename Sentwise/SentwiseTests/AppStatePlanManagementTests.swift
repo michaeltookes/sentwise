@@ -22,6 +22,7 @@ final class AppStatePlanManagementTests: XCTestCase {
         /// The status the account flips to once a change succeeds; the reconcile
         /// poll reads it via `fetchManagedAccountStatus`.
         var statusAfterChange: ManagedAccountStatus?
+        var changeResult: PaddlePlanChange?
         private(set) var changedPriceIDs: [String] = []
 
         func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
@@ -41,6 +42,7 @@ final class AppStatePlanManagementTests: XCTestCase {
             changedPriceIDs.append(priceID)
             if let changeError { throw changeError }
             if let statusAfterChange { statusToReturn = statusAfterChange }
+            if let changeResult { return changeResult }
             let plan = PaddleConfig.active.plan(forPriceID: priceID)?.subscriptionPlan ?? .unknown
             return PaddlePlanChange(plan: plan, status: .active)
         }
@@ -121,6 +123,34 @@ final class AppStatePlanManagementTests: XCTestCase {
         XCTAssertNil(appState.changingPlanTier)
     }
 
+    func testChangePlanAppliesValidatedResponseWhenStatusPollDoesNotFlipTier() async {
+        let llm = PlanLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        setStatus(appState, plan: .starter, status: .active)
+        llm.changeResult = PaddlePlanChange(plan: .pro, status: .active)
+
+        await appState.changePlan(to: .pro, reconcileRetryDelays: [])
+
+        XCTAssertEqual(llm.changedPriceIDs, [PaddleConfig.active.priceID(for: .pro)])
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+        XCTAssertEqual(appState.managedAccountStatus?.subscription?.plan, .pro)
+        XCTAssertEqual(appState.planChangeMessage, AppState.changePlanConfirmation(for: .pro))
+        XCTAssertFalse(appState.planChangeFailed)
+    }
+
+    func testChangePlanDoesNotConfirmWhenResponseAndPollMissTargetTier() async {
+        let llm = PlanLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        setStatus(appState, plan: .starter, status: .active)
+        llm.changeResult = PaddlePlanChange(plan: .starter, status: .active)
+
+        await appState.changePlan(to: .pro, reconcileRetryDelays: [])
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .starter)
+        XCTAssertTrue(appState.planChangeFailed)
+        XCTAssertEqual(appState.planChangeMessage, AppState.changePlanConfirmationPendingMessage())
+    }
+
     func testChangePlanIsNoOpWhenAlreadyOnTargetTier() async {
         let llm = PlanLLM()
         let appState = makeSignedInAppState(llm: llm)
@@ -146,6 +176,17 @@ final class AppStatePlanManagementTests: XCTestCase {
         XCTAssertFalse(appState.isChangingPlan)
     }
 
+    func testChangePlanIsNoOpWhenPaidSubscriptionEnded() async {
+        let llm = PlanLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        setStatus(appState, plan: .pro, status: .canceled)
+
+        await appState.changePlan(to: .unlimited)
+
+        XCTAssertTrue(llm.changedPriceIDs.isEmpty)
+        XCTAssertNil(appState.planChangeMessage)
+    }
+
     // MARK: - Current tier + catalog helpers
 
     func testCurrentSubscriptionPlanTierMapsEachPaidPlanAndNilsLifecyclePlans() {
@@ -159,6 +200,23 @@ final class AppStatePlanManagementTests: XCTestCase {
 
         setStatus(appState, plan: .trial, status: .trialing)
         XCTAssertNil(appState.currentSubscriptionPlanTier)
+        XCTAssertFalse(appState.showsPlanManagement)
+    }
+
+    func testPlanManagementHiddenForEndedPaidSubscriptions() {
+        let llm = PlanLLM()
+        let appState = makeSignedInAppState(llm: llm)
+
+        setStatus(appState, plan: .pro, status: .canceled)
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+        XCTAssertFalse(appState.hasManageablePaidSubscription)
+        XCTAssertTrue(appState.shouldOfferSubscribe)
+        XCTAssertFalse(appState.showsPlanManagement)
+
+        setStatus(appState, plan: .unlimited, status: .lapsed)
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .unlimited)
+        XCTAssertFalse(appState.hasManageablePaidSubscription)
+        XCTAssertTrue(appState.shouldOfferSubscribe)
         XCTAssertFalse(appState.showsPlanManagement)
     }
 

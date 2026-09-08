@@ -15,6 +15,8 @@ private let planChangeReconcileRetryDelays: [UInt64] = [
     3_000_000_000
 ]
 
+private let successfulPlanChangeStatuses: Set<ManagedSubscription.Status> = [.active, .pastDue]
+
 /// In-app plan management on `AppState` (backlog item 90): the account's current
 /// purchasable tier, the upgrade/downgrade change-plan flow (a Paddle
 /// subscription update with proration, reconciled against `/v1/me`), and the
@@ -42,7 +44,7 @@ extension AppState {
     /// the account is on one of the purchasable tiers, so a trialing / lapsed /
     /// unknown account keeps the Subscribe entry point instead.
     var showsPlanManagement: Bool {
-        isManagedSignedIn && currentSubscriptionPlanTier != nil
+        isManagedSignedIn && hasManageablePaidSubscription && currentSubscriptionPlanTier != nil
     }
 
     /// Switches the subscription to `tier` (item 90). No-op when not signed in,
@@ -56,6 +58,7 @@ extension AppState {
         reconcileRetryDelays: [UInt64] = planChangeReconcileRetryDelays
     ) async {
         guard isManagedSignedIn, isOnline, !isChangingPlan,
+              hasManageablePaidSubscription,
               let current = currentSubscriptionPlanTier, current != tier else {
             return
         }
@@ -69,8 +72,9 @@ extension AppState {
         }
 
         let priceID = PaddleConfig.active.priceID(for: tier)
+        let change: PaddlePlanChange
         do {
-            _ = try await llm.changeManagedPlan(priceID: priceID)
+            change = try await llm.changeManagedPlan(priceID: priceID)
         } catch {
             await reconcileManagedAccountState(after: error, provider: .managed)
             planChangeFailed = true
@@ -78,7 +82,14 @@ extension AppState {
             return
         }
 
-        await reconcilePlanChange(to: tier, retryDelays: reconcileRetryDelays)
+        let observedTargetTier = await reconcilePlanChange(to: tier, retryDelays: reconcileRetryDelays)
+        if !observedTargetTier {
+            guard applyValidatedPlanChange(change, expectedTier: tier) else {
+                planChangeFailed = true
+                planChangeMessage = Self.changePlanConfirmationPendingMessage()
+                return
+            }
+        }
         planChangeFailed = false
         planChangeMessage = Self.changePlanConfirmation(for: tier)
     }
@@ -87,22 +98,51 @@ extension AppState {
     /// becomes `tier` (item 90), so the pane reflects the new plan. Stops early
     /// once the tier flips. In Prowl hunt mode `refreshManagedQuota` is a
     /// deterministic no-op, so this neither polls the network nor blocks.
-    func reconcilePlanChange(to tier: PaddlePlan, retryDelays: [UInt64]) async {
+    func reconcilePlanChange(to tier: PaddlePlan, retryDelays: [UInt64]) async -> Bool {
         await refreshManagedQuota()
-        if currentSubscriptionPlanTier == tier { return }
+        if currentSubscriptionPlanTier == tier { return true }
         // Hunt mode never flips the deterministic stub tier — don't spin the poll.
-        guard !ProwlHuntRuntime.current.isEnabled else { return }
+        guard !ProwlHuntRuntime.current.isEnabled else { return false }
 
         for delay in retryDelays {
             do {
                 try await Task.sleep(nanoseconds: delay)
             } catch {
-                return
+                return false
             }
-            guard isManagedSignedIn, isOnline else { return }
+            guard isManagedSignedIn, isOnline else { return false }
             await refreshManagedQuota()
-            if currentSubscriptionPlanTier == tier { return }
+            if currentSubscriptionPlanTier == tier { return true }
         }
+        return false
+    }
+
+    @discardableResult
+    private func applyValidatedPlanChange(_ change: PaddlePlanChange, expectedTier tier: PaddlePlan) -> Bool {
+        guard let changedTier = PaddlePlan(subscriptionPlan: change.plan),
+              changedTier == tier,
+              successfulPlanChangeStatuses.contains(change.status) else {
+            return false
+        }
+
+        let previousStatus = managedAccountStatus
+        let subscription = ManagedSubscription(
+            plan: change.plan,
+            status: change.status,
+            renewsAt: previousStatus?.subscription?.renewsAt,
+            manageBillingURL: previousStatus?.subscription?.manageBillingURL
+        )
+        let status = ManagedAccountStatus(
+            userID: previousStatus?.userID ?? managedClerkUserID,
+            email: previousStatus?.email ?? managedAccountEmail,
+            trial: previousStatus?.trial,
+            quota: previousStatus?.quota ?? managedQuota,
+            subscription: subscription
+        )
+        managedAccountStatus = status
+        markManagedAccountStatusFresh(from: status)
+        recordSubscriptionSnapshot(from: status)
+        return true
     }
 
     /// A short confirm prompt for switching to `tier` (item 90). Billing-only —
@@ -117,6 +157,10 @@ extension AppState {
     /// Billing-only confirmation copy after a successful plan change (item 90).
     static func changePlanConfirmation(for tier: PaddlePlan) -> String {
         "You're on \(tier.displayName). The change is prorated to your billing date."
+    }
+
+    static func changePlanConfirmationPendingMessage() -> String {
+        "We couldn't confirm the plan switch yet. Check your subscription again before trying another change."
     }
 
     /// Billing-only copy for a failed plan change (item 90). Surfaces the Worker's

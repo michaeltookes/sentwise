@@ -137,10 +137,26 @@ final class ManagedInferencePlanManagementTests: XCTestCase {
 
     func testChangePlanSurfacesWorkerMessageForEachError() async {
         let cases: [(Int, String, String)] = [
-            (400, #"{"error":{"type":"invalid_request","message":"You're already on that plan."}}"#, "You're already on that plan."),
-            (404, #"{"error":{"type":"billing_subscription_not_found","message":"No active subscription to change."}}"#, "No active subscription to change."),
-            (502, #"{"error":{"type":"upstream_error","message":"Billing is temporarily unavailable."}}"#, "Billing is temporarily unavailable."),
-            (503, #"{"error":{"type":"checkout_unavailable","message":"Plan changes are unavailable right now."}}"#, "Plan changes are unavailable right now.")
+            (
+                400,
+                #"{"error":{"type":"invalid_request","message":"You're already on that plan."}}"#,
+                "You're already on that plan."
+            ),
+            (
+                404,
+                #"{"error":{"type":"billing_subscription_not_found","message":"No active subscription to change."}}"#,
+                "No active subscription to change."
+            ),
+            (
+                502,
+                #"{"error":{"type":"upstream_error","message":"Billing is temporarily unavailable."}}"#,
+                "Billing is temporarily unavailable."
+            ),
+            (
+                503,
+                #"{"error":{"type":"checkout_unavailable","message":"Plan changes are unavailable right now."}}"#,
+                "Plan changes are unavailable right now."
+            )
         ]
         for (status, body, expected) in cases {
             let transport = FakeLLMTransport(response: json(body, status: status))

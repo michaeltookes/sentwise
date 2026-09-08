@@ -116,43 +116,26 @@ final class AppState: ObservableObject {
     /// True briefly after a successful account deletion so the signed-out
     /// Subscription pane can confirm it (item 73). Cleared on the next sign-in.
     @Published var didDeleteManagedAccount: Bool = false
-    /// Latest managed-account usage allotment; `nil` until known.
     @Published var managedQuota: ManagedQuota?
-    /// Hashed account key the cached quota belongs to.
     var managedQuotaAccountKey: String?
-    /// Old -> new account-key aliases created during stable-ID backfill.
     var managedQuotaAccountKeyAliases: [String: String] = [:]
-    // MARK: - Billing / checkout (item 56c). See AppState+Billing.
     @Published var billingCheckout: BillingCheckoutRequest?
     var billingReconciliationTask: Task<Void, Never>?
     var billingReconciliationBaseline: BillingReconciliationSnapshot?
     @Published var cachedSubscriptionSnapshot: SubscriptionSnapshot?
     var billingPortalRefreshPending = false
-    // MARK: - In-app plan management (item 90). See AppState+BillingPortal / +PlanManagement.
-    /// In-flight flag for the on-demand manage-billing / cancel fetch, so the pane
-    /// can show progress and disable the control while a URL is being fetched.
+    // MARK: - In-app plan management (item 90)
     @Published var isManagingBilling: Bool = false
-    /// Inline, billing-only message shown when the on-demand manage-billing fetch
-    /// fails or returns nothing — so the pane never presents an enabled no-op.
     @Published var manageBillingMessage: String?
-    /// In-flight flag for a plan change (upgrade/downgrade) request + reconcile.
     @Published var isChangingPlan: Bool = false
-    /// The tier whose change request is in flight, so the pane can show the spinner
-    /// on the right card and keep the others disabled.
     @Published var changingPlanTier: PaddlePlan?
-    /// Inline confirmation ("You're on Pro.") or billing-only error for a plan
-    /// change. Cleared when a new change starts.
     @Published var planChangeMessage: String?
-    /// Whether the last `planChangeMessage` is an error (drives red styling).
     @Published var planChangeFailed: Bool = false
-    /// Durable per-account subscription cache (test-injectable) backing the above.
     var subscriptionCacheStore: SubscriptionCacheStoring = UserDefaultsSubscriptionCacheStore()
 
     // MARK: - Workspace app-password guidance (item 75)
 
-    /// The Google Workspace / Gmail policy failure from the last connect attempt.
     @Published var workspaceAuthFailure: WorkspaceAuthFailure = .none
-    /// Account owner and domain class for the current Workspace guidance.
     var workspaceAuthFailureAccountID: String?
     var workspaceAuthIsCustomDomain: Bool = false
     /// Whether this account already registered "Sign in with Google" interest.
@@ -424,8 +407,8 @@ final class AppState: ObservableObject {
     var browserGeneration = 0
     var bulkGeneration = 0
 
-    /// Pause between bulk-cleanup sweeps so rapid scans do not trip provider rate limits.
     var bulkSweepPacingNanoseconds: UInt64 = 1_200_000_000
+
     // MARK: - Initialization
 
     init(
