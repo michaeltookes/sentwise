@@ -139,4 +139,34 @@ struct LLMService: LLMProviding {
         )
         return try await client.createCheckoutTransaction(priceID: priceID)
     }
+
+    /// Fetches a fresh Paddle management URL via `GET /v1/paddle/manage-billing`
+    /// (item 90). In Prowl hunt mode returns a deterministic, zero-network stub
+    /// URL so the pane's control is reachable without touching the network (the
+    /// browser is never actually opened in a hunt — `AppState` gates that).
+    func fetchManageBillingURL(action: PaddleBillingAction?) async throws -> URL {
+        if isProwlHuntMode {
+            return URL(string: "https://sentwise.ai/account/billing")!
+        }
+        let client = ManagedInferenceClient(
+            sessionProvider: managedSessionProvider,
+            transport: transport
+        )
+        return try await client.fetchManageBillingURL(action: action)
+    }
+
+    /// Switches the managed subscription's tier via `POST /v1/paddle/change-plan`
+    /// (item 90). In Prowl hunt mode returns a deterministic, zero-network result
+    /// for the requested tier so the confirm→reconcile flow is walkable offline.
+    func changeManagedPlan(priceID: String) async throws -> PaddlePlanChange {
+        if isProwlHuntMode {
+            let plan = PaddleConfig.active.plan(forPriceID: priceID)?.subscriptionPlan ?? .unknown
+            return PaddlePlanChange(plan: plan, status: .active)
+        }
+        let client = ManagedInferenceClient(
+            sessionProvider: managedSessionProvider,
+            transport: transport
+        )
+        return try await client.changePlan(priceID: priceID)
+    }
 }

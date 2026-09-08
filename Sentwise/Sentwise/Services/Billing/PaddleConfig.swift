@@ -41,6 +41,40 @@ enum PaddlePlan: String, CaseIterable, Identifiable, Sendable, Equatable {
         }
     }
 
+    /// The monthly price shown on the in-app plan cards (item 90). Owner-confirmed
+    /// 2026-09-04 and kept in sync with the sentwise.ai pricing page. Billing-only
+    /// copy — no privacy/retention claims.
+    var monthlyPrice: String {
+        switch self {
+        case .starter: return "$9"
+        case .pro: return "$19"
+        case .unlimited: return "$39"
+        }
+    }
+
+    /// The plan's monthly allowance headline (item 90), matching the marketing
+    /// site's owner-confirmed caps. Billing-only copy.
+    var allowanceSummary: String {
+        switch self {
+        case .starter: return "30 follow-ups a month"
+        case .pro: return "120 follow-ups a month"
+        case .unlimited: return "Unlimited follow-ups"
+        }
+    }
+
+    /// A one-line qualifier under the allowance headline (item 90). Billing-only.
+    var allowanceDetail: String {
+        switch self {
+        case .starter: return "About one a workday."
+        case .pro: return "Room for a full week of calls."
+        case .unlimited: return "Fair-use — no cap to watch."
+        }
+    }
+
+    /// Whether this tier is highlighted as the recommended plan on the cards
+    /// (Pro), matching the marketing site's "Most popular" treatment.
+    var isFeatured: Bool { self == .pro }
+
     /// The corresponding subscription plan this purchase results in, for mapping
     /// a completed checkout back to `ManagedSubscription.Plan` in tests/UI.
     var subscriptionPlan: ManagedSubscription.Plan {
@@ -48,6 +82,34 @@ enum PaddlePlan: String, CaseIterable, Identifiable, Sendable, Equatable {
         case .starter: return .starter
         case .pro: return .pro
         case .unlimited: return .unlimited
+        }
+    }
+
+    /// The purchasable tier corresponding to a `ManagedSubscription.Plan`, or nil
+    /// for lifecycle/non-purchasable plans (trial / none / team / unknown). Used
+    /// to mark the account's current tier on the in-app plan cards (item 90).
+    init?(subscriptionPlan: ManagedSubscription.Plan) {
+        switch subscriptionPlan {
+        case .starter: self = .starter
+        case .pro: self = .pro
+        case .unlimited: self = .unlimited
+        case .trial, .team, .noPlan, .unknown: return nil
+        }
+    }
+
+    /// Whether moving from `current` to `self` is an upgrade (up the
+    /// Starter→Pro→Unlimited ladder) rather than a downgrade. Drives the
+    /// Upgrade/Downgrade verb on the plan cards (item 90).
+    func isUpgrade(from current: PaddlePlan) -> Bool {
+        rank > current.rank
+    }
+
+    /// Position on the Starter→Pro→Unlimited ladder (0-based).
+    private var rank: Int {
+        switch self {
+        case .starter: return 0
+        case .pro: return 1
+        case .unlimited: return 2
         }
     }
 }
@@ -84,6 +146,13 @@ struct PaddleConfig: Sendable, Equatable {
         case .pro: return proPriceID
         case .unlimited: return unlimitedPriceID
         }
+    }
+
+    /// The purchasable tier a price id maps to, or nil for an unknown id. Used by
+    /// the Prowl-hunt change-plan stub to resolve the requested tier with zero
+    /// network (item 90).
+    func plan(forPriceID priceID: String) -> PaddlePlan? {
+        PaddlePlan.allCases.first { self.priceID(for: $0) == priceID }
     }
 
     // MARK: - Credential sets

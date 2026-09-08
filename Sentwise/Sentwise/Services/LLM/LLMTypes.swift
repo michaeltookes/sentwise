@@ -266,6 +266,14 @@ enum LLMError: Error, Equatable, Sendable {
     /// e.g. an unsupported price, an ineligible account, or checkout not
     /// configured. Surfaced in the checkout sheet as a `.failed` phase.
     case managedCheckoutFailed(String)
+    /// Switching the subscription's tier via `POST /v1/paddle/change-plan` failed
+    /// (backlog item 90). Carries the Worker's plain, user-facing message (an
+    /// unchanged/unknown price, no active subscription, or Paddle unavailable).
+    case managedChangePlanFailed(String)
+    /// Fetching a fresh Paddle management URL via `GET /v1/paddle/manage-billing`
+    /// failed or returned nothing (backlog item 90). Carries a plain, billing-only
+    /// message the pane shows inline instead of an enabled button that no-ops.
+    case managedManageBillingUnavailable(String)
 }
 
 /// A single-provider adapter: turns an `LLMRequest` into a completion by calling
@@ -322,6 +330,21 @@ protocol LLMProviding: Sendable {
     /// Providers without a managed-account concept get the default, which reports
     /// "not signed in".
     func createPaddleCheckoutTransaction(priceID: String) async throws -> PaddleCheckoutTransaction
+
+    /// Fetches a fresh Paddle management URL via
+    /// `GET /v1/paddle/manage-billing[?action=cancel]` (backlog item 90). Paddle
+    /// portal URLs are short-lived, so the app fetches one on tap instead of
+    /// trusting the webhook-stored URL. Throws `LLMError` on failure. Providers
+    /// without a managed-account concept get the default, which reports "not
+    /// signed in".
+    func fetchManageBillingURL(action: PaddleBillingAction?) async throws -> URL
+
+    /// Switches the managed subscription to `priceID`'s tier via
+    /// `POST /v1/paddle/change-plan` (backlog item 90) — a Paddle subscription
+    /// update with proration, not a second checkout. Returns the tier/status after
+    /// the update. Throws `LLMError` on failure. Providers without a
+    /// managed-account concept get the default, which reports "not signed in".
+    func changeManagedPlan(priceID: String) async throws -> PaddlePlanChange
 }
 
 extension LLMProviding {
@@ -344,6 +367,18 @@ extension LLMProviding {
     /// Default: no managed checkout. Only `LLMService` overrides this to hit
     /// `POST /v1/paddle/checkout` under the account session.
     func createPaddleCheckoutTransaction(priceID: String) async throws -> PaddleCheckoutTransaction {
+        throw LLMError.managedNotSignedIn
+    }
+
+    /// Default: no managed billing portal. Only `LLMService` overrides this to hit
+    /// `GET /v1/paddle/manage-billing` under the account session.
+    func fetchManageBillingURL(action: PaddleBillingAction?) async throws -> URL {
+        throw LLMError.managedNotSignedIn
+    }
+
+    /// Default: no managed subscription to change. Only `LLMService` overrides
+    /// this to hit `POST /v1/paddle/change-plan` under the account session.
+    func changeManagedPlan(priceID: String) async throws -> PaddlePlanChange {
         throw LLMError.managedNotSignedIn
     }
 
