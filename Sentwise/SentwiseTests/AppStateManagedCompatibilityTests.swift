@@ -86,6 +86,18 @@ final class AppStateManagedCompatibilityTests: XCTestCase {
         }
     }
 
+    func testLiveNonCardSubscriptionDoesNotFallBackToCachedPlanCards() {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(plan: .pro, status: .active, capturedAt: Date())
+        appState.managedAccountStatus = status(plan: .team, statusValue: .active)
+
+        XCTAssertNil(appState.currentSubscriptionPlanTier)
+        XCTAssertTrue(appState.hasManageablePaidSubscription)
+        XCTAssertFalse(appState.showsPlanManagement)
+        XCTAssertTrue(appState.canManageBilling)
+    }
+
     func testManagedLicenseCachesQuotaOnlyAccountStatusForGrace() async {
         let llm = StatusLLM()
         llm.statusToReturn = ManagedAccountStatus(

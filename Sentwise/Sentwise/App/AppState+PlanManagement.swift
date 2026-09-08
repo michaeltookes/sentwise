@@ -34,12 +34,12 @@ extension AppState {
 
     /// The account's current purchasable tier (Starter / Pro / Unlimited), or nil
     /// when the account is on a lifecycle plan that isn't one of the cards (trial /
-    /// none / team / unknown). Prefers the freshest `/v1/me` subscription, falling
-    /// back to the offline-grace snapshot.
+    /// none / team / unknown). A live `/v1/me` subscription is authoritative even
+    /// when it maps to no card; falls back to offline grace only when live status
+    /// omits subscription data.
     var currentSubscriptionPlanTier: PaddlePlan? {
-        if let plan = managedAccountStatus?.subscription?.plan,
-           let tier = PaddlePlan(subscriptionPlan: plan) {
-            return tier
+        if let subscription = managedAccountStatus?.subscription {
+            return PaddlePlan(subscriptionPlan: subscription.plan)
         }
         if let plan = effectiveSubscriptionSnapshot?.plan,
            let tier = PaddlePlan(subscriptionPlan: plan) {
