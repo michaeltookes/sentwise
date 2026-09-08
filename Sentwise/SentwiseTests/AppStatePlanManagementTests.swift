@@ -16,6 +16,7 @@ final class AppStatePlanManagementTests: XCTestCase {
         // Manage billing
         var manageBillingURLToReturn = URL(string: "https://billing.example/portal")!
         var manageBillingError: Error?
+        var manageBillingDelay: UInt64?
         private(set) var manageBillingActions: [PaddleBillingAction?] = []
 
         // Change plan
@@ -40,6 +41,10 @@ final class AppStatePlanManagementTests: XCTestCase {
 
         func fetchManageBillingURL(action: PaddleBillingAction?) async throws -> URL {
             manageBillingActions.append(action)
+            let delay = manageBillingDelay
+            if let delay {
+                try await Task.sleep(nanoseconds: delay)
+            }
             if let manageBillingError { throw manageBillingError }
             return manageBillingURLToReturn
         }
@@ -107,6 +112,31 @@ final class AppStatePlanManagementTests: XCTestCase {
 
         XCTAssertEqual(llm.manageBillingActions, [.cancel])
         XCTAssertEqual(openedURL?.absoluteString, "https://billing.example/cancel")
+    }
+
+    func testPreviousManageBillingOperationDoesNotClearNewAccountBusyState() async {
+        let llm = PlanLLM()
+        llm.manageBillingDelay = 50_000_000
+        let appState = makeSignedInAppState(llm: llm)
+        setStatus(appState, plan: .pro, status: .active)
+
+        let firstOpen = Task {
+            await appState.openManageBilling { _ in }
+        }
+        await waitUntil { appState.isManagingBilling }
+        switchManagedAccount(appState, plan: .pro, userID: "user_other", email: "other@example.com")
+        llm.manageBillingDelay = 300_000_000
+
+        let secondOpen = Task {
+            await appState.openManageBilling { _ in }
+        }
+        await waitUntil { appState.isManagingBilling }
+
+        await firstOpen.value
+
+        XCTAssertTrue(appState.isManagingBilling)
+        await secondOpen.value
+        XCTAssertFalse(appState.isManagingBilling)
     }
 
     // MARK: - Change plan (upgrade / downgrade)
@@ -213,6 +243,40 @@ final class AppStatePlanManagementTests: XCTestCase {
         XCTAssertEqual(appState.currentSubscriptionPlanTier, .starter)
         XCTAssertNil(appState.planChangeMessage)
         XCTAssertFalse(appState.planChangeFailed)
+    }
+
+    func testPreviousPlanChangeDoesNotClearNewAccountBusyState() async {
+        let llm = PlanLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        setStatus(appState, plan: .starter, status: .active)
+        llm.changeResult = PaddlePlanChange(plan: .pro, status: .active)
+
+        let firstChange = Task {
+            await appState.changePlan(
+                to: .pro,
+                reconcileRetryDelays: [50_000_000],
+                backgroundReconcileRetryDelays: []
+            )
+        }
+        await waitUntil { appState.isChangingPlan }
+        switchManagedAccount(appState, plan: .starter, userID: "user_other", email: "other@example.com")
+        llm.changeResult = PaddlePlanChange(plan: .unlimited, status: .active)
+
+        let secondChange = Task {
+            await appState.changePlan(
+                to: .unlimited,
+                reconcileRetryDelays: [300_000_000],
+                backgroundReconcileRetryDelays: []
+            )
+        }
+        await waitUntil { appState.changingPlanTier == .unlimited }
+
+        await firstChange.value
+
+        XCTAssertTrue(appState.isChangingPlan)
+        XCTAssertEqual(appState.changingPlanTier, .unlimited)
+        await secondChange.value
+        XCTAssertFalse(appState.isChangingPlan)
     }
 
     func testChangePlanIsNoOpWhenAlreadyOnTargetTier() async {
@@ -342,6 +406,20 @@ final class AppStatePlanManagementTests: XCTestCase {
 
     private func setStatus(_ appState: AppState, plan: ManagedSubscription.Plan, status: ManagedSubscription.Status) {
         let value = self.status(plan: plan, status: status)
+        appState.managedAccountStatus = value
+        appState.markManagedAccountStatusFresh(from: value)
+    }
+
+    private func switchManagedAccount(
+        _ appState: AppState,
+        plan: ManagedSubscription.Plan,
+        userID: String,
+        email: String
+    ) {
+        appState.resetPlanManagementState()
+        let value = status(plan: plan, status: .active, userID: userID, email: email)
+        appState.managedAccountID = "clerk-user:\(userID)"
+        appState.managedAccountEmail = email
         appState.managedAccountStatus = value
         appState.markManagedAccountStatusFresh(from: value)
     }

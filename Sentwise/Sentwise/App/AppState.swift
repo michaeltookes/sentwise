@@ -127,10 +127,12 @@ final class AppState: ObservableObject {
     // MARK: - In-app plan management (item 90)
     @Published var isManagingBilling: Bool = false
     @Published var manageBillingMessage: String?
+    var manageBillingOperationGeneration: UInt64 = 0
     @Published var isChangingPlan: Bool = false
     @Published var changingPlanTier: PaddlePlan?
     @Published var planChangeMessage: String?
     @Published var planChangeFailed: Bool = false
+    var planChangeOperationGeneration: UInt64 = 0
     var planChangeReconciliationTask: Task<Void, Never>?
     var planChangeReconciliationGeneration: UInt64 = 0
     var subscriptionCacheStore: SubscriptionCacheStoring = UserDefaultsSubscriptionCacheStore()
@@ -146,9 +148,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Voice Profile
 
-    /// The learned voice profile, or `nil` if none has been learned yet.
     @Published var voiceProfile: VoiceProfile?
-    /// Whether voice learning is in progress.
     @Published var isLearningVoice: Bool = false
     /// A short progress message shown while learning.
     @Published var voiceProgress: String?

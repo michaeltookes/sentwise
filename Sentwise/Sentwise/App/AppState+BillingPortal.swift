@@ -31,21 +31,27 @@ extension AppState {
     ) async {
         guard isManagedSignedIn, isOnline, hasManageablePaidSubscription, !isManagingBilling else { return }
         let accountKey = currentManagedUsageAccountKey
+        manageBillingOperationGeneration &+= 1
+        let operationGeneration = manageBillingOperationGeneration
         manageBillingMessage = nil
         isManagingBilling = true
-        defer { isManagingBilling = false }
+        defer {
+            if isCurrentManageBillingOperation(operationGeneration, accountKey: accountKey) {
+                isManagingBilling = false
+            }
+        }
 
         let url: URL
         do {
             url = try await llm.fetchManageBillingURL(action: action)
         } catch {
-            guard managedAccountMatches(accountKey) else { return }
+            guard isCurrentManageBillingOperation(operationGeneration, accountKey: accountKey) else { return }
             await reconcileManagedAccountState(after: error, provider: .managed)
-            guard managedAccountMatches(accountKey) else { return }
+            guard isCurrentManageBillingOperation(operationGeneration, accountKey: accountKey) else { return }
             manageBillingMessage = Self.manageBillingErrorMessage(for: error)
             return
         }
-        guard managedAccountMatches(accountKey) else { return }
+        guard isCurrentManageBillingOperation(operationGeneration, accountKey: accountKey) else { return }
 
         // In a Prowl accessibility hunt the URL is a deterministic stub and we must
         // not actually launch a browser; the control is still reachable/labelled.
@@ -92,5 +98,9 @@ extension AppState {
             return nil
         }
         return url
+    }
+
+    private func isCurrentManageBillingOperation(_ generation: UInt64, accountKey: String) -> Bool {
+        manageBillingOperationGeneration == generation && managedAccountMatches(accountKey)
     }
 }

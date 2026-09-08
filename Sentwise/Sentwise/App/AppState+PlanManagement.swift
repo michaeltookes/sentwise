@@ -72,14 +72,18 @@ extension AppState {
             return
         }
         let accountKey = currentManagedUsageAccountKey
+        planChangeOperationGeneration &+= 1
+        let operationGeneration = planChangeOperationGeneration
         cancelPlanChangeReconciliation()
         planChangeMessage = nil
         planChangeFailed = false
         isChangingPlan = true
         changingPlanTier = tier
         defer {
-            isChangingPlan = false
-            changingPlanTier = nil
+            if isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) {
+                isChangingPlan = false
+                changingPlanTier = nil
+            }
         }
 
         let priceID = PaddleConfig.active.priceID(for: tier)
@@ -87,21 +91,22 @@ extension AppState {
         do {
             change = try await llm.changeManagedPlan(priceID: priceID)
         } catch {
-            guard managedAccountMatches(accountKey) else { return }
+            guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
             await reconcileManagedAccountState(after: error, provider: .managed)
-            guard managedAccountMatches(accountKey) else { return }
+            guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
             planChangeFailed = true
             planChangeMessage = Self.changePlanErrorMessage(for: error)
             return
         }
-        guard managedAccountMatches(accountKey) else { return }
+        guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
 
         let observedTargetTier = await reconcilePlanChange(
             to: tier,
             accountKey: accountKey,
+            operationGeneration: operationGeneration,
             retryDelays: reconcileRetryDelays
         )
-        guard managedAccountMatches(accountKey) else { return }
+        guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
         if !observedTargetTier {
             guard applyValidatedPlanChange(change, expectedTier: tier, accountKey: accountKey) else {
                 planChangeFailed = true
@@ -123,9 +128,14 @@ extension AppState {
     /// becomes `tier` (item 90), so the pane reflects the new plan. Stops early
     /// once the tier flips. In Prowl hunt mode `refreshManagedQuota` is a
     /// deterministic no-op, so this neither polls the network nor blocks.
-    func reconcilePlanChange(to tier: PaddlePlan, accountKey: String, retryDelays: [UInt64]) async -> Bool {
+    func reconcilePlanChange(
+        to tier: PaddlePlan,
+        accountKey: String,
+        operationGeneration: UInt64,
+        retryDelays: [UInt64]
+    ) async -> Bool {
         await refreshManagedQuota()
-        guard managedAccountMatches(accountKey) else { return false }
+        guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return false }
         if hasFreshLivePlanAndQuota(tier) { return true }
         // Hunt mode never flips the deterministic stub tier — don't spin the poll.
         guard !ProwlHuntRuntime.current.isEnabled else { return false }
@@ -136,9 +146,10 @@ extension AppState {
             } catch {
                 return false
             }
-            guard managedAccountMatches(accountKey), isOnline else { return false }
+            guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey),
+                  isOnline else { return false }
             await refreshManagedQuota()
-            guard managedAccountMatches(accountKey) else { return false }
+            guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return false }
             if hasFreshLivePlanAndQuota(tier) { return true }
         }
         return false
@@ -186,6 +197,8 @@ extension AppState {
 
     func resetPlanManagementState() {
         cancelPlanChangeReconciliation()
+        manageBillingOperationGeneration &+= 1
+        planChangeOperationGeneration &+= 1
         isManagingBilling = false
         manageBillingMessage = nil
         isChangingPlan = false
@@ -198,6 +211,10 @@ extension AppState {
         guard isManagedSignedIn else { return false }
         let currentAccountKey = currentManagedUsageAccountKey
         return accountKey == currentAccountKey || managedQuotaAccountKeyAliases[accountKey] == currentAccountKey
+    }
+
+    private func isCurrentPlanChangeOperation(_ generation: UInt64, accountKey: String) -> Bool {
+        planChangeOperationGeneration == generation && managedAccountMatches(accountKey)
     }
 
     private func schedulePlanChangeReconciliation(
