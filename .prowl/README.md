@@ -305,8 +305,11 @@ sign-in flows from the AI tab, then switch to Subscription.
 
 Because the stub plan is Pro/active, the **in-app plan cards (item 90)** render
 in hunt mode: `id=planManagement` wraps three `id=planCard_<tier>` cards
-(`starter`/`pro`/`unlimited`) with `id=planCurrentBadge_pro` marking the current
-tier. The cards are assert-only. Every control that would switch, confirm, or
+(`starter`/`pro`/`unlimited`) with the current tier visibly marked. The Account
+Plan row also exposes `id=planCurrentBadge_<tier>` on its current-plan marker so
+hunts can assert the exact active tier without depending on nested card badge
+exposure in macOS Accessibility. The cards are assert-only. Every control that
+would switch, confirm, or
 cancel a subscription — `id=changePlanButton_<tier>` (labels "Upgrade" /
 "Downgrade"), `id=confirmChangePlan` ("Switch to <tier>", also caught by the
 existing `"Switch to"` forbid), and `id=cancelSubscription` ("Cancel
@@ -326,7 +329,7 @@ so it never leaves the app.
 | `id=subscriptionOwnKeyFallback` | "Use your own AI key instead" (problem states) | assert-only |
 | `id=planManagement` | Wrapper for the three plan cards (item 90) | assert-only |
 | `id=planCard_<tier>` | Starter / Pro / Unlimited tier card | assert-only |
-| `id=planCurrentBadge_<tier>` | "Current plan" badge on the active tier | assert-only |
+| `id=planCurrentBadge_<tier>` | Current-plan marker for the active tier | assert-only |
 | `id=changePlanButton_<tier>` | "Upgrade" / "Downgrade" to a tier | no (forbidden: id + "Upgrade"/"Downgrade") |
 | `id=confirmChangePlan` | Confirm the tier switch | no (forbidden: id + "Switch to") |
 | `id=planChangeMessage` | Plan-change confirmation / error line | assert-only |

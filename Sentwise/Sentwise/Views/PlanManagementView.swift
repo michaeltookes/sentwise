@@ -112,12 +112,14 @@ private struct PlanTierRow: View {
     @ViewBuilder
     private var trailingControl: some View {
         if isCurrent {
-            Text("Current plan")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Current plan")
-                .accessibilityIdentifier("planCurrentBadge_\(tier.rawValue)")
+            HStack(spacing: 0) {
+                Text("Current plan")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .accessibilityIdentifier("planCurrentBadge_\(tier.rawValue)")
+            .accessibilityLabel("Current plan: \(tier.displayName)")
+            .accessibilityElement(children: .combine)
         } else if isChanging {
             ProgressView().controlSize(.small)
         } else {

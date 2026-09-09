@@ -81,9 +81,19 @@ struct SubscriptionSettingsView: View {
                     .accessibilityIdentifier("subscriptionAccountEmail")
             }
             LabeledContent("Plan") {
-                Text(model.planText)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("subscriptionPlan")
+                HStack(spacing: 8) {
+                    Text(model.planText)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("subscriptionPlan")
+                    if appState.showsPlanManagement,
+                       let currentTier = appState.currentSubscriptionPlanTier {
+                        Text("Current plan")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .accessibilityIdentifier("planCurrentBadge_\(currentTier.rawValue)")
+                            .accessibilityLabel("Current plan: \(currentTier.displayName)")
+                    }
+                }
             }
             if let secondary = model.secondaryText {
                 Text(secondary)
