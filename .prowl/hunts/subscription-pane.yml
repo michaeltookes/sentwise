@@ -4,7 +4,12 @@
 # sign-in fake, then the account status is stubbed to an active **Pro** plan
 # (StubManagedInferenceClient.stubbedAccountStatus, zero network), so the paid
 # plan-management surface renders: the account identity, the current-plan line,
-# and the three tier cards with Pro marked current.
+# and all three tier cards. The active tier is verified as Pro via the
+# account-row id=subscriptionCurrentPlanBadge_pro marker. The hunt deliberately
+# does NOT assert the Pro card's *internal* "Current plan" badge: macOS
+# Accessibility does not dependably expose that nested marker, which is exactly
+# why the reliable account-row marker exists — so the hunt's card invariant is
+# "the Pro card renders" (id=planCard_pro), not "the card is internally badged."
 #
 # After the offline sign-in setup this is open-and-assert only. The tier-change
 # surface (changePlanButton_*, confirmChangePlan, cancelSubscription — labels
@@ -12,13 +17,13 @@
 # observable billing state and is forbidden by id AND label in config.yml.
 # Because the guardrail substring-matches every step's selector, those controls
 # can be neither clicked NOR asserted here — their presence is proven indirectly
-# by the plan cards + the "Current plan" badge rendering. See .prowl/README.md
-# "Subscription pane controls".
+# by the plan cards rendering + the account-row current-plan marker.
+# See .prowl/README.md "Subscription pane controls".
 #
 # Run it (on the Lucius runner):  prowl run subscription-pane
 
 name: subscription-pane
-description: The Subscription tab's plan cards render with the current tier marked (active Pro stub)
+description: The Subscription tab's three plan cards render and the active tier resolves to Pro (account-row marker)
 
 steps:
   - click:
@@ -64,7 +69,7 @@ steps:
   - assert:
       visible: id=subscriptionPlan
 
-  # In-app plan cards (item 90): the wrapper + tiers render, Pro marked current.
+  # In-app plan cards (item 90): the wrapper + all three tier cards render.
   # These read-only cards are the sanctioned proof that the plan-management
   # surface (including the guardrail-forbidden change/cancel controls) rendered.
   # The active tier is verified via the Account row's reliable
