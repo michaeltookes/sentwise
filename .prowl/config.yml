@@ -240,8 +240,10 @@ guardrails:
     - "Get an API key"
     # In-app plan management (item 90). The stub account status is Pro/active, so
     # the three plan cards render in hunt mode. The cards themselves and the
-    # "Current plan" badge are read-only (asserted via planCard_* /
-    # planCurrentBadge_*), but every control that would switch, confirm, or cancel
+    # current-plan markers are read-only (asserted via planCard_*, the nested
+    # planCurrentBadge_* card badge, and the AX-reliable account-row
+    # subscriptionCurrentPlanBadge_* marker), but every control that would
+    # switch, confirm, or cancel
     # a subscription — or open the Paddle billing portal in a browser — stays
     # forbidden by AX id and by label. In hunt mode these are already zero-network
     # (the change/manage calls are deterministic stubs and the browser open is

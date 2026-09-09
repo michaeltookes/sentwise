@@ -1,0 +1,100 @@
+# Reachability guard for the Sentwise-account Subscription pane (items 73 + 90).
+# Hunt mode launches signed out so the sign-in hunts can exercise first-run
+# account setup. This hunt first drives the deterministic offline email-code
+# sign-in fake, then the account status is stubbed to an active **Pro** plan
+# (StubManagedInferenceClient.stubbedAccountStatus, zero network), so the paid
+# plan-management surface renders: the account identity, the current-plan line,
+# and all three tier cards. The active tier is verified as Pro via the
+# account-row id=subscriptionCurrentPlanBadge_pro marker. The hunt deliberately
+# does NOT assert the Pro card's *internal* "Current plan" badge: macOS
+# Accessibility does not dependably expose that nested marker, which is exactly
+# why the reliable account-row marker exists — so the hunt's card invariant is
+# "the Pro card renders" (id=planCard_pro), not "the card is internally badged."
+#
+# After the offline sign-in setup this is open-and-assert only. The tier-change
+# surface (changePlanButton_*, confirmChangePlan, cancelSubscription — labels
+# "Upgrade" / "Downgrade" / "Switch to <tier>" / "Cancel subscription") mutates
+# observable billing state and is forbidden by id AND label in config.yml.
+# Because the guardrail substring-matches every step's selector, those controls
+# can be neither clicked NOR asserted here — their presence is proven indirectly
+# by the plan cards rendering + the account-row current-plan marker.
+# See .prowl/README.md "Subscription pane controls".
+#
+# Run it (on the Lucius runner):  prowl run subscription-pane
+
+name: subscription-pane
+description: The Subscription tab's three plan cards render and the active tier resolves to Pro (account-row marker)
+
+steps:
+  - click:
+      selector: statusItem
+
+  - click:
+      selector: id=openSettings
+
+  - waitForSelector:
+      selector: label="Sentwise Settings"
+      timeout: 10000
+
+  - click:
+      selector: label="AI"
+
+  # Sign in through the hunt-mode offline fake before asserting paid account UI.
+  - fill:
+      selector: id=managedEmailField
+      value: hunt.fixture@sentwise.invalid
+  - click:
+      selector: id=managedSendCodeButton
+  - waitForSelector:
+      selector: id=managedCodeField
+      timeout: 10000
+  - click:
+      selector: id=managedVerifyButton
+
+  # This link renders only from AIProviderSettingsView's signed-in branch.
+  - waitForSelector:
+      selector: id=aiSubscriptionLink
+      timeout: 10000
+  - click:
+      selector: id=aiSubscriptionLink
+
+  # The Subscription pane switched in (not just some window present).
+  - waitForSelector:
+      selector: id=subscriptionTab
+      timeout: 10000
+
+  # Account identity + current-plan line (signed-in Pro stub).
+  - assert:
+      visible: id=subscriptionAccountEmail
+  - assert:
+      visible: id=subscriptionPlan
+
+  # In-app plan cards (item 90): the wrapper + all three tier cards render.
+  # These read-only cards are the sanctioned proof that the plan-management
+  # surface (including the guardrail-forbidden change/cancel controls) rendered.
+  # The active tier is verified via the Account row's reliable
+  # id=subscriptionCurrentPlanBadge_pro marker (macOS AX does not dependably
+  # expose the nested card badge); the Pro *card* is proven by id=planCard_pro.
+  - scrollTo:
+      selector: id=planManagement
+  - assert:
+      visible: id=planManagement
+  - assert:
+      visible: id=planCard_entry
+  - scrollTo:
+      selector: id=planCard_pro
+  - assert:
+      visible: id=planCard_pro
+  - waitForSelector:
+      selector: id=subscriptionCurrentPlanBadge_pro
+      timeout: 10000
+  - scrollTo:
+      selector: id=planCard_unlimited
+  - assert:
+      visible: id=planCard_unlimited
+
+  # Billing-management entry point renders (assert-only; not forbidden).
+  - scrollTo:
+      selector: id=manageBilling
+  - assert:
+      visible: id=manageBilling

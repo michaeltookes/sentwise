@@ -69,6 +69,10 @@ private struct PlanTierRow: View {
     let upgrade: Bool
     let onChange: () -> Void
 
+    private var cardAccessibilityIdentifier: String {
+        tier == .starter ? "planCard_entry" : "planCard_\(tier.rawValue)"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
@@ -105,17 +109,21 @@ private struct PlanTierRow: View {
                 .strokeBorder(isCurrent ? Color.accentColor.opacity(0.7) : Color.secondary.opacity(0.25),
                               lineWidth: isCurrent ? 2 : 1)
         )
-        .accessibilityIdentifier("planCard_\(tier.rawValue)")
+        .accessibilityIdentifier(cardAccessibilityIdentifier)
         .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
     private var trailingControl: some View {
         if isCurrent {
-            Text("Current plan")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-                .accessibilityIdentifier("planCurrentBadge_\(tier.rawValue)")
+            HStack(spacing: 0) {
+                Text("Current plan")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .accessibilityIdentifier("planCurrentBadge_\(tier.rawValue)")
+            .accessibilityLabel("Current plan: \(tier.displayName)")
+            .accessibilityElement(children: .combine)
         } else if isChanging {
             ProgressView().controlSize(.small)
         } else {
@@ -125,5 +133,4 @@ private struct PlanTierRow: View {
                 .accessibilityLabel("\(upgrade ? "Upgrade to" : "Downgrade to") \(tier.displayName)")
         }
     }
-
 }

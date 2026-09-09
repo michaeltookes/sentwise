@@ -275,6 +275,7 @@ column marks which are allowed by `forbiddenSelectors`:
 | `id=managedVerifyButton` | "Verify & connect" (offline fake) | yes |
 | `id=managedCancelBrowserSignIn` | "Cancel" (abort a browser-based Google sign-in) | assert-only |
 | `id=managedSimulateGoogleCallback` | "Simulate browser sign-in" — **hunt-mode-only** control that completes the faked Google flow | yes |
+| `id=aiSubscriptionLink` | Signed-in-only link from AI to Subscription | yes |
 | `id=managedSignOutButton` | "Sign out" of the managed account | no (forbidden) |
 | `id=useOwnProviderDisclosure` | "Use your own AI provider instead" disclosure | (onboarding only) |
 | `id=byoProviderPicker` | Bring-your-own provider picker | assert / stage |
@@ -298,10 +299,22 @@ billing URL, zero network) and delete is a no-op. The destructive controls are
 walkable but their activation is already blocked by the `"delete"`/`"Delete"`
 forbidden selectors (delete) and `"Sign out"` is safe/harmless in hunt mode.
 
+Hunt mode does **not** seed a managed account session at launch: the sign-in
+hunts need a fresh signed-out fixture. A hunt that asserts signed-in
+Subscription content must first drive one of the deterministic offline managed
+sign-in flows from the AI tab, then switch to Subscription.
+
 Because the stub plan is Pro/active, the **in-app plan cards (item 90)** render
-in hunt mode: `id=planManagement` wraps three `id=planCard_<tier>` cards
-(`starter`/`pro`/`unlimited`) with `id=planCurrentBadge_pro` marking the current
-tier. The cards are assert-only. Every control that would switch, confirm, or
+in hunt mode: `id=planManagement` wraps the three cards. Starter uses
+`id=planCard_entry` so the selector does not collide with the repo's broad
+`start` guardrail; Pro and Unlimited use `id=planCard_pro` and
+`id=planCard_unlimited`; each card marks the active tier with a nested
+`id=planCurrentBadge_<tier>` badge. Because macOS Accessibility does not
+dependably expose that nested card badge, the Account Plan row exposes a
+separate, reliably-surfaced `id=subscriptionCurrentPlanBadge_<tier>` marker —
+this is the one hunts assert to verify the exact active tier (a distinct id, so
+it never collides with the card badge). The cards are assert-only. Every control that would switch,
+confirm, or
 cancel a subscription — `id=changePlanButton_<tier>` (labels "Upgrade" /
 "Downgrade"), `id=confirmChangePlan` ("Switch to <tier>", also caught by the
 existing `"Switch to"` forbid), and `id=cancelSubscription` ("Cancel
@@ -320,8 +333,10 @@ so it never leaves the app.
 | `id=subscriptionPlanDetail` | Renewal / lapsed explanation line | assert-only |
 | `id=subscriptionOwnKeyFallback` | "Use your own AI key instead" (problem states) | assert-only |
 | `id=planManagement` | Wrapper for the three plan cards (item 90) | assert-only |
-| `id=planCard_<tier>` | Starter / Pro / Unlimited tier card | assert-only |
-| `id=planCurrentBadge_<tier>` | "Current plan" badge on the active tier | assert-only |
+| `id=planCard_entry` | Starter tier card | assert-only |
+| `id=planCard_pro` / `id=planCard_unlimited` | Pro / Unlimited tier cards | assert-only |
+| `id=planCurrentBadge_<tier>` | Nested current-plan badge inside the active tier card | assert-only |
+| `id=subscriptionCurrentPlanBadge_<tier>` | Account-row current-plan marker (the AX-reliable one hunts assert) | assert-only |
 | `id=changePlanButton_<tier>` | "Upgrade" / "Downgrade" to a tier | no (forbidden: id + "Upgrade"/"Downgrade") |
 | `id=confirmChangePlan` | Confirm the tier switch | no (forbidden: id + "Switch to") |
 | `id=planChangeMessage` | Plan-change confirmation / error line | assert-only |
@@ -334,7 +349,7 @@ so it never leaves the app.
 | `id=deleteAccountConfirmField` | Type-DELETE confirm field | no (forbidden: "delete") |
 | `id=deleteAccountConfirm` | Confirm-delete button | no (forbidden: "delete") |
 | `id=deleteAccountCancel` | Cancel the delete sheet | assert-only |
-| `id=openSubscriptionFromAI` | AI-tab link that switches to Subscription | assert / click |
+| `id=aiSubscriptionLink` | AI-tab link that switches to Subscription | assert / click |
 | `id=accountDeletedConfirmation` | "Your Sentwise account was deleted." note | assert-only |
 
 Window presence checks use `waitForSelector` with the exact AX label each
