@@ -27,7 +27,7 @@ struct AIProviderSettingsView: View {
                         appState.openSettingsHandler?(.subscription)
                     }
                     .buttonStyle(.link)
-                    .accessibilityIdentifier("openSubscriptionFromAI")
+                    .accessibilityIdentifier("aiSubscriptionLink")
                     .accessibilityLabel("Open the Subscription tab")
                 } else {
                     if !appState.isManagedProviderActive {

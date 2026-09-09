@@ -45,14 +45,13 @@ steps:
       timeout: 10000
   - click:
       selector: id=managedVerifyButton
-  - waitForSelector:
-      selector: id=activeProviderBadge
-      timeout: 10000
-  - assert:
-      visible: id=activeProviderBadge
 
+  # This link renders only from AIProviderSettingsView's signed-in branch.
+  - waitForSelector:
+      selector: id=aiSubscriptionLink
+      timeout: 10000
   - click:
-      selector: label="Subscription"
+      selector: id=aiSubscriptionLink
 
   # The Subscription pane switched in (not just some window present).
   - waitForSelector:
@@ -68,13 +67,10 @@ steps:
   # In-app plan cards (item 90): the wrapper + tiers render, Pro marked current.
   # These read-only cards are the sanctioned proof that the plan-management
   # surface (including the guardrail-forbidden change/cancel controls) rendered.
-  #
-  # NOTE: id=planCard_starter is deliberately NOT asserted — its id contains the
-  # substring "start", which is a forbiddenSelector (the mailbox-watch Start/Pause
-  # controls), so the guardrail would reject the step. The wrapper + the other two
-  # cards + the Pro current-badge already prove all three cards rendered.
   - assert:
       visible: id=planManagement
+  - assert:
+      visible: id=planCard_entry
   - assert:
       visible: id=planCard_pro
   - assert:

@@ -275,6 +275,7 @@ column marks which are allowed by `forbiddenSelectors`:
 | `id=managedVerifyButton` | "Verify & connect" (offline fake) | yes |
 | `id=managedCancelBrowserSignIn` | "Cancel" (abort a browser-based Google sign-in) | assert-only |
 | `id=managedSimulateGoogleCallback` | "Simulate browser sign-in" — **hunt-mode-only** control that completes the faked Google flow | yes |
+| `id=aiSubscriptionLink` | Signed-in-only link from AI to Subscription | yes |
 | `id=managedSignOutButton` | "Sign out" of the managed account | no (forbidden) |
 | `id=useOwnProviderDisclosure` | "Use your own AI provider instead" disclosure | (onboarding only) |
 | `id=byoProviderPicker` | Bring-your-own provider picker | assert / stage |
@@ -304,12 +305,14 @@ Subscription content must first drive one of the deterministic offline managed
 sign-in flows from the AI tab, then switch to Subscription.
 
 Because the stub plan is Pro/active, the **in-app plan cards (item 90)** render
-in hunt mode: `id=planManagement` wraps three `id=planCard_<tier>` cards
-(`starter`/`pro`/`unlimited`) with the current tier visibly marked. The Account
-Plan row also exposes `id=planCurrentBadge_<tier>` on its current-plan marker so
-hunts can assert the exact active tier without depending on nested card badge
-exposure in macOS Accessibility. The cards are assert-only. Every control that
-would switch, confirm, or
+in hunt mode: `id=planManagement` wraps the three cards. Starter uses
+`id=planCard_entry` so the selector does not collide with the repo's broad
+`start` guardrail; Pro and Unlimited use `id=planCard_pro` and
+`id=planCard_unlimited`. The Account Plan row also exposes
+`id=planCurrentBadge_<tier>` on its current-plan marker so hunts can assert the
+exact active tier without depending on nested card badge exposure in macOS
+Accessibility. The cards are assert-only. Every control that would switch,
+confirm, or
 cancel a subscription — `id=changePlanButton_<tier>` (labels "Upgrade" /
 "Downgrade"), `id=confirmChangePlan` ("Switch to <tier>", also caught by the
 existing `"Switch to"` forbid), and `id=cancelSubscription` ("Cancel
@@ -328,7 +331,8 @@ so it never leaves the app.
 | `id=subscriptionPlanDetail` | Renewal / lapsed explanation line | assert-only |
 | `id=subscriptionOwnKeyFallback` | "Use your own AI key instead" (problem states) | assert-only |
 | `id=planManagement` | Wrapper for the three plan cards (item 90) | assert-only |
-| `id=planCard_<tier>` | Starter / Pro / Unlimited tier card | assert-only |
+| `id=planCard_entry` | Starter tier card | assert-only |
+| `id=planCard_pro` / `id=planCard_unlimited` | Pro / Unlimited tier cards | assert-only |
 | `id=planCurrentBadge_<tier>` | Current-plan marker for the active tier | assert-only |
 | `id=changePlanButton_<tier>` | "Upgrade" / "Downgrade" to a tier | no (forbidden: id + "Upgrade"/"Downgrade") |
 | `id=confirmChangePlan` | Confirm the tier switch | no (forbidden: id + "Switch to") |
@@ -342,7 +346,7 @@ so it never leaves the app.
 | `id=deleteAccountConfirmField` | Type-DELETE confirm field | no (forbidden: "delete") |
 | `id=deleteAccountConfirm` | Confirm-delete button | no (forbidden: "delete") |
 | `id=deleteAccountCancel` | Cancel the delete sheet | assert-only |
-| `id=openSubscriptionFromAI` | AI-tab link that switches to Subscription | assert / click |
+| `id=aiSubscriptionLink` | AI-tab link that switches to Subscription | assert / click |
 | `id=accountDeletedConfirmation` | "Your Sentwise account was deleted." note | assert-only |
 
 Window presence checks use `waitForSelector` with the exact AX label each

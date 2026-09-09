@@ -282,7 +282,7 @@ the Sentwise-account home: account email, plan / trial / renewal, weekly usage
 guarded delete-account flow. It is distinct from the **Account** tab, which is
 the *mailbox* (IMAP) account. The AI tab keeps only a one-line
 "Account, usage, and plan details are under Subscription" link
-(`openSubscriptionFromAI`) that switches tabs via `openSettingsHandler`; the
+(`aiSubscriptionLink`) that switches tabs via `openSettingsHandler`; the
 usage bar is never rendered in two places.
 
 The **Analytics** tab (`SettingsTab.analytics`, after "Subscription"; item 84) is
