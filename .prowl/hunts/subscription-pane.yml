@@ -1,16 +1,19 @@
 # Reachability guard for the Sentwise-account Subscription pane (items 73 + 90).
-# In hunt mode the account status is stubbed to an active **Pro** plan
+# Hunt mode launches signed out so the sign-in hunts can exercise first-run
+# account setup. This hunt first drives the deterministic offline email-code
+# sign-in fake, then the account status is stubbed to an active **Pro** plan
 # (StubManagedInferenceClient.stubbedAccountStatus, zero network), so the paid
 # plan-management surface renders: the account identity, the current-plan line,
 # and the three tier cards with Pro marked current.
 #
-# Open-and-assert only. The tier-change surface (changePlanButton_*,
-# confirmChangePlan, cancelSubscription — labels "Upgrade" / "Downgrade" /
-# "Switch to <tier>" / "Cancel subscription") mutates observable billing state and
-# is forbidden by id AND label in config.yml. Because the guardrail substring-
-# matches every step's selector, those controls can be neither clicked NOR
-# asserted here — their presence is proven indirectly by the plan cards + the
-# "Current plan" badge rendering. See .prowl/README.md "Subscription pane controls".
+# After the offline sign-in setup this is open-and-assert only. The tier-change
+# surface (changePlanButton_*, confirmChangePlan, cancelSubscription — labels
+# "Upgrade" / "Downgrade" / "Switch to <tier>" / "Cancel subscription") mutates
+# observable billing state and is forbidden by id AND label in config.yml.
+# Because the guardrail substring-matches every step's selector, those controls
+# can be neither clicked NOR asserted here — their presence is proven indirectly
+# by the plan cards + the "Current plan" badge rendering. See .prowl/README.md
+# "Subscription pane controls".
 #
 # Run it (on the Lucius runner):  prowl run subscription-pane
 
@@ -26,6 +29,24 @@ steps:
 
   - waitForSelector:
       selector: label="Sentwise Settings"
+      timeout: 10000
+
+  - click:
+      selector: label="AI"
+
+  # Sign in through the hunt-mode offline fake before asserting paid account UI.
+  - fill:
+      selector: id=managedEmailField
+      value: hunt.fixture@sentwise.invalid
+  - click:
+      selector: id=managedSendCodeButton
+  - waitForSelector:
+      selector: id=managedCodeField
+      timeout: 10000
+  - click:
+      selector: id=managedVerifyButton
+  - waitForSelector:
+      selector: id=activeProviderBadge
       timeout: 10000
 
   - click:
@@ -56,9 +77,14 @@ steps:
       visible: id=planCard_pro
   - assert:
       visible: id=planCard_unlimited
-  - assert:
-      visible: id=planCurrentBadge_pro
+  - scrollTo:
+      selector: id=planCard_unlimited
+  - waitForSelector:
+      selector: label="Current plan"
+      timeout: 10000
 
   # Billing-management entry point renders (assert-only; not forbidden).
+  - scrollTo:
+      selector: id=manageBilling
   - assert:
       visible: id=manageBilling

@@ -107,7 +107,6 @@ private struct PlanTierRow: View {
         )
         .accessibilityIdentifier("planCard_\(tier.rawValue)")
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(accessibilityLabel)
     }
 
     @ViewBuilder
@@ -116,6 +115,8 @@ private struct PlanTierRow: View {
             Text("Current plan")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Current plan")
                 .accessibilityIdentifier("planCurrentBadge_\(tier.rawValue)")
         } else if isChanging {
             ProgressView().controlSize(.small)
@@ -125,10 +126,5 @@ private struct PlanTierRow: View {
                 .accessibilityIdentifier("changePlanButton_\(tier.rawValue)")
                 .accessibilityLabel("\(upgrade ? "Upgrade to" : "Downgrade to") \(tier.displayName)")
         }
-    }
-
-    private var accessibilityLabel: String {
-        let status = isCurrent ? "Current plan. " : ""
-        return "\(tier.displayName). \(status)\(tier.monthlyPrice) per month. \(tier.allowanceSummary)."
     }
 }

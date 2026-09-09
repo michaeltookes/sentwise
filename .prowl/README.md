@@ -298,6 +298,11 @@ billing URL, zero network) and delete is a no-op. The destructive controls are
 walkable but their activation is already blocked by the `"delete"`/`"Delete"`
 forbidden selectors (delete) and `"Sign out"` is safe/harmless in hunt mode.
 
+Hunt mode does **not** seed a managed account session at launch: the sign-in
+hunts need a fresh signed-out fixture. A hunt that asserts signed-in
+Subscription content must first drive one of the deterministic offline managed
+sign-in flows from the AI tab, then switch to Subscription.
+
 Because the stub plan is Pro/active, the **in-app plan cards (item 90)** render
 in hunt mode: `id=planManagement` wraps three `id=planCard_<tier>` cards
 (`starter`/`pro`/`unlimited`) with `id=planCurrentBadge_pro` marking the current
