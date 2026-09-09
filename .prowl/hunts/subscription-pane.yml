@@ -67,17 +67,23 @@ steps:
   # In-app plan cards (item 90): the wrapper + tiers render, Pro marked current.
   # These read-only cards are the sanctioned proof that the plan-management
   # surface (including the guardrail-forbidden change/cancel controls) rendered.
+  - scrollTo:
+      selector: id=planManagement
   - assert:
       visible: id=planManagement
   - assert:
       visible: id=planCard_entry
+  - scrollTo:
+      selector: id=planCard_pro
   - assert:
       visible: id=planCard_pro
-  - assert:
-      visible: id=planCard_unlimited
   - waitForSelector:
       selector: id=planCurrentBadge_pro
       timeout: 10000
+  - scrollTo:
+      selector: id=planCard_unlimited
+  - assert:
+      visible: id=planCard_unlimited
 
   # Billing-management entry point renders (assert-only; not forbidden).
   - scrollTo:
