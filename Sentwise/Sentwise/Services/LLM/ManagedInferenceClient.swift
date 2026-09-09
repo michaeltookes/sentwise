@@ -25,6 +25,15 @@ enum ManagedInference {
     /// `POST /v1/paddle/checkout` mints a Paddle transaction bound to the account
     /// with a signed `custom_data` the webhook trusts.
     static var paddleCheckoutEndpoint: URL { baseURL.appendingPathComponent("v1/paddle/checkout") }
+    /// Authenticated Paddle subscription-update endpoint (backlog item 90).
+    /// `POST /v1/paddle/change-plan` with `{ priceId }` switches the account's
+    /// existing subscription to a new tier (prorated) — not a second checkout.
+    static var paddleChangePlanEndpoint: URL { baseURL.appendingPathComponent("v1/paddle/change-plan") }
+    /// Authenticated on-demand Paddle management-URL endpoint (backlog item 90).
+    /// `GET /v1/paddle/manage-billing[?action=cancel]` returns a *fresh*
+    /// `{ managementUrl }` — Paddle portal URLs are short-lived, so the app fetches
+    /// one on tap instead of trusting the (often-empty) webhook-stored URL.
+    static var paddleManageBillingEndpoint: URL { baseURL.appendingPathComponent("v1/paddle/manage-billing") }
     /// Demand-capture endpoint for "notify me when sign-in with Google is
     /// available" (backlog item 75). `POST /v1/interest` with `{"topic":…}`.
     static var interestEndpoint: URL { baseURL.appendingPathComponent("v1/interest") }

@@ -116,39 +116,40 @@ final class AppState: ObservableObject {
     /// True briefly after a successful account deletion so the signed-out
     /// Subscription pane can confirm it (item 73). Cleared on the next sign-in.
     @Published var didDeleteManagedAccount: Bool = false
-    /// Latest managed-account usage allotment; `nil` until known.
     @Published var managedQuota: ManagedQuota?
-    /// Hashed account key the cached quota belongs to.
     var managedQuotaAccountKey: String?
-    /// Old -> new account-key aliases created during stable-ID backfill.
     var managedQuotaAccountKeyAliases: [String: String] = [:]
-    // MARK: - Billing / checkout (item 56c). See AppState+Billing.
     @Published var billingCheckout: BillingCheckoutRequest?
     var billingReconciliationTask: Task<Void, Never>?
     var billingReconciliationBaseline: BillingReconciliationSnapshot?
     @Published var cachedSubscriptionSnapshot: SubscriptionSnapshot?
     var billingPortalRefreshPending = false
-    /// Durable per-account subscription cache (test-injectable) backing the above.
+    // MARK: - In-app plan management (item 90)
+    @Published var isManagingBilling: Bool = false
+    @Published var manageBillingMessage: String?
+    var manageBillingOperationGeneration: UInt64 = 0
+    @Published var isChangingPlan: Bool = false
+    @Published var changingPlanTier: PaddlePlan?
+    @Published var planChangeMessage: String?
+    var planChangeConfirmationTier: PaddlePlan?
+    @Published var planChangeFailed: Bool = false
+    var planChangeOperationGeneration: UInt64 = 0
+    var planChangeReconciliationTask: Task<Void, Never>?
+    var planChangeReconciliationGeneration: UInt64 = 0
+    var pendingPlanChangeReconciliation: PendingPlanChangeReconciliation?
     var subscriptionCacheStore: SubscriptionCacheStoring = UserDefaultsSubscriptionCacheStore()
-
     // MARK: - Workspace app-password guidance (item 75)
 
-    /// The Google Workspace / Gmail policy failure from the last connect attempt.
     @Published var workspaceAuthFailure: WorkspaceAuthFailure = .none
-    /// Account owner and domain class for the current Workspace guidance.
     var workspaceAuthFailureAccountID: String?
     var workspaceAuthIsCustomDomain: Bool = false
-    /// Whether this account already registered "Sign in with Google" interest.
     @Published var googleOAuthInterestRegistered: Bool = false
-    /// Whether an interest-registration request is in flight.
     @Published var isRegisteringGoogleOAuthInterest: Bool = false
     @Published var googleOAuthInterestError: String?
 
     // MARK: - Voice Profile
 
-    /// The learned voice profile, or `nil` if none has been learned yet.
     @Published var voiceProfile: VoiceProfile?
-    /// Whether voice learning is in progress.
     @Published var isLearningVoice: Bool = false
     /// A short progress message shown while learning.
     @Published var voiceProgress: String?
@@ -407,8 +408,8 @@ final class AppState: ObservableObject {
     var browserGeneration = 0
     var bulkGeneration = 0
 
-    /// Pause between bulk-cleanup sweeps so rapid scans do not trip provider rate limits.
     var bulkSweepPacingNanoseconds: UInt64 = 1_200_000_000
+
     // MARK: - Initialization
 
     init(
@@ -489,7 +490,6 @@ final class AppState: ObservableObject {
             interval: { [weak self] in TimeInterval(self?.pollIntervalSeconds ?? 300) },
             onTick: { [weak self] in await self?.pollInboxOnce() }
         )
-
         installExternalActionHandlers()
     }
 

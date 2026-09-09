@@ -79,6 +79,46 @@ final class AppStateManagedStatusRefreshRetryTests: XCTestCase {
         XCTAssertEqual(appState.managedLicense, .entitled)
     }
 
+    func testQuotaLessStatusRefreshKeepsStatusStaleAndSchedulesRetry() async {
+        let staleQuota = managedQuota(limit: 10)
+        let llm = StatusRefreshLLMProvider(results: [.status(activeStatus(quota: nil))])
+        let appState = makeSignedInAppState(llm: llm)
+        defer { appState.cancelScheduledManagedAccountStatusRefresh() }
+        appState.managedQuota = staleQuota
+        appState.pendingPlanChangeReconciliation = PendingPlanChangeReconciliation(
+            tier: .pro,
+            accountKey: appState.currentManagedUsageAccountKey,
+            generation: appState.planChangeReconciliationGeneration
+        )
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+        XCTAssertEqual(appState.managedQuota, staleQuota)
+        XCTAssertFalse(appState.managedAccountStatusIsFresh)
+        XCTAssertNotNil(appState.managedAccountStatusRefreshTask)
+    }
+
+    func testStatusRetryClearsPendingPlanConfirmationErrorWhenTargetAppears() async {
+        let llm = StatusRefreshLLMProvider(results: [.status(activeStatus())])
+        let appState = makeSignedInAppState(llm: llm)
+        defer { appState.cancelScheduledManagedAccountStatusRefresh() }
+        appState.planChangeFailed = true
+        appState.planChangeMessage = AppState.changePlanConfirmationPendingMessage()
+        appState.pendingPlanChangeReconciliation = PendingPlanChangeReconciliation(
+            tier: .pro,
+            accountKey: appState.currentManagedUsageAccountKey,
+            generation: appState.planChangeReconciliationGeneration
+        )
+
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+        XCTAssertFalse(appState.planChangeFailed)
+        XCTAssertEqual(appState.planChangeMessage, AppState.changePlanConfirmation(for: .pro))
+        XCTAssertNil(appState.pendingPlanChangeReconciliation)
+    }
+
     func testManagedStatusRefreshRetryStopsAfterBoundedFailures() async throws {
         let llm = StatusRefreshLLMProvider(results: [.failure, .failure])
         let appState = makeSignedInAppState(llm: llm)
@@ -116,10 +156,25 @@ final class AppStateManagedStatusRefreshRetryTests: XCTestCase {
     }
 
     private func activeStatus() -> ManagedAccountStatus {
+        activeStatus(quota: managedQuota(limit: 120))
+    }
+
+    private func activeStatus(quota: ManagedQuota?) -> ManagedAccountStatus {
         ManagedAccountStatus(
             userID: "user_marcus",
             email: "marcus@example.com",
+            quota: quota,
             subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+    }
+
+    private func managedQuota(limit: Int) -> ManagedQuota {
+        ManagedQuota(
+            used: 1,
+            limit: limit,
+            remaining: max(limit - 1, 0),
+            resetsAt: Date(),
+            tokenLimit: limit * 10
         )
     }
 

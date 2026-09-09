@@ -2,9 +2,10 @@ import SwiftUI
 
 /// The "Subscription" tab of Settings (backlog item 73): the Sentwise account
 /// home. Shows the signed-in account email, plan / trial / renewal, weekly usage
-/// (reused from `ManagedUsageView`), a manage-billing entry point (a stub until
-/// checkout ships in 56c), sign-out, and a guarded delete-account flow. When
-/// signed out it reuses the same managed sign-in controls as the AI tab.
+/// (reused from `ManagedUsageView`), in-app plan management (the three tiers with
+/// the current one marked, plus upgrade/downgrade and cancel — item 90), an
+/// on-demand manage-billing entry point, sign-out, and a guarded delete-account
+/// flow. When signed out it reuses the same managed sign-in controls as the AI tab.
 ///
 /// This is distinct from the "Account" tab, which is the *mailbox* (IMAP)
 /// account. This pane is the *Sentwise* account behind managed inference.
@@ -113,20 +114,45 @@ struct SubscriptionSettingsView: View {
                 .accessibilityLabel("Subscribe to a plan")
             }
 
-            Button("Manage billing") {
+            if appState.showsPlanManagement {
+                PlanManagementView()
+            }
+
+            Button {
                 Task { await appState.openManageBilling() }
+            } label: {
+                HStack(spacing: 8) {
+                    Text("Manage billing")
+                    if appState.isManagingBilling {
+                        ProgressView().controlSize(.small)
+                    }
+                }
             }
             .disabled(!appState.canManageBilling)
             .accessibilityIdentifier("manageBilling")
             .accessibilityLabel("Manage billing")
 
-            if !appState.canManageBilling {
+            if let message = appState.manageBillingMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("manageBillingMessage")
+            } else if !appState.canManageBilling, !appState.isManagingBilling, !appState.isChangingPlan {
                 Text(appState.shouldOfferSubscribe
                      ? "Subscribe to manage billing here."
                      : "A billing portal link will appear here once your subscription is active.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("manageBillingUnavailable")
+            }
+
+            if appState.showsPlanManagement {
+                Button("Cancel subscription", role: .destructive) {
+                    Task { await appState.cancelSubscription() }
+                }
+                .disabled(!appState.canManageBilling)
+                .accessibilityIdentifier("cancelSubscription")
+                .accessibilityLabel("Cancel subscription")
             }
         }
 
