@@ -363,6 +363,7 @@ final class AppStatePlanManagementTests: XCTestCase {
         appState.isChangingPlan = true
         appState.changingPlanTier = .pro
         appState.planChangeMessage = AppState.changePlanConfirmation(for: .pro)
+        appState.planChangeConfirmationTier = .pro
         appState.planChangeFailed = true
         appState.billingPortalRefreshPending = true
         appState.planChangeReconciliationTask = Task {
@@ -376,6 +377,7 @@ final class AppStatePlanManagementTests: XCTestCase {
         XCTAssertFalse(appState.isChangingPlan)
         XCTAssertNil(appState.changingPlanTier)
         XCTAssertNil(appState.planChangeMessage)
+        XCTAssertNil(appState.planChangeConfirmationTier)
         XCTAssertFalse(appState.planChangeFailed)
         XCTAssertFalse(appState.billingPortalRefreshPending)
         XCTAssertNil(appState.planChangeReconciliationTask)

@@ -23,7 +23,7 @@ private let planChangeBackgroundReconcileRetryDelays: [UInt64] = [
     1_800_000_000_000
 ]
 
-private let successfulPlanChangeStatuses: Set<ManagedSubscription.Status> = [.active, .pastDue]
+let successfulPlanChangeStatuses: Set<ManagedSubscription.Status> = [.active, .pastDue]
 
 struct PendingPlanChangeReconciliation {
     let tier: PaddlePlan
@@ -92,6 +92,7 @@ extension AppState {
         let operationGeneration = planChangeOperationGeneration
         cancelPlanChangeReconciliation()
         planChangeMessage = nil
+        planChangeConfirmationTier = nil
         planChangeFailed = false
         isChangingPlan = true
         changingPlanTier = tier
@@ -113,6 +114,7 @@ extension AppState {
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
             planChangeFailed = true
             planChangeMessage = Self.changePlanErrorMessage(for: error)
+            planChangeConfirmationTier = nil
             return
         }
         guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
@@ -128,6 +130,7 @@ extension AppState {
             guard applyValidatedPlanChange(change, expectedTier: tier, accountKey: accountKey) else {
                 planChangeFailed = true
                 planChangeMessage = Self.changePlanConfirmationPendingMessage()
+                planChangeConfirmationTier = nil
                 return
             }
             schedulePlanChangeReconciliation(
@@ -139,6 +142,7 @@ extension AppState {
         }
         planChangeFailed = false
         planChangeMessage = Self.changePlanConfirmation(for: tier)
+        planChangeConfirmationTier = tier
     }
 
     /// Polls `/v1/me` after a successful change-plan call until the account's tier
@@ -151,9 +155,15 @@ extension AppState {
         operationGeneration: UInt64,
         retryDelays: [UInt64]
     ) async -> Bool {
-        await refreshManagedQuota()
+        var refreshedStatus = await refreshManagedQuota(requireQuotaForFreshStatus: true)
         guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return false }
-        if hasFreshConfirmedPlanChange(tier) { return true }
+        if statusConfirmsPlanChange(refreshedStatus, tier: tier) {
+            trackPlanChangeUntilQuotaArrivesIfNeeded(refreshedStatus, tier: tier, accountKey: accountKey)
+            return true
+        }
+        if hasFreshConfirmedPlanChange(tier) {
+            return true
+        }
         // Hunt mode never flips the deterministic stub tier — don't spin the poll.
         guard !ProwlHuntRuntime.current.isEnabled else { return false }
 
@@ -165,9 +175,15 @@ extension AppState {
             }
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey),
                   isOnline else { return false }
-            await refreshManagedQuota()
+            refreshedStatus = await refreshManagedQuota(requireQuotaForFreshStatus: true)
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return false }
-            if hasFreshConfirmedPlanChange(tier) { return true }
+            if statusConfirmsPlanChange(refreshedStatus, tier: tier) {
+                trackPlanChangeUntilQuotaArrivesIfNeeded(refreshedStatus, tier: tier, accountKey: accountKey)
+                return true
+            }
+            if hasFreshConfirmedPlanChange(tier) {
+                return true
+            }
         }
         return false
     }
@@ -223,6 +239,7 @@ extension AppState {
         isChangingPlan = false
         changingPlanTier = nil
         planChangeMessage = nil
+        planChangeConfirmationTier = nil
         planChangeFailed = false
     }
 
@@ -283,20 +300,29 @@ extension AppState {
         guard planChangeReconciliationGeneration == generation,
               managedAccountMatches(accountKey) else { return false }
         guard isOnline else { return true }
-        await refreshManagedQuota(
+        let refreshedStatus = await refreshManagedQuota(
             scheduleRetryOnFailure: false,
-            deferPendingPlanChangeStatus: !isFinalAttempt
+            deferPendingPlanChangeStatus: !isFinalAttempt,
+            requireQuotaForFreshStatus: true
         )
         guard planChangeReconciliationGeneration == generation,
               managedAccountMatches(accountKey) else { return false }
-        if hasFreshConfirmedPlanChange(tier) {
-            finishPlanChangeReconciliation(generation: generation)
+        if statusConfirmsPlanChange(refreshedStatus, tier: tier) || hasFreshConfirmedPlanChange(tier) {
+            let isWaitingForQuota = refreshedStatus?.quota == nil && !managedAccountStatusIsFresh
+            scheduleQuotaRetryIfAcceptedWithoutQuota(refreshedStatus)
+            finishPlanChangeReconciliation(generation: generation, preservePendingConfirmation: isWaitingForQuota)
             return false
         }
         if isFinalAttempt {
             planChangeFailed = true
             planChangeMessage = Self.changePlanConfirmationPendingMessage()
-            finishPlanChangeReconciliation(generation: generation)
+            planChangeConfirmationTier = nil
+            pendingPlanChangeReconciliation = PendingPlanChangeReconciliation(
+                tier: tier,
+                accountKey: accountKey,
+                generation: generation
+            )
+            finishPlanChangeReconciliation(generation: generation, preservePendingConfirmation: true)
             if !managedAccountStatusIsFresh {
                 scheduleManagedAccountStatusRefreshRetryAfterFailure()
             }
@@ -304,58 +330,6 @@ extension AppState {
         }
         guard applyValidatedPlanChange(change, expectedTier: tier, accountKey: accountKey) else {
             finishPlanChangeReconciliation(generation: generation)
-            return false
-        }
-        return true
-    }
-
-    private func finishPlanChangeReconciliation(generation: UInt64) {
-        guard planChangeReconciliationGeneration == generation else { return }
-        planChangeReconciliationTask?.cancel()
-        planChangeReconciliationTask = nil
-        if pendingPlanChangeReconciliation?.generation == generation {
-            pendingPlanChangeReconciliation = nil
-        }
-    }
-
-    func shouldDeferStatusRefreshForPendingPlanChange(_ status: ManagedAccountStatus) -> Bool {
-        guard let pending = pendingPlanChangeReconciliation,
-              pending.generation == planChangeReconciliationGeneration,
-              managedAccountMatches(pending.accountKey) else {
-            return false
-        }
-        return !statusConfirmsPendingPlanChange(status, pending: pending)
-    }
-
-    func finishPendingPlanChangeReconciliationIfConfirmed(by status: ManagedAccountStatus) {
-        guard let pending = pendingPlanChangeReconciliation,
-              pending.generation == planChangeReconciliationGeneration,
-              managedAccountMatches(pending.accountKey),
-              statusConfirmsPendingPlanChange(status, pending: pending) else {
-            return
-        }
-        finishPlanChangeReconciliation(generation: pending.generation)
-    }
-
-    private func statusConfirmsPendingPlanChange(
-        _ status: ManagedAccountStatus,
-        pending: PendingPlanChangeReconciliation
-    ) -> Bool {
-        guard let subscription = status.subscription,
-              PaddlePlan(subscriptionPlan: subscription.plan) == pending.tier,
-              successfulPlanChangeStatuses.contains(subscription.status) else {
-            return false
-        }
-        return true
-    }
-
-    private func hasFreshConfirmedPlanChange(_ tier: PaddlePlan) -> Bool {
-        guard managedAccountStatusIsFresh,
-              let status = managedAccountStatus,
-              let subscription = status.subscription,
-              let currentTier = PaddlePlan(subscriptionPlan: subscription.plan),
-              currentTier == tier,
-              successfulPlanChangeStatuses.contains(subscription.status) else {
             return false
         }
         return true

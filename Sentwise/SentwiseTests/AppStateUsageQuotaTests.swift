@@ -473,7 +473,7 @@ final class AppStateUsageQuotaTests: XCTestCase {
         let appState = makeSignedInAppState(llm: llm)
 
         let refresh = Task { @MainActor in
-            await appState.refreshManagedQuota()
+            _ = await appState.refreshManagedQuota()
         }
         await llm.waitUntilFetchStarted()
         await appState.signOutManaged()

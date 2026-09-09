@@ -14,6 +14,12 @@ private enum ManagedQuotaIngestionSource {
     case statusRefresh
 }
 
+private struct ManagedAccountStatusRefreshOptions {
+    let scheduleRetryOnFailure: Bool
+    let deferPendingPlanChangeStatus: Bool
+    let requireQuotaForFreshStatus: Bool
+}
+
 /// Managed-inference usage metering on `AppState` (backlog item 56b): mirroring
 /// the latest quota into published state, refreshing it from `/v1/me`, and firing
 /// the 50/75/100% weekly-usage alerts idempotently. Kept in its own file so
@@ -157,46 +163,53 @@ extension AppState {
     /// signed-in managed account. Transient errors keep the last known display
     /// value and schedule a bounded retry. In Prowl hunt mode the LLM service
     /// returns the deterministic stub with zero network.
+    @discardableResult
     func refreshManagedQuota(
         scheduleRetryOnFailure: Bool = true,
-        deferPendingPlanChangeStatus: Bool = true
-    ) async {
+        deferPendingPlanChangeStatus: Bool = true,
+        requireQuotaForFreshStatus: Bool = false
+    ) async -> ManagedAccountStatus? {
         guard ProwlHuntRuntime.current.isEnabled || isManagedSignedIn else {
-            return
+            return nil
         }
         managedAccountStatusRefreshOrdering.startedGeneration &+= 1
         let refreshGeneration = managedAccountStatusRefreshOrdering.startedGeneration
         let successVersionAtStart = managedAccountStatusRefreshOrdering.successVersion
         let accountKey = currentManagedUsageAccountKey
+        let options = ManagedAccountStatusRefreshOptions(
+            scheduleRetryOnFailure: scheduleRetryOnFailure,
+            deferPendingPlanChangeStatus: deferPendingPlanChangeStatus,
+            requireQuotaForFreshStatus: requireQuotaForFreshStatus
+        )
         do {
             // The reporter path already routes the fetched quota through
             // `ingestManagedQuota`; still ingest the return value directly so an
             // injected LLM double without a wired relay updates state too.
             if let status = try await llm.fetchManagedAccountStatus() {
-                applyManagedAccountStatusRefreshSuccess(
+                return applyManagedAccountStatusRefreshSuccess(
                     status,
                     generation: refreshGeneration,
                     accountKey: accountKey,
-                    scheduleRetryOnFailure: scheduleRetryOnFailure,
-                    deferPendingPlanChangeStatus: deferPendingPlanChangeStatus
-                )
+                    options: options
+                ) ? status : nil
             } else {
                 guard shouldApplyManagedAccountStatusRefreshFailure(
                     generation: refreshGeneration,
                     accountKey: accountKey,
                     successVersionAtStart: successVersionAtStart
-                ) else { return }
+                ) else { return nil }
                 managedAccountStatusIsFresh = false
                 if scheduleRetryOnFailure {
                     scheduleManagedAccountStatusRefreshRetryAfterFailure()
                 }
+                return nil
             }
         } catch {
             guard shouldApplyManagedAccountStatusRefreshFailure(
                 generation: refreshGeneration,
                 accountKey: accountKey,
                 successVersionAtStart: successVersionAtStart
-            ) else { return }
+            ) else { return nil }
             managedAccountStatusIsFresh = false
             // Metering is best-effort surfacing, never a blocking failure; a
             // managed 401 is reconciled by the normal draft/test paths.
@@ -210,22 +223,23 @@ extension AppState {
                scheduleRetryOnFailure {
                 scheduleManagedAccountStatusRefreshRetryAfterFailure()
             }
+            return nil
         }
     }
 
+    @discardableResult
     private func applyManagedAccountStatusRefreshSuccess(
         _ status: ManagedAccountStatus,
         generation: UInt64,
         accountKey: String,
-        scheduleRetryOnFailure: Bool,
-        deferPendingPlanChangeStatus: Bool
-    ) {
+        options: ManagedAccountStatusRefreshOptions
+    ) -> Bool {
         guard shouldAcceptManagedAccountStatusRefreshSuccess(generation: generation, accountKey: accountKey) else {
-            return
+            return false
         }
-        if deferPendingPlanChangeStatus, shouldDeferStatusRefreshForPendingPlanChange(status) {
+        if options.deferPendingPlanChangeStatus, shouldDeferStatusRefreshForPendingPlanChange(status) {
             managedAccountStatusIsFresh = false
-            return
+            return false
         }
         managedAccountStatusRefreshOrdering.acceptedGeneration = generation
         managedAccountStatusRefreshOrdering.successVersion &+= 1
@@ -233,8 +247,13 @@ extension AppState {
         // Mirror the full status for the Subscription pane (item 73), even when
         // `quota` is absent on an older Worker build.
         managedAccountStatus = status
-        markManagedAccountStatusFresh(from: status)
-        scheduleManagedAccountStatusRefreshAfterSuccess(scheduleRetryIfStale: scheduleRetryOnFailure)
+        let needsFreshQuota = options.requireQuotaForFreshStatus || statusConfirmsTrackedPlanChange(status)
+        if needsFreshQuota && status.quota == nil {
+            managedAccountStatusIsFresh = false
+        } else {
+            markManagedAccountStatusFresh(from: status)
+        }
+        scheduleManagedAccountStatusRefreshAfterSuccess(scheduleRetryIfStale: options.scheduleRetryOnFailure)
         let resolvedAccountKey = backfillManagedAccountIDIfNeeded(from: status, replacing: accountKey)
         preserveSubscriptionSnapshot(
             snapshotBeforeBackfill: snapshotBeforeAccountKeyBackfill,
@@ -246,8 +265,10 @@ extension AppState {
         }
         recordSubscriptionSnapshot(from: status)
         finishPendingPlanChangeReconciliationIfConfirmed(by: status)
+        clearStalePlanChangeConfirmationIfNeeded(after: status)
         resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
         retryDeferredTranscriptFolderDeliveriesAfterManagedLicenseRefreshIfNeeded()
+        return true
     }
 
     private func preserveSubscriptionSnapshot(
