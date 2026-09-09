@@ -308,10 +308,12 @@ Because the stub plan is Pro/active, the **in-app plan cards (item 90)** render
 in hunt mode: `id=planManagement` wraps the three cards. Starter uses
 `id=planCard_entry` so the selector does not collide with the repo's broad
 `start` guardrail; Pro and Unlimited use `id=planCard_pro` and
-`id=planCard_unlimited`. The Account Plan row also exposes
-`id=planCurrentBadge_<tier>` on its current-plan marker so hunts can assert the
-exact active tier without depending on nested card badge exposure in macOS
-Accessibility. The cards are assert-only. Every control that would switch,
+`id=planCard_unlimited`; each card marks the active tier with a nested
+`id=planCurrentBadge_<tier>` badge. Because macOS Accessibility does not
+dependably expose that nested card badge, the Account Plan row exposes a
+separate, reliably-surfaced `id=subscriptionCurrentPlanBadge_<tier>` marker —
+this is the one hunts assert to verify the exact active tier (a distinct id, so
+it never collides with the card badge). The cards are assert-only. Every control that would switch,
 confirm, or
 cancel a subscription — `id=changePlanButton_<tier>` (labels "Upgrade" /
 "Downgrade"), `id=confirmChangePlan` ("Switch to <tier>", also caught by the
@@ -333,7 +335,8 @@ so it never leaves the app.
 | `id=planManagement` | Wrapper for the three plan cards (item 90) | assert-only |
 | `id=planCard_entry` | Starter tier card | assert-only |
 | `id=planCard_pro` / `id=planCard_unlimited` | Pro / Unlimited tier cards | assert-only |
-| `id=planCurrentBadge_<tier>` | Current-plan marker for the active tier | assert-only |
+| `id=planCurrentBadge_<tier>` | Nested current-plan badge inside the active tier card | assert-only |
+| `id=subscriptionCurrentPlanBadge_<tier>` | Account-row current-plan marker (the AX-reliable one hunts assert) | assert-only |
 | `id=changePlanButton_<tier>` | "Upgrade" / "Downgrade" to a tier | no (forbidden: id + "Upgrade"/"Downgrade") |
 | `id=confirmChangePlan` | Confirm the tier switch | no (forbidden: id + "Switch to") |
 | `id=planChangeMessage` | Plan-change confirmation / error line | assert-only |

@@ -67,6 +67,9 @@ steps:
   # In-app plan cards (item 90): the wrapper + tiers render, Pro marked current.
   # These read-only cards are the sanctioned proof that the plan-management
   # surface (including the guardrail-forbidden change/cancel controls) rendered.
+  # The active tier is verified via the Account row's reliable
+  # id=subscriptionCurrentPlanBadge_pro marker (macOS AX does not dependably
+  # expose the nested card badge); the Pro *card* is proven by id=planCard_pro.
   - scrollTo:
       selector: id=planManagement
   - assert:
@@ -78,7 +81,7 @@ steps:
   - assert:
       visible: id=planCard_pro
   - waitForSelector:
-      selector: id=planCurrentBadge_pro
+      selector: id=subscriptionCurrentPlanBadge_pro
       timeout: 10000
   - scrollTo:
       selector: id=planCard_unlimited

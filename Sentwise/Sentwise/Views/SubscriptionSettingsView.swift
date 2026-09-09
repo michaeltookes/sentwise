@@ -90,7 +90,7 @@ struct SubscriptionSettingsView: View {
                         Text("Current plan")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.accentColor)
-                            .accessibilityIdentifier("planCurrentBadge_\(currentTier.rawValue)")
+                            .accessibilityIdentifier("subscriptionCurrentPlanBadge_\(currentTier.rawValue)")
                             .accessibilityLabel("Current plan: \(currentTier.displayName)")
                     }
                 }
