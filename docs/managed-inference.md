@@ -427,6 +427,15 @@ alone.
   teardown), and a terminal failure is only overridden by a completion. In Prowl
   hunt mode there is no network and no poll.
 
+- **Paddle API key scopes (server-side `PADDLE_API_KEY` secret)** — the Worker's
+  Paddle key must grant **`transaction.read` / `transaction.write`** (checkout
+  mint, item 56c) **and** **`subscription.read` / `subscription.write`** (plan
+  changes `PATCH /subscriptions/{id}` and the manage-billing `GET /subscriptions/{id}`
+  management-url fetch, item 90). A key scoped only for transactions returns
+  `403 forbidden "not authorized to read|update subscription"` on plan changes
+  while checkout still works — the sandbox symptom seen 2026-09-10. Grant the same
+  scopes to the live key at the production cutover (item 74).
+
 ### Offline license grace (item 56c)
 
 The "license" for managed drafting is the subscription **status** from `/v1/me`.
