@@ -88,6 +88,11 @@ extension AppState {
         secrets.hasValue(for: .openRouterAPIKey)
     }
 
+    func restoreOpenRouterProvisioningLaunchState() {
+        isOpenRouterProvisioning = secrets.hasValue(for: .openRouterPKCEVerifier)
+        pendingOpenRouterProvisioningMessageSurface = currentOpenRouterProvisioningMessageSurface()
+    }
+
     /// Reactivates the stored OpenRouter credential without starting another browser
     /// authorization. This keeps a saved OpenRouter key reachable even when a generic
     /// OpenAI-compatible key is also present.

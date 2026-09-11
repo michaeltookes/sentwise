@@ -9,10 +9,8 @@ final class AppState: ObservableObject {
     var settingsTransientMessageGeneration: UInt64 = 0
     @Published var settingsTransientMessages = SettingsTransientMessages()
     // MARK: - Watch State
-
     /// Current watcher status. Drives the menu-bar status line.
     @Published var watchStatus: WatchStatus = .idle
-
     /// Number of drafts awaiting the user's approval.
     @Published var pendingDraftCount: Int = 0
 
@@ -474,7 +472,7 @@ final class AppState: ObservableObject {
         self.llmBaseURL = settings.llmBaseURL
         self.verifiedLLMModel = managedLaunch.verifiedLLMModel
         self.llmAPIKey = managedLaunch.apiKey
-        self.isOpenRouterProvisioning = secrets.hasValue(for: .openRouterPKCEVerifier)
+        restoreOpenRouterProvisioningLaunchState()
         self.voiceProfile = persistence.loadVoiceProfile()
         restoreManagedAccountLaunchIdentity(managedLaunch, settings: settings)
         restoreReviewPersistenceState()
