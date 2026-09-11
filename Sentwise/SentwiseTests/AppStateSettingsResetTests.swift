@@ -126,14 +126,14 @@ final class AppStateSettingsResetTests: XCTestCase {
         XCTAssertEqual(appState.llmError(for: .settings), "OpenRouter failed.")
         XCTAssertEqual(appState.managedError(for: .settings), "Google failed.")
 
-        appState.setActiveSettingsTab(.subscription)
+        appState.activeSettingsTab = .subscription
         appState.markSettingsManagedCallbackErrorDisplayed(for: .settings, visibleIn: .subscription)
         appState.resetTransientSettingsMessages()
 
         XCTAssertEqual(appState.llmError(for: .settings), "OpenRouter failed.")
         XCTAssertNil(appState.managedError(for: .settings))
 
-        appState.setActiveSettingsTab(.ai)
+        appState.activeSettingsTab = .ai
         appState.markSettingsLLMCallbackErrorDisplayed(for: .settings, visibleIn: .ai)
         appState.resetTransientSettingsMessages()
 
@@ -147,9 +147,9 @@ final class AppStateSettingsResetTests: XCTestCase {
         appState.settingsTransientMessages.managedError = "Google failed."
         appState.markSettingsLLMCallbackErrorPendingDisplay(for: .settings)
         appState.markSettingsManagedCallbackErrorPendingDisplay(for: .settings)
-        appState.setActiveSettingsTab(.ai)
+        appState.activeSettingsTab = .ai
         appState.markSettingsLLMCallbackErrorDisplayed(for: .settings, visibleIn: .ai)
-        appState.setActiveSettingsTab(.subscription)
+        appState.activeSettingsTab = .subscription
         appState.markSettingsManagedCallbackErrorDisplayed(for: .settings, visibleIn: .subscription)
 
         appState.resetTransientSettingsMessages()
@@ -164,7 +164,7 @@ final class AppStateSettingsResetTests: XCTestCase {
         appState.settingsTransientMessages.managedError = "Google failed."
         appState.markSettingsLLMCallbackErrorPendingDisplay(for: .settings)
         appState.markSettingsManagedCallbackErrorPendingDisplay(for: .settings)
-        appState.setActiveSettingsTab(.general)
+        appState.activeSettingsTab = .general
 
         appState.markSettingsLLMCallbackErrorDisplayed(for: .settings, visibleIn: .ai)
         appState.markSettingsManagedCallbackErrorDisplayed(for: .settings, visibleIn: .subscription)
@@ -173,9 +173,9 @@ final class AppStateSettingsResetTests: XCTestCase {
         XCTAssertEqual(appState.llmError(for: .settings), "OpenRouter failed.")
         XCTAssertEqual(appState.managedError(for: .settings), "Google failed.")
 
-        appState.setActiveSettingsTab(.ai)
+        appState.activeSettingsTab = .ai
         appState.markSettingsLLMCallbackErrorDisplayed(for: .settings, visibleIn: .ai)
-        appState.setActiveSettingsTab(.subscription)
+        appState.activeSettingsTab = .subscription
         appState.markSettingsManagedCallbackErrorDisplayed(for: .settings, visibleIn: .subscription)
         appState.resetTransientSettingsMessages()
 
