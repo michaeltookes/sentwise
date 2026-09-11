@@ -219,8 +219,8 @@ extension AppState {
     }
 
     private func shouldHandleManagedOAuthCallback(flowID: String?) -> Bool {
-        guard let flowID else { return true }
         let currentFlowID = ((try? secrets.value(for: .managedOAuthFlowID)) ?? nil)
+        guard let flowID else { return currentFlowID == nil }
         if currentFlowID == nil {
             _ = consumeCanceledManagedOAuthCallbackSurface()
             pendingManagedSignInMessageSurface = .shared

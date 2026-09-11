@@ -54,7 +54,8 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
     func testRelaunchedOpenRouterCallbackFailureUsesPersistedSettingsSurface() async throws {
         let secrets = InMemorySecretStore()
         let firstLaunch = makeAppState(secrets: secrets)
-        _ = try XCTUnwrap(firstLaunch.beginOpenRouterProvisioning(messageSurface: .settings))
+        let url = try XCTUnwrap(firstLaunch.beginOpenRouterProvisioning(messageSurface: .settings))
+        let flowID = try XCTUnwrap(openRouterCallbackState(from: url))
         let relaunched = makeAppState(secrets: secrets)
         let transport = CallbackSurfaceJSONTransport(
             HTTPResponse(statusCode: 500, body: Data(#"{"error":"bad code"}"#.utf8))
@@ -62,6 +63,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
 
         await relaunched.handleOpenRouterCallback(
             code: "CODE",
+            flowID: flowID,
             provisioner: OpenRouterKeyProvisioner(transport: transport)
         )
 
@@ -73,11 +75,13 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
     func testOpenRouterCallbackFailureSurvivesSettingsCloseDuringExchange() async throws {
         let secrets = InMemorySecretStore()
         let appState = makeAppState(secrets: secrets)
-        _ = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
+        let url = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
+        let flowID = try XCTUnwrap(openRouterCallbackState(from: url))
         let transport = ManagedProviderSuspendedLLMTransport()
         let callback = Task {
             await appState.handleOpenRouterCallback(
                 code: "CODE",
+                flowID: flowID,
                 provisioner: OpenRouterKeyProvisioner(transport: transport)
             )
         }
@@ -139,6 +143,32 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         XCTAssertNil(appState.llmError(for: .settings))
     }
 
+    func testStatelessOpenRouterCallbackDoesNotDisturbReplacementFlow() async throws {
+        let secrets = InMemorySecretStore()
+        let appState = makeAppState(secrets: secrets)
+        _ = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
+
+        appState.cancelOpenRouterProvisioning(messageSurface: .settings)
+        let urlB = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
+        let flowB = try XCTUnwrap(openRouterCallbackState(from: urlB))
+        let verifierB = try XCTUnwrap(try secrets.value(for: .openRouterPKCEVerifier))
+        let transport = CallbackSurfaceJSONTransport(
+            HTTPResponse(statusCode: 500, body: Data(#"{"error":"bad code"}"#.utf8))
+        )
+
+        await appState.handleOpenRouterCallback(
+            code: "CODE_A",
+            provisioner: OpenRouterKeyProvisioner(transport: transport)
+        )
+
+        XCTAssertEqual(transport.callCount, 0)
+        XCTAssertTrue(appState.isOpenRouterProvisioning)
+        XCTAssertEqual(try secrets.value(for: .openRouterPKCEVerifier), verifierB)
+        XCTAssertEqual(try secrets.value(for: .openRouterPKCEFlowID), flowB)
+        XCTAssertNil(appState.llmError)
+        XCTAssertNil(appState.llmError(for: .settings))
+    }
+
     func testCanceledSettingsManagedOAuthCallbackDoesNotDisturbReplacementFlow() async throws {
         let secrets = InMemorySecretStore()
         let secondStartResponse = startResponse.replacingOccurrences(of: #""id":"sia_1""#, with: #""id":"sia_2""#)
@@ -162,6 +192,36 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         await appState.handleManagedOAuthCallback(nonce: "nonce_from_a", flowID: flowA)
 
         XCTAssertNotEqual(flowA, flowB)
+        XCTAssertEqual(transport.callCount, 2)
+        XCTAssertEqual(appState.managedSignInStage, .awaitingBrowser)
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertEqual(try secrets.value(for: .managedOAuthSignInID), "sia_2")
+        XCTAssertEqual(try secrets.value(for: .managedOAuthFlowID), flowB)
+        XCTAssertNil(appState.managedError)
+        XCTAssertNil(appState.managedError(for: .settings))
+    }
+
+    func testStatelessManagedOAuthCallbackDoesNotDisturbReplacementFlow() async throws {
+        let secrets = InMemorySecretStore()
+        let secondStartResponse = startResponse.replacingOccurrences(of: #""id":"sia_1""#, with: #""id":"sia_2""#)
+        let transport = QueueClerkTransport([
+            clerkReply(startResponse, clientToken: "client_A"),
+            clerkReply(secondStartResponse, clientToken: "client_B")
+        ])
+        let clerk = ClerkClient(
+            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            transport: transport
+        )
+        let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
+        let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
+
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, messageSurface: .settings)
+        await appState.cancelManagedSignInFlow(messageSurface: .settings)
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, messageSurface: .settings)
+        let flowB = try XCTUnwrap(callbackState(from: transport.requests[1].form["redirect_url"]))
+
+        await appState.handleManagedOAuthCallback(nonce: "nonce_from_a")
+
         XCTAssertEqual(transport.callCount, 2)
         XCTAssertEqual(appState.managedSignInStage, .awaitingBrowser)
         XCTAssertFalse(appState.isManagedSignedIn)
@@ -202,6 +262,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let firstManaged = ManagedAccountService(secrets: secrets, clerk: startClerk)
         let firstLaunch = makeAppState(provider: "managed", secrets: secrets, managedAccount: firstManaged)
         await firstLaunch.startManagedGoogleSignIn(openURL: { _ in }, messageSurface: .settings)
+        let flowID = try XCTUnwrap(callbackState(from: startTransport.requests[0].form["redirect_url"]))
         let callbackTransport = QueueClerkTransport([
             clerkReply(#"{"errors":[{"message":"Bad nonce"}]}"#, status: 400, clientToken: "client_B")
         ])
@@ -212,7 +273,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let callbackManaged = ManagedAccountService(secrets: secrets, clerk: callbackClerk)
         let relaunched = makeAppState(provider: "managed", secrets: secrets, managedAccount: callbackManaged)
 
-        await relaunched.handleManagedOAuthCallback(nonce: "bad_nonce")
+        await relaunched.handleManagedOAuthCallback(nonce: "bad_nonce", flowID: flowID)
 
         XCTAssertNil(relaunched.managedError)
         XCTAssertNotNil(relaunched.managedError(for: .settings))
@@ -229,6 +290,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let firstManaged = ManagedAccountService(secrets: secrets, clerk: startClerk)
         let firstLaunch = makeAppState(provider: "managed", secrets: secrets, managedAccount: firstManaged)
         await firstLaunch.startManagedGoogleSignIn(openURL: { _ in }, messageSurface: .settings)
+        let flowID = try XCTUnwrap(callbackState(from: startTransport.requests[0].form["redirect_url"]))
         let callbackTransport = SuspendedClerkTransport()
         let callbackClerk = ClerkClient(
             frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
@@ -241,7 +303,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
             didStartCallback.fulfill()
         }
         let callback = Task {
-            await relaunched.handleManagedOAuthCallback(nonce: "bad_nonce")
+            await relaunched.handleManagedOAuthCallback(nonce: "bad_nonce", flowID: flowID)
         }
         await fulfillment(of: [didStartCallback], timeout: 1)
 

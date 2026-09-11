@@ -255,8 +255,8 @@ extension AppState {
     }
 
     private func shouldHandleOpenRouterCallback(flowID: String?) -> Bool {
-        guard let flowID else { return true }
         let currentFlowID = ((try? secrets.value(for: .openRouterPKCEFlowID)) ?? nil)
+        guard let flowID else { return currentFlowID == nil }
         if currentFlowID == nil {
             _ = consumeCanceledOpenRouterCallbackSurface()
             pendingOpenRouterProvisioningMessageSurface = .shared

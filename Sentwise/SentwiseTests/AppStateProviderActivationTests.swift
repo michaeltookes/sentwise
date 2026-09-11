@@ -42,6 +42,16 @@ final class AppStateProviderActivationTests: XCTestCase {
         )
     }
 
+    private func callbackState(from urlString: String?) -> String? {
+        guard let urlString else { return nil }
+        return URLComponents(string: urlString)?.queryItems?.first { $0.name == "state" }?.value
+    }
+
+    private func openRouterCallbackState(from authURL: URL) -> String? {
+        let items = URLComponents(url: authURL, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return callbackState(from: items.first { $0.name == "callback_url" }?.value)
+    }
+
     // MARK: - Active-provider badge logic
 
     func testActiveProviderFlagsAreMutuallyExclusive() {
@@ -193,13 +203,15 @@ final class AppStateProviderActivationTests: XCTestCase {
     func testOpenRouterCallbackFailureUsesInitiatingSettingsSurface() async throws {
         let secrets = InMemorySecretStore()
         let appState = makeAppState(provider: "managed", secrets: secrets)
-        _ = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
+        let url = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
+        let flowID = try XCTUnwrap(openRouterCallbackState(from: url))
         let transport = ActivationFakeJSONTransport(
             HTTPResponse(statusCode: 500, body: Data(#"{"error":"bad code"}"#.utf8))
         )
 
         await appState.handleOpenRouterCallback(
             code: "CODE",
+            flowID: flowID,
             provisioner: OpenRouterKeyProvisioner(transport: transport)
         )
 
@@ -303,8 +315,9 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertEqual(opened?.absoluteString, "https://accounts.google.com/o/oauth2/auth?x=1")
         XCTAssertEqual(appState.managedSignInStage, .awaitingBrowser,
                        "opening the browser should switch the panel to the waiting state")
+        let flowID = try XCTUnwrap(callbackState(from: transport.requests[0].form["redirect_url"]))
 
-        await appState.handleManagedOAuthCallback(nonce: "nonce_1")
+        await appState.handleManagedOAuthCallback(nonce: "nonce_1", flowID: flowID)
 
         XCTAssertEqual(appState.managedSignInStage, .idle, "a completed sign-in leaves the waiting state")
         XCTAssertTrue(appState.isManagedSignedIn)
@@ -395,7 +408,9 @@ final class AppStateProviderActivationTests: XCTestCase {
         let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
 
         await appState.startManagedGoogleSignIn(openURL: { _ in }, messageSurface: .settings)
-        await appState.handleManagedOAuthCallback(nonce: "bad_nonce")
+        let flowID = try XCTUnwrap(callbackState(from: transport.requests[0].form["redirect_url"]))
+
+        await appState.handleManagedOAuthCallback(nonce: "bad_nonce", flowID: flowID)
 
         XCTAssertEqual(appState.managedSignInStage, .idle)
         XCTAssertFalse(appState.isManagedSignedIn)
