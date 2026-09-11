@@ -74,10 +74,10 @@ extension AppState {
     }
 
     /// Clears the learned profile.
-    func forgetVoiceProfile() {
+    func forgetVoiceProfile(messageSurface: TransientMessageSurface = .shared) {
         persistence.removeVoiceProfile()
         voiceProfile = nil
-        voiceError = nil
+        setVoiceError(nil, for: messageSurface)
     }
 
     // MARK: - Helpers

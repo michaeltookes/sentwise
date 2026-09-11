@@ -167,7 +167,7 @@ extension AppState {
                 )
                 return
             }
-            applyManagedSignedOutState(clearEmailInput: true)
+            applyManagedSignedOutState(clearEmailInput: true, messageSurface: messageSurface)
             reportManagedErrorIfCurrent(
                 Self.managedMessage(for: error),
                 generation: settingsMessageGeneration,
@@ -176,7 +176,7 @@ extension AppState {
             saveSettings()
             return
         }
-        applyManagedSignedOutState(clearEmailInput: true)
+        applyManagedSignedOutState(clearEmailInput: true, messageSurface: messageSurface)
         saveSettings()
     }
 
@@ -232,13 +232,16 @@ extension AppState {
                 return false
             }
         }
-        applyManagedSignedOutState(clearEmailInput: true)
+        applyManagedSignedOutState(clearEmailInput: true, messageSurface: messageSurface)
         didDeleteManagedAccount = true
         saveSettings()
         return true
     }
 
-    private func applyManagedSignedOutState(clearEmailInput: Bool) {
+    private func applyManagedSignedOutState(
+        clearEmailInput: Bool,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
         clearManagedQuotaCache()
         isManagedSignedIn = false
         managedAccountEmail = ""
@@ -252,7 +255,7 @@ extension AppState {
         pendingManagedSignInActivatesProvider = true
         managedSignInStage = .idle
         googleOAuthInterestRegistered = false
-        googleOAuthInterestError = nil
+        setGoogleOAuthInterestError(nil, for: messageSurface)
         if llmProviderKind == .managed {
             verifiedLLMModel = ""
             refreshLLMConnectionStatus()

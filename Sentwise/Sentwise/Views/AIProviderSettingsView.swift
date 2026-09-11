@@ -82,7 +82,7 @@ struct AIProviderSettingsView: View {
 
                 if appState.voiceProfile != nil {
                     Button("Forget voice profile", role: .destructive) {
-                        appState.forgetVoiceProfile()
+                        appState.forgetVoiceProfile(messageSurface: .settings)
                     }
                     .disabled(appState.isLearningVoice)
                     .accessibilityLabel("Forget voice profile")
