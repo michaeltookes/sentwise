@@ -27,7 +27,7 @@ struct ManagedInferenceCard: View {
                 .font(.caption).foregroundStyle(.secondary)
 
             if !isActive {
-                Button("Use Sentwise AI") { appState.selectLLMProvider(.managed) }
+                Button("Use Sentwise AI") { appState.selectLLMProvider(.managed, messageSurface: messageSurface) }
                     .accessibilityIdentifier("useManagedInference")
             } else if appState.isManagedSignedIn {
                 ConnectedBadge(text: "Connected as \(appState.managedAccountEmail)")
@@ -175,7 +175,7 @@ struct ManagedSignInControls: View {
                 // since a Prowl hunt cannot drive a real browser round-trip.
                 if isHuntMode {
                     Button("Simulate browser sign-in (Prowl hunt)") {
-                        appState.completeManagedGoogleSignInForHunt()
+                        appState.completeManagedGoogleSignInForHunt(messageSurface: messageSurface)
                     }
                     .accessibilityIdentifier("managedSimulateGoogleCallback")
                 }
@@ -249,7 +249,9 @@ struct BYOProviderControls: View {
             if isStagedProviderActive {
                 activeProviderConfig
             } else {
-                Button("Use this provider") { appState.selectLLMProvider(stagedProvider) }
+                Button("Use this provider") {
+                    appState.selectLLMProvider(stagedProvider, messageSurface: messageSurface)
+                }
                     .accessibilityIdentifier("useThisProviderButton")
                 ProviderKeyGuidance(provider: stagedProvider)
             }

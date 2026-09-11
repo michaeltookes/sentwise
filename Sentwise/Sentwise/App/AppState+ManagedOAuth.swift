@@ -114,7 +114,7 @@ extension AppState {
             return
         }
         if pendingManagedSignInActivatesProvider, llmProviderKind != .managed {
-            selectLLMProvider(.managed)
+            selectLLMProvider(.managed, messageSurface: messageSurface)
         }
         let email = result.displayIdentifier.flatMap { $0.isEmpty ? nil : $0 } ?? "your Google account"
         finalizeManagedSignIn(email: email, accountID: result.accountIdentifier)

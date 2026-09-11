@@ -17,7 +17,9 @@ struct AIProviderSettingsView: View {
                     if appState.isManagedProviderActive {
                         LabeledContent("Status") { ActiveProviderBadge() }
                     } else {
-                        Button("Use Sentwise AI") { appState.selectLLMProvider(.managed) }
+                        Button("Use Sentwise AI") {
+                            appState.selectLLMProvider(.managed, messageSurface: .settings)
+                        }
                             .accessibilityIdentifier("useManagedInference")
                             .accessibilityLabel("Use Sentwise AI")
                     }
@@ -31,7 +33,9 @@ struct AIProviderSettingsView: View {
                     .accessibilityLabel("Open the Subscription tab")
                 } else {
                     if !appState.isManagedProviderActive {
-                        Button("Use Sentwise AI") { appState.selectLLMProvider(.managed) }
+                        Button("Use Sentwise AI") {
+                            appState.selectLLMProvider(.managed, messageSurface: .settings)
+                        }
                             .accessibilityIdentifier("useManagedInference")
                             .accessibilityLabel("Use Sentwise AI")
                     }

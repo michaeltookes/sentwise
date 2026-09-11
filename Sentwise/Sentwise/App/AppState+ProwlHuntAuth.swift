@@ -22,9 +22,14 @@ extension AppState {
     /// no real `sentwise://oauth-callback` round-trip. Mirrors the state the real
     /// `handleManagedOAuthCallback` reaches: managed becomes the active provider
     /// and the account is connected.
-    func completeManagedGoogleSignInForHunt(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) {
+    func completeManagedGoogleSignInForHunt(
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
         guard isHuntMode else { return }
-        if pendingManagedSignInActivatesProvider, llmProviderKind != .managed { selectLLMProvider(.managed) }
+        if pendingManagedSignInActivatesProvider, llmProviderKind != .managed {
+            selectLLMProvider(.managed, messageSurface: messageSurface)
+        }
         finalizeManagedSignIn(email: Self.huntFixtureGoogleEmail, accountID: "hunt-google")
     }
 

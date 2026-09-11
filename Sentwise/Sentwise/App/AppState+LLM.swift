@@ -117,7 +117,7 @@ extension AppState {
     /// instead of reusing another provider's model id. The custom base URL is
     /// shared in settings, so clear it on provider changes to avoid sending the
     /// new provider's requests to the previous provider's endpoint.
-    func selectLLMProvider(_ provider: LLMProviderKind) {
+    func selectLLMProvider(_ provider: LLMProviderKind, messageSurface: TransientMessageSurface = .shared) {
         guard provider != llmProviderKind else { return }
         let selectedBaseURL = restoredBaseURLOnProviderSelection(provider)
         llmProviderKind = provider
@@ -135,7 +135,7 @@ extension AppState {
         )
         refreshLLMConnectionStatus()
         resetDraftPreviewForLLMChange()
-        llmError = nil
+        setLLMError(nil, for: messageSurface)
         saveSettings()
         if transcriptWatchedFolderEnabled, canCreateFollowUp {
             startTranscriptFolderWatchingIfEnabled()

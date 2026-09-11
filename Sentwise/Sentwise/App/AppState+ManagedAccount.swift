@@ -98,7 +98,9 @@ extension AppState {
             // This avoids macOS TextField commit timing making Prowl hunts flaky.
             let signedInEmail = pendingManagedSignInEmail
                 ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
-            if activatesManagedProvider, llmProviderKind != .managed { selectLLMProvider(.managed) }
+            if activatesManagedProvider, llmProviderKind != .managed {
+                selectLLMProvider(.managed, messageSurface: messageSurface)
+            }
             finalizeManagedSignIn(email: signedInEmail, accountID: "hunt-email:\(signedInEmail)")
             return
         }
@@ -128,7 +130,7 @@ extension AppState {
         let signedInEmail = pendingManagedSignInEmail
             ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
         if activatesManagedProvider, llmProviderKind != .managed {
-            selectLLMProvider(.managed)
+            selectLLMProvider(.managed, messageSurface: messageSurface)
         }
         finalizeManagedSignIn(email: signedInEmail, accountID: result.accountIdentifier)
     }

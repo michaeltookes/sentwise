@@ -59,4 +59,20 @@ final class AppStateLLMSettingsSurfaceTests: XCTestCase {
         XCTAssertNotNil(appState.llmError(for: .settings))
         XCTAssertEqual(try? secrets.value(for: .openRouterAPIKey), "sk-openrouter")
     }
+
+    func testProviderSelectionClearsSettingsLLMErrorBucket() {
+        let appState = makeAppState(secrets: InMemorySecretStore(), persistence: AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed"
+        )))
+        appState.llmError = "setup assistant error"
+        appState.settingsTransientMessages.llmError = "settings error"
+
+        appState.selectLLMProvider(.anthropic, messageSurface: .settings)
+
+        XCTAssertEqual(appState.llmProviderKind, .anthropic)
+        XCTAssertEqual(appState.llmError, "setup assistant error")
+        XCTAssertNil(appState.llmError(for: .settings))
+    }
 }
