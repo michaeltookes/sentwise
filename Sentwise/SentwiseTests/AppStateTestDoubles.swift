@@ -373,6 +373,7 @@ final class SuspendedBodyMailProvider: MailProvider, @unchecked Sendable {
 }
 
 final class AppStateFailingSecretStore: SecretStore {
+    var failOnValue: Set<SecretKey> = []
     var failOnSet: SecretKey?
     var failOnRemove: SecretKey?
     private var storage: [String: String]
@@ -391,7 +392,10 @@ final class AppStateFailingSecretStore: SecretStore {
     }
 
     func value(for key: SecretKey) throws -> String? {
-        storage[key.rawValue]
+        if failOnValue.contains(key) {
+            throw KeychainError.unexpectedStatus(errSecInteractionNotAllowed)
+        }
+        return storage[key.rawValue]
     }
 
     func remove(_ key: SecretKey) throws {

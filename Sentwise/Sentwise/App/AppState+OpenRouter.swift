@@ -154,7 +154,7 @@ extension AppState {
             }
             verifier = storedVerifier
         } catch {
-            reportOpenRouterCallbackStateReadError(error, generation: settingsMessageGeneration, surface: messageSurface)
+            reportOpenRouterCallbackStateReadErrorForUnknownSurface(error, generation: settingsMessageGeneration)
             return
         }
         setLLMError(nil, for: messageSurface)
@@ -239,7 +239,7 @@ extension AppState {
             }
             return true
         } catch {
-            reportOpenRouterCallbackStateReadError(error, generation: generation, surface: surface)
+            reportOpenRouterCallbackStateReadErrorForUnknownSurface(error, generation: generation)
             return false
         }
     }
@@ -291,6 +291,15 @@ extension AppState {
         )
     }
 
+    private func reportOpenRouterCallbackStateReadErrorForUnknownSurface(
+        _ error: Error,
+        generation: UInt64
+    ) {
+        let message = Self.callbackStateReadMessage(subject: "OpenRouter sign-in state", error: error)
+        reportOpenRouterCallbackError(message, generation: generation, surface: .shared)
+        reportOpenRouterCallbackError(message, generation: generation, surface: .settings)
+    }
+
     static func callbackStateReadMessage(subject: String, error: Error) -> String {
         let detail: String
         switch error {
@@ -327,10 +336,9 @@ extension AppState {
         do {
             return try openRouterCallbackFlowMatches(flowID: flowID, resetCanceledWhenMissing: true)
         } catch {
-            reportOpenRouterCallbackStateReadError(
+            reportOpenRouterCallbackStateReadErrorForUnknownSurface(
                 error,
-                generation: settingsTransientMessageGeneration,
-                surface: currentOpenRouterProvisioningMessageSurface()
+                generation: settingsTransientMessageGeneration
             )
             return false
         }

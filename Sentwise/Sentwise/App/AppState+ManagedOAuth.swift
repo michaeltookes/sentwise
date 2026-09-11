@@ -130,7 +130,7 @@ extension AppState {
         do {
             signInID = try secrets.value(for: .managedOAuthSignInID)
         } catch {
-            reportManagedOAuthCallbackStateReadError(error, generation: settingsMessageGeneration, surface: messageSurface)
+            reportManagedOAuthCallbackStateReadErrorForUnknownSurface(error, generation: settingsMessageGeneration)
             return
         }
         if managedSignInStage == .idle,
@@ -195,7 +195,7 @@ extension AppState {
             }
             return true
         } catch {
-            reportManagedOAuthCallbackStateReadError(error, generation: generation, surface: surface)
+            reportManagedOAuthCallbackStateReadErrorForUnknownSurface(error, generation: generation)
             return false
         }
     }
@@ -228,6 +228,15 @@ extension AppState {
             generation: generation,
             surface: surface
         )
+    }
+
+    private func reportManagedOAuthCallbackStateReadErrorForUnknownSurface(
+        _ error: Error,
+        generation: UInt64
+    ) {
+        let message = Self.callbackStateReadMessage(subject: "Sentwise sign-in state", error: error)
+        reportManagedOAuthCallbackError(message, generation: generation, surface: .shared)
+        reportManagedOAuthCallbackError(message, generation: generation, surface: .settings)
     }
 
     private func reportManagedOAuthCallbackError(
@@ -292,10 +301,9 @@ extension AppState {
         do {
             return try managedOAuthCallbackFlowMatches(flowID: flowID, resetCanceledWhenMissing: true)
         } catch {
-            reportManagedOAuthCallbackStateReadError(
+            reportManagedOAuthCallbackStateReadErrorForUnknownSurface(
                 error,
-                generation: settingsTransientMessageGeneration,
-                surface: currentManagedOAuthMessageSurface()
+                generation: settingsTransientMessageGeneration
             )
             return false
         }
@@ -312,10 +320,9 @@ extension AppState {
         do {
             guard try secrets.value(for: .managedOAuthFlowID) == nil else { return }
         } catch {
-            reportManagedOAuthCallbackStateReadError(
+            reportManagedOAuthCallbackStateReadErrorForUnknownSurface(
                 error,
-                generation: settingsTransientMessageGeneration,
-                surface: currentManagedOAuthMessageSurface()
+                generation: settingsTransientMessageGeneration
             )
             return
         }
