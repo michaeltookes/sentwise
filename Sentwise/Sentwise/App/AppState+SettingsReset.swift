@@ -88,12 +88,11 @@ extension AppState {
         settingsTransientMessages.hasUnseenLLMCallbackError = false
         settingsTransientMessages.hasUnseenManagedCallbackError = false
 
-        // General / signature / diagnostics panes. `transcriptFolderError` is a
+        // General / signature panes. `transcriptFolderError` is a
         // standing watcher condition; keep it until the watcher restarts or
         // accepts a transcript successfully.
         signatureDetectionMessage = nil
         signatureDetectionSucceeded = nil
-        diagnosticsError = nil
     }
 
     func isCurrentSettingsTransientMessageGeneration(_ generation: UInt64) -> Bool {

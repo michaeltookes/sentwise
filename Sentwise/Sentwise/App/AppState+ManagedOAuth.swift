@@ -137,7 +137,10 @@ extension AppState {
         surface: TransientMessageSurface
     ) {
         let reported = reportManagedErrorIfCurrent(message, generation: generation, surface: surface)
-        if reported {
+        if reported || surface == .settings {
+            if !reported {
+                setManagedError(message, for: surface)
+            }
             markSettingsManagedCallbackErrorPendingDisplay(for: surface)
         }
     }

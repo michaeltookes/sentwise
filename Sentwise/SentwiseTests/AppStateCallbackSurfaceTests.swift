@@ -58,6 +58,31 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         XCTAssertNotNil(relaunched.llmError(for: .settings))
     }
 
+    func testOpenRouterCallbackFailureSurvivesSettingsCloseDuringExchange() async throws {
+        let secrets = InMemorySecretStore()
+        let appState = makeAppState(secrets: secrets)
+        _ = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
+        let transport = ManagedProviderSuspendedLLMTransport()
+        let callback = Task {
+            await appState.handleOpenRouterCallback(
+                code: "CODE",
+                provisioner: OpenRouterKeyProvisioner(transport: transport)
+            )
+        }
+        await fulfillment(of: [transport.didStartRequest], timeout: 1)
+
+        appState.resetTransientSettingsMessages(preserveUnseenCallbackErrors: false)
+        transport.complete(with: .success(HTTPResponse(statusCode: 500, body: Data(#"{"error":"bad code"}"#.utf8))))
+        await callback.value
+
+        XCTAssertNil(appState.llmError)
+        XCTAssertNotNil(appState.llmError(for: .settings))
+
+        appState.resetTransientSettingsMessages()
+
+        XCTAssertNotNil(appState.llmError(for: .settings))
+    }
+
     func testCanceledSettingsOpenRouterCallbackIsIgnored() async throws {
         let secrets = InMemorySecretStore()
         let appState = makeAppState(secrets: secrets)
@@ -119,5 +144,47 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         XCTAssertNil(relaunched.managedError)
         XCTAssertNotNil(relaunched.managedError(for: .settings))
         XCTAssertFalse(relaunched.isManagedSignedIn)
+    }
+
+    func testManagedOAuthCallbackFailureSurvivesSettingsCloseDuringExchange() async throws {
+        let secrets = InMemorySecretStore()
+        let startTransport = QueueClerkTransport([clerkReply(startResponse, clientToken: "client_A")])
+        let startClerk = ClerkClient(
+            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            transport: startTransport
+        )
+        let firstManaged = ManagedAccountService(secrets: secrets, clerk: startClerk)
+        let firstLaunch = makeAppState(provider: "managed", secrets: secrets, managedAccount: firstManaged)
+        await firstLaunch.startManagedGoogleSignIn(openURL: { _ in }, messageSurface: .settings)
+        let callbackTransport = SuspendedClerkTransport()
+        let callbackClerk = ClerkClient(
+            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            transport: callbackTransport
+        )
+        let callbackManaged = ManagedAccountService(secrets: secrets, clerk: callbackClerk)
+        let relaunched = makeAppState(provider: "managed", secrets: secrets, managedAccount: callbackManaged)
+        let didStartCallback = expectation(description: "managed oauth callback started")
+        callbackTransport.onRequest = {
+            didStartCallback.fulfill()
+        }
+        let callback = Task {
+            await relaunched.handleManagedOAuthCallback(nonce: "bad_nonce")
+        }
+        await fulfillment(of: [didStartCallback], timeout: 1)
+
+        relaunched.resetTransientSettingsMessages(preserveUnseenCallbackErrors: false)
+        callbackTransport.resume(with: clerkReply(
+            #"{"errors":[{"message":"Bad nonce"}]}"#,
+            status: 400,
+            clientToken: "client_B"
+        ))
+        await callback.value
+
+        XCTAssertNil(relaunched.managedError)
+        XCTAssertNotNil(relaunched.managedError(for: .settings))
+
+        relaunched.resetTransientSettingsMessages()
+
+        XCTAssertNotNil(relaunched.managedError(for: .settings))
     }
 }

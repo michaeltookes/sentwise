@@ -211,7 +211,10 @@ extension AppState {
         surface: TransientMessageSurface
     ) {
         let reported = reportLLMErrorIfCurrent(message, generation: generation, surface: surface)
-        if reported {
+        if reported || surface == .settings {
+            if !reported {
+                setLLMError(message, for: surface)
+            }
             markSettingsLLMCallbackErrorPendingDisplay(for: surface)
         }
     }
