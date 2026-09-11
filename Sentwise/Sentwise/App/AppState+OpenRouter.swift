@@ -158,6 +158,10 @@ extension AppState {
         do {
             key = try await provisioner.exchangeCodeForKey(code: code, codeVerifier: verifier)
         } catch {
+            guard isCurrentOpenRouterProvisioning(verifier: verifier, flowID: flowID) else {
+                finishIgnoredOpenRouterCallbackIfEnded()
+                return
+            }
             isOpenRouterProvisioning = false
             reportOpenRouterCallbackError(
                 Self.llmMessage(for: error),
@@ -166,11 +170,8 @@ extension AppState {
             )
             return
         }
-        guard isCurrentOpenRouterProvisioning(verifier: verifier) else {
-            if ((try? secrets.value(for: .openRouterPKCEVerifier)) ?? nil) == nil {
-                _ = consumeCanceledOpenRouterCallbackSurface()
-                pendingOpenRouterProvisioningMessageSurface = .shared
-            }
+        guard isCurrentOpenRouterProvisioning(verifier: verifier, flowID: flowID) else {
+            finishIgnoredOpenRouterCallbackIfEnded()
             return
         }
 
@@ -203,6 +204,17 @@ extension AppState {
 
     private func isCurrentOpenRouterProvisioning(verifier: String) -> Bool {
         ((try? secrets.value(for: .openRouterPKCEVerifier)) ?? nil) == verifier
+    }
+
+    private func isCurrentOpenRouterProvisioning(verifier: String, flowID: String?) -> Bool {
+        isCurrentOpenRouterProvisioning(verifier: verifier)
+            && isCurrentOpenRouterCallbackFlow(flowID: flowID)
+    }
+
+    private func isCurrentOpenRouterCallbackFlow(flowID: String?) -> Bool {
+        let currentFlowID = ((try? secrets.value(for: .openRouterPKCEFlowID)) ?? nil)
+        guard let flowID else { return currentFlowID == nil }
+        return currentFlowID == flowID
     }
 
     private func handleMissingOpenRouterVerifierCallback() {
@@ -262,6 +274,13 @@ extension AppState {
             pendingOpenRouterProvisioningMessageSurface = .shared
         }
         return currentFlowID == flowID
+    }
+
+    private func finishIgnoredOpenRouterCallbackIfEnded() {
+        if ((try? secrets.value(for: .openRouterPKCEVerifier)) ?? nil) == nil {
+            _ = consumeCanceledOpenRouterCallbackSurface()
+            pendingOpenRouterProvisioningMessageSurface = .shared
+        }
     }
 
     static func openRouterProvisioningMessageSurface(secrets: SecretStore) -> TransientMessageSurface? {

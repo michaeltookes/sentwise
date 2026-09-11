@@ -133,12 +133,17 @@ extension AppState {
         let messageSurface = currentManagedOAuthMessageSurface()
         setManagedError(nil, for: messageSurface)
         let settingsMessageGeneration = settingsTransientMessageGeneration
+        let signInID = ((try? secrets.value(for: .managedOAuthSignInID)) ?? nil)
         managedBusyAction = .oauthCallback
         defer { managedBusyAction = nil }
         let result: ManagedAccountSignInResult
         do {
             result = try await managedAccount.completeGoogleSignIn(rotatingTokenNonce: nonce)
         } catch {
+            guard isCurrentManagedOAuthCallback(signInID: signInID, flowID: flowID) else {
+                finishIgnoredManagedOAuthCallbackIfEnded()
+                return
+            }
             reportManagedOAuthCallbackError(
                 Self.managedMessage(for: error),
                 generation: settingsMessageGeneration,
@@ -218,6 +223,18 @@ extension AppState {
         Self.managedOAuthMessageSurface(secrets: secrets) ?? pendingManagedSignInMessageSurface
     }
 
+    private func isCurrentManagedOAuthCallback(signInID: String?, flowID: String?) -> Bool {
+        let currentSignInID = ((try? secrets.value(for: .managedOAuthSignInID)) ?? nil)
+        guard currentSignInID == signInID else { return false }
+        return isCurrentManagedOAuthCallbackFlow(flowID: flowID)
+    }
+
+    private func isCurrentManagedOAuthCallbackFlow(flowID: String?) -> Bool {
+        let currentFlowID = ((try? secrets.value(for: .managedOAuthFlowID)) ?? nil)
+        guard let flowID else { return currentFlowID == nil }
+        return currentFlowID == flowID
+    }
+
     private func shouldHandleManagedOAuthCallback(flowID: String?) -> Bool {
         let currentFlowID = ((try? secrets.value(for: .managedOAuthFlowID)) ?? nil)
         guard let flowID else { return currentFlowID == nil }
@@ -226,6 +243,13 @@ extension AppState {
             pendingManagedSignInMessageSurface = .shared
         }
         return currentFlowID == flowID
+    }
+
+    private func finishIgnoredManagedOAuthCallbackIfEnded() {
+        if ((try? secrets.value(for: .managedOAuthSignInID)) ?? nil) == nil {
+            _ = consumeCanceledManagedOAuthCallbackSurface()
+            pendingManagedSignInMessageSurface = .shared
+        }
     }
 
     static func managedOAuthMessageSurface(secrets: SecretStore) -> TransientMessageSurface? {
