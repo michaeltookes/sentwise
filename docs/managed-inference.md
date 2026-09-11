@@ -89,12 +89,12 @@ system browser through a registered custom URL scheme.
 
 Flow:
 
-1. `POST /v1/client/sign_ins` with `strategy=oauth_google` and
-   `redirect_url=https://sentwise-inference.sentwise-service.workers.dev/auth/callback` → Clerk returns the sign-in with
+1. `POST /v1/client/sign_ins` with `strategy=oauth_google` and a
+   `redirect_url=https://sentwise-inference.sentwise-service.workers.dev/auth/callback?state=…` per-flow callback URL → Clerk returns the sign-in with
    `first_factor_verification.external_verification_redirect_url` (a hosted URL).
 2. The app opens that URL in the default browser (`NSWorkspace.open`). The user
    authenticates with Google; Clerk finishes the external handshake.
-3. Clerk redirects the browser to the Worker's `/auth/callback?rotating_token_nonce=…` landing page ("You're signed in — you can close this tab"), which forwards to `sentwise://oauth-callback?rotating_token_nonce=…`. Redirecting straight to the custom scheme left the Google tab spinning forever (observed 2026-08-21). The Worker forwards only the allow-listed parameter and stores/logs nothing.
+3. Clerk redirects the browser to the Worker's `/auth/callback?rotating_token_nonce=…&state=…` landing page ("You're signed in — you can close this tab"), which forwards to `sentwise://oauth-callback?rotating_token_nonce=…&state=…`. Redirecting straight to the custom scheme left the Google tab spinning forever (observed 2026-08-21). The Worker forwards only the allow-listed nonce/state parameters and stores/logs nothing.
    `AppDelegate.application(_:open:)` routes it to `AppState.handleIncomingURL`,
    which parses it with `SentwiseURLCallback` and calls
    `ManagedAccountService.completeGoogleSignIn(rotatingTokenNonce:)`.
@@ -131,8 +131,8 @@ PKCE flow so the user never copies a key:
 
 1. `AppState.beginOpenRouterProvisioning` mints a PKCE pair (`PKCEGenerator`),
    stores the verifier in the Keychain (`openRouter.pkceVerifier`), and opens
-   `https://openrouter.ai/auth?callback_url=https://sentwise-inference.sentwise-service.workers.dev/openrouter/callback&code_challenge=…&code_challenge_method=S256`.
-2. OpenRouter redirects the browser to the Worker's `/openrouter/callback?code=…` landing page, which forwards to `sentwise://openrouter-callback?code=…`.
+   `https://openrouter.ai/auth?callback_url=https://sentwise-inference.sentwise-service.workers.dev/openrouter/callback?state=…&code_challenge=…&code_challenge_method=S256`.
+2. OpenRouter redirects the browser to the Worker's `/openrouter/callback?code=…&state=…` landing page, which forwards to `sentwise://openrouter-callback?code=…&state=…`.
    `handleOpenRouterCallback` exchanges the code + verifier at
    `POST https://openrouter.ai/api/v1/auth/keys` for an API key.
 3. The key is stored as the **OpenAI-compatible** provider's key, with the base

@@ -19,6 +19,19 @@ extension AppState {
         ManagedInference.baseURL.appendingPathComponent("auth/callback").absoluteString
     }
 
+    static func newBrowserCallbackFlowID() -> String {
+        PKCEGenerator.randomURLSafeString(byteCount: 16)
+    }
+
+    private static func managedOAuthRedirectURL(flowID: String) -> String {
+        var components = URLComponents(
+            url: ManagedInference.baseURL.appendingPathComponent("auth/callback"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "state", value: flowID)]
+        return components?.url?.absoluteString ?? managedOAuthRedirectURL
+    }
+
     /// Shared success path once a session is stored (email code or OAuth): records
     /// the account, marks managed verified when it's the active provider, and
     /// resumes any watchers that a re-auth had paused.
@@ -35,6 +48,7 @@ extension AppState {
         managedSignInStage = .idle
         isManagedSignedIn = true
         clearManagedOAuthMessageSurfaceBestEffort()
+        clearManagedOAuthFlowIDBestEffort()
         clearCanceledManagedOAuthCallbackSurfaceBestEffort()
 
         // When managed is the active provider path, mark it verified so drafting
@@ -77,14 +91,27 @@ extension AppState {
         let settingsMessageGeneration = settingsTransientMessageGeneration
         managedBusyAction = .google
         defer { managedBusyAction = nil }
-        clearCanceledManagedOAuthCallbackSurfaceBestEffort()
+        let flowID = Self.newBrowserCallbackFlowID()
         do {
-            let url = try await managedAccount.startGoogleSignIn(redirectURL: Self.managedOAuthRedirectURL)
+            try secrets.set(flowID, for: .managedOAuthFlowID)
+        } catch {
+            reportManagedErrorIfCurrent(
+                Self.managedMessage(for: error),
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
+            return
+        }
+        do {
+            let url = try await managedAccount.startGoogleSignIn(
+                redirectURL: Self.managedOAuthRedirectURL(flowID: flowID)
+            )
             persistManagedOAuthMessageSurfaceBestEffort(messageSurface)
             openURL(url)
             pendingManagedSignInActivatesProvider = activatesManagedProvider
             managedSignInStage = .awaitingBrowser
         } catch {
+            clearManagedOAuthFlowIDBestEffort()
             pendingManagedSignInActivatesProvider = true
             reportManagedErrorIfCurrent(
                 Self.managedMessage(for: error),
@@ -95,7 +122,8 @@ extension AppState {
     }
 
     /// Completes Google sign-in from the `sentwise://oauth-callback` redirect.
-    func handleManagedOAuthCallback(nonce: String) async {
+    func handleManagedOAuthCallback(nonce: String, flowID: String? = nil) async {
+        guard shouldHandleManagedOAuthCallback(flowID: flowID) else { return }
         if managedSignInStage == .idle,
            !secrets.hasValue(for: .managedOAuthSignInID),
            consumeCanceledManagedOAuthCallbackSurface() != nil {
@@ -119,6 +147,7 @@ extension AppState {
             if managedSignInStage == .awaitingBrowser {
                 pendingManagedSignInActivatesProvider = true
                 pendingManagedSignInMessageSurface = .shared
+                clearManagedOAuthFlowIDBestEffort()
                 managedSignInStage = .idle
             }
             return
@@ -161,6 +190,14 @@ extension AppState {
         }
     }
 
+    func clearManagedOAuthFlowIDBestEffort() {
+        do {
+            try secrets.remove(.managedOAuthFlowID)
+        } catch {
+            logger.error("Failed to clear managed OAuth flow id: \(error.localizedDescription)")
+        }
+    }
+
     func persistCanceledManagedOAuthCallbackSurfaceBestEffort(_ surface: TransientMessageSurface) {
         do {
             try secrets.set(surface.persistedValue, for: .managedOAuthCanceledCallbackSurface)
@@ -179,6 +216,16 @@ extension AppState {
 
     private func currentManagedOAuthMessageSurface() -> TransientMessageSurface {
         Self.managedOAuthMessageSurface(secrets: secrets) ?? pendingManagedSignInMessageSurface
+    }
+
+    private func shouldHandleManagedOAuthCallback(flowID: String?) -> Bool {
+        guard let flowID else { return true }
+        let currentFlowID = ((try? secrets.value(for: .managedOAuthFlowID)) ?? nil)
+        if currentFlowID == nil {
+            _ = consumeCanceledManagedOAuthCallbackSurface()
+            pendingManagedSignInMessageSurface = .shared
+        }
+        return currentFlowID == flowID
     }
 
     static func managedOAuthMessageSurface(secrets: SecretStore) -> TransientMessageSurface? {

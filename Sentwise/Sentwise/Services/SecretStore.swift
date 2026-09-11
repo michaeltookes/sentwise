@@ -57,6 +57,8 @@ struct SecretKey: RawRepresentable, Hashable {
     static let managedOAuthSignInID = SecretKey(rawValue: "managed.oauthSignInID")
     /// The message surface that initiated the in-progress managed OAuth flow.
     static let managedOAuthMessageSurface = SecretKey(rawValue: "managed.oauthMessageSurface")
+    /// Random transaction id embedded in the managed OAuth redirect state.
+    static let managedOAuthFlowID = SecretKey(rawValue: "managed.oauthFlowID")
     /// Marker for a canceled managed OAuth browser flow whose redirect may still arrive.
     static let managedOAuthCanceledCallbackSurface = SecretKey(rawValue: "managed.oauthCanceledCallbackSurface")
 
@@ -66,6 +68,8 @@ struct SecretKey: RawRepresentable, Hashable {
     static let openRouterPKCEVerifier = SecretKey(rawValue: "openRouter.pkceVerifier")
     /// The message surface that initiated the in-progress OpenRouter PKCE flow.
     static let openRouterPKCEMessageSurface = SecretKey(rawValue: "openRouter.pkceMessageSurface")
+    /// Random transaction id embedded in the OpenRouter callback URL state.
+    static let openRouterPKCEFlowID = SecretKey(rawValue: "openRouter.pkceFlowID")
     /// Marker for a canceled OpenRouter browser flow whose redirect may still arrive.
     static let openRouterCanceledCallbackSurface = SecretKey(rawValue: "openRouter.canceledCallbackSurface")
     /// The OpenRouter-provisioned OpenAI-compatible API key. Kept separate from the

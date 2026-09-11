@@ -156,6 +156,7 @@ extension AppState {
         resetManagedSignInFlow(messageSurface: messageSurface, resetPendingMessageSurface: false)
         if wasAwaitingBrowser {
             clearManagedOAuthMessageSurfaceBestEffort()
+            clearManagedOAuthFlowIDBestEffort()
             persistCanceledManagedOAuthCallbackSurfaceBestEffort(canceledSurface)
         }
     }
@@ -263,6 +264,9 @@ extension AppState {
         managedCodeInput = ""
         pendingManagedSignInEmail = nil
         pendingManagedSignInMessageSurface = .shared
+        clearManagedOAuthMessageSurfaceBestEffort()
+        clearManagedOAuthFlowIDBestEffort()
+        clearCanceledManagedOAuthCallbackSurfaceBestEffort()
         pendingManagedSignInActivatesProvider = true
         managedSignInStage = .idle
         googleOAuthInterestRegistered = false

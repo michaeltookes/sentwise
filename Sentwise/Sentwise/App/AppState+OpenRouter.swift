@@ -16,6 +16,15 @@ extension AppState {
     static var openRouterCallbackURL: String {
         ManagedInference.baseURL.appendingPathComponent("openrouter/callback").absoluteString
     }
+
+    private static func openRouterCallbackURL(flowID: String) -> String {
+        var components = URLComponents(
+            url: ManagedInference.baseURL.appendingPathComponent("openrouter/callback"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "state", value: flowID)]
+        return components?.url?.absoluteString ?? openRouterCallbackURL
+    }
     /// A sensible default model for a freshly provisioned OpenRouter key. The user
     /// can change it; OpenRouter namespaces model ids by publisher.
     static let openRouterDefaultModel = "openai/gpt-4o-mini"
@@ -39,20 +48,22 @@ extension AppState {
             return nil
         }
         let codes = PKCEGenerator.generate()
-        clearCanceledOpenRouterCallbackSurfaceBestEffort()
+        let flowID = Self.newBrowserCallbackFlowID()
         do {
             try secrets.set(codes.verifier, for: .openRouterPKCEVerifier)
             try secrets.set(messageSurface.persistedValue, for: .openRouterPKCEMessageSurface)
+            try secrets.set(flowID, for: .openRouterPKCEFlowID)
         } catch {
             try? secrets.remove(.openRouterPKCEVerifier)
             try? secrets.remove(.openRouterPKCEMessageSurface)
+            try? secrets.remove(.openRouterPKCEFlowID)
             setLLMError(Self.keychainLLMMessage(action: "save", error: error), for: messageSurface)
             return nil
         }
         isOpenRouterProvisioning = true
         pendingOpenRouterProvisioningMessageSurface = messageSurface
         return OpenRouterKeyProvisioner().authorizationURL(
-            callbackURL: Self.openRouterCallbackURL,
+            callbackURL: Self.openRouterCallbackURL(flowID: flowID),
             challenge: codes.challenge
         )
     }
@@ -75,6 +86,7 @@ extension AppState {
         do {
             try secrets.remove(.openRouterPKCEVerifier)
             try secrets.remove(.openRouterPKCEMessageSurface)
+            try secrets.remove(.openRouterPKCEFlowID)
             try secrets.set(messageSurface.persistedValue, for: .openRouterCanceledCallbackSurface)
         } catch {
             setLLMError(Self.keychainLLMMessage(action: "remove", error: error), for: messageSurface)
@@ -127,8 +139,10 @@ extension AppState {
     /// exchange is testable without the network.
     func handleOpenRouterCallback(
         code: String,
+        flowID: String? = nil,
         provisioner: OpenRouterKeyProvisioner = OpenRouterKeyProvisioner()
     ) async {
+        guard shouldHandleOpenRouterCallback(flowID: flowID) else { return }
         guard let verifier = (try? secrets.value(for: .openRouterPKCEVerifier)) ?? nil, !verifier.isEmpty else {
             handleMissingOpenRouterVerifierCallback()
             return
@@ -179,6 +193,7 @@ extension AppState {
         }
         try? secrets.remove(.openRouterPKCEVerifier)
         try? secrets.remove(.openRouterPKCEMessageSurface)
+        try? secrets.remove(.openRouterPKCEFlowID)
         clearCanceledOpenRouterCallbackSurfaceBestEffort()
         isOpenRouterProvisioning = false
         pendingOpenRouterProvisioningMessageSurface = .shared
@@ -192,6 +207,7 @@ extension AppState {
 
     private func handleMissingOpenRouterVerifierCallback() {
         isOpenRouterProvisioning = false
+        clearOpenRouterProvisioningFlowIDBestEffort()
         if consumeCanceledOpenRouterCallbackSurface() != nil {
             pendingOpenRouterProvisioningMessageSurface = .shared
             return
@@ -238,6 +254,16 @@ extension AppState {
         Self.openRouterProvisioningMessageSurface(secrets: secrets) ?? pendingOpenRouterProvisioningMessageSurface
     }
 
+    private func shouldHandleOpenRouterCallback(flowID: String?) -> Bool {
+        guard let flowID else { return true }
+        let currentFlowID = ((try? secrets.value(for: .openRouterPKCEFlowID)) ?? nil)
+        if currentFlowID == nil {
+            _ = consumeCanceledOpenRouterCallbackSurface()
+            pendingOpenRouterProvisioningMessageSurface = .shared
+        }
+        return currentFlowID == flowID
+    }
+
     static func openRouterProvisioningMessageSurface(secrets: SecretStore) -> TransientMessageSurface? {
         let value = (try? secrets.value(for: .openRouterPKCEMessageSurface)) ?? nil
         return value.flatMap(TransientMessageSurface.init(persistedValue:))
@@ -263,6 +289,14 @@ extension AppState {
             try secrets.remove(.openRouterCanceledCallbackSurface)
         } catch {
             logger.error("Failed to clear canceled OpenRouter callback marker: \(error.localizedDescription)")
+        }
+    }
+
+    private func clearOpenRouterProvisioningFlowIDBestEffort() {
+        do {
+            try secrets.remove(.openRouterPKCEFlowID)
+        } catch {
+            logger.error("Failed to clear OpenRouter flow id: \(error.localizedDescription)")
         }
     }
 }

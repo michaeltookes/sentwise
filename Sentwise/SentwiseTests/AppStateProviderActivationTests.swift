@@ -62,14 +62,18 @@ final class AppStateProviderActivationTests: XCTestCase {
 
         let url = try XCTUnwrap(appState.beginOpenRouterProvisioning())
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        XCTAssertEqual(items.first { $0.name == "callback_url" }?.value, AppState.openRouterCallbackURL)
+        let callbackURL = items.first { $0.name == "callback_url" }?.value
+        XCTAssertTrue(callbackURL?.hasPrefix(AppState.openRouterCallbackURL) ?? false)
         XCTAssertTrue(AppState.openRouterCallbackURL.hasSuffix("/openrouter/callback"))
+        let callbackItems = URLComponents(string: callbackURL ?? "")?.queryItems ?? []
+        XCTAssertFalse((callbackItems.first { $0.name == "state" }?.value ?? "").isEmpty)
         XCTAssertFalse((items.first { $0.name == "code_challenge" }?.value ?? "").isEmpty)
         XCTAssertEqual(items.first { $0.name == "code_challenge_method" }?.value, "S256")
 
         let verifier = try secrets.value(for: .openRouterPKCEVerifier)
         XCTAssertFalse((verifier ?? "").isEmpty)
         XCTAssertEqual(try secrets.value(for: .openRouterPKCEMessageSurface), "shared")
+        XCTAssertFalse((try secrets.value(for: .openRouterPKCEFlowID) ?? "").isEmpty)
     }
 
     func testBeginOpenRouterProvisioningDoesNotOverwritePendingVerifier() throws {
@@ -271,7 +275,7 @@ final class AppStateProviderActivationTests: XCTestCase {
 
         XCTAssertNil(appState.routableCallback(for: url, isHuntMode: true),
                      "a hunt must never reach the completion paths, even via a stray deep link")
-        XCTAssertEqual(appState.routableCallback(for: url, isHuntMode: false), .openRouter(code: "CODE"))
+        XCTAssertEqual(appState.routableCallback(for: url, isHuntMode: false), .openRouter(code: "CODE", flowID: nil))
         XCTAssertNil(appState.routableCallback(for: URL(string: "https://evil?code=x")!, isHuntMode: false))
     }
 

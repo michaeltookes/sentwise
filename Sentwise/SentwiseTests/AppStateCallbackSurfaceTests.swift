@@ -3,13 +3,15 @@ import XCTest
 
 private final class CallbackSurfaceJSONTransport: LLMHTTPTransport, @unchecked Sendable {
     private let response: HTTPResponse
+    private(set) var callCount = 0
 
     init(_ response: HTTPResponse) {
         self.response = response
     }
 
     func postJSON(_ url: URL, headers: [String: String], body: Data) async throws -> HTTPResponse {
-        response
+        callCount += 1
+        return response
     }
 }
 
@@ -19,6 +21,16 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
     private let startResponse =
         #"{"response":{"id":"sia_1","first_factor_verification":"#
             + #"{"external_verification_redirect_url":"https://accounts.google.com/o/oauth2/auth?x=1"}}}"#
+
+    private func callbackState(from urlString: String?) -> String? {
+        guard let urlString else { return nil }
+        return URLComponents(string: urlString)?.queryItems?.first { $0.name == "state" }?.value
+    }
+
+    private func openRouterCallbackState(from authURL: URL) -> String? {
+        let items = URLComponents(url: authURL, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return callbackState(from: items.first { $0.name == "callback_url" }?.value)
+    }
 
     private func makeAppState(
         provider: String = "managed",
@@ -96,6 +108,67 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         XCTAssertNil(appState.llmError(for: .settings))
         XCTAssertNil((try secrets.value(for: .openRouterPKCEVerifier)) ?? nil)
         XCTAssertNil((try secrets.value(for: .openRouterCanceledCallbackSurface)) ?? nil)
+    }
+
+    func testCanceledSettingsOpenRouterCallbackDoesNotDisturbReplacementFlow() async throws {
+        let secrets = InMemorySecretStore()
+        let appState = makeAppState(secrets: secrets)
+        let urlA = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
+        let flowA = try XCTUnwrap(openRouterCallbackState(from: urlA))
+
+        appState.cancelOpenRouterProvisioning(messageSurface: .settings)
+        let urlB = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
+        let flowB = try XCTUnwrap(openRouterCallbackState(from: urlB))
+        let verifierB = try XCTUnwrap(try secrets.value(for: .openRouterPKCEVerifier))
+        let transport = CallbackSurfaceJSONTransport(
+            HTTPResponse(statusCode: 500, body: Data(#"{"error":"bad code"}"#.utf8))
+        )
+
+        await appState.handleOpenRouterCallback(
+            code: "CODE_A",
+            flowID: flowA,
+            provisioner: OpenRouterKeyProvisioner(transport: transport)
+        )
+
+        XCTAssertNotEqual(flowA, flowB)
+        XCTAssertEqual(transport.callCount, 0)
+        XCTAssertTrue(appState.isOpenRouterProvisioning)
+        XCTAssertEqual(try secrets.value(for: .openRouterPKCEVerifier), verifierB)
+        XCTAssertEqual(try secrets.value(for: .openRouterPKCEFlowID), flowB)
+        XCTAssertNil(appState.llmError)
+        XCTAssertNil(appState.llmError(for: .settings))
+    }
+
+    func testCanceledSettingsManagedOAuthCallbackDoesNotDisturbReplacementFlow() async throws {
+        let secrets = InMemorySecretStore()
+        let secondStartResponse = startResponse.replacingOccurrences(of: #""id":"sia_1""#, with: #""id":"sia_2""#)
+        let transport = QueueClerkTransport([
+            clerkReply(startResponse, clientToken: "client_A"),
+            clerkReply(secondStartResponse, clientToken: "client_B")
+        ])
+        let clerk = ClerkClient(
+            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            transport: transport
+        )
+        let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
+        let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
+
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, messageSurface: .settings)
+        let flowA = try XCTUnwrap(callbackState(from: transport.requests[0].form["redirect_url"]))
+        await appState.cancelManagedSignInFlow(messageSurface: .settings)
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, messageSurface: .settings)
+        let flowB = try XCTUnwrap(callbackState(from: transport.requests[1].form["redirect_url"]))
+
+        await appState.handleManagedOAuthCallback(nonce: "nonce_from_a", flowID: flowA)
+
+        XCTAssertNotEqual(flowA, flowB)
+        XCTAssertEqual(transport.callCount, 2)
+        XCTAssertEqual(appState.managedSignInStage, .awaitingBrowser)
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertEqual(try secrets.value(for: .managedOAuthSignInID), "sia_2")
+        XCTAssertEqual(try secrets.value(for: .managedOAuthFlowID), flowB)
+        XCTAssertNil(appState.managedError)
+        XCTAssertNil(appState.managedError(for: .settings))
     }
 
     func testCanceledSettingsManagedOAuthCallbackIsIgnored() async throws {
