@@ -2,13 +2,15 @@ import Foundation
 
 extension AppState {
 
+    @discardableResult
     func reportManagedErrorIfCurrent(
         _ message: String,
         generation: UInt64,
         surface: TransientMessageSurface = .shared
-    ) {
-        guard isCurrentTransientMessageSurface(surface, generation: generation) else { return }
+    ) -> Bool {
+        guard isCurrentTransientMessageSurface(surface, generation: generation) else { return false }
         setManagedError(message, for: surface)
+        return true
     }
 
     static func managedMessage(for error: Error) -> String {

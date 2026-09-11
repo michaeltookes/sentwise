@@ -213,7 +213,7 @@ final class SettingsWindowController: NSObject, NSToolbarDelegate, NSWindowDeleg
     func windowWillClose(_ notification: Notification) {
         // Clear the transient inline messages/errors the panes showed this
         // session (e.g. a plan-change error) so reopening Settings starts clean.
-        appState.resetTransientSettingsMessages()
+        appState.resetTransientSettingsMessages(preserveUnseenCallbackErrors: false)
         // Drop the window/hosting controllers so the next open rebuilds them; keep
         // `selectedTab` so reopening returns to the tab the user last viewed.
         window = nil

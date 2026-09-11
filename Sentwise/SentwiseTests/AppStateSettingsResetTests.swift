@@ -109,6 +109,37 @@ final class AppStateSettingsResetTests: XCTestCase {
         XCTAssertFalse(appState.planChangeFailed)
     }
 
+    func testResetPreservesUnseenSettingsCallbackErrorsOnce() {
+        let appState = makeAppState()
+        appState.settingsTransientMessages.llmError = "OpenRouter failed."
+        appState.settingsTransientMessages.managedError = "Google failed."
+        appState.markSettingsLLMCallbackErrorPendingDisplay(for: .settings)
+        appState.markSettingsManagedCallbackErrorPendingDisplay(for: .settings)
+
+        appState.resetTransientSettingsMessages()
+
+        XCTAssertEqual(appState.llmError(for: .settings), "OpenRouter failed.")
+        XCTAssertEqual(appState.managedError(for: .settings), "Google failed.")
+
+        appState.resetTransientSettingsMessages()
+
+        XCTAssertNil(appState.llmError(for: .settings))
+        XCTAssertNil(appState.managedError(for: .settings))
+    }
+
+    func testCloseResetClearsUnseenSettingsCallbackErrors() {
+        let appState = makeAppState()
+        appState.settingsTransientMessages.llmError = "OpenRouter failed."
+        appState.settingsTransientMessages.managedError = "Google failed."
+        appState.markSettingsLLMCallbackErrorPendingDisplay(for: .settings)
+        appState.markSettingsManagedCallbackErrorPendingDisplay(for: .settings)
+
+        appState.resetTransientSettingsMessages(preserveUnseenCallbackErrors: false)
+
+        XCTAssertNil(appState.llmError(for: .settings))
+        XCTAssertNil(appState.managedError(for: .settings))
+    }
+
     func testResetLeavesPlanChangeOperationInFlight() async {
         let llm = SuspendedPlanChangeLLM()
         let appState = makeAppState(llm: llm)

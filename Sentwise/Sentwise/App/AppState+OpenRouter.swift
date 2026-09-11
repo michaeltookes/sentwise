@@ -145,7 +145,7 @@ extension AppState {
             key = try await provisioner.exchangeCodeForKey(code: code, codeVerifier: verifier)
         } catch {
             isOpenRouterProvisioning = false
-            reportLLMErrorIfCurrent(
+            reportOpenRouterCallbackError(
                 Self.llmMessage(for: error),
                 generation: settingsMessageGeneration,
                 surface: messageSurface
@@ -170,7 +170,7 @@ extension AppState {
             )
         } catch {
             isOpenRouterProvisioning = false
-            reportLLMErrorIfCurrent(
+            reportOpenRouterCallbackError(
                 Self.keychainLLMMessage(action: "save", error: error),
                 generation: settingsMessageGeneration,
                 surface: messageSurface
@@ -198,7 +198,22 @@ extension AppState {
         }
         let messageSurface = currentOpenRouterProvisioningMessageSurface()
         pendingOpenRouterProvisioningMessageSurface = .shared
-        setLLMError("OpenRouter sign-in didn't start on this Mac. Try connecting again.", for: messageSurface)
+        reportOpenRouterCallbackError(
+            "OpenRouter sign-in didn't start on this Mac. Try connecting again.",
+            generation: settingsTransientMessageGeneration,
+            surface: messageSurface
+        )
+    }
+
+    private func reportOpenRouterCallbackError(
+        _ message: String,
+        generation: UInt64,
+        surface: TransientMessageSurface
+    ) {
+        let reported = reportLLMErrorIfCurrent(message, generation: generation, surface: surface)
+        if reported {
+            markSettingsLLMCallbackErrorPendingDisplay(for: surface)
+        }
     }
 
     private func activateProvisionedOpenRouterKey(_ key: String) {

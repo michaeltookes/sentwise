@@ -284,9 +284,9 @@ extension AppState {
             host: account.host,
             port: account.port
         )
-        await testConnection(with: credentials, messageSurface: messageSurface)
+        let didConnect = await testConnection(with: credentials, messageSurface: messageSurface)
 
-        guard connectionError(for: messageSurface) == nil, isAccountConnected, isActiveAccount(account) else {
+        guard didConnect, isAccountConnected, isActiveAccount(account) else {
             restoreConnectionSnapshot(settings: outgoingSettings)
             if wasWatching {
                 startWatchingIfReady()

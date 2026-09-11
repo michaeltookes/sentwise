@@ -111,7 +111,7 @@ extension AppState {
         do {
             result = try await managedAccount.completeGoogleSignIn(rotatingTokenNonce: nonce)
         } catch {
-            reportManagedErrorIfCurrent(
+            reportManagedOAuthCallbackError(
                 Self.managedMessage(for: error),
                 generation: settingsMessageGeneration,
                 surface: messageSurface
@@ -129,6 +129,17 @@ extension AppState {
         let email = result.displayIdentifier.flatMap { $0.isEmpty ? nil : $0 } ?? "your Google account"
         finalizeManagedSignIn(email: email, accountID: result.accountIdentifier)
         logger.info("Managed Google sign-in completed")
+    }
+
+    private func reportManagedOAuthCallbackError(
+        _ message: String,
+        generation: UInt64,
+        surface: TransientMessageSurface
+    ) {
+        let reported = reportManagedErrorIfCurrent(message, generation: generation, surface: surface)
+        if reported {
+            markSettingsManagedCallbackErrorPendingDisplay(for: surface)
+        }
     }
 
     func persistManagedOAuthMessageSurfaceBestEffort(_ surface: TransientMessageSurface) {

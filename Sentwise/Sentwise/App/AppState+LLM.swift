@@ -211,13 +211,15 @@ extension AppState {
         resumeInboxWatchingAfterProviderRecoveryIfNeeded()
     }
 
+    @discardableResult
     func reportLLMErrorIfCurrent(
         _ message: String,
         generation: UInt64,
         surface: TransientMessageSurface
-    ) {
-        guard isCurrentTransientMessageSurface(surface, generation: generation) else { return }
+    ) -> Bool {
+        guard isCurrentTransientMessageSurface(surface, generation: generation) else { return false }
         setLLMError(message, for: surface)
+        return true
     }
 
     private func storeTestedLLMCredential(
