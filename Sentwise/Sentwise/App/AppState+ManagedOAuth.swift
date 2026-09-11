@@ -94,7 +94,10 @@ extension AppState {
         let flowID = Self.newBrowserCallbackFlowID()
         do {
             try secrets.set(flowID, for: .managedOAuthFlowID)
+            try secrets.set(messageSurface.persistedValue, for: .managedOAuthMessageSurface)
         } catch {
+            clearManagedOAuthFlowIDBestEffort()
+            clearManagedOAuthMessageSurfaceBestEffort()
             reportManagedErrorIfCurrent(
                 Self.managedMessage(for: error),
                 generation: settingsMessageGeneration,
@@ -106,12 +109,12 @@ extension AppState {
             let url = try await managedAccount.startGoogleSignIn(
                 redirectURL: Self.managedOAuthRedirectURL(flowID: flowID)
             )
-            persistManagedOAuthMessageSurfaceBestEffort(messageSurface)
             openURL(url)
             pendingManagedSignInActivatesProvider = activatesManagedProvider
             managedSignInStage = .awaitingBrowser
         } catch {
             clearManagedOAuthFlowIDBestEffort()
+            clearManagedOAuthMessageSurfaceBestEffort()
             pendingManagedSignInActivatesProvider = true
             reportManagedErrorIfCurrent(
                 Self.managedMessage(for: error),
@@ -250,14 +253,6 @@ extension AppState {
                 setManagedError(message, for: surface)
             }
             markSettingsManagedCallbackErrorPendingDisplay(for: surface)
-        }
-    }
-
-    func persistManagedOAuthMessageSurfaceBestEffort(_ surface: TransientMessageSurface) {
-        do {
-            try secrets.set(surface.persistedValue, for: .managedOAuthMessageSurface)
-        } catch {
-            logger.error("Failed to persist managed OAuth message surface: \(error.localizedDescription)")
         }
     }
 
