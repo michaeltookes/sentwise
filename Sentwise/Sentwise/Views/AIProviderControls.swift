@@ -59,6 +59,12 @@ struct ManagedAccountErrorMessage: View {
     var body: some View {
         if let error = appState.managedError(for: messageSurface) {
             OnboardingError(message: error)
+                .onAppear {
+                    appState.markSettingsManagedCallbackErrorDisplayed(for: messageSurface)
+                }
+                .onChange(of: error) { _, _ in
+                    appState.markSettingsManagedCallbackErrorDisplayed(for: messageSurface)
+                }
         }
     }
 }
@@ -77,6 +83,12 @@ struct BYOProviderErrorMessage: View {
     var body: some View {
         if let error = appState.llmError(for: messageSurface) {
             OnboardingError(message: error)
+                .onAppear {
+                    appState.markSettingsLLMCallbackErrorDisplayed(for: messageSurface)
+                }
+                .onChange(of: error) { _, _ in
+                    appState.markSettingsLLMCallbackErrorDisplayed(for: messageSurface)
+                }
         }
     }
 }
@@ -110,7 +122,7 @@ struct ManagedSignInControls: View {
                     Button {
                         Task {
                             await appState.startManagedGoogleSignIn(
-                                openURL: { _ = openURL($0) },
+                                openURL: { openURL($0) },
                                 activatesManagedProvider: activatesManagedProvider,
                                 messageSurface: messageSurface
                             )

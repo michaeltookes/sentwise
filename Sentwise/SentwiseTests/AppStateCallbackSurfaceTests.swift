@@ -71,7 +71,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         }
         await fulfillment(of: [transport.didStartRequest], timeout: 1)
 
-        appState.resetTransientSettingsMessages(preserveUnseenCallbackErrors: false)
+        appState.resetTransientSettingsMessages()
         transport.complete(with: .success(HTTPResponse(statusCode: 500, body: Data(#"{"error":"bad code"}"#.utf8))))
         await callback.value
 
@@ -172,7 +172,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         }
         await fulfillment(of: [didStartCallback], timeout: 1)
 
-        relaunched.resetTransientSettingsMessages(preserveUnseenCallbackErrors: false)
+        relaunched.resetTransientSettingsMessages()
         callbackTransport.resume(with: clerkReply(
             #"{"errors":[{"message":"Bad nonce"}]}"#,
             status: 400,

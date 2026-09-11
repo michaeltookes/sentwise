@@ -54,12 +54,16 @@ extension AppState {
     /// (`transcriptFolderError`). Mailbox/provider/account/voice controls are
     /// shared with the Setup Assistant, so Settings uses a separate transient
     /// message bucket that can be cleared without erasing onboarding feedback.
-    func resetTransientSettingsMessages(preserveUnseenCallbackErrors: Bool = true) {
+    /// Settings-origin browser callback errors survive until their relevant error
+    /// renderer appears, because Settings may open on an unrelated tab first.
+    func resetTransientSettingsMessages() {
         settingsTransientMessageGeneration &+= 1
-        let preservedLLMError = preserveUnseenCallbackErrors && settingsTransientMessages.hasUnseenLLMCallbackError
+        let hadUnseenLLMCallbackError = settingsTransientMessages.hasUnseenLLMCallbackError
+        let hadUnseenManagedCallbackError = settingsTransientMessages.hasUnseenManagedCallbackError
+        let preservedLLMError = hadUnseenLLMCallbackError
             ? settingsTransientMessages.llmError
             : nil
-        let preservedManagedError = preserveUnseenCallbackErrors && settingsTransientMessages.hasUnseenManagedCallbackError
+        let preservedManagedError = hadUnseenManagedCallbackError
             ? settingsTransientMessages.managedError
             : nil
 
@@ -85,8 +89,9 @@ extension AppState {
         settingsTransientMessages.managedError = preservedManagedError
         settingsTransientMessages.voiceError = nil
         settingsTransientMessages.googleOAuthInterestError = nil
-        settingsTransientMessages.hasUnseenLLMCallbackError = false
-        settingsTransientMessages.hasUnseenManagedCallbackError = false
+        settingsTransientMessages.hasUnseenLLMCallbackError = hadUnseenLLMCallbackError && preservedLLMError != nil
+        settingsTransientMessages.hasUnseenManagedCallbackError =
+            hadUnseenManagedCallbackError && preservedManagedError != nil
 
         // General / signature panes. `transcriptFolderError` is a
         // standing watcher condition; keep it until the watcher restarts or
@@ -135,6 +140,11 @@ extension AppState {
         settingsTransientMessages.hasUnseenLLMCallbackError = true
     }
 
+    func markSettingsLLMCallbackErrorDisplayed(for surface: TransientMessageSurface) {
+        guard surface == .settings else { return }
+        settingsTransientMessages.hasUnseenLLMCallbackError = false
+    }
+
     func managedError(for surface: TransientMessageSurface) -> String? {
         surface == .settings ? settingsTransientMessages.managedError : managedError
     }
@@ -150,6 +160,11 @@ extension AppState {
     func markSettingsManagedCallbackErrorPendingDisplay(for surface: TransientMessageSurface) {
         guard surface == .settings else { return }
         settingsTransientMessages.hasUnseenManagedCallbackError = true
+    }
+
+    func markSettingsManagedCallbackErrorDisplayed(for surface: TransientMessageSurface) {
+        guard surface == .settings else { return }
+        settingsTransientMessages.hasUnseenManagedCallbackError = false
     }
 
     func voiceError(for surface: TransientMessageSurface) -> String? {

@@ -109,7 +109,7 @@ final class AppStateSettingsResetTests: XCTestCase {
         XCTAssertFalse(appState.planChangeFailed)
     }
 
-    func testResetPreservesUnseenSettingsCallbackErrorsOnce() {
+    func testResetPreservesUnseenSettingsCallbackErrorsUntilDisplayed() {
         let appState = makeAppState()
         appState.settingsTransientMessages.llmError = "OpenRouter failed."
         appState.settingsTransientMessages.managedError = "Google failed."
@@ -123,18 +123,32 @@ final class AppStateSettingsResetTests: XCTestCase {
 
         appState.resetTransientSettingsMessages()
 
+        XCTAssertEqual(appState.llmError(for: .settings), "OpenRouter failed.")
+        XCTAssertEqual(appState.managedError(for: .settings), "Google failed.")
+
+        appState.markSettingsManagedCallbackErrorDisplayed(for: .settings)
+        appState.resetTransientSettingsMessages()
+
+        XCTAssertEqual(appState.llmError(for: .settings), "OpenRouter failed.")
+        XCTAssertNil(appState.managedError(for: .settings))
+
+        appState.markSettingsLLMCallbackErrorDisplayed(for: .settings)
+        appState.resetTransientSettingsMessages()
+
         XCTAssertNil(appState.llmError(for: .settings))
         XCTAssertNil(appState.managedError(for: .settings))
     }
 
-    func testCloseResetClearsUnseenSettingsCallbackErrors() {
+    func testDisplayedSettingsCallbackErrorsClearOnReset() {
         let appState = makeAppState()
         appState.settingsTransientMessages.llmError = "OpenRouter failed."
         appState.settingsTransientMessages.managedError = "Google failed."
         appState.markSettingsLLMCallbackErrorPendingDisplay(for: .settings)
         appState.markSettingsManagedCallbackErrorPendingDisplay(for: .settings)
+        appState.markSettingsLLMCallbackErrorDisplayed(for: .settings)
+        appState.markSettingsManagedCallbackErrorDisplayed(for: .settings)
 
-        appState.resetTransientSettingsMessages(preserveUnseenCallbackErrors: false)
+        appState.resetTransientSettingsMessages()
 
         XCTAssertNil(appState.llmError(for: .settings))
         XCTAssertNil(appState.managedError(for: .settings))
