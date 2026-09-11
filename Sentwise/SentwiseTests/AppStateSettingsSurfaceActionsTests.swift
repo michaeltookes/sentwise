@@ -67,4 +67,15 @@ final class AppStateSettingsSurfaceActionsTests: XCTestCase {
         XCTAssertEqual(appState.googleOAuthInterestError, "setup assistant interest error")
         XCTAssertNil(appState.googleOAuthInterestError(for: .settings))
     }
+
+    func testSettingsConnectionErrorFallsBackToSharedMailboxError() {
+        let appState = makeAppState()
+        appState.connectionError = "startup mailbox error"
+
+        XCTAssertEqual(appState.connectionError(for: .settings), "startup mailbox error")
+
+        appState.settingsTransientMessages.connectionError = "settings mailbox error"
+
+        XCTAssertEqual(appState.connectionError(for: .settings), "settings mailbox error")
+    }
 }

@@ -75,7 +75,10 @@ extension AppState {
     }
 
     func connectionError(for surface: TransientMessageSurface) -> String? {
-        surface == .settings ? settingsTransientMessages.connectionError : connectionError
+        if surface == .settings {
+            return settingsTransientMessages.connectionError ?? connectionError
+        }
+        return connectionError
     }
 
     func setConnectionError(_ message: String?, for surface: TransientMessageSurface) {
