@@ -94,7 +94,7 @@ Flow:
    `first_factor_verification.external_verification_redirect_url` (a hosted URL).
 2. The app opens that URL in the default browser (`NSWorkspace.open`). The user
    authenticates with Google; Clerk finishes the external handshake.
-3. Clerk redirects the browser to the Worker's `/auth/callback?rotating_token_nonce=…&state=…` landing page ("You're signed in — you can close this tab"), which forwards to `sentwise://oauth-callback?rotating_token_nonce=…&state=…`. Redirecting straight to the custom scheme left the Google tab spinning forever (observed 2026-08-21). The Worker forwards only the allow-listed nonce/state parameters and stores/logs nothing.
+3. Clerk redirects the browser to the Worker's `/auth/callback?rotating_token_nonce=…&state=…` landing page ("You're all set"), which forwards to `sentwise://oauth-callback?rotating_token_nonce=…&state=…`. Redirecting straight to the custom scheme left the Google tab spinning forever (observed 2026-08-21). The landing routes shipped 2026-09-11 (item 89; service PR #19 `browser-callback-page`) — before that both paths fell through to the Worker's JSON 404. The page is a static server render; the params are read **client-side** from both the query string and the URL **fragment** (Clerk returns the nonce in the fragment on HTTPS — including the hash-router `#/?…` shape — and a fragment never reaches the server), and only the allow-listed nonce/state parameters are forwarded, percent-encoded via `URLSearchParams`; nothing is stored or logged.
    `AppDelegate.application(_:open:)` routes it to `AppState.handleIncomingURL`,
    which parses it with `SentwiseURLCallback` and calls
    `ManagedAccountService.completeGoogleSignIn(rotatingTokenNonce:)`.
@@ -108,10 +108,10 @@ The pieces: `ClerkClient.startOAuthSignIn` / `completeOAuthSignIn`,
 `ManagedAccountService+OAuth.swift`, `AppState+ManagedOAuth.swift`,
 `SentwiseURLCallback`, and the `CFBundleURLTypes` entry in `Info.plist`.
 
-### Clerk dashboard prerequisite (owner action required)
+### Clerk dashboard prerequisite — configured 2026-09-11
 
-Native OAuth is **not verified live yet** (needs the owner + a browser). Before
-it can work, the Clerk dashboard must be configured:
+Both dashboard steps are done on the dev instance and the flow is **live-verified**
+(see **Live verification** below). What was configured:
 
 - **Enable the Google social connection** (User & Authentication → Social
   Connections → Google). For the dev instance, Clerk's shared dev credentials are
@@ -121,8 +121,9 @@ it can work, the Clerk dashboard must be configured:
   this the redirect allowlist for the OAuth `redirect_url`). Without it Clerk
   rejects the `redirect_url` on the `sign_ins` create call.
 
-Once configured, exercise the full flow once and record the result here (as the
-email-code flow was recorded under **Live verification** above).
+Production cutover note: the shared dev Google credentials do not carry over — a
+real Google OAuth client and the production instance's redirect allowlist entry
+are launch steps under item 74.
 
 ## OpenRouter one-click BYO (item 59)
 
@@ -141,8 +142,10 @@ PKCE flow so the user never copies a key:
    click.
 
 No dashboard configuration is required for OpenRouter beyond the user having (or
-creating) an OpenRouter account during the browser step. Live verification of the
-round-trip is **pending** (needs the owner + a browser + an OpenRouter account).
+creating) an OpenRouter account during the browser step. The Worker's
+`/openrouter/callback` landing page is live (shipped with `/auth/callback`,
+2026-09-11, service PR #19 — previously a 404 dead-end). Live verification of the
+full round-trip is **pending** (needs the owner + a browser + an OpenRouter account).
 
 ## URL scheme security
 
@@ -618,6 +621,7 @@ hunt fakes (above) and their unit tests (`ManagedAccountServiceOAuthTests`,
 
 ## Live verification
 
+- **2026-09-11:** owner live-verified **Continue with Google** end-to-end (item 89): signed out in the Subscription tab, clicked Continue with Google, authenticated in the browser, landed on the Worker's "You're all set" page, and was deep-linked back into the app signed in to the same account (michaeltookes92@gmail.com, linked by verified email). Prerequisites completed the same day: Google social connection enabled (shared dev credentials) and `https://sentwise-inference.sentwise-service.workers.dev/auth/callback` added to the redirect allowlist; Worker version `a145cbb2` (service PR #19).
 - **2026-08-20/21:** owner signed up via the native email-code flow against the real Clerk dev instance (Clerk's *Password* requirement had to be turned off in the dashboard first — `required_fields` included `password`, which the passwordless flow can never satisfy), switched the active provider to Sentwise AI, and generated a draft from Review Drafts. `wrangler tail` showed `POST /v1/draft → 200`, outcome `ok`, ~3.2 s wall time, no exceptions, no logs. Clerk dashboard prerequisite: **Email address (verification code) on, Password off, Organizations off.**
 
 ## Service repo CI/CD (added 2026-08-21)
