@@ -4,10 +4,10 @@ import os
 import SwiftUI
 
 private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "AppState")
-
 /// Central application state container and single source of truth for observed app state.
 @MainActor
 final class AppState: ObservableObject {
+    var settingsTransientMessageGeneration: UInt64 = 0
     // MARK: - Watch State
 
     /// Current watcher status. Drives the menu-bar status line.

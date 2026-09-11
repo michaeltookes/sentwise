@@ -26,10 +26,15 @@ extension AppState {
         guard !isDetectingSignature else { return }
         signatureDetectionMessage = nil
         signatureDetectionSucceeded = nil
+        let settingsMessageGeneration = settingsTransientMessageGeneration
+        func report(_ succeeded: Bool, _ message: String) {
+            guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
+            reportSignatureDetection(succeeded: succeeded, message)
+        }
 
         let credentials = mailCredentials
         guard credentials.isComplete else {
-            reportSignatureDetection(succeeded: false, "Connect an email account first to detect your signature.")
+            report(false, "Connect an email account first to detect your signature.")
             return
         }
         let startingSignaturePolicy = signaturePolicy
@@ -41,47 +46,29 @@ extension AppState {
         do {
             let bodies = try await fetchSentSampleBodies(credentials: credentials)
             guard mailCredentials == credentials else {
-                reportSignatureDetection(
-                    succeeded: false,
-                    "Email account changed while detection was running. Try again."
-                )
+                report(false, "Email account changed while detection was running. Try again.")
                 return
             }
             guard !bodies.isEmpty else {
-                reportSignatureDetection(
-                    succeeded: false,
-                    "No sent messages found to detect a signature from — enter one below."
-                )
+                report(false, "No sent messages found to detect a signature from — enter one below.")
                 return
             }
             if let detected = SignatureDetector.detect(fromSentBodies: bodies) {
                 guard signaturePolicy == startingSignaturePolicy, signatureText == startingSignatureText else {
-                    reportSignatureDetection(
-                        succeeded: false,
-                        "Signature settings changed while detection was running, so your edits were left unchanged."
-                    )
+                    report(false, "Signature settings changed while detection was running, so your edits were left unchanged.")
                     return
                 }
                 (signatureText, signaturePolicy) = (detected, .custom)
-                reportSignatureDetection(succeeded: true, "Found this in your recent Sent mail — edit if needed.")
+                report(true, "Found this in your recent Sent mail — edit if needed.")
             } else {
-                reportSignatureDetection(
-                    succeeded: false,
-                    "Couldn't find a consistent signature in your Sent mail — enter one below."
-                )
+                report(false, "Couldn't find a consistent signature in your Sent mail — enter one below.")
             }
         } catch {
             guard mailCredentials == credentials else {
-                reportSignatureDetection(
-                    succeeded: false,
-                    "Email account changed while detection was running. Try again."
-                )
+                report(false, "Email account changed while detection was running. Try again.")
                 return
             }
-            reportSignatureDetection(
-                succeeded: false,
-                "Couldn't read your Sent mail. \(AppState.message(for: error))"
-            )
+            report(false, "Couldn't read your Sent mail. \(AppState.message(for: error))")
         }
     }
 

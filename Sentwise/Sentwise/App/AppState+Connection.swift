@@ -29,11 +29,13 @@ extension AppState {
     @discardableResult
     func testConnection() async -> Bool {
         connectionError = nil
+        let settingsMessageGeneration = settingsTransientMessageGeneration
         commitMailEmailEditFromUser()
 
         let credentials = mailCredentials
         return await testConnection(with: credentials) {
             self.isCurrentMailCredentialSnapshot($0)
+                && self.isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration)
         }
     }
 

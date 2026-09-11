@@ -49,6 +49,7 @@ extension AppState {
             managedError = "Enter your email address."
             return
         }
+        let settingsMessageGeneration = settingsTransientMessageGeneration
 
         if isHuntMode {
             // Deterministic offline fake: advance to code entry, no network.
@@ -70,7 +71,7 @@ extension AppState {
             managedSignInStage = .codeSent
         } catch {
             pendingManagedSignInActivatesProvider = true
-            managedError = Self.managedMessage(for: error)
+            reportManagedErrorIfCurrent(Self.managedMessage(for: error), generation: settingsMessageGeneration)
         }
     }
 
@@ -98,6 +99,7 @@ extension AppState {
             managedError = "Enter the code from your email."
             return
         }
+        let settingsMessageGeneration = settingsTransientMessageGeneration
 
         managedBusyAction = .verifyCode
         defer { managedBusyAction = nil }
@@ -105,7 +107,7 @@ extension AppState {
         do {
             result = try await managedAccount.completeSignIn(code: code)
         } catch {
-            managedError = Self.managedMessage(for: error)
+            reportManagedErrorIfCurrent(Self.managedMessage(for: error), generation: settingsMessageGeneration)
             return
         }
 
@@ -135,17 +137,18 @@ extension AppState {
     /// Local mail data and voice profile are untouched.
     func signOutManaged() async {
         managedError = nil
+        let settingsMessageGeneration = settingsTransientMessageGeneration
         managedBusyAction = .signOut
         defer { managedBusyAction = nil }
         do {
             try await managedAccount.signOut()
         } catch {
             if await managedAccount.isSignedIn {
-                managedError = Self.managedMessage(for: error)
+                reportManagedErrorIfCurrent(Self.managedMessage(for: error), generation: settingsMessageGeneration)
                 return
             }
             applyManagedSignedOutState(clearEmailInput: true)
-            managedError = Self.managedMessage(for: error)
+            reportManagedErrorIfCurrent(Self.managedMessage(for: error), generation: settingsMessageGeneration)
             saveSettings()
             return
         }
@@ -165,6 +168,7 @@ extension AppState {
     @discardableResult
     func deleteManagedAccount(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async -> Bool {
         managedError = nil
+        let settingsMessageGeneration = settingsTransientMessageGeneration
         if isHuntMode {
             // Offline no-op: the confirm button "works" without teardown.
             return true
@@ -176,7 +180,7 @@ extension AppState {
             try await llm.deleteManagedAccount()
         } catch {
             await reconcileManagedAccountState(after: error, provider: .managed)
-            managedError = Self.managedMessage(for: error)
+            reportManagedErrorIfCurrent(Self.managedMessage(for: error), generation: settingsMessageGeneration)
             return false
         }
 
@@ -188,8 +192,11 @@ extension AppState {
             do {
                 try await managedAccount.invalidateStoredCredentialsForDeletedAccount()
             } catch {
-                managedError = "Your account was deleted, but Sentwise couldn't clear local credentials. "
-                    + Self.managedMessage(for: error)
+                reportManagedErrorIfCurrent(
+                    "Your account was deleted, but Sentwise couldn't clear local credentials. "
+                        + Self.managedMessage(for: error),
+                    generation: settingsMessageGeneration
+                )
                 return false
             }
         }
@@ -222,68 +229,6 @@ extension AppState {
 
     var managedAccountDisplayEmail: String {
         managedAccountStatus?.email ?? managedAccountEmail
-    }
-
-    // MARK: - Error mapping
-
-    static func managedMessage(for error: Error) -> String {
-        managedClerkMessage(for: error)
-            ?? managedLLMMessage(for: error)
-            ?? managedKeychainMessage(for: error)
-            ?? error.localizedDescription
-    }
-
-    private static func managedClerkMessage(for error: Error) -> String? {
-        switch error {
-        case ClerkError.transport:
-            return "Couldn't reach Sentwise sign-in. Check your connection and try again."
-        case ClerkError.http(_, let message, _):
-            return message ?? "Sign-in failed. Please try again."
-        case ClerkError.notComplete(_, let missingFields, _) where !missingFields.isEmpty:
-            return "Sign-up couldn't finish: the account service still requires "
-                + missingFields.joined(separator: ", ")
-                + ". This is a Sentwise configuration issue, not your code — please contact support."
-        case ClerkError.notComplete:
-            return "That code didn't complete sign-in. Request a new code and try again."
-        case ClerkError.emailCodeUnsupported:
-            return "This account can't sign in with an email code."
-        case ClerkError.malformedResponse:
-            return "Unexpected response from sign-in. Please try again."
-        default:
-            return nil
-        }
-    }
-
-    private static func managedLLMMessage(for error: Error) -> String? {
-        switch error {
-        case LLMError.transport:
-            return "Couldn't reach Sentwise sign-in. Check your connection and try again."
-        case LLMError.managedNotSignedIn:
-            return "Sign-in didn't stick. Please try again."
-        case LLMError.managedAccountDeletionFailed(let message):
-            return message
-        case LLMError.http(let status, let message):
-            let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                return trimmed
-            }
-            return "Sentwise account service returned HTTP \(status). Please try again."
-        case LLMError.invalidResponse(let detail):
-            return "Unexpected response from Sentwise account service. Please try again. (\(detail))"
-        default:
-            return nil
-        }
-    }
-
-    private static func managedKeychainMessage(for error: Error) -> String? {
-        switch error {
-        case KeychainError.unexpectedStatus(let status):
-            return "Couldn't update Sentwise AI credentials in Keychain. Keychain returned status \(status)."
-        case KeychainError.dataEncodingFailed:
-            return "Couldn't update Sentwise AI credentials in Keychain."
-        default:
-            return nil
-        }
     }
 
     // MARK: - Launch state (item 56a)

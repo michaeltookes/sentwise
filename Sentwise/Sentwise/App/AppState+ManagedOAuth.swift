@@ -69,6 +69,7 @@ extension AppState {
             managedSignInStage = .awaitingBrowser
             return
         }
+        let settingsMessageGeneration = settingsTransientMessageGeneration
         managedBusyAction = .google
         defer { managedBusyAction = nil }
         do {
@@ -78,20 +79,21 @@ extension AppState {
             managedSignInStage = .awaitingBrowser
         } catch {
             pendingManagedSignInActivatesProvider = true
-            managedError = Self.managedMessage(for: error)
+            reportManagedErrorIfCurrent(Self.managedMessage(for: error), generation: settingsMessageGeneration)
         }
     }
 
     /// Completes Google sign-in from the `sentwise://oauth-callback` redirect.
     func handleManagedOAuthCallback(nonce: String) async {
         managedError = nil
+        let settingsMessageGeneration = settingsTransientMessageGeneration
         managedBusyAction = .oauthCallback
         defer { managedBusyAction = nil }
         let result: ManagedAccountSignInResult
         do {
             result = try await managedAccount.completeGoogleSignIn(rotatingTokenNonce: nonce)
         } catch {
-            managedError = Self.managedMessage(for: error)
+            reportManagedErrorIfCurrent(Self.managedMessage(for: error), generation: settingsMessageGeneration)
             if managedSignInStage == .awaitingBrowser {
                 pendingManagedSignInActivatesProvider = true
                 managedSignInStage = .idle

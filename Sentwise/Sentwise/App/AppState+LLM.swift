@@ -143,6 +143,7 @@ extension AppState {
     /// Verifies the API key with a live test call and, on success, stores it.
     func testLLMConnection() async {
         llmError = nil
+        let settingsMessageGeneration = settingsTransientMessageGeneration
 
         let key = llmAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if llmProviderKind.requiresAPIKey {
@@ -169,7 +170,7 @@ extension AppState {
             )
         } catch {
             await reconcileManagedAccountState(after: error, provider: testedProvider)
-            llmError = Self.llmMessage(for: error)
+            reportLLMErrorIfCurrent(Self.llmMessage(for: error), generation: settingsMessageGeneration)
             return
         }
 
@@ -177,26 +178,16 @@ extension AppState {
               resolvedLLMModel == testedModel,
               currentLLMBaseURL == testedBaseURL,
               llmAPIKey.trimmingCharacters(in: .whitespacesAndNewlines) == key else {
-            llmError = "Connection settings changed. Test again."
+            reportLLMErrorIfCurrent("Connection settings changed. Test again.", generation: settingsMessageGeneration)
             refreshLLMConnectionStatus()
             return
         }
 
-        if key.isEmpty {
-            do {
-                try secrets.remove(testedAPIKeySecret)
-            } catch {
-                llmError = Self.keychainLLMMessage(action: "remove", error: error)
-                return
-            }
-        } else {
-            do {
-                try secrets.set(key, for: testedAPIKeySecret)
-            } catch {
-                llmError = Self.keychainLLMMessage(action: "save", error: error)
-                return
-            }
-        }
+        guard storeTestedLLMCredential(
+            key,
+            secret: testedAPIKeySecret,
+            settingsMessageGeneration: settingsMessageGeneration
+        ) else { return }
 
         verifiedLLMModel = testedModel
         resetDraftPreviewForLLMChange()
@@ -206,6 +197,26 @@ extension AppState {
         // the watched folder while the provider was disconnected (item 51).
         startTranscriptFolderWatchingIfEnabled()
         resumeInboxWatchingAfterProviderRecoveryIfNeeded()
+    }
+
+    private func reportLLMErrorIfCurrent(_ message: String, generation: UInt64) {
+        guard isCurrentSettingsTransientMessageGeneration(generation) else { return }
+        llmError = message
+    }
+
+    private func storeTestedLLMCredential(
+        _ key: String,
+        secret: SecretKey,
+        settingsMessageGeneration: UInt64
+    ) -> Bool {
+        do {
+            key.isEmpty ? try secrets.remove(secret) : try secrets.set(key, for: secret)
+            return true
+        } catch {
+            let action = key.isEmpty ? "remove" : "save"
+            reportLLMErrorIfCurrent(Self.keychainLLMMessage(action: action, error: error), generation: settingsMessageGeneration)
+            return false
+        }
     }
 
     /// Disconnects a BYO provider by clearing its stored API key. Defaults to the

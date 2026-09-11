@@ -116,6 +116,7 @@ extension AppState {
             llmError = "OpenRouter sign-in didn't start on this Mac. Try connecting again."
             return
         }
+        let settingsMessageGeneration = settingsTransientMessageGeneration
 
         isTestingLLM = true
         defer { isTestingLLM = false }
@@ -125,6 +126,7 @@ extension AppState {
             key = try await provisioner.exchangeCodeForKey(code: code, codeVerifier: verifier)
         } catch {
             isOpenRouterProvisioning = false
+            guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
             llmError = Self.llmMessage(for: error)
             return
         }
@@ -142,6 +144,7 @@ extension AppState {
             )
         } catch {
             isOpenRouterProvisioning = false
+            guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
             llmError = Self.keychainLLMMessage(action: "save", error: error)
             return
         }

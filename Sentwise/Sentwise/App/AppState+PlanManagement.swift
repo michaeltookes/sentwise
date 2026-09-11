@@ -29,6 +29,27 @@ struct PendingPlanChangeReconciliation {
     let tier: PaddlePlan
     let accountKey: String
     let generation: UInt64
+    let settingsMessageGeneration: UInt64?
+
+    init(
+        tier: PaddlePlan,
+        accountKey: String,
+        generation: UInt64,
+        settingsMessageGeneration: UInt64? = nil
+    ) {
+        self.tier = tier
+        self.accountKey = accountKey
+        self.generation = generation
+        self.settingsMessageGeneration = settingsMessageGeneration
+    }
+}
+
+private struct ScheduledPlanChangeReconciliation {
+    let tier: PaddlePlan
+    let accountKey: String
+    let change: PaddlePlanChange
+    let generation: UInt64
+    let settingsMessageGeneration: UInt64
 }
 
 /// In-app plan management on `AppState` (backlog item 90): the account's current
@@ -87,13 +108,12 @@ extension AppState {
               let current = currentSubscriptionPlanTier, current != tier else {
             return
         }
+        let settingsMessageGeneration = settingsTransientMessageGeneration
         let accountKey = currentManagedUsageAccountKey
         planChangeOperationGeneration &+= 1
         let operationGeneration = planChangeOperationGeneration
         cancelPlanChangeReconciliation()
-        planChangeMessage = nil
-        planChangeConfirmationTier = nil
-        planChangeFailed = false
+        clearPlanChangeMessageState()
         isChangingPlan = true
         changingPlanTier = tier
         defer {
@@ -112,9 +132,10 @@ extension AppState {
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
             await reconcileManagedAccountState(after: error, provider: .managed)
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
-            planChangeFailed = true
-            planChangeMessage = Self.changePlanErrorMessage(for: error)
-            planChangeConfirmationTier = nil
+            publishPlanChangeFailure(
+                Self.changePlanErrorMessage(for: error),
+                settingsMessageGeneration: settingsMessageGeneration
+            )
             return
         }
         guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
@@ -123,26 +144,27 @@ extension AppState {
             to: tier,
             accountKey: accountKey,
             operationGeneration: operationGeneration,
-            retryDelays: reconcileRetryDelays
+            retryDelays: reconcileRetryDelays,
+            settingsMessageGeneration: settingsMessageGeneration
         )
         guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
         if !observedTargetTier {
             guard applyValidatedPlanChange(change, expectedTier: tier, accountKey: accountKey) else {
-                planChangeFailed = true
-                planChangeMessage = Self.changePlanConfirmationPendingMessage()
-                planChangeConfirmationTier = nil
+                publishPlanChangeFailure(
+                    Self.changePlanConfirmationPendingMessage(),
+                    settingsMessageGeneration: settingsMessageGeneration
+                )
                 return
             }
             schedulePlanChangeReconciliation(
                 to: tier,
                 accountKey: accountKey,
                 validatedChange: change,
-                retryDelays: backgroundReconcileRetryDelays
+                retryDelays: backgroundReconcileRetryDelays,
+                settingsMessageGeneration: settingsMessageGeneration
             )
         }
-        planChangeFailed = false
-        planChangeMessage = Self.changePlanConfirmation(for: tier)
-        planChangeConfirmationTier = tier
+        publishPlanChangeConfirmation(for: tier, settingsMessageGeneration: settingsMessageGeneration)
     }
 
     /// Polls `/v1/me` after a successful change-plan call until the account's tier
@@ -153,12 +175,18 @@ extension AppState {
         to tier: PaddlePlan,
         accountKey: String,
         operationGeneration: UInt64,
-        retryDelays: [UInt64]
+        retryDelays: [UInt64],
+        settingsMessageGeneration: UInt64? = nil
     ) async -> Bool {
         var refreshedStatus = await refreshManagedQuota(requireQuotaForFreshStatus: true)
         guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return false }
         if statusConfirmsPlanChange(refreshedStatus, tier: tier) {
-            trackPlanChangeUntilQuotaArrivesIfNeeded(refreshedStatus, tier: tier, accountKey: accountKey)
+            trackPlanChangeUntilQuotaArrivesIfNeeded(
+                refreshedStatus,
+                tier: tier,
+                accountKey: accountKey,
+                settingsMessageGeneration: settingsMessageGeneration
+            )
             return true
         }
         if hasFreshConfirmedPlanChange(tier) {
@@ -178,7 +206,12 @@ extension AppState {
             refreshedStatus = await refreshManagedQuota(requireQuotaForFreshStatus: true)
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return false }
             if statusConfirmsPlanChange(refreshedStatus, tier: tier) {
-                trackPlanChangeUntilQuotaArrivesIfNeeded(refreshedStatus, tier: tier, accountKey: accountKey)
+                trackPlanChangeUntilQuotaArrivesIfNeeded(
+                    refreshedStatus,
+                    tier: tier,
+                    accountKey: accountKey,
+                    settingsMessageGeneration: settingsMessageGeneration
+                )
                 return true
             }
             if hasFreshConfirmedPlanChange(tier) {
@@ -238,9 +271,7 @@ extension AppState {
         manageBillingMessage = nil
         isChangingPlan = false
         changingPlanTier = nil
-        planChangeMessage = nil
-        planChangeConfirmationTier = nil
-        planChangeFailed = false
+        clearPlanChangeMessageState()
     }
 
     func managedAccountMatches(_ accountKey: String) -> Bool {
@@ -253,11 +284,32 @@ extension AppState {
         planChangeOperationGeneration == generation && managedAccountMatches(accountKey)
     }
 
+    private func clearPlanChangeMessageState() {
+        planChangeMessage = nil
+        planChangeConfirmationTier = nil
+        planChangeFailed = false
+    }
+
+    private func publishPlanChangeFailure(_ message: String, settingsMessageGeneration: UInt64) {
+        guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
+        planChangeFailed = true
+        planChangeMessage = message
+        planChangeConfirmationTier = nil
+    }
+
+    private func publishPlanChangeConfirmation(for tier: PaddlePlan, settingsMessageGeneration: UInt64) {
+        guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
+        planChangeFailed = false
+        planChangeMessage = Self.changePlanConfirmation(for: tier)
+        planChangeConfirmationTier = tier
+    }
+
     private func schedulePlanChangeReconciliation(
         to tier: PaddlePlan,
         accountKey: String,
         validatedChange change: PaddlePlanChange,
-        retryDelays: [UInt64]
+        retryDelays: [UInt64],
+        settingsMessageGeneration: UInt64
     ) {
         cancelPlanChangeReconciliation()
         guard managedAccountMatches(accountKey), !retryDelays.isEmpty else { return }
@@ -266,7 +318,15 @@ extension AppState {
         pendingPlanChangeReconciliation = PendingPlanChangeReconciliation(
             tier: tier,
             accountKey: accountKey,
-            generation: generation
+            generation: generation,
+            settingsMessageGeneration: settingsMessageGeneration
+        )
+        let context = ScheduledPlanChangeReconciliation(
+            tier: tier,
+            accountKey: accountKey,
+            change: change,
+            generation: generation,
+            settingsMessageGeneration: settingsMessageGeneration
         )
         planChangeReconciliationTask = Task { [weak self] in
             for (index, delay) in retryDelays.enumerated() {
@@ -278,10 +338,7 @@ extension AppState {
                 guard let self else { return }
                 let isFinalAttempt = index == retryDelays.count - 1
                 let shouldContinue = await self.refreshPlanChangeReconciliation(
-                    to: tier,
-                    accountKey: accountKey,
-                    validatedChange: change,
-                    generation: generation,
+                    context,
                     isFinalAttempt: isFinalAttempt
                 )
                 if !shouldContinue { return }
@@ -291,45 +348,47 @@ extension AppState {
     }
 
     private func refreshPlanChangeReconciliation(
-        to tier: PaddlePlan,
-        accountKey: String,
-        validatedChange change: PaddlePlanChange,
-        generation: UInt64,
+        _ context: ScheduledPlanChangeReconciliation,
         isFinalAttempt: Bool
     ) async -> Bool {
-        guard planChangeReconciliationGeneration == generation,
-              managedAccountMatches(accountKey) else { return false }
+        guard planChangeReconciliationGeneration == context.generation,
+              managedAccountMatches(context.accountKey) else { return false }
         guard isOnline else { return true }
         let refreshedStatus = await refreshManagedQuota(
             scheduleRetryOnFailure: false,
             deferPendingPlanChangeStatus: !isFinalAttempt,
             requireQuotaForFreshStatus: true
         )
-        guard planChangeReconciliationGeneration == generation,
-              managedAccountMatches(accountKey) else { return false }
-        if statusConfirmsPlanChange(refreshedStatus, tier: tier) || hasFreshConfirmedPlanChange(tier) {
+        guard planChangeReconciliationGeneration == context.generation,
+              managedAccountMatches(context.accountKey) else { return false }
+        if statusConfirmsPlanChange(refreshedStatus, tier: context.tier) || hasFreshConfirmedPlanChange(context.tier) {
             let isWaitingForQuota = refreshedStatus?.quota == nil && !managedAccountStatusIsFresh
             scheduleQuotaRetryIfAcceptedWithoutQuota(refreshedStatus)
-            finishPlanChangeReconciliation(generation: generation, preservePendingConfirmation: isWaitingForQuota)
+            finishPlanChangeReconciliation(
+                generation: context.generation,
+                preservePendingConfirmation: isWaitingForQuota
+            )
             return false
         }
         if isFinalAttempt {
-            planChangeFailed = true
-            planChangeMessage = Self.changePlanConfirmationPendingMessage()
-            planChangeConfirmationTier = nil
-            pendingPlanChangeReconciliation = PendingPlanChangeReconciliation(
-                tier: tier,
-                accountKey: accountKey,
-                generation: generation
+            publishPlanChangeFailure(
+                Self.changePlanConfirmationPendingMessage(),
+                settingsMessageGeneration: context.settingsMessageGeneration
             )
-            finishPlanChangeReconciliation(generation: generation, preservePendingConfirmation: true)
+            pendingPlanChangeReconciliation = PendingPlanChangeReconciliation(
+                tier: context.tier,
+                accountKey: context.accountKey,
+                generation: context.generation,
+                settingsMessageGeneration: context.settingsMessageGeneration
+            )
+            finishPlanChangeReconciliation(generation: context.generation, preservePendingConfirmation: true)
             if !managedAccountStatusIsFresh {
                 scheduleManagedAccountStatusRefreshRetryAfterFailure()
             }
             return false
         }
-        guard applyValidatedPlanChange(change, expectedTier: tier, accountKey: accountKey) else {
-            finishPlanChangeReconciliation(generation: generation)
+        guard applyValidatedPlanChange(context.change, expectedTier: context.tier, accountKey: context.accountKey) else {
+            finishPlanChangeReconciliation(generation: context.generation)
             return false
         }
         return true

@@ -30,6 +30,7 @@ extension AppState {
         openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
     ) async {
         guard isManagedSignedIn, canManageBilling else { return }
+        let settingsMessageGeneration = settingsTransientMessageGeneration
         let accountKey = currentManagedUsageAccountKey
         manageBillingOperationGeneration &+= 1
         let operationGeneration = manageBillingOperationGeneration
@@ -48,6 +49,7 @@ extension AppState {
             guard isCurrentManageBillingOperation(operationGeneration, accountKey: accountKey) else { return }
             await reconcileManagedAccountState(after: error, provider: .managed)
             guard isCurrentManageBillingOperation(operationGeneration, accountKey: accountKey) else { return }
+            guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
             manageBillingMessage = Self.manageBillingErrorMessage(for: error)
             return
         }

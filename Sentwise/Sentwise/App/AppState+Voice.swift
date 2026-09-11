@@ -18,15 +18,20 @@ extension AppState {
     /// Samples the Sent folder and derives a voice profile via the LLM.
     func learnVoiceProfile() async {
         voiceError = nil
+        let settingsMessageGeneration = settingsTransientMessageGeneration
+        func reportVoiceError(_ message: String) {
+            guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
+            voiceError = message
+        }
 
         await refreshManagedQuotaIfLicenseStatusStale()
         guard let llmConfiguration = currentVoiceLLMConfiguration else {
-            voiceError = "Connect an AI provider first (Test Connection above)."
+            reportVoiceError("Connect an AI provider first (Test Connection above).")
             return
         }
         let credentials = mailCredentials
         guard credentials.isComplete else {
-            voiceError = "Connect an email account first."
+            reportVoiceError("Connect an email account first.")
             return
         }
 
@@ -42,17 +47,17 @@ extension AppState {
                 self?.voiceProgress = progress
             }
             guard isCurrentVoiceContext(credentials: credentials, llmConfiguration: llmConfiguration) else {
-                voiceError = Self.staleVoiceLLMConfigurationMessage
+                reportVoiceError(Self.staleVoiceLLMConfigurationMessage)
                 return
             }
             guard !bodies.isEmpty else {
-                voiceError = "No sent messages found to learn from."
+                reportVoiceError("No sent messages found to learn from.")
                 return
             }
             voiceProgress = "Learning your voice from \(bodies.count) message\(bodies.count == 1 ? "" : "s")…"
             let profile = try await makeProfile(fromSentBodies: bodies, llmConfiguration: llmConfiguration)
             guard isCurrentVoiceContext(credentials: credentials, llmConfiguration: llmConfiguration) else {
-                voiceError = Self.staleVoiceLLMConfigurationMessage
+                reportVoiceError(Self.staleVoiceLLMConfigurationMessage)
                 return
             }
             persistence.saveVoiceProfile(profile)
@@ -61,10 +66,10 @@ extension AppState {
             let wasCurrent = isCurrentVoiceContext(credentials: credentials, llmConfiguration: llmConfiguration)
             let signedOut = await reconcileManagedAccountState(after: error, provider: llmConfiguration.provider)
             guard wasCurrent, signedOut || isCurrentVoiceContext(credentials: credentials, llmConfiguration: llmConfiguration) else {
-                voiceError = Self.staleVoiceLLMConfigurationMessage
+                reportVoiceError(Self.staleVoiceLLMConfigurationMessage)
                 return
             }
-            voiceError = Self.voiceMessage(for: error)
+            reportVoiceError(Self.voiceMessage(for: error))
         }
     }
 

@@ -2,27 +2,35 @@ import Foundation
 
 extension AppState {
     /// Clears the transient inline messages and errors shown in the Settings
-    /// window's panes so reopening Settings returns to a clean state.
+    /// window's panes so each Settings session starts clean.
     ///
     /// Motivation (item 90 follow-up): a plan-change error ("Could not change your
     /// plan.") lingered in the Subscription pane after the window was closed and
-    /// reopened, because `AppState` outlives the window. Called from
-    /// `SettingsWindowController.windowWillClose`.
+    /// reopened, because `AppState` outlives the window. Called when a Settings
+    /// session opens and closes.
     ///
     /// Scope is the Settings surface only — it deliberately does not touch the
     /// draft/review or menu-bar flow's own status (e.g. `approvalError`,
-    /// `draftSavedMessage`, `draftSentMessage`). Standing conditions (a mailbox
-    /// that is actually disconnected, an unverified provider) are recomputed on
-    /// the next action, so clearing their inline text here is cosmetic.
+    /// `draftSavedMessage`, `draftSentMessage`) or mailbox-browser row-action
+    /// errors (`bodyError`, `draftError`). Standing conditions (a mailbox that is
+    /// actually disconnected, an unverified provider) are recomputed on the next
+    /// action, so clearing their inline text here is cosmetic.
     func resetTransientSettingsMessages() {
-        // Plan-management + billing (also cancels any in-flight change/manage ops).
-        resetPlanManagementState()
+        settingsTransientMessageGeneration &+= 1
+
+        // Recent-message preview belongs to Settings; invalidate a slow fetch so
+        // it cannot republish `fetchError` after the pane has gone away.
+        _ = nextPreviewGeneration()
+        isFetching = false
+
+        // Billing portal fetches are presentation-only. Plan changes are not:
+        // they may already be changing the remote subscription, so preserve their
+        // operation generation and busy state while clearing only their messages.
+        resetSettingsBillingAndPlanMessages()
 
         // Account / mailbox panes.
         connectionError = nil
         fetchError = nil
-        bodyError = nil
-        draftError = nil
 
         // AI provider / managed-account panes.
         llmError = nil
@@ -32,7 +40,21 @@ extension AppState {
 
         // General / signature / diagnostics / transcript panes.
         signatureDetectionMessage = nil
+        signatureDetectionSucceeded = nil
         transcriptFolderError = nil
         diagnosticsError = nil
+    }
+
+    func isCurrentSettingsTransientMessageGeneration(_ generation: UInt64) -> Bool {
+        settingsTransientMessageGeneration == generation
+    }
+
+    private func resetSettingsBillingAndPlanMessages() {
+        manageBillingOperationGeneration &+= 1
+        isManagingBilling = false
+        manageBillingMessage = nil
+        planChangeMessage = nil
+        planChangeConfirmationTier = nil
+        planChangeFailed = false
     }
 }

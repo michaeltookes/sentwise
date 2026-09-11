@@ -149,6 +149,8 @@ final class SettingsWindowController: NSObject, NSToolbarDelegate, NSWindowDeleg
             return
         }
 
+        appState.resetTransientSettingsMessages()
+
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.titled, .closable],
