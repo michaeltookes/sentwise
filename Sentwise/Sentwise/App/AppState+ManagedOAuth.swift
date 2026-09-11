@@ -157,6 +157,10 @@ extension AppState {
             }
             return
         }
+        guard isCurrentManagedOAuthCallbackFlow(flowID: flowID) else {
+            await discardIgnoredManagedOAuthSuccessIfEnded()
+            return
+        }
         if pendingManagedSignInActivatesProvider, llmProviderKind != .managed {
             selectLLMProvider(.managed, messageSurface: messageSurface)
         }
@@ -250,6 +254,18 @@ extension AppState {
             _ = consumeCanceledManagedOAuthCallbackSurface()
             pendingManagedSignInMessageSurface = .shared
         }
+    }
+
+    private func discardIgnoredManagedOAuthSuccessIfEnded() async {
+        guard ((try? secrets.value(for: .managedOAuthFlowID)) ?? nil) == nil else { return }
+        do {
+            try await managedAccount.signOut()
+        } catch {
+            logger.error("Failed to discard canceled managed OAuth session: \(error.localizedDescription)")
+        }
+        finishIgnoredManagedOAuthCallbackIfEnded()
+        clearManagedOAuthMessageSurfaceBestEffort()
+        pendingManagedSignInActivatesProvider = true
     }
 
     static func managedOAuthMessageSurface(secrets: SecretStore) -> TransientMessageSurface? {
