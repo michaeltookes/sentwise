@@ -6,13 +6,15 @@ final class AppStateSettingsSurfaceActionsTests: XCTestCase {
 
     private func makeAppState(
         persistence: AppStateMemoryPersistence = AppStateMemoryPersistence(),
-        secrets: SecretStore = InMemorySecretStore()
+        secrets: SecretStore = InMemorySecretStore(),
+        interestClient: GoogleOAuthInterestRegistering = RecordingGoogleOAuthInterestClient()
     ) -> AppState {
         AppState(
             persistence: persistence,
             secrets: secrets,
             mailProvider: FakeAppMailProvider(result: .success(())),
-            llm: FakeLLMProvider(result: .success(()))
+            llm: FakeLLMProvider(result: .success(())),
+            googleOAuthInterestClient: interestClient
         )
     }
 
@@ -66,6 +68,27 @@ final class AppStateSettingsSurfaceActionsTests: XCTestCase {
         XCTAssertFalse(appState.googleOAuthInterestRegistered)
         XCTAssertEqual(appState.googleOAuthInterestError, "setup assistant interest error")
         XCTAssertNil(appState.googleOAuthInterestError(for: .settings))
+    }
+
+    func testSettingsGoogleInterestSignOutClearsSettingsOAuthInterestErrorBucket() async {
+        let client = RecordingGoogleOAuthInterestClient(error: LLMError.managedNotSignedIn)
+        let appState = makeAppState(interestClient: client)
+        appState.isManagedSignedIn = true
+        appState.managedAccountEmail = "marcus@example.com"
+        appState.managedAccountID = "acct-1"
+        appState.googleOAuthInterestRegistered = false
+        appState.googleOAuthInterestError = "setup assistant interest error"
+        appState.settingsTransientMessages.googleOAuthInterestError = "settings interest error"
+
+        await appState.registerGoogleOAuthInterest(isHuntMode: false, messageSurface: .settings)
+
+        XCTAssertEqual(client.callCount, 1)
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertFalse(appState.googleOAuthInterestRegistered)
+        XCTAssertEqual(appState.googleOAuthInterestError, "setup assistant interest error")
+        XCTAssertNil(appState.googleOAuthInterestError(for: .settings))
+        XCTAssertNil(appState.managedError)
+        XCTAssertEqual(appState.managedError(for: .settings), "Sign-in didn't stick. Please try again.")
     }
 
     func testManagedInputEditsClearOnlyRequestedSurface() {

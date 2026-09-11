@@ -172,7 +172,7 @@ extension AppState {
                 baseURL: testedBaseURL
             )
         } catch {
-            await reconcileManagedAccountState(after: error, provider: testedProvider)
+            await reconcileManagedAccountState(after: error, provider: testedProvider, messageSurface: messageSurface)
             reportLLMErrorIfCurrent(
                 Self.llmMessage(for: error),
                 generation: settingsMessageGeneration,

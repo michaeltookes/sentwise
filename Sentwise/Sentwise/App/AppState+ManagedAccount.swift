@@ -218,7 +218,7 @@ extension AppState {
         do {
             try await llm.deleteManagedAccount()
         } catch {
-            await reconcileManagedAccountState(after: error, provider: .managed)
+            await reconcileManagedAccountState(after: error, provider: .managed, messageSurface: messageSurface)
             reportManagedErrorIfCurrent(
                 Self.managedMessage(for: error),
                 generation: settingsMessageGeneration,
@@ -474,7 +474,11 @@ extension AppState {
     /// whose staleness guards would otherwise swallow the error can still surface
     /// it — the configuration changed *because of* this failure, not under the user.
     @discardableResult
-    func reconcileManagedAccountState(after error: Error, provider: LLMProviderKind) async -> Bool {
+    func reconcileManagedAccountState(
+        after error: Error,
+        provider: LLMProviderKind,
+        messageSurface: TransientMessageSurface = .shared
+    ) async -> Bool {
         guard provider == .managed else { return false }
         if case LLMError.managedTrialExpired = error {
             supersedeInFlightManagedAccountStatusRefreshes()
@@ -487,7 +491,7 @@ extension AppState {
         guard case LLMError.managedNotSignedIn = error else { return false }
         guard !(await managedAccount.isSignedIn) else { return false }
 
-        applyManagedSignedOutState(clearEmailInput: false)
+        applyManagedSignedOutState(clearEmailInput: false, messageSurface: messageSurface)
         saveSettings()
         return true
     }

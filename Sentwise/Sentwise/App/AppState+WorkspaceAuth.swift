@@ -172,7 +172,11 @@ extension AppState {
         } catch {
             let failure = googleOAuthInterestFailure(from: error, fallbackAccountKey: accountKey)
             let wasCurrentAccount = isCurrentGoogleOAuthInterestAccount(failure.accountKey)
-            let signedOut = await reconcileManagedAccountState(after: failure.error, provider: .managed)
+            let signedOut = await reconcileManagedAccountState(
+                after: failure.error,
+                provider: .managed,
+                messageSurface: messageSurface
+            )
             guard wasCurrentAccount || signedOut else {
                 logger.error("Interest registration failed for stale account: \(failure.error.localizedDescription)")
                 return

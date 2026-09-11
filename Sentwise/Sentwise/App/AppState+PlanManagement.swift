@@ -130,7 +130,7 @@ extension AppState {
             change = try await llm.changeManagedPlan(priceID: priceID, expectedAccountKey: sessionAccountKey)
         } catch {
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
-            await reconcileManagedAccountState(after: error, provider: .managed)
+            await reconcileManagedAccountState(after: error, provider: .managed, messageSurface: .settings)
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
             publishPlanChangeFailure(
                 Self.changePlanErrorMessage(for: error),

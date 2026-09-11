@@ -64,7 +64,11 @@ extension AppState {
             voiceProfile = profile
         } catch {
             let wasCurrent = isCurrentVoiceContext(credentials: credentials, llmConfiguration: llmConfiguration)
-            let signedOut = await reconcileManagedAccountState(after: error, provider: llmConfiguration.provider)
+            let signedOut = await reconcileManagedAccountState(
+                after: error,
+                provider: llmConfiguration.provider,
+                messageSurface: messageSurface
+            )
             guard wasCurrent, signedOut || isCurrentVoiceContext(credentials: credentials, llmConfiguration: llmConfiguration) else {
                 reportVoiceError(Self.staleVoiceLLMConfigurationMessage)
                 return
