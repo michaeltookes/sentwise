@@ -259,6 +259,15 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Surfaced to the maintainer via the existing `/admin` surface (alongside 56b's margin dashboard) or an export; feeds marketing ("X% convert, mostly to Pro").
     - Depends on 56c emitting the conversion/subscription event; complements 56b (usage/margin).
 
+91. **Sign-in-free Paddle portal links via customer portal sessions** — *discovered 2026-09-11 during the item 90 cancel live-verify*
+    "Manage billing" / "Cancel Subscription" open a Paddle `management_urls` link, which lands the user on the portal's **email sign-in page** (enter email → wait for a magic link) before they can act — Paddle's documented behavior for those pre-generated links. Paddle's newer `POST /customers/{customer_id}/portal-sessions` API returns **authenticated** links (an `overview` URL plus per-subscription deep links like `cancel_subscription` and `update_subscription_payment_method`) that log the customer straight in with no sign-in step. Not launch-blocking — the current path works, one extra step — but it's friction on the two most sensitive billing actions.
+    *As a paying user, I want "Manage billing" and "Cancel" to land me directly in my billing portal, so that I'm not bounced through an email sign-in loop for an action I started inside the signed-in app.*
+    - Worker: replace (or front) `fetchPaddleManagementUrl`'s `management_urls` read with a portal-sessions create — `POST /customers/{customer_id}/portal-sessions` — mapping the existing `update_payment_method` / `cancel` actions to the session's deep links; the Paddle `customer_id` is available on the live subscription entity the worker already fetches (consider storing it in `privateMetadata.subscription` at webhook time to save a round-trip).
+    - Session links are freshly minted per click (they expire and shouldn't be cached) — fits the existing on-demand `GET /v1/paddle/manage-billing` shape; no app-side changes expected beyond copy, since the app already fetches on demand.
+    - Fall back to the current `management_urls` path if the portal-session create fails, so billing management never regresses to a dead button.
+    - Tests: action → deep-link mapping, fallback path, no caching of session URLs.
+    - Live-verify in sandbox: Manage billing and Cancel both land signed-in, no email step.
+
 ## Low Priority
 
 31. **Outlook / Microsoft 365 support**
