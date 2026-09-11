@@ -43,11 +43,11 @@ struct AIProviderSettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                     ManagedSignInControls(messageSurface: .settings)
                 }
-                ManagedAccountErrorMessage(messageSurface: .settings)
+                ManagedAccountErrorMessage(messageSurface: .settings, settingsDisplayTab: .ai)
             }
 
             Section("Use your own AI") {
-                BYOProviderControls(messageSurface: .settings)
+                BYOProviderControls(messageSurface: .settings, settingsDisplayTab: .ai)
             }
 
             Section("Voice") {

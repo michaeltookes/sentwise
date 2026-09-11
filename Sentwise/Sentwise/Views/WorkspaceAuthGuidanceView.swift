@@ -12,9 +12,14 @@ import SwiftUI
 struct WorkspaceAuthGuidanceView: View {
     @EnvironmentObject var appState: AppState
     let messageSurface: AppState.TransientMessageSurface
+    let settingsDisplayTab: SettingsTab?
 
-    init(messageSurface: AppState.TransientMessageSurface = .shared) {
+    init(
+        messageSurface: AppState.TransientMessageSurface = .shared,
+        settingsDisplayTab: SettingsTab? = nil
+    ) {
         self.messageSurface = messageSurface
+        self.settingsDisplayTab = settingsDisplayTab
     }
 
     var body: some View {
@@ -139,7 +144,7 @@ struct WorkspaceAuthGuidanceView: View {
                     activatesManagedProvider: false,
                     messageSurface: messageSurface
                 )
-                ManagedAccountErrorMessage(messageSurface: messageSurface)
+                ManagedAccountErrorMessage(messageSurface: messageSurface, settingsDisplayTab: settingsDisplayTab)
             }
             .padding(.top, 2)
             .accessibilityIdentifier("oauthInterestSignIn")

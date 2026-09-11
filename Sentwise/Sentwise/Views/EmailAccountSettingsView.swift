@@ -147,7 +147,7 @@ struct EmailAccountSettingsView: View {
                     .foregroundStyle(.red)
             }
 
-            WorkspaceAuthGuidanceView(messageSurface: .settings)
+            WorkspaceAuthGuidanceView(messageSurface: .settings, settingsDisplayTab: .account)
         }
     }
 

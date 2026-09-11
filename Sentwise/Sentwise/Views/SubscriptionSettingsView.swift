@@ -66,7 +66,7 @@ struct SubscriptionSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             ManagedSignInControls(messageSurface: .settings)
-            ManagedAccountErrorMessage(messageSurface: .settings)
+            ManagedAccountErrorMessage(messageSurface: .settings, settingsDisplayTab: .subscription)
         }
     }
 
@@ -189,7 +189,7 @@ struct SubscriptionSettingsView: View {
                 .foregroundStyle(.secondary)
         }
 
-        ManagedAccountErrorMessage(messageSurface: .settings)
+        ManagedAccountErrorMessage(messageSurface: .settings, settingsDisplayTab: .subscription)
     }
 }
 

@@ -152,8 +152,12 @@ extension AppState {
         settingsTransientMessages.hasUnseenLLMCallbackError = true
     }
 
-    func markSettingsLLMCallbackErrorDisplayed(for surface: TransientMessageSurface) {
+    func markSettingsLLMCallbackErrorDisplayed(
+        for surface: TransientMessageSurface,
+        visibleIn tab: SettingsTab
+    ) {
         guard surface == .settings else { return }
+        guard activeSettingsTab == tab else { return }
         settingsTransientMessages.hasUnseenLLMCallbackError = false
     }
 
@@ -174,8 +178,12 @@ extension AppState {
         settingsTransientMessages.hasUnseenManagedCallbackError = true
     }
 
-    func markSettingsManagedCallbackErrorDisplayed(for surface: TransientMessageSurface) {
+    func markSettingsManagedCallbackErrorDisplayed(
+        for surface: TransientMessageSurface,
+        visibleIn tab: SettingsTab
+    ) {
         guard surface == .settings else { return }
+        guard activeSettingsTab == tab else { return }
         settingsTransientMessages.hasUnseenManagedCallbackError = false
     }
 

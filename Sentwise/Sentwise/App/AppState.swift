@@ -8,6 +8,11 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "AppStat
 final class AppState: ObservableObject {
     var settingsTransientMessageGeneration: UInt64 = 0
     @Published var settingsTransientMessages = SettingsTransientMessages()
+    private(set) var activeSettingsTab: SettingsTab?
+
+    func setActiveSettingsTab(_ tab: SettingsTab?) {
+        activeSettingsTab = tab
+    }
     // MARK: - Watch State
     /// Current watcher status. Drives the menu-bar status line.
     @Published var watchStatus: WatchStatus = .idle

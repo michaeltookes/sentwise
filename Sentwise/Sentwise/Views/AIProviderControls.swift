@@ -51,21 +51,34 @@ struct ManagedInferenceCard: View {
 struct ManagedAccountErrorMessage: View {
     @EnvironmentObject var appState: AppState
     let messageSurface: AppState.TransientMessageSurface
+    let settingsDisplayTab: SettingsTab?
 
-    init(messageSurface: AppState.TransientMessageSurface = .shared) {
+    init(
+        messageSurface: AppState.TransientMessageSurface = .shared,
+        settingsDisplayTab: SettingsTab? = nil
+    ) {
         self.messageSurface = messageSurface
+        self.settingsDisplayTab = settingsDisplayTab
     }
 
     var body: some View {
         if let error = appState.managedError(for: messageSurface) {
             OnboardingError(message: error)
                 .onAppear {
-                    appState.markSettingsManagedCallbackErrorDisplayed(for: messageSurface)
+                    markCallbackErrorDisplayed()
                 }
                 .onChange(of: error) { _, _ in
-                    appState.markSettingsManagedCallbackErrorDisplayed(for: messageSurface)
+                    markCallbackErrorDisplayed()
                 }
         }
+    }
+
+    private func markCallbackErrorDisplayed() {
+        guard let settingsDisplayTab else { return }
+        appState.markSettingsManagedCallbackErrorDisplayed(
+            for: messageSurface,
+            visibleIn: settingsDisplayTab
+        )
     }
 }
 
@@ -75,21 +88,34 @@ struct ManagedAccountErrorMessage: View {
 struct BYOProviderErrorMessage: View {
     @EnvironmentObject var appState: AppState
     let messageSurface: AppState.TransientMessageSurface
+    let settingsDisplayTab: SettingsTab?
 
-    init(messageSurface: AppState.TransientMessageSurface = .shared) {
+    init(
+        messageSurface: AppState.TransientMessageSurface = .shared,
+        settingsDisplayTab: SettingsTab? = nil
+    ) {
         self.messageSurface = messageSurface
+        self.settingsDisplayTab = settingsDisplayTab
     }
 
     var body: some View {
         if let error = appState.llmError(for: messageSurface) {
             OnboardingError(message: error)
                 .onAppear {
-                    appState.markSettingsLLMCallbackErrorDisplayed(for: messageSurface)
+                    markCallbackErrorDisplayed()
                 }
                 .onChange(of: error) { _, _ in
-                    appState.markSettingsLLMCallbackErrorDisplayed(for: messageSurface)
+                    markCallbackErrorDisplayed()
                 }
         }
+    }
+
+    private func markCallbackErrorDisplayed() {
+        guard let settingsDisplayTab else { return }
+        appState.markSettingsLLMCallbackErrorDisplayed(
+            for: messageSurface,
+            visibleIn: settingsDisplayTab
+        )
     }
 }
 
@@ -230,14 +256,19 @@ struct ManagedSignInControls: View {
 struct BYOProviderControls: View {
     @EnvironmentObject var appState: AppState
     let messageSurface: AppState.TransientMessageSurface
+    let settingsDisplayTab: SettingsTab?
 
     /// The provider highlighted in the picker. Staged locally so opening the
     /// picker doesn't immediately switch the active provider; "Use this provider"
     /// makes the switch. Synced to the active provider when BYO is live.
     @State private var stagedProvider: LLMProviderKind = .anthropic
 
-    init(messageSurface: AppState.TransientMessageSurface = .shared) {
+    init(
+        messageSurface: AppState.TransientMessageSurface = .shared,
+        settingsDisplayTab: SettingsTab? = nil
+    ) {
         self.messageSurface = messageSurface
+        self.settingsDisplayTab = settingsDisplayTab
     }
 
     private var byoProviders: [LLMProviderKind] {
@@ -279,7 +310,7 @@ struct BYOProviderControls: View {
                 ProviderKeyGuidance(provider: stagedProvider)
             }
 
-            BYOProviderErrorMessage(messageSurface: messageSurface)
+            BYOProviderErrorMessage(messageSurface: messageSurface, settingsDisplayTab: settingsDisplayTab)
             ProviderPrivacyNote()
         }
         .onAppear {

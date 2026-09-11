@@ -126,13 +126,15 @@ final class AppStateSettingsResetTests: XCTestCase {
         XCTAssertEqual(appState.llmError(for: .settings), "OpenRouter failed.")
         XCTAssertEqual(appState.managedError(for: .settings), "Google failed.")
 
-        appState.markSettingsManagedCallbackErrorDisplayed(for: .settings)
+        appState.setActiveSettingsTab(.subscription)
+        appState.markSettingsManagedCallbackErrorDisplayed(for: .settings, visibleIn: .subscription)
         appState.resetTransientSettingsMessages()
 
         XCTAssertEqual(appState.llmError(for: .settings), "OpenRouter failed.")
         XCTAssertNil(appState.managedError(for: .settings))
 
-        appState.markSettingsLLMCallbackErrorDisplayed(for: .settings)
+        appState.setActiveSettingsTab(.ai)
+        appState.markSettingsLLMCallbackErrorDisplayed(for: .settings, visibleIn: .ai)
         appState.resetTransientSettingsMessages()
 
         XCTAssertNil(appState.llmError(for: .settings))
@@ -145,9 +147,36 @@ final class AppStateSettingsResetTests: XCTestCase {
         appState.settingsTransientMessages.managedError = "Google failed."
         appState.markSettingsLLMCallbackErrorPendingDisplay(for: .settings)
         appState.markSettingsManagedCallbackErrorPendingDisplay(for: .settings)
-        appState.markSettingsLLMCallbackErrorDisplayed(for: .settings)
-        appState.markSettingsManagedCallbackErrorDisplayed(for: .settings)
+        appState.setActiveSettingsTab(.ai)
+        appState.markSettingsLLMCallbackErrorDisplayed(for: .settings, visibleIn: .ai)
+        appState.setActiveSettingsTab(.subscription)
+        appState.markSettingsManagedCallbackErrorDisplayed(for: .settings, visibleIn: .subscription)
 
+        appState.resetTransientSettingsMessages()
+
+        XCTAssertNil(appState.llmError(for: .settings))
+        XCTAssertNil(appState.managedError(for: .settings))
+    }
+
+    func testOffscreenSettingsCallbackErrorsRemainPendingUntilVisibleTabDisplaysThem() {
+        let appState = makeAppState()
+        appState.settingsTransientMessages.llmError = "OpenRouter failed."
+        appState.settingsTransientMessages.managedError = "Google failed."
+        appState.markSettingsLLMCallbackErrorPendingDisplay(for: .settings)
+        appState.markSettingsManagedCallbackErrorPendingDisplay(for: .settings)
+        appState.setActiveSettingsTab(.general)
+
+        appState.markSettingsLLMCallbackErrorDisplayed(for: .settings, visibleIn: .ai)
+        appState.markSettingsManagedCallbackErrorDisplayed(for: .settings, visibleIn: .subscription)
+        appState.resetTransientSettingsMessages()
+
+        XCTAssertEqual(appState.llmError(for: .settings), "OpenRouter failed.")
+        XCTAssertEqual(appState.managedError(for: .settings), "Google failed.")
+
+        appState.setActiveSettingsTab(.ai)
+        appState.markSettingsLLMCallbackErrorDisplayed(for: .settings, visibleIn: .ai)
+        appState.setActiveSettingsTab(.subscription)
+        appState.markSettingsManagedCallbackErrorDisplayed(for: .settings, visibleIn: .subscription)
         appState.resetTransientSettingsMessages()
 
         XCTAssertNil(appState.llmError(for: .settings))
