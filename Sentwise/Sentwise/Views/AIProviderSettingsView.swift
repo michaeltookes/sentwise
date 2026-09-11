@@ -17,7 +17,9 @@ struct AIProviderSettingsView: View {
                     if appState.isManagedProviderActive {
                         LabeledContent("Status") { ActiveProviderBadge() }
                     } else {
-                        Button("Use Sentwise AI") { appState.selectLLMProvider(.managed) }
+                        Button("Use Sentwise AI") {
+                            appState.selectLLMProvider(.managed, messageSurface: .settings)
+                        }
                             .accessibilityIdentifier("useManagedInference")
                             .accessibilityLabel("Use Sentwise AI")
                     }
@@ -31,19 +33,21 @@ struct AIProviderSettingsView: View {
                     .accessibilityLabel("Open the Subscription tab")
                 } else {
                     if !appState.isManagedProviderActive {
-                        Button("Use Sentwise AI") { appState.selectLLMProvider(.managed) }
+                        Button("Use Sentwise AI") {
+                            appState.selectLLMProvider(.managed, messageSurface: .settings)
+                        }
                             .accessibilityIdentifier("useManagedInference")
                             .accessibilityLabel("Use Sentwise AI")
                     }
                     Text("Sign in or create your account")
                         .font(.caption).foregroundStyle(.secondary)
-                    ManagedSignInControls()
+                    ManagedSignInControls(messageSurface: .settings)
                 }
-                ManagedAccountErrorMessage()
+                ManagedAccountErrorMessage(messageSurface: .settings, settingsDisplayTab: .ai)
             }
 
             Section("Use your own AI") {
-                BYOProviderControls()
+                BYOProviderControls(messageSurface: .settings, settingsDisplayTab: .ai)
             }
 
             Section("Voice") {
@@ -60,7 +64,7 @@ struct AIProviderSettingsView: View {
                 }
 
                 Button {
-                    Task { await appState.learnVoiceProfile() }
+                    Task { await appState.learnVoiceProfile(messageSurface: .settings) }
                 } label: {
                     if appState.isLearningVoice {
                         HStack(spacing: 6) {
@@ -78,7 +82,7 @@ struct AIProviderSettingsView: View {
 
                 if appState.voiceProfile != nil {
                     Button("Forget voice profile", role: .destructive) {
-                        appState.forgetVoiceProfile()
+                        appState.forgetVoiceProfile(messageSurface: .settings)
                     }
                     .disabled(appState.isLearningVoice)
                     .accessibilityLabel("Forget voice profile")
@@ -90,7 +94,7 @@ struct AIProviderSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if let error = appState.voiceError {
+                if let error = appState.voiceError(for: .settings) {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.red)

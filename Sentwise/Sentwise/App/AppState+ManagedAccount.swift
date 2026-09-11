@@ -40,15 +40,18 @@ extension AppState {
     /// `isHuntMode` is injectable so unit tests can exercise the fake path.
     func startManagedSignIn(
         activatesManagedProvider: Bool = true,
-        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
+        messageSurface: TransientMessageSurface = .shared
     ) async {
-        managedError = nil
+        setManagedError(nil, for: messageSurface)
+        pendingManagedSignInMessageSurface = messageSurface
         didDeleteManagedAccount = false
         let email = managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard email.contains("@"), email.count >= 3 else {
-            managedError = "Enter your email address."
+            setManagedError("Enter your email address.", for: messageSurface)
             return
         }
+        let settingsMessageGeneration = settingsTransientMessageGeneration
 
         if isHuntMode {
             // Deterministic offline fake: advance to code entry, no network.
@@ -70,7 +73,11 @@ extension AppState {
             managedSignInStage = .codeSent
         } catch {
             pendingManagedSignInActivatesProvider = true
-            managedError = Self.managedMessage(for: error)
+            reportManagedErrorIfCurrent(
+                Self.managedMessage(for: error),
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
         }
     }
 
@@ -80,24 +87,30 @@ extension AppState {
     /// In Prowl hunt mode this is a deterministic, fully-offline fake: any non-empty
     /// code completes to the signed-in fixture account without any network or Clerk
     /// call (item 70). `isHuntMode` is injectable so unit tests can exercise it.
-    func verifyManagedCode(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
-        managedError = nil
+    func verifyManagedCode(
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
+        messageSurface: TransientMessageSurface = .shared
+    ) async {
+        setManagedError(nil, for: messageSurface)
         let activatesManagedProvider = pendingManagedSignInActivatesProvider
         if isHuntMode {
             // Deterministic offline fake: the button completes to the fixture account.
             // This avoids macOS TextField commit timing making Prowl hunts flaky.
             let signedInEmail = pendingManagedSignInEmail
                 ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
-            if activatesManagedProvider, llmProviderKind != .managed { selectLLMProvider(.managed) }
+            if activatesManagedProvider, llmProviderKind != .managed {
+                selectLLMProvider(.managed, messageSurface: messageSurface)
+            }
             finalizeManagedSignIn(email: signedInEmail, accountID: "hunt-email:\(signedInEmail)")
             return
         }
 
         let code = managedCodeInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty else {
-            managedError = "Enter the code from your email."
+            setManagedError("Enter the code from your email.", for: messageSurface)
             return
         }
+        let settingsMessageGeneration = settingsTransientMessageGeneration
 
         managedBusyAction = .verifyCode
         defer { managedBusyAction = nil }
@@ -105,7 +118,11 @@ extension AppState {
         do {
             result = try await managedAccount.completeSignIn(code: code)
         } catch {
-            managedError = Self.managedMessage(for: error)
+            reportManagedErrorIfCurrent(
+                Self.managedMessage(for: error),
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
             return
         }
 
@@ -113,43 +130,65 @@ extension AppState {
         let signedInEmail = pendingManagedSignInEmail
             ?? managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
         if activatesManagedProvider, llmProviderKind != .managed {
-            selectLLMProvider(.managed)
+            selectLLMProvider(.managed, messageSurface: messageSurface)
         }
         finalizeManagedSignIn(email: signedInEmail, accountID: result.accountIdentifier)
     }
 
-    func resetManagedSignInFlow() {
+    func resetManagedSignInFlow(
+        messageSurface: TransientMessageSurface = .shared,
+        resetPendingMessageSurface: Bool = true
+    ) {
         pendingManagedSignInEmail = nil
+        if resetPendingMessageSurface {
+            pendingManagedSignInMessageSurface = .shared
+        }
         managedSignInStage = .idle
         managedCodeInput = ""
-        managedError = nil
+        setManagedError(nil, for: messageSurface)
         pendingManagedSignInActivatesProvider = true
     }
 
-    func cancelManagedSignInFlow() async {
+    func cancelManagedSignInFlow(messageSurface: TransientMessageSurface = .shared) async {
+        let wasAwaitingBrowser = managedSignInStage == .awaitingBrowser
+        let canceledSurface = pendingManagedSignInMessageSurface
         await managedAccount.cancelSignIn()
-        resetManagedSignInFlow()
+        resetManagedSignInFlow(messageSurface: messageSurface, resetPendingMessageSurface: false)
+        if wasAwaitingBrowser {
+            clearManagedOAuthMessageSurfaceBestEffort()
+            clearManagedOAuthFlowIDBestEffort()
+            persistCanceledManagedOAuthCallbackSurfaceBestEffort(canceledSurface)
+        }
     }
 
     /// Signs out of the managed account: clears stored tokens and connected state.
     /// Local mail data and voice profile are untouched.
-    func signOutManaged() async {
-        managedError = nil
+    func signOutManaged(messageSurface: TransientMessageSurface = .shared) async {
+        setManagedError(nil, for: messageSurface)
+        let settingsMessageGeneration = settingsTransientMessageGeneration
         managedBusyAction = .signOut
         defer { managedBusyAction = nil }
         do {
             try await managedAccount.signOut()
         } catch {
             if await managedAccount.isSignedIn {
-                managedError = Self.managedMessage(for: error)
+                reportManagedErrorIfCurrent(
+                    Self.managedMessage(for: error),
+                    generation: settingsMessageGeneration,
+                    surface: messageSurface
+                )
                 return
             }
-            applyManagedSignedOutState(clearEmailInput: true)
-            managedError = Self.managedMessage(for: error)
+            applyManagedSignedOutState(clearEmailInput: true, messageSurface: messageSurface)
+            reportManagedErrorIfCurrent(
+                Self.managedMessage(for: error),
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
             saveSettings()
             return
         }
-        applyManagedSignedOutState(clearEmailInput: true)
+        applyManagedSignedOutState(clearEmailInput: true, messageSurface: messageSurface)
         saveSettings()
     }
 
@@ -163,8 +202,12 @@ extension AppState {
     /// the signed-in fixture (so the hunt can keep walking). `isHuntMode` is
     /// injectable for unit tests.
     @discardableResult
-    func deleteManagedAccount(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async -> Bool {
-        managedError = nil
+    func deleteManagedAccount(
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
+        messageSurface: TransientMessageSurface = .shared
+    ) async -> Bool {
+        setManagedError(nil, for: messageSurface)
+        let settingsMessageGeneration = settingsTransientMessageGeneration
         if isHuntMode {
             // Offline no-op: the confirm button "works" without teardown.
             return true
@@ -175,8 +218,12 @@ extension AppState {
         do {
             try await llm.deleteManagedAccount()
         } catch {
-            await reconcileManagedAccountState(after: error, provider: .managed)
-            managedError = Self.managedMessage(for: error)
+            await reconcileManagedAccountState(after: error, provider: .managed, messageSurface: messageSurface)
+            reportManagedErrorIfCurrent(
+                Self.managedMessage(for: error),
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
             return false
         }
 
@@ -188,18 +235,25 @@ extension AppState {
             do {
                 try await managedAccount.invalidateStoredCredentialsForDeletedAccount()
             } catch {
-                managedError = "Your account was deleted, but Sentwise couldn't clear local credentials. "
-                    + Self.managedMessage(for: error)
+                reportManagedErrorIfCurrent(
+                    "Your account was deleted, but Sentwise couldn't clear local credentials. "
+                        + Self.managedMessage(for: error),
+                    generation: settingsMessageGeneration,
+                    surface: messageSurface
+                )
                 return false
             }
         }
-        applyManagedSignedOutState(clearEmailInput: true)
+        applyManagedSignedOutState(clearEmailInput: true, messageSurface: messageSurface)
         didDeleteManagedAccount = true
         saveSettings()
         return true
     }
 
-    private func applyManagedSignedOutState(clearEmailInput: Bool) {
+    private func applyManagedSignedOutState(
+        clearEmailInput: Bool,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
         clearManagedQuotaCache()
         isManagedSignedIn = false
         managedAccountEmail = ""
@@ -209,10 +263,14 @@ extension AppState {
         }
         managedCodeInput = ""
         pendingManagedSignInEmail = nil
+        pendingManagedSignInMessageSurface = .shared
+        clearManagedOAuthMessageSurfaceBestEffort()
+        clearManagedOAuthFlowIDBestEffort()
+        clearCanceledManagedOAuthCallbackSurfaceBestEffort()
         pendingManagedSignInActivatesProvider = true
         managedSignInStage = .idle
         googleOAuthInterestRegistered = false
-        googleOAuthInterestError = nil
+        setGoogleOAuthInterestError(nil, for: messageSurface)
         if llmProviderKind == .managed {
             verifiedLLMModel = ""
             refreshLLMConnectionStatus()
@@ -222,68 +280,6 @@ extension AppState {
 
     var managedAccountDisplayEmail: String {
         managedAccountStatus?.email ?? managedAccountEmail
-    }
-
-    // MARK: - Error mapping
-
-    static func managedMessage(for error: Error) -> String {
-        managedClerkMessage(for: error)
-            ?? managedLLMMessage(for: error)
-            ?? managedKeychainMessage(for: error)
-            ?? error.localizedDescription
-    }
-
-    private static func managedClerkMessage(for error: Error) -> String? {
-        switch error {
-        case ClerkError.transport:
-            return "Couldn't reach Sentwise sign-in. Check your connection and try again."
-        case ClerkError.http(_, let message, _):
-            return message ?? "Sign-in failed. Please try again."
-        case ClerkError.notComplete(_, let missingFields, _) where !missingFields.isEmpty:
-            return "Sign-up couldn't finish: the account service still requires "
-                + missingFields.joined(separator: ", ")
-                + ". This is a Sentwise configuration issue, not your code — please contact support."
-        case ClerkError.notComplete:
-            return "That code didn't complete sign-in. Request a new code and try again."
-        case ClerkError.emailCodeUnsupported:
-            return "This account can't sign in with an email code."
-        case ClerkError.malformedResponse:
-            return "Unexpected response from sign-in. Please try again."
-        default:
-            return nil
-        }
-    }
-
-    private static func managedLLMMessage(for error: Error) -> String? {
-        switch error {
-        case LLMError.transport:
-            return "Couldn't reach Sentwise sign-in. Check your connection and try again."
-        case LLMError.managedNotSignedIn:
-            return "Sign-in didn't stick. Please try again."
-        case LLMError.managedAccountDeletionFailed(let message):
-            return message
-        case LLMError.http(let status, let message):
-            let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                return trimmed
-            }
-            return "Sentwise account service returned HTTP \(status). Please try again."
-        case LLMError.invalidResponse(let detail):
-            return "Unexpected response from Sentwise account service. Please try again. (\(detail))"
-        default:
-            return nil
-        }
-    }
-
-    private static func managedKeychainMessage(for error: Error) -> String? {
-        switch error {
-        case KeychainError.unexpectedStatus(let status):
-            return "Couldn't update Sentwise AI credentials in Keychain. Keychain returned status \(status)."
-        case KeychainError.dataEncodingFailed:
-            return "Couldn't update Sentwise AI credentials in Keychain."
-        default:
-            return nil
-        }
     }
 
     // MARK: - Launch state (item 56a)
@@ -478,7 +474,11 @@ extension AppState {
     /// whose staleness guards would otherwise swallow the error can still surface
     /// it — the configuration changed *because of* this failure, not under the user.
     @discardableResult
-    func reconcileManagedAccountState(after error: Error, provider: LLMProviderKind) async -> Bool {
+    func reconcileManagedAccountState(
+        after error: Error,
+        provider: LLMProviderKind,
+        messageSurface: TransientMessageSurface = .shared
+    ) async -> Bool {
         guard provider == .managed else { return false }
         if case LLMError.managedTrialExpired = error {
             supersedeInFlightManagedAccountStatusRefreshes()
@@ -491,7 +491,7 @@ extension AppState {
         guard case LLMError.managedNotSignedIn = error else { return false }
         guard !(await managedAccount.isSignedIn) else { return false }
 
-        applyManagedSignedOutState(clearEmailInput: false)
+        applyManagedSignedOutState(clearEmailInput: false, messageSurface: messageSurface)
         saveSettings()
         return true
     }

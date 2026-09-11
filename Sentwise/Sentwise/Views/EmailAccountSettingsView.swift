@@ -47,7 +47,7 @@ struct EmailAccountSettingsView: View {
             presenting: accountPendingRemoval
         ) { account in
             Button("Remove", role: .destructive) {
-                appState.removeSavedAccount(account)
+                appState.removeSavedAccount(account, messageSurface: .settings)
                 accountPendingRemoval = nil
             }
             Button("Cancel", role: .cancel) { accountPendingRemoval = nil }
@@ -126,7 +126,7 @@ struct EmailAccountSettingsView: View {
                     Text(appState.mailEmail).foregroundStyle(.secondary)
                 }
                 Button("Disconnect", role: .destructive) {
-                    appState.disconnectMail()
+                    appState.disconnectMail(messageSurface: .settings)
                 }
                 .disabled(appState.isConnecting)
                 .accessibilityLabel("Disconnect \(appState.mailEmail)")
@@ -141,13 +141,13 @@ struct EmailAccountSettingsView: View {
                 connectForm
             }
 
-            if let error = appState.connectionError {
+            if let error = appState.connectionError(for: .settings) {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
             }
 
-            WorkspaceAuthGuidanceView()
+            WorkspaceAuthGuidanceView(messageSurface: .settings, settingsDisplayTab: .account)
         }
     }
 
@@ -296,11 +296,11 @@ struct EmailAccountSettingsView: View {
         if isAddingAccount {
             newAccountForm.commitEmailEditFromUser()
             let credentials = newAccountForm.credentials
-            didConnect = await appState.testConnection(with: credentials) {
+            didConnect = await appState.testConnection(with: credentials, messageSurface: .settings) {
                 isAddingAccount && newAccountForm.credentials == $0
             }
         } else {
-            didConnect = await appState.testConnection()
+            didConnect = await appState.testConnection(messageSurface: .settings)
         }
         if didConnect && appState.isAccountConnected {
             isAddingAccount = false
@@ -311,15 +311,15 @@ struct EmailAccountSettingsView: View {
     private func switchTo(_ account: SavedMailAccount) async {
         isAddingAccount = false
         newAccountForm.resetForNewAccount()
-        await appState.switchToSavedAccount(account)
+        await appState.switchToSavedAccount(account, messageSurface: .settings)
     }
 
     /// Clears only the local add-account form so the connected account remains
     /// active while the user enters and verifies a new one.
     private func beginAddingAccount() {
         newAccountForm.resetForNewAccount()
-        appState.connectionError = nil
-        appState.clearWorkspaceAuthGuidance()
+        appState.setConnectionError(nil, for: .settings)
+        appState.clearWorkspaceAuthGuidance(for: .settings)
         isAddingAccount = true
         isMailEmailFocused = true
     }
@@ -331,8 +331,8 @@ struct EmailAccountSettingsView: View {
     private func abandonAddingAccountIfNeeded() {
         guard isAddingAccount else { return }
         isAddingAccount = false
-        appState.connectionError = nil
-        appState.clearWorkspaceAuthGuidance()
+        appState.setConnectionError(nil, for: .settings)
+        appState.clearWorkspaceAuthGuidance(for: .settings)
         newAccountForm.resetForNewAccount()
     }
 
@@ -362,10 +362,10 @@ struct EmailAccountSettingsView: View {
                     let changed = newAccountForm.host != $0
                     newAccountForm.updateHostFromUser($0)
                     if changed {
-                        appState.clearWorkspaceAuthGuidance()
+                    appState.clearWorkspaceAuthGuidance(for: .settings)
                     }
                 } else {
-                    appState.updateMailHostFromUser($0)
+                    appState.updateMailHostFromUser($0, messageSurface: .settings)
                 }
             }
         )
@@ -379,10 +379,10 @@ struct EmailAccountSettingsView: View {
                     let changed = newAccountForm.port != $0
                     newAccountForm.port = $0
                     if changed {
-                        appState.clearWorkspaceAuthGuidance()
+                    appState.clearWorkspaceAuthGuidance(for: .settings)
                     }
                 } else {
-                    appState.updateMailPortFromUser($0)
+                    appState.updateMailPortFromUser($0, messageSurface: .settings)
                 }
             }
         )
@@ -396,10 +396,10 @@ struct EmailAccountSettingsView: View {
                     let changed = newAccountForm.appPassword != $0
                     newAccountForm.appPassword = $0
                     if changed {
-                        appState.clearWorkspaceAuthGuidance()
+                    appState.clearWorkspaceAuthGuidance(for: .settings)
                     }
                 } else {
-                    appState.updateMailAppPasswordFromUser($0)
+                    appState.updateMailAppPasswordFromUser($0, messageSurface: .settings)
                 }
             }
         )
@@ -413,10 +413,10 @@ struct EmailAccountSettingsView: View {
                     let changed = newAccountForm.email != $0
                     newAccountForm.updateEmailFromUser($0)
                     if changed {
-                        appState.clearWorkspaceAuthGuidance()
+                    appState.clearWorkspaceAuthGuidance(for: .settings)
                     }
                 } else {
-                    appState.updateMailEmailFromUser($0)
+                    appState.updateMailEmailFromUser($0, messageSurface: .settings)
                 }
             }
         )

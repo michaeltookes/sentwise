@@ -17,7 +17,7 @@ extension AppState {
         do {
             try removeLegacyOAuthCredentialsIfPresent()
         } catch {
-            connectionError = Self.legacyOAuthCleanupMessage(error: error)
+            setAppWideConnectionError(Self.legacyOAuthCleanupMessage(error: error))
         }
     }
 

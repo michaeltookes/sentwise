@@ -140,6 +140,96 @@ final class AppStateConnectionStaleResultTests: XCTestCase {
         XCTAssertEqual(appState.mailEmail, "")
         XCTAssertTrue(appState.savedAccounts.isEmpty)
     }
+
+    func testSettingsResetIgnoresExplicitConnectionFailure() async {
+        let provider = SuspendedAppMailProvider()
+        let appState = makeAppState(provider: provider)
+        let connection = Task {
+            await appState.testConnection(with: workspaceCredentials(), messageSurface: .settings)
+        }
+        await fulfillment(of: [provider.didStartVerification], timeout: 1)
+
+        appState.resetTransientSettingsMessages()
+        provider.complete(with: .failure(MailError.authenticationFailed(workspaceInvalidCredentials)))
+        let didConnect = await connection.value
+
+        XCTAssertFalse(didConnect)
+        XCTAssertNil(appState.connectionError)
+        XCTAssertEqual(appState.workspaceAuthFailure, .none)
+        XCTAssertNil(appState.workspaceAuthGuidance)
+        XCTAssertFalse(appState.activityEvents.contains { $0.kind == .workspaceAuthGuidance })
+    }
+
+    func testSettingsResetIgnoresExplicitConnectionSuccess() async {
+        let provider = SuspendedAppMailProvider()
+        let appState = makeAppState(provider: provider)
+        let connection = Task {
+            await appState.testConnection(with: workspaceCredentials(), messageSurface: .settings)
+        }
+        await fulfillment(of: [provider.didStartVerification], timeout: 1)
+
+        appState.resetTransientSettingsMessages()
+        provider.complete(with: .success(()))
+        let didConnect = await connection.value
+
+        XCTAssertFalse(didConnect)
+        XCTAssertFalse(appState.isAccountConnected)
+        XCTAssertEqual(appState.mailEmail, "")
+        XCTAssertTrue(appState.savedAccounts.isEmpty)
+    }
+
+    func testSettingsConnectionFailureUsesSettingsErrorBucket() async {
+        let provider = FakeAppMailProvider(result: .failure(.connectionFailed("offline")))
+        let appState = makeAppState(provider: provider)
+        appState.connectionError = "setup assistant error"
+
+        let didConnect = await appState.testConnection(
+            with: workspaceCredentials(email: "marcus@example.com"),
+            messageSurface: .settings
+        )
+
+        XCTAssertFalse(didConnect)
+        XCTAssertEqual(appState.connectionError, "setup assistant error")
+        XCTAssertTrue(appState.connectionError(for: .settings)?.contains("offline") ?? false)
+    }
+
+    func testSettingsConnectionSuccessClearsSharedConnectionFallback() async {
+        let provider = FakeAppMailProvider(result: .success(()))
+        let appState = makeAppState(provider: provider)
+        appState.connectionError = "setup assistant error"
+
+        let didConnect = await appState.testConnection(
+            with: workspaceCredentials(email: "marcus@example.com"),
+            messageSurface: .settings
+        )
+
+        XCTAssertTrue(didConnect)
+        XCTAssertNil(appState.connectionError)
+        XCTAssertNil(appState.connectionError(for: .settings))
+    }
+
+    func testSettingsWorkspaceAuthFailureUsesSettingsGuidanceBucket() async {
+        let provider = FakeAppMailProvider(result: .failure(.authenticationFailed(workspaceInvalidCredentials)))
+        let appState = makeAppState(provider: provider)
+        appState.workspaceAuthFailure = .webLoginRequired
+        appState.workspaceAuthFailureAccountID = "setup"
+        appState.workspaceAuthIsCustomDomain = false
+
+        let didConnect = await appState.testConnection(
+            with: workspaceCredentials(email: "marcus@example.com"),
+            messageSurface: .settings
+        )
+
+        XCTAssertFalse(didConnect)
+        XCTAssertEqual(appState.workspaceAuthFailure, .webLoginRequired)
+        XCTAssertEqual(appState.workspaceAuthFailureAccountID, "setup")
+        XCTAssertFalse(appState.workspaceAuthIsCustomDomain)
+        XCTAssertNotNil(appState.workspaceAuthGuidance)
+        XCTAssertNotNil(appState.workspaceAuthGuidance(for: .settings))
+        XCTAssertEqual(appState.settingsTransientMessages.workspaceAuthFailure, .appPasswordRejectedWorkspace)
+        XCTAssertEqual(appState.settingsTransientMessages.workspaceAuthFailureAccountID, "marcus@example.com")
+        XCTAssertTrue(appState.settingsTransientMessages.workspaceAuthIsCustomDomain)
+    }
 }
 
 @MainActor

@@ -42,6 +42,16 @@ final class AppStateProviderActivationTests: XCTestCase {
         )
     }
 
+    private func callbackState(from urlString: String?) -> String? {
+        guard let urlString else { return nil }
+        return URLComponents(string: urlString)?.queryItems?.first { $0.name == "state" }?.value
+    }
+
+    private func openRouterCallbackState(from authURL: URL) -> String? {
+        let items = URLComponents(url: authURL, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return callbackState(from: items.first { $0.name == "callback_url" }?.value)
+    }
+
     // MARK: - Active-provider badge logic
 
     func testActiveProviderFlagsAreMutuallyExclusive() {
@@ -62,13 +72,18 @@ final class AppStateProviderActivationTests: XCTestCase {
 
         let url = try XCTUnwrap(appState.beginOpenRouterProvisioning())
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        XCTAssertEqual(items.first { $0.name == "callback_url" }?.value, AppState.openRouterCallbackURL)
+        let callbackURL = items.first { $0.name == "callback_url" }?.value
+        XCTAssertTrue(callbackURL?.hasPrefix(AppState.openRouterCallbackURL) ?? false)
         XCTAssertTrue(AppState.openRouterCallbackURL.hasSuffix("/openrouter/callback"))
+        let callbackItems = URLComponents(string: callbackURL ?? "")?.queryItems ?? []
+        XCTAssertFalse((callbackItems.first { $0.name == "state" }?.value ?? "").isEmpty)
         XCTAssertFalse((items.first { $0.name == "code_challenge" }?.value ?? "").isEmpty)
         XCTAssertEqual(items.first { $0.name == "code_challenge_method" }?.value, "S256")
 
         let verifier = try secrets.value(for: .openRouterPKCEVerifier)
         XCTAssertFalse((verifier ?? "").isEmpty)
+        XCTAssertEqual(try secrets.value(for: .openRouterPKCEMessageSurface), "shared")
+        XCTAssertFalse((try secrets.value(for: .openRouterPKCEFlowID) ?? "").isEmpty)
     }
 
     func testBeginOpenRouterProvisioningDoesNotOverwritePendingVerifier() throws {
@@ -80,6 +95,7 @@ final class AppStateProviderActivationTests: XCTestCase {
 
         XCTAssertNil(url)
         XCTAssertEqual(try secrets.value(for: .openRouterPKCEVerifier), "VER_A")
+        XCTAssertEqual(try secrets.value(for: .openRouterPKCEMessageSurface), "shared")
         XCTAssertTrue(appState.isOpenRouterProvisioning)
         XCTAssertNotNil(appState.llmError)
     }
@@ -184,6 +200,27 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertEqual(appState.llmProviderKind, .managed, "provider is left unchanged on failure")
     }
 
+    func testOpenRouterCallbackFailureUsesInitiatingSettingsSurface() async throws {
+        let secrets = InMemorySecretStore()
+        let appState = makeAppState(provider: "managed", secrets: secrets)
+        let url = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
+        let flowID = try XCTUnwrap(openRouterCallbackState(from: url))
+        let transport = ActivationFakeJSONTransport(
+            HTTPResponse(statusCode: 500, body: Data(#"{"error":"bad code"}"#.utf8))
+        )
+
+        await appState.handleOpenRouterCallback(
+            code: "CODE",
+            flowID: flowID,
+            provisioner: OpenRouterKeyProvisioner(transport: transport)
+        )
+
+        XCTAssertFalse(appState.isOpenRouterProvisioning)
+        XCTAssertNil(appState.llmError)
+        XCTAssertNotNil(appState.llmError(for: .settings))
+        XCTAssertEqual(appState.llmProviderKind, .managed)
+    }
+
     func testCancelOpenRouterProvisioningDuringExchangeDiscardsReturnedKey() async throws {
         let secrets = InMemorySecretStore(seed: [.openRouterPKCEVerifier: "VER"])
         let appState = makeAppState(provider: "managed", secrets: secrets)
@@ -250,7 +287,7 @@ final class AppStateProviderActivationTests: XCTestCase {
 
         XCTAssertNil(appState.routableCallback(for: url, isHuntMode: true),
                      "a hunt must never reach the completion paths, even via a stray deep link")
-        XCTAssertEqual(appState.routableCallback(for: url, isHuntMode: false), .openRouter(code: "CODE"))
+        XCTAssertEqual(appState.routableCallback(for: url, isHuntMode: false), .openRouter(code: "CODE", flowID: nil))
         XCTAssertNil(appState.routableCallback(for: URL(string: "https://evil?code=x")!, isHuntMode: false))
     }
 
@@ -278,8 +315,9 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertEqual(opened?.absoluteString, "https://accounts.google.com/o/oauth2/auth?x=1")
         XCTAssertEqual(appState.managedSignInStage, .awaitingBrowser,
                        "opening the browser should switch the panel to the waiting state")
+        let flowID = try XCTUnwrap(callbackState(from: transport.requests[0].form["redirect_url"]))
 
-        await appState.handleManagedOAuthCallback(nonce: "nonce_1")
+        await appState.handleManagedOAuthCallback(nonce: "nonce_1", flowID: flowID)
 
         XCTAssertEqual(appState.managedSignInStage, .idle, "a completed sign-in leaves the waiting state")
         XCTAssertTrue(appState.isManagedSignedIn)
@@ -351,8 +389,33 @@ final class AppStateProviderActivationTests: XCTestCase {
 
         XCTAssertEqual(appState.managedSignInStage, .idle)
         XCTAssertFalse(appState.isManagedSignedIn)
-        XCTAssertNotNil(appState.managedError)
+        XCTAssertNil(appState.managedError)
         XCTAssertNil(try secrets.value(for: .managedSessionID))
+        XCTAssertNil(try secrets.value(for: .managedOAuthCanceledCallbackSurface))
+    }
+
+    func testManagedOAuthCallbackFailureUsesInitiatingSettingsSurface() async throws {
+        let secrets = InMemorySecretStore()
+        let transport = QueueClerkTransport([
+            clerkReply(startResponse, clientToken: "client_A"),
+            clerkReply(#"{"errors":[{"message":"Bad nonce"}]}"#, status: 400, clientToken: "client_B")
+        ])
+        let clerk = ClerkClient(
+            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            transport: transport
+        )
+        let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
+        let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
+
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, messageSurface: .settings)
+        let flowID = try XCTUnwrap(callbackState(from: transport.requests[0].form["redirect_url"]))
+
+        await appState.handleManagedOAuthCallback(nonce: "bad_nonce", flowID: flowID)
+
+        XCTAssertEqual(appState.managedSignInStage, .idle)
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertNil(appState.managedError)
+        XCTAssertNotNil(appState.managedError(for: .settings))
     }
 
     func testStaleManagedOAuthCallbackDoesNotClearEmailCodeStage() async {

@@ -112,11 +112,10 @@ extension AppState {
     /// Removes the active account's password for disconnect. The legacy shared
     /// slot is removed only when it belongs to the active account, because it may
     /// still back an older inactive account after a failed migration.
-    func removeActiveMailPasswordForDisconnect() -> ActiveMailPasswordRemoval? {
+    func removeActiveMailPasswordForDisconnect(messageSurface: TransientMessageSurface = .shared) -> ActiveMailPasswordRemoval? {
         let activeEmail = mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let activeKey = activeEmail.isEmpty ? nil : SecretKey.mailAppPassword(email: activeEmail)
-        let activeAccountPassword: String?
-        let activeLegacyPassword: String?
+        let activeAccountPassword: String?, activeLegacyPassword: String?
 
         do {
             if let activeKey {
@@ -130,7 +129,7 @@ extension AppState {
                 activeLegacyPassword = nil
             }
         } catch {
-            connectionError = Self.keychainMessage(action: "read", error: error)
+            setConnectionError(Self.keychainMessage(action: "read", error: error), for: messageSurface)
             return nil
         }
 
@@ -147,7 +146,7 @@ extension AppState {
                 legacyPassword: activeLegacyPassword
             )
         } catch {
-            connectionError = Self.keychainMessage(action: "remove", error: error)
+            setConnectionError(Self.keychainMessage(action: "remove", error: error), for: messageSurface)
             return nil
         }
     }
@@ -264,12 +263,12 @@ extension AppState {
     /// verify path so the connection status stays honest. Both accounts' secrets
     /// are retained — only the *active* pointer moves. Pending drafts are left
     /// untouched; they stay scoped to their originating account by identity.
-    func switchToSavedAccount(_ account: SavedMailAccount) async {
-        clearWorkspaceAuthGuidance()
+    func switchToSavedAccount(_ account: SavedMailAccount, messageSurface: TransientMessageSurface = .shared) async {
+        clearWorkspaceAuthGuidance(for: messageSurface)
         guard !isActiveAccount(account) else { return }
 
         guard let password = storedMailPassword(forEmail: account.email), !password.isEmpty else {
-            connectionError = "No saved password for \(account.email). Reconnect this account to continue."
+            setConnectionError("No saved password for \(account.email). Reconnect this account to continue.", for: messageSurface)
             return
         }
 
@@ -285,9 +284,9 @@ extension AppState {
             host: account.host,
             port: account.port
         )
-        await testConnection(with: credentials)
+        let didConnect = await testConnection(with: credentials, messageSurface: messageSurface)
 
-        guard connectionError == nil, isAccountConnected, isActiveAccount(account) else {
+        guard didConnect, isAccountConnected, isActiveAccount(account) else {
             restoreConnectionSnapshot(settings: outgoingSettings)
             if wasWatching {
                 startWatchingIfReady()
@@ -306,18 +305,17 @@ extension AppState {
     /// secret and drops it from the list. If it was the active account, the app
     /// goes offline and the account inputs are cleared. Other accounts' secrets
     /// are never touched.
-    func removeSavedAccount(_ account: SavedMailAccount) {
-        connectionError = nil
+    func removeSavedAccount(_ account: SavedMailAccount, messageSurface: TransientMessageSurface = .shared) {
+        setConnectionError(nil, for: messageSurface)
         guard !isConnecting else {
-            connectionError = "Wait for the current connection test to finish before removing an account."
+            setConnectionError("Wait for the current connection test to finish before removing an account.", for: messageSurface)
             return
         }
         let wasCurrentAccount = SavedMailAccount.normalizedEmail(mailEmail) == account.id
         let shouldClearCurrentAccount = isActiveAccount(account) || wasCurrentAccount
-        let ownsWorkspaceGuidance = workspaceAuthFailureAccountID == account.id
+        let ownsWorkspaceGuidance = workspaceAuthGuidanceAccountID(for: messageSurface) == account.id
         let accountKey = SecretKey.mailAppPassword(email: account.email)
-        let previousAccountPassword: String?
-        let previousLegacyPassword: String?
+        let previousAccountPassword: String?, previousLegacyPassword: String?
         let shouldRemoveLegacyPassword: Bool
 
         do {
@@ -325,14 +323,11 @@ extension AppState {
             previousLegacyPassword = try legacyMailPasswordForOwnedAccount(account.email)
             shouldRemoveLegacyPassword = previousLegacyPassword != nil
         } catch {
-            connectionError = Self.keychainMessage(action: "read", error: error)
+            setConnectionError(Self.keychainMessage(action: "read", error: error), for: messageSurface)
             return
         }
 
-        let nextSettings = settingsAfterRemovingSavedAccount(
-            account,
-            clearCurrentAccount: shouldClearCurrentAccount
-        )
+        let nextSettings = settingsAfterRemovingSavedAccount(account, clearCurrentAccount: shouldClearCurrentAccount)
 
         do {
             try secrets.remove(accountKey)
@@ -341,11 +336,14 @@ extension AppState {
                 try secrets.remove(.mailAppPassword)
             }
         } catch {
-            connectionError = removedAccountRollbackMessage(
-                baseMessage: Self.keychainMessage(action: "remove", error: error),
-                accountEmail: account.email,
-                accountPassword: previousAccountPassword,
-                legacyPassword: shouldRemoveLegacyPassword ? previousLegacyPassword : nil
+            setConnectionError(
+                removedAccountRollbackMessage(
+                    baseMessage: Self.keychainMessage(action: "remove", error: error),
+                    accountEmail: account.email,
+                    accountPassword: previousAccountPassword,
+                    legacyPassword: shouldRemoveLegacyPassword ? previousLegacyPassword : nil
+                ),
+                for: messageSurface
             )
             return
         }
@@ -353,18 +351,21 @@ extension AppState {
         do {
             try persistSettingsSync(nextSettings)
         } catch {
-            connectionError = removedAccountRollbackMessage(
-                baseMessage: Self.settingsMessage(action: "save", error: error),
-                accountEmail: account.email,
-                accountPassword: previousAccountPassword,
-                legacyPassword: shouldRemoveLegacyPassword ? previousLegacyPassword : nil
+            setConnectionError(
+                removedAccountRollbackMessage(
+                    baseMessage: Self.settingsMessage(action: "save", error: error),
+                    accountEmail: account.email,
+                    accountPassword: previousAccountPassword,
+                    legacyPassword: shouldRemoveLegacyPassword ? previousLegacyPassword : nil
+                ),
+                for: messageSurface
             )
             return
         }
 
         savedAccounts = nextSettings.savedAccounts
 
-        if shouldClearCurrentAccount || ownsWorkspaceGuidance { clearWorkspaceAuthGuidance() }
+        if shouldClearCurrentAccount || ownsWorkspaceGuidance { clearWorkspaceAuthGuidance(for: messageSurface) }
         if shouldClearCurrentAccount {
             goOfflineAfterRemovingActiveAccount()
         }

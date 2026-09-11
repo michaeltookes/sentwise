@@ -135,7 +135,7 @@ extension AppState {
         do {
             try persistSettingsSync(settings)
         } catch {
-            connectionError = Self.settingsMessage(action: "save", error: error)
+            setAppWideConnectionError(Self.settingsMessage(action: "save", error: error))
             logger.error("Failed to save settings synchronously: \(error.localizedDescription)")
         }
     }

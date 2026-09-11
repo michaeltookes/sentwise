@@ -16,10 +16,10 @@ extension AppState {
         // The browser handed control back; put the app in front so the result is seen.
         NSApp.activate(ignoringOtherApps: true)
         switch callback {
-        case .managedOAuth(let nonce):
-            Task { await handleManagedOAuthCallback(nonce: nonce) }
-        case .openRouter(let code):
-            Task { await handleOpenRouterCallback(code: code) }
+        case .managedOAuth(let nonce, let flowID):
+            Task { await handleManagedOAuthCallback(nonce: nonce, flowID: flowID) }
+        case .openRouter(let code, let flowID):
+            Task { await handleOpenRouterCallback(code: code, flowID: flowID) }
         }
     }
 

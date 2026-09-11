@@ -13,21 +13,28 @@ final class SentwiseURLCallbackTests: XCTestCase {
     func testManagedOAuthCallbackParses() {
         XCTAssertEqual(
             parse("sentwise://oauth-callback?rotating_token_nonce=abc123"),
-            .managedOAuth(nonce: "abc123")
+            .managedOAuth(nonce: "abc123", flowID: nil)
         )
     }
 
     func testOpenRouterCallbackParses() {
         XCTAssertEqual(
             parse("sentwise://openrouter-callback?code=xyz789"),
-            .openRouter(code: "xyz789")
+            .openRouter(code: "xyz789", flowID: nil)
         )
     }
 
-    func testManagedOAuthIgnoresExtraParams() {
+    func testManagedOAuthParsesState() {
         XCTAssertEqual(
             parse("sentwise://oauth-callback?rotating_token_nonce=abc&state=z"),
-            .managedOAuth(nonce: "abc")
+            .managedOAuth(nonce: "abc", flowID: "z")
+        )
+    }
+
+    func testOpenRouterParsesState() {
+        XCTAssertEqual(
+            parse("sentwise://openrouter-callback?code=xyz789&state=z"),
+            .openRouter(code: "xyz789", flowID: "z")
         )
     }
 
@@ -61,7 +68,7 @@ final class SentwiseURLCallbackTests: XCTestCase {
     func testSchemeAndHostAreCaseInsensitive() {
         XCTAssertEqual(
             parse("SENTWISE://OAUTH-CALLBACK?rotating_token_nonce=abc"),
-            .managedOAuth(nonce: "abc")
+            .managedOAuth(nonce: "abc", flowID: nil)
         )
     }
 }

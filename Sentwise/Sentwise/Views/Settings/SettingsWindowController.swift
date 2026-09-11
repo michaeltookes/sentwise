@@ -86,6 +86,10 @@ final class SettingsPaneControllerCache {
         controllers.count
     }
 
+    var cachedTabs: Set<SettingsTab> {
+        Set(controllers.keys)
+    }
+
     func controller(for tab: SettingsTab) -> NSHostingController<AnyView> {
         if let controller = controllers[tab] {
             return controller
@@ -144,10 +148,14 @@ final class SettingsWindowController: NSObject, NSToolbarDelegate, NSWindowDeleg
     /// last-selected tab.
     func show() {
         if let window {
+            appState.activeSettingsTab = selectedTab
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
+
+        appState.resetTransientSettingsMessages()
+        appState.activeSettingsTab = selectedTab
 
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.contentSize),
@@ -184,18 +192,30 @@ final class SettingsWindowController: NSObject, NSToolbarDelegate, NSWindowDeleg
     /// Shows Settings and selects `tab` (backlog item 56b — a usage alert opens
     /// the AI Provider pane). Creates the window if needed, then switches tabs.
     func show(tab: SettingsTab) {
-        show()
+        guard window != nil else {
+            selectedTab = tab
+            show()
+            return
+        }
         window?.toolbar?.selectedItemIdentifier = tab.toolbarItemIdentifier
         updateContent(for: tab)
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    var cachedPaneTabs: Set<SettingsTab> {
+        paneControllerCache.cachedTabs
     }
 
     private func updateContent(for tab: SettingsTab) {
         guard tab != selectedTab else {
+            appState.activeSettingsTab = tab
             window?.title = tab.rawValue
             return
         }
 
         selectedTab = tab
+        appState.activeSettingsTab = tab
         // Swapping the content view controller lets AppKit re-place the window
         // (each pane is a hosting controller); pin the top-left corner across the
         // swap so switching tabs never moves the window.
@@ -209,6 +229,10 @@ final class SettingsWindowController: NSObject, NSToolbarDelegate, NSWindowDeleg
     // MARK: - NSWindowDelegate
 
     func windowWillClose(_ notification: Notification) {
+        // Clear the transient inline messages/errors the panes showed this
+        // session (e.g. a plan-change error) so reopening Settings starts clean.
+        appState.resetTransientSettingsMessages()
+        appState.activeSettingsTab = nil
         // Drop the window/hosting controllers so the next open rebuilds them; keep
         // `selectedTab` so reopening returns to the tab the user last viewed.
         window = nil

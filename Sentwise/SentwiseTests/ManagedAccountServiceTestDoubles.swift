@@ -105,11 +105,13 @@ func clerkReply(_ json: String, status: Int = 200, clientToken: String? = nil) -
 
 enum ManagedAccountTestSecretError: Error {
     case setDenied
+    case readDenied
     case removeDenied
 }
 
 final class ManagedAccountFailingSecretStore: SecretStore {
     var failOnSetKeys: Set<SecretKey> = []
+    var failOnValueKeys: Set<SecretKey> = []
     var failOnRemoveKeys: Set<SecretKey> = []
     private var storage: [String: String]
 
@@ -127,7 +129,10 @@ final class ManagedAccountFailingSecretStore: SecretStore {
     }
 
     func value(for key: SecretKey) throws -> String? {
-        storage[key.rawValue]
+        if failOnValueKeys.contains(key) {
+            throw ManagedAccountTestSecretError.readDenied
+        }
+        return storage[key.rawValue]
     }
 
     func remove(_ key: SecretKey) throws {

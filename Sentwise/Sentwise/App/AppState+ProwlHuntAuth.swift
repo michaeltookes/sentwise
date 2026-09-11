@@ -22,9 +22,14 @@ extension AppState {
     /// no real `sentwise://oauth-callback` round-trip. Mirrors the state the real
     /// `handleManagedOAuthCallback` reaches: managed becomes the active provider
     /// and the account is connected.
-    func completeManagedGoogleSignInForHunt(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) {
+    func completeManagedGoogleSignInForHunt(
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
         guard isHuntMode else { return }
-        if pendingManagedSignInActivatesProvider, llmProviderKind != .managed { selectLLMProvider(.managed) }
+        if pendingManagedSignInActivatesProvider, llmProviderKind != .managed {
+            selectLLMProvider(.managed, messageSurface: messageSurface)
+        }
         finalizeManagedSignIn(email: Self.huntFixtureGoogleEmail, accountID: "hunt-google")
     }
 
@@ -32,9 +37,12 @@ extension AppState {
     /// OpenAI-compatible provider, with no browser, no PKCE exchange, and no real
     /// key. Mirrors the state the real `handleOpenRouterCallback` reaches so the
     /// BYO card shows the OpenRouter (OpenAI-compatible) provider active.
-    func completeOpenRouterProvisioningForHunt(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) {
+    func completeOpenRouterProvisioningForHunt(
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
         guard isHuntMode else { return }
-        llmError = nil
+        setLLMError(nil, for: messageSurface)
         let fakeKey = "hunt-openrouter-fixture-key"
         // Store the fake key like the real callback so `refreshLLMConnectionStatus`
         // recomputes the provider as connected. In hunt mode (and tests) `secrets`
@@ -49,6 +57,7 @@ extension AppState {
         llmModel = Self.openRouterDefaultModel
         verifiedLLMModel = Self.openRouterDefaultModel
         isLLMConnected = true
+        pendingOpenRouterProvisioningMessageSurface = .shared
         refreshLLMConnectionStatus()
         resetDraftPreviewForLLMChange()
         saveSettings()

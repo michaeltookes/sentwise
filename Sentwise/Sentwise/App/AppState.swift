@@ -2,17 +2,16 @@ import Combine
 import SentwiseMail
 import os
 import SwiftUI
-
 private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "AppState")
-
 /// Central application state container and single source of truth for observed app state.
 @MainActor
 final class AppState: ObservableObject {
+    var settingsTransientMessageGeneration: UInt64 = 0
+    @Published var settingsTransientMessages = SettingsTransientMessages()
+    var activeSettingsTab: SettingsTab?
     // MARK: - Watch State
-
     /// Current watcher status. Drives the menu-bar status line.
     @Published var watchStatus: WatchStatus = .idle
-
     /// Number of drafts awaiting the user's approval.
     @Published var pendingDraftCount: Int = 0
 
@@ -28,7 +27,9 @@ final class AppState: ObservableObject {
 
     /// A user-facing message describing the last connection error, if any.
     @Published var connectionError: String?
-
+    var connectionErrorIsAppWide = false
+    var pendingManagedSignInMessageSurface: TransientMessageSurface = .shared
+    var pendingOpenRouterProvisioningMessageSurface: TransientMessageSurface = .shared
     // MARK: - Mail Account Inputs (bound to Settings fields)
 
     @Published var mailEmail: String
@@ -63,8 +64,7 @@ final class AppState: ObservableObject {
     /// A user-facing message describing the last body-fetch error, if any.
     @Published var bodyError: String?
 
-    // MARK: - AI Provider (bound to Settings fields)
-
+    // MARK: - AI Provider
     /// The selected LLM provider.
     @Published var llmProviderKind: LLMProviderKind
     /// The chosen model id (empty = provider default).
@@ -474,7 +474,7 @@ final class AppState: ObservableObject {
         self.llmBaseURL = settings.llmBaseURL
         self.verifiedLLMModel = managedLaunch.verifiedLLMModel
         self.llmAPIKey = managedLaunch.apiKey
-        self.isOpenRouterProvisioning = secrets.hasValue(for: .openRouterPKCEVerifier)
+        restoreOpenRouterProvisioningLaunchState()
         self.voiceProfile = persistence.loadVoiceProfile()
         restoreManagedAccountLaunchIdentity(managedLaunch, settings: settings)
         restoreReviewPersistenceState()

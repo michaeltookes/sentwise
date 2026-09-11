@@ -29,15 +29,11 @@ extension AppState {
             return
         }
         if status.quota == nil && !managedAccountStatusIsFresh {
-            planChangeFailed = false
-            planChangeMessage = Self.changePlanConfirmation(for: pending.tier)
-            planChangeConfirmationTier = pending.tier
+            publishPendingPlanChangeConfirmationIfCurrent(pending)
             return
         }
         finishPlanChangeReconciliation(generation: pending.generation)
-        planChangeFailed = false
-        planChangeMessage = Self.changePlanConfirmation(for: pending.tier)
-        planChangeConfirmationTier = pending.tier
+        publishPendingPlanChangeConfirmationIfCurrent(pending)
     }
 
     func clearStalePlanChangeConfirmationIfNeeded(after status: ManagedAccountStatus) {
@@ -56,7 +52,8 @@ extension AppState {
     func trackPlanChangeUntilQuotaArrivesIfNeeded(
         _ status: ManagedAccountStatus?,
         tier: PaddlePlan,
-        accountKey: String
+        accountKey: String,
+        settingsMessageGeneration: UInt64? = nil
     ) {
         guard let status,
               status.quota == nil,
@@ -69,7 +66,8 @@ extension AppState {
         pendingPlanChangeReconciliation = PendingPlanChangeReconciliation(
             tier: tier,
             accountKey: accountKey,
-            generation: planChangeReconciliationGeneration
+            generation: planChangeReconciliationGeneration,
+            settingsMessageGeneration: settingsMessageGeneration
         )
         scheduleManagedAccountStatusRefreshRetryAfterFailure()
     }
@@ -115,6 +113,16 @@ extension AppState {
         planChangeMessage = nil
         planChangeConfirmationTier = nil
         planChangeFailed = false
+    }
+
+    private func publishPendingPlanChangeConfirmationIfCurrent(_ pending: PendingPlanChangeReconciliation) {
+        if let settingsMessageGeneration = pending.settingsMessageGeneration,
+           !isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) {
+            return
+        }
+        planChangeFailed = false
+        planChangeMessage = Self.changePlanConfirmation(for: pending.tier)
+        planChangeConfirmationTier = pending.tier
     }
 
     private func clearDivergentPendingPlanChangeIfNeeded(after status: ManagedAccountStatus) {

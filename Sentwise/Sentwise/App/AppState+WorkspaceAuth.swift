@@ -16,22 +16,29 @@ extension AppState {
 
     // MARK: - Classification
 
-    /// Clears any prior Workspace guidance. Called when a fresh connect attempt
-    /// starts, and on disconnect / add-account transitions, so stale guidance never
-    /// lingers past the failure it described.
-    func clearWorkspaceAuthGuidance() {
-        workspaceAuthFailure = .none
-        workspaceAuthFailureAccountID = nil
-        workspaceAuthIsCustomDomain = false
+    /// Clears any prior Workspace guidance for one message surface. Called when a
+    /// fresh connect attempt starts, and on disconnect / add-account transitions,
+    /// so stale guidance never lingers past the failure it described.
+    func clearWorkspaceAuthGuidance(for surface: TransientMessageSurface = .shared) {
+        setWorkspaceAuthGuidance(
+            failure: .none,
+            accountID: nil,
+            isCustomDomain: false,
+            for: surface
+        )
     }
 
     /// Classifies a failed connection's error against the credentials that were
     /// tried, updates the guidance state, and — when it's a recognized policy
     /// failure — records a metadata-only activity entry (class name only, never the
     /// email, server text, or credential).
-    func classifyWorkspaceAuthFailure(_ error: Error, credentials: MailAccountCredentials) {
+    func classifyWorkspaceAuthFailure(
+        _ error: Error,
+        credentials: MailAccountCredentials,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
         guard case let MailError.authenticationFailed(serverText) = error else {
-            clearWorkspaceAuthGuidance()
+            clearWorkspaceAuthGuidance(for: messageSurface)
             return
         }
 
@@ -41,10 +48,15 @@ extension AppState {
             emailDomain: domain,
             imapHost: credentials.host
         )
-        workspaceAuthFailure = failure
-        workspaceAuthFailureAccountID = failure == .none ? nil : SavedMailAccount.normalizedEmail(credentials.email)
-        workspaceAuthIsCustomDomain = failure != .none
+        let accountID = failure == .none ? nil : SavedMailAccount.normalizedEmail(credentials.email)
+        let isCustomDomain = failure != .none
             && !WorkspaceAuthFailure.isConsumerGoogleDomain(domain)
+        setWorkspaceAuthGuidance(
+            failure: failure,
+            accountID: accountID,
+            isCustomDomain: isCustomDomain,
+            for: messageSurface
+        )
 
         guard failure != .none else { return }
         recordWorkspaceAuthGuidanceActivity(failure)
@@ -53,7 +65,43 @@ extension AppState {
     /// The guidance copy for the current failure state, or `nil` when there is no
     /// recognized policy failure to guide.
     var workspaceAuthGuidance: WorkspaceAuthGuidance? {
-        WorkspaceAuthGuidance.make(for: workspaceAuthFailure, isCustomDomain: workspaceAuthIsCustomDomain)
+        workspaceAuthGuidance(for: .shared)
+    }
+
+    func workspaceAuthGuidance(for surface: TransientMessageSurface) -> WorkspaceAuthGuidance? {
+        WorkspaceAuthGuidance.make(
+            for: workspaceAuthFailure(for: surface),
+            isCustomDomain: workspaceAuthIsCustomDomain(for: surface)
+        )
+    }
+
+    func workspaceAuthGuidanceAccountID(for surface: TransientMessageSurface) -> String? {
+        surface == .settings ? settingsTransientMessages.workspaceAuthFailureAccountID : workspaceAuthFailureAccountID
+    }
+
+    private func workspaceAuthFailure(for surface: TransientMessageSurface) -> WorkspaceAuthFailure {
+        surface == .settings ? settingsTransientMessages.workspaceAuthFailure : workspaceAuthFailure
+    }
+
+    private func workspaceAuthIsCustomDomain(for surface: TransientMessageSurface) -> Bool {
+        surface == .settings ? settingsTransientMessages.workspaceAuthIsCustomDomain : workspaceAuthIsCustomDomain
+    }
+
+    private func setWorkspaceAuthGuidance(
+        failure: WorkspaceAuthFailure,
+        accountID: String?,
+        isCustomDomain: Bool,
+        for surface: TransientMessageSurface
+    ) {
+        if surface == .settings {
+            settingsTransientMessages.workspaceAuthFailure = failure
+            settingsTransientMessages.workspaceAuthFailureAccountID = accountID
+            settingsTransientMessages.workspaceAuthIsCustomDomain = isCustomDomain
+        } else {
+            workspaceAuthFailure = failure
+            workspaceAuthFailureAccountID = accountID
+            workspaceAuthIsCustomDomain = isCustomDomain
+        }
     }
 
     /// Records the failure class in activity history with no PII: no account,
@@ -100,13 +148,17 @@ extension AppState {
     /// click, matching the opt-in telemetry rule. In Prowl hunt mode it's a no-op
     /// stub: it never touches the network. On success the confirmation state is
     /// persisted locally so the button isn't re-offered.
-    func registerGoogleOAuthInterest(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
+    func registerGoogleOAuthInterest(
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
+        messageSurface: TransientMessageSurface = .shared
+    ) async {
         guard canOfferGoogleOAuthInterest else { return }
         let accountKey = currentGoogleOAuthInterestAccountKey
         let sessionAccountKey = currentGoogleOAuthInterestSessionAccountKey
         if isHuntMode { return }
+        let settingsMessageGeneration = settingsTransientMessageGeneration
 
-        googleOAuthInterestError = nil
+        setGoogleOAuthInterestError(nil, for: messageSurface)
         isRegisteringGoogleOAuthInterest = true
         defer { isRegisteringGoogleOAuthInterest = false }
 
@@ -120,16 +172,24 @@ extension AppState {
         } catch {
             let failure = googleOAuthInterestFailure(from: error, fallbackAccountKey: accountKey)
             let wasCurrentAccount = isCurrentGoogleOAuthInterestAccount(failure.accountKey)
-            let signedOut = await reconcileManagedAccountState(after: failure.error, provider: .managed)
+            let signedOut = await reconcileManagedAccountState(
+                after: failure.error,
+                provider: .managed,
+                messageSurface: messageSurface
+            )
             guard wasCurrentAccount || signedOut else {
                 logger.error("Interest registration failed for stale account: \(failure.error.localizedDescription)")
                 return
             }
+            guard isCurrentTransientMessageSurface(messageSurface, generation: settingsMessageGeneration) else {
+                logger.error("Interest registration failed after Settings reset: \(failure.error.localizedDescription)")
+                return
+            }
             let message = Self.managedMessage(for: failure.error)
             if signedOut {
-                managedError = message
+                setManagedError(message, for: messageSurface)
             } else {
-                googleOAuthInterestError = message
+                setGoogleOAuthInterestError(message, for: messageSurface)
             }
             logger.error("Interest registration failed: \(failure.error.localizedDescription)")
         }

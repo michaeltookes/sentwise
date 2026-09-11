@@ -256,6 +256,23 @@ final class AppStateVoiceTests: XCTestCase {
         XCTAssertEqual(appState.signatureDetectionSucceeded, false)
     }
 
+    func testSuggestSignatureDoesNotMutateAfterSettingsResetDuringDetection() async {
+        let mailProvider = SuspendedVoiceSampleMailProvider(messages: [sentMessage()])
+        let appState = makeSignatureAppState(mailProvider: mailProvider)
+
+        let task = Task { await appState.suggestSignatureFromSentMail() }
+        await fulfillment(of: [mailProvider.didStartBodyFetch], timeout: 1)
+
+        appState.resetTransientSettingsMessages()
+        mailProvider.completeBody(with: .success(Data("Sounds good.\n\nBest,\nDetected".utf8)))
+        await task.value
+
+        XCTAssertEqual(appState.signaturePolicy, .none)
+        XCTAssertEqual(appState.signatureText, "")
+        XCTAssertNil(appState.signatureDetectionMessage)
+        XCTAssertNil(appState.signatureDetectionSucceeded)
+    }
+
     func testManagedProxyAuthFailureFromStaleVoiceLearningClearsPublishedAccountState() async throws {
         let secrets = InMemorySecretStore(seed: [
             .mailAppPassword(email: "me@gmail.com"): "app-pw",
