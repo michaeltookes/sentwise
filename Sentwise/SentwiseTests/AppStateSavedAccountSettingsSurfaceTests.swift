@@ -32,7 +32,8 @@ final class AppStateSavedAccountSettingsSurfaceTests: XCTestCase {
 
         await app.switchToSavedAccount(gmail, messageSurface: .settings)
 
-        XCTAssertEqual(app.connectionError, "startup keychain warning")
+        XCTAssertNil(app.connectionError)
+        XCTAssertNil(app.connectionError(for: .settings))
         XCTAssertTrue(app.isActiveAccount(gmail))
         XCTAssertEqual(app.mailEmail, gmail.email)
         XCTAssertEqual(persistence.loadSettings().mailEmail, gmail.email)
