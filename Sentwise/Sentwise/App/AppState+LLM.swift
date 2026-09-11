@@ -141,14 +141,14 @@ extension AppState {
     }
 
     /// Verifies the API key with a live test call and, on success, stores it.
-    func testLLMConnection() async {
-        llmError = nil
+    func testLLMConnection(messageSurface: TransientMessageSurface = .shared) async {
+        setLLMError(nil, for: messageSurface)
         let settingsMessageGeneration = settingsTransientMessageGeneration
 
         let key = llmAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if llmProviderKind.requiresAPIKey {
             guard !key.isEmpty else {
-                llmError = "Enter an API key first."
+                setLLMError("Enter an API key first.", for: messageSurface)
                 return
             }
         }
@@ -170,7 +170,11 @@ extension AppState {
             )
         } catch {
             await reconcileManagedAccountState(after: error, provider: testedProvider)
-            reportLLMErrorIfCurrent(Self.llmMessage(for: error), generation: settingsMessageGeneration)
+            reportLLMErrorIfCurrent(
+                Self.llmMessage(for: error),
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
             return
         }
 
@@ -178,7 +182,11 @@ extension AppState {
               resolvedLLMModel == testedModel,
               currentLLMBaseURL == testedBaseURL,
               llmAPIKey.trimmingCharacters(in: .whitespacesAndNewlines) == key else {
-            reportLLMErrorIfCurrent("Connection settings changed. Test again.", generation: settingsMessageGeneration)
+            reportLLMErrorIfCurrent(
+                "Connection settings changed. Test again.",
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
             refreshLLMConnectionStatus()
             return
         }
@@ -186,7 +194,8 @@ extension AppState {
         guard storeTestedLLMCredential(
             key,
             secret: testedAPIKeySecret,
-            settingsMessageGeneration: settingsMessageGeneration
+            settingsMessageGeneration: settingsMessageGeneration,
+            messageSurface: messageSurface
         ) else { return }
 
         verifiedLLMModel = testedModel
@@ -199,22 +208,31 @@ extension AppState {
         resumeInboxWatchingAfterProviderRecoveryIfNeeded()
     }
 
-    private func reportLLMErrorIfCurrent(_ message: String, generation: UInt64) {
-        guard isCurrentSettingsTransientMessageGeneration(generation) else { return }
-        llmError = message
+    private func reportLLMErrorIfCurrent(
+        _ message: String,
+        generation: UInt64,
+        surface: TransientMessageSurface
+    ) {
+        guard isCurrentTransientMessageSurface(surface, generation: generation) else { return }
+        setLLMError(message, for: surface)
     }
 
     private func storeTestedLLMCredential(
         _ key: String,
         secret: SecretKey,
-        settingsMessageGeneration: UInt64
+        settingsMessageGeneration: UInt64,
+        messageSurface: TransientMessageSurface
     ) -> Bool {
         do {
             key.isEmpty ? try secrets.remove(secret) : try secrets.set(key, for: secret)
             return true
         } catch {
             let action = key.isEmpty ? "remove" : "save"
-            reportLLMErrorIfCurrent(Self.keychainLLMMessage(action: action, error: error), generation: settingsMessageGeneration)
+            reportLLMErrorIfCurrent(
+                Self.keychainLLMMessage(action: action, error: error),
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
             return false
         }
     }

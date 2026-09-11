@@ -147,7 +147,7 @@ struct EmailAccountSettingsView: View {
                     .foregroundStyle(.red)
             }
 
-            WorkspaceAuthGuidanceView()
+            WorkspaceAuthGuidanceView(messageSurface: .settings)
         }
     }
 
@@ -296,11 +296,11 @@ struct EmailAccountSettingsView: View {
         if isAddingAccount {
             newAccountForm.commitEmailEditFromUser()
             let credentials = newAccountForm.credentials
-            didConnect = await appState.testConnection(with: credentials) {
+            didConnect = await appState.testConnection(with: credentials, messageSurface: .settings) {
                 isAddingAccount && newAccountForm.credentials == $0
             }
         } else {
-            didConnect = await appState.testConnection()
+            didConnect = await appState.testConnection(messageSurface: .settings)
         }
         if didConnect && appState.isAccountConnected {
             isAddingAccount = false

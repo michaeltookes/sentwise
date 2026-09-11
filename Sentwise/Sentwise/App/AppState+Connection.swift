@@ -27,15 +27,13 @@ extension AppState {
 
     /// Tests the mailbox connection and, on success, saves the credentials.
     @discardableResult
-    func testConnection() async -> Bool {
+    func testConnection(messageSurface: TransientMessageSurface = .shared) async -> Bool {
         connectionError = nil
-        let settingsMessageGeneration = settingsTransientMessageGeneration
         commitMailEmailEditFromUser()
 
         let credentials = mailCredentials
-        return await testConnection(with: credentials) {
+        return await testConnection(with: credentials, messageSurface: messageSurface) {
             self.isCurrentMailCredentialSnapshot($0)
-                && self.isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration)
         }
     }
 
@@ -44,22 +42,13 @@ extension AppState {
     @discardableResult
     func testConnection(
         with credentials: MailAccountCredentials,
+        messageSurface: TransientMessageSurface = .shared,
         shouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool = { _ in true }
     ) async -> Bool {
         connectionError = nil
         clearWorkspaceAuthGuidance()
-        let email = credentials.email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let host = credentials.host.trimmingCharacters(in: .whitespacesAndNewlines)
-        let credentials = MailAccountCredentials(
-            email: email,
-            appPassword: MailCredentialPasswordNormalization.normalized(
-                credentials.appPassword,
-                email: email,
-                host: host
-            ),
-            host: host,
-            port: credentials.port
-        )
+        let settingsMessageGeneration = settingsTransientMessageGeneration
+        let credentials = normalizedConnectionCredentials(credentials)
         guard credentials.isComplete else {
             connectionError = "Enter your email address and app password first."
             return false
@@ -72,12 +61,22 @@ extension AppState {
         do {
             try await mailProvider.verifyConnection(credentials)
         } catch {
-            guard shouldApplyResult(credentials) else { return false }
+            guard shouldApplyConnectionResult(
+                credentials,
+                surface: messageSurface,
+                generation: settingsMessageGeneration,
+                shouldApplyResult: shouldApplyResult
+            ) else { return false }
             connectionError = Self.message(for: error)
             classifyWorkspaceAuthFailure(error, credentials: credentials)
             return false
         }
-        guard shouldApplyResult(credentials) else { return false }
+        guard shouldApplyConnectionResult(
+            credentials,
+            surface: messageSurface,
+            generation: settingsMessageGeneration,
+            shouldApplyResult: shouldApplyResult
+        ) else { return false }
 
         let previousSettings = persistence.loadSettings()
         let previousEmail = previousSettings.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -110,6 +109,30 @@ extension AppState {
     private func hasAccountIdentityChanged(from previousEmail: String, to nextEmail: String) -> Bool {
         guard !previousEmail.isEmpty else { return false }
         return previousEmail.caseInsensitiveCompare(nextEmail) != .orderedSame
+    }
+
+    private func normalizedConnectionCredentials(_ credentials: MailAccountCredentials) -> MailAccountCredentials {
+        let email = credentials.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let host = credentials.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        return MailAccountCredentials(
+            email: email,
+            appPassword: MailCredentialPasswordNormalization.normalized(
+                credentials.appPassword,
+                email: email,
+                host: host
+            ),
+            host: host,
+            port: credentials.port
+        )
+    }
+
+    private func shouldApplyConnectionResult(
+        _ credentials: MailAccountCredentials,
+        surface: TransientMessageSurface,
+        generation: UInt64,
+        shouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool
+    ) -> Bool {
+        shouldApplyResult(credentials) && isCurrentTransientMessageSurface(surface, generation: generation)
     }
 
     private func isCurrentMailCredentialSnapshot(_ credentials: MailAccountCredentials) -> Bool {

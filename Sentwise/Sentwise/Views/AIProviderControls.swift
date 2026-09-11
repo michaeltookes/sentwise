@@ -7,6 +7,11 @@ import SwiftUI
 /// The primary, pre-selected managed-inference option: sign in and draft, no key.
 struct ManagedInferenceCard: View {
     @EnvironmentObject var appState: AppState
+    let messageSurface: AppState.TransientMessageSurface
+
+    init(messageSurface: AppState.TransientMessageSurface = .shared) {
+        self.messageSurface = messageSurface
+    }
 
     private var isActive: Bool { appState.isManagedProviderActive }
 
@@ -26,15 +31,15 @@ struct ManagedInferenceCard: View {
                     .accessibilityIdentifier("useManagedInference")
             } else if appState.isManagedSignedIn {
                 ConnectedBadge(text: "Connected as \(appState.managedAccountEmail)")
-                Button("Sign out") { Task { await appState.signOutManaged() } }
+                Button("Sign out") { Task { await appState.signOutManaged(messageSurface: messageSurface) } }
                     .disabled(appState.isManagedBusy)
                     .accessibilityIdentifier("managedSignOutButton")
             } else {
                 Text("Sign in or create your account")
                     .font(.caption).foregroundStyle(.secondary)
-                ManagedSignInControls()
+                ManagedSignInControls(messageSurface: messageSurface)
             }
-            ManagedAccountErrorMessage()
+            ManagedAccountErrorMessage(messageSurface: messageSurface)
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.08)))
@@ -45,9 +50,14 @@ struct ManagedInferenceCard: View {
 /// sign-out failures remain visible in both signed-in and signed-out states.
 struct ManagedAccountErrorMessage: View {
     @EnvironmentObject var appState: AppState
+    let messageSurface: AppState.TransientMessageSurface
+
+    init(messageSurface: AppState.TransientMessageSurface = .shared) {
+        self.messageSurface = messageSurface
+    }
 
     var body: some View {
-        if let error = appState.managedError {
+        if let error = appState.managedError(for: messageSurface) {
             OnboardingError(message: error)
         }
     }
@@ -58,9 +68,14 @@ struct ManagedAccountErrorMessage: View {
 /// failures consistently.
 struct BYOProviderErrorMessage: View {
     @EnvironmentObject var appState: AppState
+    let messageSurface: AppState.TransientMessageSurface
+
+    init(messageSurface: AppState.TransientMessageSurface = .shared) {
+        self.messageSurface = messageSurface
+    }
 
     var body: some View {
-        if let error = appState.llmError {
+        if let error = appState.llmError(for: messageSurface) {
             OnboardingError(message: error)
         }
     }
@@ -74,10 +89,16 @@ struct ManagedSignInControls: View {
 
     let showsGoogleOption: Bool
     let activatesManagedProvider: Bool
+    let messageSurface: AppState.TransientMessageSurface
 
-    init(showsGoogleOption: Bool = true, activatesManagedProvider: Bool = true) {
+    init(
+        showsGoogleOption: Bool = true,
+        activatesManagedProvider: Bool = true,
+        messageSurface: AppState.TransientMessageSurface = .shared
+    ) {
         self.showsGoogleOption = showsGoogleOption
         self.activatesManagedProvider = activatesManagedProvider
+        self.messageSurface = messageSurface
     }
 
     private var isHuntMode: Bool { ProwlHuntRuntime.current.isEnabled }
@@ -90,7 +111,8 @@ struct ManagedSignInControls: View {
                         Task {
                             await appState.startManagedGoogleSignIn(
                                 openURL: { _ = openURL($0) },
-                                activatesManagedProvider: activatesManagedProvider
+                                activatesManagedProvider: activatesManagedProvider,
+                                messageSurface: messageSurface
                             )
                         }
                     } label: {
@@ -108,7 +130,12 @@ struct ManagedSignInControls: View {
                     .disabled(appState.isManagedBusy)
                     .accessibilityIdentifier("managedEmailField")
                 Button {
-                    Task { await appState.startManagedSignIn(activatesManagedProvider: activatesManagedProvider) }
+                    Task {
+                        await appState.startManagedSignIn(
+                            activatesManagedProvider: activatesManagedProvider,
+                            messageSurface: messageSurface
+                        )
+                    }
                 } label: {
                     signInLabel(busy: appState.managedBusyAction == .emailCode, title: "Send sign-in code")
                 }
@@ -122,14 +149,14 @@ struct ManagedSignInControls: View {
                     .accessibilityIdentifier("managedCodeField")
                 HStack {
                     Button {
-                        Task { await appState.verifyManagedCode() }
+                        Task { await appState.verifyManagedCode(messageSurface: messageSurface) }
                     } label: {
                         signInLabel(busy: appState.managedBusyAction == .verifyCode, title: "Verify & connect")
                     }
                     .disabled(appState.isManagedBusy)
                     .accessibilityIdentifier("managedVerifyButton")
                     Button("Use a different email") {
-                        Task { await appState.cancelManagedSignInFlow() }
+                        Task { await appState.cancelManagedSignInFlow(messageSurface: messageSurface) }
                     }
                         .disabled(appState.isManagedBusy)
                         .buttonStyle(.link)
@@ -140,7 +167,7 @@ struct ManagedSignInControls: View {
                 Text("A browser window opened — approve the sign-in there, then you'll be brought back automatically.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Cancel") {
-                    Task { await appState.cancelManagedSignInFlow() }
+                    Task { await appState.cancelManagedSignInFlow(messageSurface: messageSurface) }
                 }
                     .buttonStyle(.link)
                     .accessibilityIdentifier("managedCancelBrowserSignIn")
@@ -159,8 +186,8 @@ struct ManagedSignInControls: View {
             }
         }
         // A stale error shouldn't linger once the user starts correcting it.
-        .onChange(of: appState.managedEmailInput) { _, _ in appState.managedError = nil }
-        .onChange(of: appState.managedCodeInput) { _, _ in appState.managedError = nil }
+        .onChange(of: appState.managedEmailInput) { _, _ in appState.setManagedError(nil, for: messageSurface) }
+        .onChange(of: appState.managedCodeInput) { _, _ in appState.setManagedError(nil, for: messageSurface) }
     }
 
     @ViewBuilder
@@ -179,11 +206,16 @@ struct ManagedSignInControls: View {
 /// excluded from the picker — it lives in its own card above.
 struct BYOProviderControls: View {
     @EnvironmentObject var appState: AppState
+    let messageSurface: AppState.TransientMessageSurface
 
     /// The provider highlighted in the picker. Staged locally so opening the
     /// picker doesn't immediately switch the active provider; "Use this provider"
     /// makes the switch. Synced to the active provider when BYO is live.
     @State private var stagedProvider: LLMProviderKind = .anthropic
+
+    init(messageSurface: AppState.TransientMessageSurface = .shared) {
+        self.messageSurface = messageSurface
+    }
 
     private var byoProviders: [LLMProviderKind] {
         LLMProviderKind.allCases.filter { $0 != .managed }
@@ -196,7 +228,7 @@ struct BYOProviderControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            OpenRouterProvisionCard()
+            OpenRouterProvisionCard(messageSurface: messageSurface)
 
             Divider()
                 .padding(.vertical, 8)
@@ -222,7 +254,7 @@ struct BYOProviderControls: View {
                 ProviderKeyGuidance(provider: stagedProvider)
             }
 
-            BYOProviderErrorMessage()
+            BYOProviderErrorMessage(messageSurface: messageSurface)
             ProviderPrivacyNote()
         }
         .onAppear {
@@ -264,7 +296,7 @@ struct BYOProviderControls: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Button {
-                Task { await appState.testLLMConnection() }
+                Task { await appState.testLLMConnection(messageSurface: messageSurface) }
             } label: {
                 if appState.isTestingLLM {
                     ProgressView().controlSize(.small)

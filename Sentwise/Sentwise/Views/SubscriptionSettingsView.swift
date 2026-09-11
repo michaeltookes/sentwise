@@ -65,8 +65,8 @@ struct SubscriptionSettingsView: View {
                  + "14-day free trial, no API key.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            ManagedSignInControls()
-            ManagedAccountErrorMessage()
+            ManagedSignInControls(messageSurface: .settings)
+            ManagedAccountErrorMessage(messageSurface: .settings)
         }
     }
 
@@ -168,7 +168,7 @@ struct SubscriptionSettingsView: View {
 
         Section {
             Button("Sign out", role: .destructive) {
-                Task { await appState.signOutManaged() }
+                Task { await appState.signOutManaged(messageSurface: .settings) }
             }
             .disabled(appState.isManagedBusy)
             .accessibilityIdentifier("subscriptionSignOut")
@@ -189,7 +189,7 @@ struct SubscriptionSettingsView: View {
                 .foregroundStyle(.secondary)
         }
 
-        ManagedAccountErrorMessage()
+        ManagedAccountErrorMessage(messageSurface: .settings)
     }
 }
 
@@ -268,13 +268,13 @@ struct DeleteAccountSheet: View {
     private func performDelete() async {
         errorMessage = nil
         isDeleting = true
-        let succeeded = await appState.deleteManagedAccount()
+        let succeeded = await appState.deleteManagedAccount(messageSurface: .settings)
         isDeleting = false
         if succeeded {
             dismiss()
         } else {
             // Keep the sheet open and surface the mapped failure message.
-            errorMessage = appState.managedError ?? "We couldn't delete your account. Please try again."
+            errorMessage = appState.managedError(for: .settings) ?? "We couldn't delete your account. Please try again."
         }
     }
 }

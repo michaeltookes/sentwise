@@ -16,12 +16,12 @@ extension AppState {
     }
 
     /// Samples the Sent folder and derives a voice profile via the LLM.
-    func learnVoiceProfile() async {
-        voiceError = nil
+    func learnVoiceProfile(messageSurface: TransientMessageSurface = .shared) async {
+        setVoiceError(nil, for: messageSurface)
         let settingsMessageGeneration = settingsTransientMessageGeneration
         func reportVoiceError(_ message: String) {
-            guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
-            voiceError = message
+            guard isCurrentTransientMessageSurface(messageSurface, generation: settingsMessageGeneration) else { return }
+            setVoiceError(message, for: messageSurface)
         }
 
         await refreshManagedQuotaIfLicenseStatusStale()

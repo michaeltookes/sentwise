@@ -66,6 +66,11 @@ struct ProviderKeyGuidance: View {
 struct OpenRouterProvisionCard: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openURL) private var openURL
+    let messageSurface: AppState.TransientMessageSurface
+
+    init(messageSurface: AppState.TransientMessageSurface = .shared) {
+        self.messageSurface = messageSurface
+    }
 
     private var isHuntMode: Bool { ProwlHuntRuntime.current.isEnabled }
 
@@ -96,13 +101,13 @@ struct OpenRouterProvisionCard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button("Cancel") {
-                        appState.cancelOpenRouterProvisioning()
+                        appState.cancelOpenRouterProvisioning(messageSurface: messageSurface)
                     }
                     .buttonStyle(.link)
                     .accessibilityIdentifier("openRouterCancelButton")
                 } else if appState.hasStoredOpenRouterCredential {
                     Button("Use saved OpenRouter key") {
-                        appState.activateStoredOpenRouterProvider()
+                        appState.activateStoredOpenRouterProvider(messageSurface: messageSurface)
                     }
                     .disabled(appState.isTestingLLM)
                     .accessibilityIdentifier("openRouterUseSavedButton")
@@ -112,7 +117,7 @@ struct OpenRouterProvisionCard: View {
                         // no PKCE exchange, no real key. Production opens the browser.
                         if isHuntMode {
                             appState.completeOpenRouterProvisioningForHunt()
-                        } else if let url = appState.beginOpenRouterProvisioning() {
+                        } else if let url = appState.beginOpenRouterProvisioning(messageSurface: messageSurface) {
                             openURL(url)
                         }
                     } label: {

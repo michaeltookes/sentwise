@@ -2,9 +2,13 @@ import Foundation
 
 extension AppState {
 
-    func reportManagedErrorIfCurrent(_ message: String, generation: UInt64) {
-        guard isCurrentSettingsTransientMessageGeneration(generation) else { return }
-        managedError = message
+    func reportManagedErrorIfCurrent(
+        _ message: String,
+        generation: UInt64,
+        surface: TransientMessageSurface = .shared
+    ) {
+        guard isCurrentTransientMessageSurface(surface, generation: generation) else { return }
+        setManagedError(message, for: surface)
     }
 
     static func managedMessage(for error: Error) -> String {

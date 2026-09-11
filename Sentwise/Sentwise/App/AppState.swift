@@ -8,6 +8,7 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "AppStat
 @MainActor
 final class AppState: ObservableObject {
     var settingsTransientMessageGeneration: UInt64 = 0
+    @Published var settingsTransientMessages = SettingsTransientMessages()
     // MARK: - Watch State
 
     /// Current watcher status. Drives the menu-bar status line.
@@ -63,8 +64,7 @@ final class AppState: ObservableObject {
     /// A user-facing message describing the last body-fetch error, if any.
     @Published var bodyError: String?
 
-    // MARK: - AI Provider (bound to Settings fields)
-
+    // MARK: - AI Provider
     /// The selected LLM provider.
     @Published var llmProviderKind: LLMProviderKind
     /// The chosen model id (empty = provider default).

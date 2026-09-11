@@ -24,7 +24,7 @@ final class AppStateWorkspaceAuthSettingsResetTests: XCTestCase {
         appState.refreshGoogleOAuthInterestState()
 
         let registration = Task {
-            await appState.registerGoogleOAuthInterest(isHuntMode: false)
+            await appState.registerGoogleOAuthInterest(isHuntMode: false, messageSurface: .settings)
         }
         await fulfillment(of: [client.didStart], timeout: 1)
 
@@ -33,7 +33,9 @@ final class AppStateWorkspaceAuthSettingsResetTests: XCTestCase {
         await registration.value
 
         XCTAssertNil(appState.googleOAuthInterestError)
+        XCTAssertNil(appState.googleOAuthInterestError(for: .settings))
         XCTAssertNil(appState.managedError)
+        XCTAssertNil(appState.managedError(for: .settings))
         XCTAssertFalse(appState.isRegisteringGoogleOAuthInterest)
         XCTAssertTrue(appState.canOfferGoogleOAuthInterest)
     }

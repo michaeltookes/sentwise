@@ -1,6 +1,18 @@
 import Foundation
 
+struct SettingsTransientMessages: Equatable {
+    var llmError: String?
+    var managedError: String?
+    var voiceError: String?
+    var googleOAuthInterestError: String?
+}
+
 extension AppState {
+    enum TransientMessageSurface {
+        case shared
+        case settings
+    }
+
     /// Clears the transient inline messages and errors shown in the Settings
     /// window's panes so each Settings session starts clean.
     ///
@@ -13,9 +25,9 @@ extension AppState {
     /// draft/review or menu-bar flow's own status (e.g. `approvalError`,
     /// `draftSavedMessage`, `draftSentMessage`), mailbox-browser row-action
     /// errors (`bodyError`, `draftError`), or active watched-folder failures
-    /// (`transcriptFolderError`). Standing provider/account conditions are
-    /// recomputed on the next action, so clearing their inline text here is
-    /// cosmetic.
+    /// (`transcriptFolderError`). Provider/account/voice controls are shared with
+    /// the Setup Assistant, so Settings uses a separate transient message bucket
+    /// that can be cleared without erasing onboarding feedback.
     func resetTransientSettingsMessages() {
         settingsTransientMessageGeneration &+= 1
 
@@ -34,10 +46,10 @@ extension AppState {
         fetchError = nil
 
         // AI provider / managed-account panes.
-        llmError = nil
-        managedError = nil
-        voiceError = nil
-        googleOAuthInterestError = nil
+        settingsTransientMessages.llmError = nil
+        settingsTransientMessages.managedError = nil
+        settingsTransientMessages.voiceError = nil
+        settingsTransientMessages.googleOAuthInterestError = nil
 
         // General / signature / diagnostics panes. `transcriptFolderError` is a
         // standing watcher condition; keep it until the watcher restarts or
@@ -49,6 +61,58 @@ extension AppState {
 
     func isCurrentSettingsTransientMessageGeneration(_ generation: UInt64) -> Bool {
         settingsTransientMessageGeneration == generation
+    }
+
+    func isCurrentTransientMessageSurface(_ surface: TransientMessageSurface, generation: UInt64) -> Bool {
+        surface == .shared || isCurrentSettingsTransientMessageGeneration(generation)
+    }
+
+    func llmError(for surface: TransientMessageSurface) -> String? {
+        surface == .settings ? settingsTransientMessages.llmError : llmError
+    }
+
+    func setLLMError(_ message: String?, for surface: TransientMessageSurface) {
+        if surface == .settings {
+            settingsTransientMessages.llmError = message
+        } else {
+            llmError = message
+        }
+    }
+
+    func managedError(for surface: TransientMessageSurface) -> String? {
+        surface == .settings ? settingsTransientMessages.managedError : managedError
+    }
+
+    func setManagedError(_ message: String?, for surface: TransientMessageSurface) {
+        if surface == .settings {
+            settingsTransientMessages.managedError = message
+        } else {
+            managedError = message
+        }
+    }
+
+    func voiceError(for surface: TransientMessageSurface) -> String? {
+        surface == .settings ? settingsTransientMessages.voiceError : voiceError
+    }
+
+    func setVoiceError(_ message: String?, for surface: TransientMessageSurface) {
+        if surface == .settings {
+            settingsTransientMessages.voiceError = message
+        } else {
+            voiceError = message
+        }
+    }
+
+    func googleOAuthInterestError(for surface: TransientMessageSurface) -> String? {
+        surface == .settings ? settingsTransientMessages.googleOAuthInterestError : googleOAuthInterestError
+    }
+
+    func setGoogleOAuthInterestError(_ message: String?, for surface: TransientMessageSurface) {
+        if surface == .settings {
+            settingsTransientMessages.googleOAuthInterestError = message
+        } else {
+            googleOAuthInterestError = message
+        }
     }
 
     private func resetSettingsBillingAndPlanMessages() {

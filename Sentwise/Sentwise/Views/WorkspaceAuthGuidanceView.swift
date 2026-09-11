@@ -11,6 +11,11 @@ import SwiftUI
 /// failure wasn't a recognized policy failure.
 struct WorkspaceAuthGuidanceView: View {
     @EnvironmentObject var appState: AppState
+    let messageSurface: AppState.TransientMessageSurface
+
+    init(messageSurface: AppState.TransientMessageSurface = .shared) {
+        self.messageSurface = messageSurface
+    }
 
     var body: some View {
         if let guidance = appState.workspaceAuthGuidance {
@@ -104,7 +109,7 @@ struct WorkspaceAuthGuidanceView: View {
         } else if appState.canOfferGoogleOAuthInterest {
             VStack(alignment: .leading, spacing: 4) {
                 Button {
-                    Task { await appState.registerGoogleOAuthInterest() }
+                    Task { await appState.registerGoogleOAuthInterest(messageSurface: messageSurface) }
                 } label: {
                     if appState.isRegisteringGoogleOAuthInterest {
                         ProgressView().controlSize(.small)
@@ -116,7 +121,7 @@ struct WorkspaceAuthGuidanceView: View {
                 .disabled(appState.isRegisteringGoogleOAuthInterest)
                 .accessibilityIdentifier("oauthInterestButton")
 
-                if let error = appState.googleOAuthInterestError {
+                if let error = appState.googleOAuthInterestError(for: messageSurface) {
                     Text(error)
                         .font(.caption2)
                         .foregroundStyle(.red)
@@ -129,8 +134,12 @@ struct WorkspaceAuthGuidanceView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                ManagedSignInControls(showsGoogleOption: false, activatesManagedProvider: false)
-                ManagedAccountErrorMessage()
+                ManagedSignInControls(
+                    showsGoogleOption: false,
+                    activatesManagedProvider: false,
+                    messageSurface: messageSurface
+                )
+                ManagedAccountErrorMessage(messageSurface: messageSurface)
             }
             .padding(.top, 2)
             .accessibilityIdentifier("oauthInterestSignIn")

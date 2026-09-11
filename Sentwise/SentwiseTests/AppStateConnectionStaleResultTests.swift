@@ -140,6 +140,43 @@ final class AppStateConnectionStaleResultTests: XCTestCase {
         XCTAssertEqual(appState.mailEmail, "")
         XCTAssertTrue(appState.savedAccounts.isEmpty)
     }
+
+    func testSettingsResetIgnoresExplicitConnectionFailure() async {
+        let provider = SuspendedAppMailProvider()
+        let appState = makeAppState(provider: provider)
+        let connection = Task {
+            await appState.testConnection(with: workspaceCredentials(), messageSurface: .settings)
+        }
+        await fulfillment(of: [provider.didStartVerification], timeout: 1)
+
+        appState.resetTransientSettingsMessages()
+        provider.complete(with: .failure(MailError.authenticationFailed(workspaceInvalidCredentials)))
+        let didConnect = await connection.value
+
+        XCTAssertFalse(didConnect)
+        XCTAssertNil(appState.connectionError)
+        XCTAssertEqual(appState.workspaceAuthFailure, .none)
+        XCTAssertNil(appState.workspaceAuthGuidance)
+        XCTAssertFalse(appState.activityEvents.contains { $0.kind == .workspaceAuthGuidance })
+    }
+
+    func testSettingsResetIgnoresExplicitConnectionSuccess() async {
+        let provider = SuspendedAppMailProvider()
+        let appState = makeAppState(provider: provider)
+        let connection = Task {
+            await appState.testConnection(with: workspaceCredentials(), messageSurface: .settings)
+        }
+        await fulfillment(of: [provider.didStartVerification], timeout: 1)
+
+        appState.resetTransientSettingsMessages()
+        provider.complete(with: .success(()))
+        let didConnect = await connection.value
+
+        XCTAssertFalse(didConnect)
+        XCTAssertFalse(appState.isAccountConnected)
+        XCTAssertEqual(appState.mailEmail, "")
+        XCTAssertTrue(appState.savedAccounts.isEmpty)
+    }
 }
 
 @MainActor

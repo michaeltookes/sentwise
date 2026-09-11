@@ -37,13 +37,13 @@ struct AIProviderSettingsView: View {
                     }
                     Text("Sign in or create your account")
                         .font(.caption).foregroundStyle(.secondary)
-                    ManagedSignInControls()
+                    ManagedSignInControls(messageSurface: .settings)
                 }
-                ManagedAccountErrorMessage()
+                ManagedAccountErrorMessage(messageSurface: .settings)
             }
 
             Section("Use your own AI") {
-                BYOProviderControls()
+                BYOProviderControls(messageSurface: .settings)
             }
 
             Section("Voice") {
@@ -60,7 +60,7 @@ struct AIProviderSettingsView: View {
                 }
 
                 Button {
-                    Task { await appState.learnVoiceProfile() }
+                    Task { await appState.learnVoiceProfile(messageSurface: .settings) }
                 } label: {
                     if appState.isLearningVoice {
                         HStack(spacing: 6) {
@@ -90,7 +90,7 @@ struct AIProviderSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if let error = appState.voiceError {
+                if let error = appState.voiceError(for: .settings) {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.red)

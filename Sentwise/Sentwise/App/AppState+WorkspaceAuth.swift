@@ -100,14 +100,17 @@ extension AppState {
     /// click, matching the opt-in telemetry rule. In Prowl hunt mode it's a no-op
     /// stub: it never touches the network. On success the confirmation state is
     /// persisted locally so the button isn't re-offered.
-    func registerGoogleOAuthInterest(isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled) async {
+    func registerGoogleOAuthInterest(
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
+        messageSurface: TransientMessageSurface = .shared
+    ) async {
         guard canOfferGoogleOAuthInterest else { return }
         let accountKey = currentGoogleOAuthInterestAccountKey
         let sessionAccountKey = currentGoogleOAuthInterestSessionAccountKey
         if isHuntMode { return }
         let settingsMessageGeneration = settingsTransientMessageGeneration
 
-        googleOAuthInterestError = nil
+        setGoogleOAuthInterestError(nil, for: messageSurface)
         isRegisteringGoogleOAuthInterest = true
         defer { isRegisteringGoogleOAuthInterest = false }
 
@@ -126,15 +129,15 @@ extension AppState {
                 logger.error("Interest registration failed for stale account: \(failure.error.localizedDescription)")
                 return
             }
-            guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else {
+            guard isCurrentTransientMessageSurface(messageSurface, generation: settingsMessageGeneration) else {
                 logger.error("Interest registration failed after Settings reset: \(failure.error.localizedDescription)")
                 return
             }
             let message = Self.managedMessage(for: failure.error)
             if signedOut {
-                managedError = message
+                setManagedError(message, for: messageSurface)
             } else {
-                googleOAuthInterestError = message
+                setGoogleOAuthInterestError(message, for: messageSurface)
             }
             logger.error("Interest registration failed: \(failure.error.localizedDescription)")
         }

@@ -60,9 +60,10 @@ extension AppState {
     func startManagedGoogleSignIn(
         openURL: (URL) -> Void = { NSWorkspace.shared.open($0) },
         activatesManagedProvider: Bool = true,
-        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
+        messageSurface: TransientMessageSurface = .shared
     ) async {
-        managedError = nil
+        setManagedError(nil, for: messageSurface)
         if isHuntMode {
             // Deterministic offline fake: show the browser-wait panel, open nothing.
             pendingManagedSignInActivatesProvider = activatesManagedProvider
@@ -79,7 +80,11 @@ extension AppState {
             managedSignInStage = .awaitingBrowser
         } catch {
             pendingManagedSignInActivatesProvider = true
-            reportManagedErrorIfCurrent(Self.managedMessage(for: error), generation: settingsMessageGeneration)
+            reportManagedErrorIfCurrent(
+                Self.managedMessage(for: error),
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
         }
     }
 

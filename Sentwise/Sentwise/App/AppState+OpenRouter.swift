@@ -24,22 +24,22 @@ extension AppState {
     /// returns the authorization URL to open in the browser. Returns `nil` (and
     /// sets `llmError`) in hunt mode or if the verifier can't be stored. Disabled
     /// in Prowl hunt mode so hunts never reach the network.
-    func beginOpenRouterProvisioning() -> URL? {
-        llmError = nil
+    func beginOpenRouterProvisioning(messageSurface: TransientMessageSurface = .shared) -> URL? {
+        setLLMError(nil, for: messageSurface)
         guard !ProwlHuntRuntime.current.isEnabled else {
-            llmError = "OpenRouter sign-in is disabled during Prowl hunts."
+            setLLMError("OpenRouter sign-in is disabled during Prowl hunts.", for: messageSurface)
             return nil
         }
         if isOpenRouterProvisioning || secrets.hasValue(for: .openRouterPKCEVerifier) {
             isOpenRouterProvisioning = true
-            llmError = "Finish OpenRouter setup in your browser, or cancel it and try again."
+            setLLMError("Finish OpenRouter setup in your browser, or cancel it and try again.", for: messageSurface)
             return nil
         }
         let codes = PKCEGenerator.generate()
         do {
             try secrets.set(codes.verifier, for: .openRouterPKCEVerifier)
         } catch {
-            llmError = Self.keychainLLMMessage(action: "save", error: error)
+            setLLMError(Self.keychainLLMMessage(action: "save", error: error), for: messageSurface)
             return nil
         }
         isOpenRouterProvisioning = true
@@ -50,20 +50,23 @@ extension AppState {
     }
 
     /// Convenience for the UI: begin provisioning and open the URL in the browser.
-    func startOpenRouterProvisioning(openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }) {
-        guard let url = beginOpenRouterProvisioning() else { return }
+    func startOpenRouterProvisioning(
+        openURL: (URL) -> Void = { NSWorkspace.shared.open($0) },
+        messageSurface: TransientMessageSurface = .shared
+    ) {
+        guard let url = beginOpenRouterProvisioning(messageSurface: messageSurface) else { return }
         openURL(url)
     }
 
     /// Cancels the browser-based provisioning flow so the next Connect click can
     /// mint a fresh verifier instead of invalidating an in-flight browser tab.
-    func cancelOpenRouterProvisioning() {
-        llmError = nil
+    func cancelOpenRouterProvisioning(messageSurface: TransientMessageSurface = .shared) {
+        setLLMError(nil, for: messageSurface)
         isOpenRouterProvisioning = false
         do {
             try secrets.remove(.openRouterPKCEVerifier)
         } catch {
-            llmError = Self.keychainLLMMessage(action: "remove", error: error)
+            setLLMError(Self.keychainLLMMessage(action: "remove", error: error), for: messageSurface)
         }
     }
 
@@ -77,15 +80,15 @@ extension AppState {
     /// Reactivates the stored OpenRouter credential without starting another browser
     /// authorization. This keeps a saved OpenRouter key reachable even when a generic
     /// OpenAI-compatible key is also present.
-    func activateStoredOpenRouterProvider() {
-        llmError = nil
+    func activateStoredOpenRouterProvider(messageSurface: TransientMessageSurface = .shared) {
+        setLLMError(nil, for: messageSurface)
         let key = Self.storedLLMAPIKey(
             provider: .openAICompatible,
             baseURL: OpenRouterKeyProvisioner.apiBaseURL,
             secrets: secrets
         )
         guard !key.isEmpty else {
-            llmError = "Connect OpenRouter first."
+            setLLMError("Connect OpenRouter first.", for: messageSurface)
             refreshLLMConnectionStatus()
             return
         }
