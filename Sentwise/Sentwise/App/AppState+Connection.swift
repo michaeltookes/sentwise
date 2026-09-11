@@ -89,6 +89,9 @@ extension AppState {
             requiresTransitionCleanup: requiresTransitionCleanup,
             messageSurface: messageSurface
         ) else { return false }
+        if messageSurface == .settings {
+            setConnectionError(nil, for: .shared)
+        }
         isAccountConnected = true
         if requiresTransitionCleanup {
             // A different or newly reconnected account invalidates any in-flight
