@@ -26,6 +26,7 @@ final class AppState: ObservableObject {
 
     /// A user-facing message describing the last connection error, if any.
     @Published var connectionError: String?
+    var connectionErrorIsAppWide = false
     var pendingManagedSignInMessageSurface: TransientMessageSurface = .shared
     var pendingOpenRouterProvisioningMessageSurface: TransientMessageSurface = .shared
     // MARK: - Mail Account Inputs (bound to Settings fields)

@@ -181,7 +181,7 @@ final class AppStateConnectionStaleResultTests: XCTestCase {
     func testSettingsConnectionFailureUsesSettingsErrorBucket() async {
         let provider = FakeAppMailProvider(result: .failure(.connectionFailed("offline")))
         let appState = makeAppState(provider: provider)
-        appState.connectionError = "setup assistant error"
+        appState.setConnectionError("setup assistant error", for: .shared)
 
         let didConnect = await appState.testConnection(
             with: workspaceCredentials(email: "marcus@example.com"),
@@ -193,10 +193,10 @@ final class AppStateConnectionStaleResultTests: XCTestCase {
         XCTAssertTrue(appState.connectionError(for: .settings)?.contains("offline") ?? false)
     }
 
-    func testSettingsConnectionSuccessClearsSharedConnectionFallback() async {
+    func testSettingsConnectionSuccessPreservesSharedSurfaceConnectionError() async {
         let provider = FakeAppMailProvider(result: .success(()))
         let appState = makeAppState(provider: provider)
-        appState.connectionError = "setup assistant error"
+        appState.setConnectionError("setup assistant error", for: .shared)
 
         let didConnect = await appState.testConnection(
             with: workspaceCredentials(email: "marcus@example.com"),
@@ -204,7 +204,7 @@ final class AppStateConnectionStaleResultTests: XCTestCase {
         )
 
         XCTAssertTrue(didConnect)
-        XCTAssertNil(appState.connectionError)
+        XCTAssertEqual(appState.connectionError, "setup assistant error")
         XCTAssertNil(appState.connectionError(for: .settings))
     }
 

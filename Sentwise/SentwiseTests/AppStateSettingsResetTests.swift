@@ -54,7 +54,7 @@ final class AppStateSettingsResetTests: XCTestCase {
         let appState = makeAppState()
 
         // Every transient message/error a Settings pane can show.
-        appState.connectionError = "setup conn"
+        appState.setConnectionError("setup conn", for: .shared)
         appState.fetchError = "fetch"
         appState.bodyError = "body"
         appState.draftError = "draft"

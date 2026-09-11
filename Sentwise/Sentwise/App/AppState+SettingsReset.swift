@@ -110,7 +110,10 @@ extension AppState {
 
     func connectionError(for surface: TransientMessageSurface) -> String? {
         if surface == .settings {
-            return settingsTransientMessages.connectionError ?? connectionError
+            if let settingsError = settingsTransientMessages.connectionError {
+                return settingsError
+            }
+            return connectionErrorIsAppWide ? connectionError : nil
         }
         return connectionError
     }
@@ -119,8 +122,17 @@ extension AppState {
         if surface == .settings {
             settingsTransientMessages.connectionError = message
         } else {
-            connectionError = message
+            setSharedConnectionError(message, isAppWide: false)
         }
+    }
+
+    func setAppWideConnectionError(_ message: String?) {
+        setSharedConnectionError(message, isAppWide: true)
+    }
+
+    private func setSharedConnectionError(_ message: String?, isAppWide: Bool) {
+        connectionError = message
+        connectionErrorIsAppWide = message == nil ? false : isAppWide
     }
 
     func llmError(for surface: TransientMessageSurface) -> String? {

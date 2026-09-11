@@ -123,7 +123,7 @@ extension AppState {
             return true
         } catch {
             transcriptWatchedFolderSeenSnapshots = previous
-            connectionError = Self.settingsMessage(action: "save", error: error)
+            setAppWideConnectionError(Self.settingsMessage(action: "save", error: error))
             transcriptFolderLogger.error("Failed to save transcript folder snapshots: \(error.localizedDescription)")
             return false
         }

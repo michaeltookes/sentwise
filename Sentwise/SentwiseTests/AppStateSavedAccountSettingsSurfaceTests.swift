@@ -5,7 +5,7 @@ import XCTest
 @MainActor
 final class AppStateSavedAccountSettingsSurfaceTests: XCTestCase {
 
-    func testSettingsSwitchSuccessIgnoresSharedConnectionErrorFallback() async {
+    func testSettingsSwitchSuccessIgnoresSharedSurfaceConnectionError() async {
         let gmail = SavedMailAccount(email: "me@gmail.com", host: "imap.gmail.com", port: 993)
         let att = SavedMailAccount(email: "me@att.net", host: "imap.mail.att.net", port: 993)
         let settings = Settings(
@@ -28,11 +28,11 @@ final class AppStateSavedAccountSettingsSurfaceTests: XCTestCase {
             llm: FakeLLMProvider(result: .success(()))
         )
         app.isAccountConnected = true
-        app.connectionError = "startup keychain warning"
+        app.setConnectionError("setup assistant error", for: .shared)
 
         await app.switchToSavedAccount(gmail, messageSurface: .settings)
 
-        XCTAssertNil(app.connectionError)
+        XCTAssertEqual(app.connectionError, "setup assistant error")
         XCTAssertNil(app.connectionError(for: .settings))
         XCTAssertTrue(app.isActiveAccount(gmail))
         XCTAssertEqual(app.mailEmail, gmail.email)
