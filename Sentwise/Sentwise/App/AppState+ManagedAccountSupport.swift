@@ -13,6 +13,22 @@ extension AppState {
         return true
     }
 
+    func updateManagedEmailInputFromUser(
+        _ value: String,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
+        managedEmailInput = value
+        setManagedError(nil, for: messageSurface)
+    }
+
+    func updateManagedCodeInputFromUser(
+        _ value: String,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
+        managedCodeInput = value
+        setManagedError(nil, for: messageSurface)
+    }
+
     static func managedMessage(for error: Error) -> String {
         managedClerkMessage(for: error)
             ?? managedLLMMessage(for: error)

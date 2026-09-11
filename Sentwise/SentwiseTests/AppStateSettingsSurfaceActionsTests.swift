@@ -68,6 +68,27 @@ final class AppStateSettingsSurfaceActionsTests: XCTestCase {
         XCTAssertNil(appState.googleOAuthInterestError(for: .settings))
     }
 
+    func testManagedInputEditsClearOnlyRequestedSurface() {
+        let appState = makeAppState()
+        appState.managedError = "setup assistant email error"
+        appState.settingsTransientMessages.managedError = "settings email error"
+
+        appState.updateManagedEmailInputFromUser("marcus@example.com", messageSurface: .settings)
+
+        XCTAssertEqual(appState.managedEmailInput, "marcus@example.com")
+        XCTAssertEqual(appState.managedError, "setup assistant email error")
+        XCTAssertNil(appState.managedError(for: .settings))
+
+        appState.managedError = "setup assistant code error"
+        appState.settingsTransientMessages.managedError = "settings code error"
+
+        appState.updateManagedCodeInputFromUser("123456", messageSurface: .shared)
+
+        XCTAssertEqual(appState.managedCodeInput, "123456")
+        XCTAssertNil(appState.managedError)
+        XCTAssertEqual(appState.managedError(for: .settings), "settings code error")
+    }
+
     func testSettingsConnectionErrorFallsBackToAppWideMailboxError() {
         let appState = makeAppState()
         appState.setAppWideConnectionError("startup mailbox error")

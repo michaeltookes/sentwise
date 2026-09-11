@@ -136,7 +136,7 @@ struct ManagedSignInControls: View {
                     Text("or use your email").font(.caption).foregroundStyle(.secondary)
                 }
 
-                TextField("Email address", text: $appState.managedEmailInput)
+                TextField("Email address", text: emailInputBinding)
                     .textContentType(.username)
                     .textFieldStyle(.roundedBorder)
                     .disabled(appState.isManagedBusy)
@@ -156,7 +156,7 @@ struct ManagedSignInControls: View {
             } else if appState.managedSignInStage == .codeSent {
                 Text("Enter the code we emailed to \(appState.managedEmailInput).")
                     .font(.caption).foregroundStyle(.secondary)
-                TextField("6-digit code", text: $appState.managedCodeInput)
+                TextField("6-digit code", text: codeInputBinding)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("managedCodeField")
                 HStack {
@@ -197,9 +197,6 @@ struct ManagedSignInControls: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        // A stale error shouldn't linger once the user starts correcting it.
-        .onChange(of: appState.managedEmailInput) { _, _ in appState.setManagedError(nil, for: messageSurface) }
-        .onChange(of: appState.managedCodeInput) { _, _ in appState.setManagedError(nil, for: messageSurface) }
     }
 
     @ViewBuilder
@@ -209,6 +206,20 @@ struct ManagedSignInControls: View {
         } else {
             Text(title)
         }
+    }
+
+    private var emailInputBinding: Binding<String> {
+        Binding(
+            get: { appState.managedEmailInput },
+            set: { appState.updateManagedEmailInputFromUser($0, messageSurface: messageSurface) }
+        )
+    }
+
+    private var codeInputBinding: Binding<String> {
+        Binding(
+            get: { appState.managedCodeInput },
+            set: { appState.updateManagedCodeInputFromUser($0, messageSurface: messageSurface) }
+        )
     }
 }
 
