@@ -11,10 +11,11 @@ extension AppState {
     ///
     /// Scope is the Settings surface only — it deliberately does not touch the
     /// draft/review or menu-bar flow's own status (e.g. `approvalError`,
-    /// `draftSavedMessage`, `draftSentMessage`) or mailbox-browser row-action
-    /// errors (`bodyError`, `draftError`). Standing conditions (a mailbox that is
-    /// actually disconnected, an unverified provider) are recomputed on the next
-    /// action, so clearing their inline text here is cosmetic.
+    /// `draftSavedMessage`, `draftSentMessage`), mailbox-browser row-action
+    /// errors (`bodyError`, `draftError`), or active watched-folder failures
+    /// (`transcriptFolderError`). Standing provider/account conditions are
+    /// recomputed on the next action, so clearing their inline text here is
+    /// cosmetic.
     func resetTransientSettingsMessages() {
         settingsTransientMessageGeneration &+= 1
 
@@ -38,10 +39,11 @@ extension AppState {
         voiceError = nil
         googleOAuthInterestError = nil
 
-        // General / signature / diagnostics / transcript panes.
+        // General / signature / diagnostics panes. `transcriptFolderError` is a
+        // standing watcher condition; keep it until the watcher restarts or
+        // accepts a transcript successfully.
         signatureDetectionMessage = nil
         signatureDetectionSucceeded = nil
-        transcriptFolderError = nil
         diagnosticsError = nil
     }
 

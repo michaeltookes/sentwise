@@ -105,6 +105,7 @@ extension AppState {
         let accountKey = currentGoogleOAuthInterestAccountKey
         let sessionAccountKey = currentGoogleOAuthInterestSessionAccountKey
         if isHuntMode { return }
+        let settingsMessageGeneration = settingsTransientMessageGeneration
 
         googleOAuthInterestError = nil
         isRegisteringGoogleOAuthInterest = true
@@ -123,6 +124,10 @@ extension AppState {
             let signedOut = await reconcileManagedAccountState(after: failure.error, provider: .managed)
             guard wasCurrentAccount || signedOut else {
                 logger.error("Interest registration failed for stale account: \(failure.error.localizedDescription)")
+                return
+            }
+            guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else {
+                logger.error("Interest registration failed after Settings reset: \(failure.error.localizedDescription)")
                 return
             }
             let message = Self.managedMessage(for: failure.error)

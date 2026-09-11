@@ -80,7 +80,7 @@ final class AppStateSettingsResetTests: XCTestCase {
         XCTAssertNil(appState.voiceError)
         XCTAssertNil(appState.googleOAuthInterestError)
         XCTAssertNil(appState.signatureDetectionMessage)
-        XCTAssertNil(appState.transcriptFolderError)
+        XCTAssertEqual(appState.transcriptFolderError, "transcript")
         XCTAssertNil(appState.diagnosticsError)
         XCTAssertNil(appState.manageBillingMessage)
         XCTAssertNil(appState.planChangeMessage)
