@@ -116,7 +116,7 @@ struct OpenRouterProvisionCard: View {
                         // Hunt mode: complete deterministically offline — no browser,
                         // no PKCE exchange, no real key. Production opens the browser.
                         if isHuntMode {
-                            appState.completeOpenRouterProvisioningForHunt()
+                            appState.completeOpenRouterProvisioningForHunt(messageSurface: messageSurface)
                         } else if let url = appState.beginOpenRouterProvisioning(messageSurface: messageSurface) {
                             openURL(url)
                         }

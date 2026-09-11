@@ -44,6 +44,7 @@ extension AppState {
         messageSurface: TransientMessageSurface = .shared
     ) async {
         setManagedError(nil, for: messageSurface)
+        pendingManagedSignInMessageSurface = messageSurface
         didDeleteManagedAccount = false
         let email = managedEmailInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard email.contains("@"), email.count >= 3 else {
@@ -134,6 +135,7 @@ extension AppState {
 
     func resetManagedSignInFlow(messageSurface: TransientMessageSurface = .shared) {
         pendingManagedSignInEmail = nil
+        pendingManagedSignInMessageSurface = .shared
         managedSignInStage = .idle
         managedCodeInput = ""
         setManagedError(nil, for: messageSurface)
@@ -244,6 +246,7 @@ extension AppState {
         }
         managedCodeInput = ""
         pendingManagedSignInEmail = nil
+        pendingManagedSignInMessageSurface = .shared
         pendingManagedSignInActivatesProvider = true
         managedSignInStage = .idle
         googleOAuthInterestRegistered = false

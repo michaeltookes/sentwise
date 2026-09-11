@@ -28,7 +28,7 @@ extension AppState {
     /// Tests the mailbox connection and, on success, saves the credentials.
     @discardableResult
     func testConnection(messageSurface: TransientMessageSurface = .shared) async -> Bool {
-        connectionError = nil
+        setConnectionError(nil, for: messageSurface)
         commitMailEmailEditFromUser()
 
         let credentials = mailCredentials
@@ -45,12 +45,12 @@ extension AppState {
         messageSurface: TransientMessageSurface = .shared,
         shouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool = { _ in true }
     ) async -> Bool {
-        connectionError = nil
-        clearWorkspaceAuthGuidance()
+        setConnectionError(nil, for: messageSurface)
+        clearWorkspaceAuthGuidance(for: messageSurface)
         let settingsMessageGeneration = settingsTransientMessageGeneration
         let credentials = normalizedConnectionCredentials(credentials)
         guard credentials.isComplete else {
-            connectionError = "Enter your email address and app password first."
+            setConnectionError("Enter your email address and app password first.", for: messageSurface)
             return false
         }
 
@@ -67,8 +67,8 @@ extension AppState {
                 generation: settingsMessageGeneration,
                 shouldApplyResult: shouldApplyResult
             ) else { return false }
-            connectionError = Self.message(for: error)
-            classifyWorkspaceAuthFailure(error, credentials: credentials)
+            setConnectionError(Self.message(for: error), for: messageSurface)
+            classifyWorkspaceAuthFailure(error, credentials: credentials, messageSurface: messageSurface)
             return false
         }
         guard shouldApplyConnectionResult(
@@ -86,7 +86,8 @@ extension AppState {
             credentials,
             previousSettings: previousSettings,
             accountIdentityChanged: accountIdentityChanged,
-            requiresTransitionCleanup: requiresTransitionCleanup
+            requiresTransitionCleanup: requiresTransitionCleanup,
+            messageSurface: messageSurface
         ) else { return false }
         isAccountConnected = true
         if requiresTransitionCleanup {
@@ -152,9 +153,9 @@ extension AppState {
     }
 
     /// Disconnects the mailbox by clearing the stored app password.
-    func disconnectMail() {
-        connectionError = nil
-        clearWorkspaceAuthGuidance()
+    func disconnectMail(messageSurface: TransientMessageSurface = .shared) {
+        setConnectionError(nil, for: messageSurface)
+        clearWorkspaceAuthGuidance(for: messageSurface)
         guard !isConnecting else {
             logger.info("Disconnect skipped while a connection test is running")
             return
@@ -162,13 +163,16 @@ extension AppState {
         do {
             try removeLegacyOAuthCredentialsIfPresent()
         } catch {
-            connectionError = Self.legacyOAuthCleanupMessage(error: error)
+            setConnectionError(Self.legacyOAuthCleanupMessage(error: error), for: messageSurface)
             return
         }
 
-        guard let removedPassword = removeActiveMailPasswordForDisconnect() else { return }
-        guard clearQueuedDispatchesBeforeAccountTransition("disconnecting") else {
-            appendConnectionRollbackMessage(restoreActiveMailPasswordRemovalMessage(removedPassword))
+        guard let removedPassword = removeActiveMailPasswordForDisconnect(messageSurface: messageSurface) else { return }
+        guard clearQueuedDispatchesBeforeAccountTransition("disconnecting", messageSurface: messageSurface) else {
+            appendConnectionRollbackMessage(
+                restoreActiveMailPasswordRemovalMessage(removedPassword),
+                messageSurface: messageSurface
+            )
             return
         }
         mailAppPassword = ""
@@ -181,12 +185,18 @@ extension AppState {
         logger.info("Mailbox disconnected")
     }
 
-    private func clearQueuedDispatchesBeforeAccountTransition(_ action: String) -> Bool {
+    private func clearQueuedDispatchesBeforeAccountTransition(
+        _ action: String,
+        messageSurface: TransientMessageSurface = .shared
+    ) -> Bool {
         do {
             try clearAllOfflineQueueEntriesDurably()
             return true
         } catch {
-            connectionError = "Couldn't clear queued drafts before \(action). \(Self.message(for: error))"
+            setConnectionError(
+                "Couldn't clear queued drafts before \(action). \(Self.message(for: error))",
+                for: messageSurface
+            )
             logger.error("Failed to clear queued drafts before \(action, privacy: .public): \(error.localizedDescription)")
             return false
         }
@@ -196,7 +206,8 @@ extension AppState {
         _ credentials: MailAccountCredentials,
         previousSettings: Settings,
         accountIdentityChanged: Bool,
-        requiresTransitionCleanup: Bool
+        requiresTransitionCleanup: Bool,
+        messageSurface: TransientMessageSurface
     ) -> Bool {
         // Per-account key (item 48): writing a second account never overwrites the
         // first account's secret, so switching back to it later needs no re-entry.
@@ -205,36 +216,43 @@ extension AppState {
         do {
             previousAppPassword = try secrets.value(for: accountKey)
         } catch {
-            connectionError = Self.keychainMessage(action: "read", error: error)
+            setConnectionError(Self.keychainMessage(action: "read", error: error), for: messageSurface)
             return false
         }
 
         do {
             try secrets.set(credentials.appPassword, for: accountKey)
         } catch {
-            connectionError = Self.keychainMessage(action: "save", error: error)
+            setConnectionError(Self.keychainMessage(action: "save", error: error), for: messageSurface)
             return false
         }
 
         do {
             try persistVerifiedConnection(credentials, clearSignature: accountIdentityChanged)
         } catch {
-            connectionError = failedConnectionPersistMessage(
-                error,
-                previousSettings: previousSettings,
-                previousAppPassword: previousAppPassword,
-                accountKey: accountKey
+            setConnectionError(
+                failedConnectionPersistMessage(
+                    error,
+                    previousSettings: previousSettings,
+                    previousAppPassword: previousAppPassword,
+                    accountKey: accountKey
+                ),
+                for: messageSurface
             )
             return false
         }
 
         let cleanupAction = accountIdentityChanged ? "changing accounts" : "reconnecting"
-        guard !requiresTransitionCleanup || clearQueuedDispatchesBeforeAccountTransition(cleanupAction) else {
-            appendConnectionRollbackMessage(rollbackVerifiedConnectionTransition(
-                to: previousSettings,
-                previousAppPassword: previousAppPassword,
-                for: accountKey
-            ))
+        guard !requiresTransitionCleanup
+            || clearQueuedDispatchesBeforeAccountTransition(cleanupAction, messageSurface: messageSurface) else {
+            appendConnectionRollbackMessage(
+                rollbackVerifiedConnectionTransition(
+                    to: previousSettings,
+                    previousAppPassword: previousAppPassword,
+                    for: accountKey
+                ),
+                messageSurface: messageSurface
+            )
             return false
         }
         if accountIdentityChanged {
@@ -281,12 +299,15 @@ extension AppState {
         return Self.keychainMessage(action: "restore", error: rollbackError)
     }
 
-    private func appendConnectionRollbackMessage(_ message: String?) {
+    private func appendConnectionRollbackMessage(
+        _ message: String?,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
         guard let message, !message.isEmpty else { return }
-        if let connectionError, !connectionError.isEmpty {
-            self.connectionError = connectionError + " " + message
+        if let connectionError = connectionError(for: messageSurface), !connectionError.isEmpty {
+            setConnectionError(connectionError + " " + message, for: messageSurface)
         } else {
-            connectionError = message
+            setConnectionError(message, for: messageSurface)
         }
     }
 }

@@ -31,6 +31,7 @@ extension AppState {
         managedCodeInput = ""
         pendingManagedSignInEmail = nil
         pendingManagedSignInActivatesProvider = true
+        pendingManagedSignInMessageSurface = .shared
         managedSignInStage = .idle
         isManagedSignedIn = true
 
@@ -64,6 +65,7 @@ extension AppState {
         messageSurface: TransientMessageSurface = .shared
     ) async {
         setManagedError(nil, for: messageSurface)
+        pendingManagedSignInMessageSurface = messageSurface
         if isHuntMode {
             // Deterministic offline fake: show the browser-wait panel, open nothing.
             pendingManagedSignInActivatesProvider = activatesManagedProvider
@@ -90,7 +92,8 @@ extension AppState {
 
     /// Completes Google sign-in from the `sentwise://oauth-callback` redirect.
     func handleManagedOAuthCallback(nonce: String) async {
-        managedError = nil
+        let messageSurface = pendingManagedSignInMessageSurface
+        setManagedError(nil, for: messageSurface)
         let settingsMessageGeneration = settingsTransientMessageGeneration
         managedBusyAction = .oauthCallback
         defer { managedBusyAction = nil }
@@ -98,9 +101,14 @@ extension AppState {
         do {
             result = try await managedAccount.completeGoogleSignIn(rotatingTokenNonce: nonce)
         } catch {
-            reportManagedErrorIfCurrent(Self.managedMessage(for: error), generation: settingsMessageGeneration)
+            reportManagedErrorIfCurrent(
+                Self.managedMessage(for: error),
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
             if managedSignInStage == .awaitingBrowser {
                 pendingManagedSignInActivatesProvider = true
+                pendingManagedSignInMessageSurface = .shared
                 managedSignInStage = .idle
             }
             return

@@ -2,7 +2,6 @@ import Combine
 import SentwiseMail
 import os
 import SwiftUI
-
 private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "AppState")
 /// Central application state container and single source of truth for observed app state.
 @MainActor
@@ -29,7 +28,8 @@ final class AppState: ObservableObject {
 
     /// A user-facing message describing the last connection error, if any.
     @Published var connectionError: String?
-
+    var pendingManagedSignInMessageSurface: TransientMessageSurface = .shared
+    var pendingOpenRouterProvisioningMessageSurface: TransientMessageSurface = .shared
     // MARK: - Mail Account Inputs (bound to Settings fields)
 
     @Published var mailEmail: String

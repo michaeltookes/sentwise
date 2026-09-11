@@ -184,6 +184,25 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertEqual(appState.llmProviderKind, .managed, "provider is left unchanged on failure")
     }
 
+    func testOpenRouterCallbackFailureUsesInitiatingSettingsSurface() async throws {
+        let secrets = InMemorySecretStore()
+        let appState = makeAppState(provider: "managed", secrets: secrets)
+        _ = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
+        let transport = ActivationFakeJSONTransport(
+            HTTPResponse(statusCode: 500, body: Data(#"{"error":"bad code"}"#.utf8))
+        )
+
+        await appState.handleOpenRouterCallback(
+            code: "CODE",
+            provisioner: OpenRouterKeyProvisioner(transport: transport)
+        )
+
+        XCTAssertFalse(appState.isOpenRouterProvisioning)
+        XCTAssertNil(appState.llmError)
+        XCTAssertNotNil(appState.llmError(for: .settings))
+        XCTAssertEqual(appState.llmProviderKind, .managed)
+    }
+
     func testCancelOpenRouterProvisioningDuringExchangeDiscardsReturnedKey() async throws {
         let secrets = InMemorySecretStore(seed: [.openRouterPKCEVerifier: "VER"])
         let appState = makeAppState(provider: "managed", secrets: secrets)
@@ -353,6 +372,28 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertFalse(appState.isManagedSignedIn)
         XCTAssertNotNil(appState.managedError)
         XCTAssertNil(try secrets.value(for: .managedSessionID))
+    }
+
+    func testManagedOAuthCallbackFailureUsesInitiatingSettingsSurface() async throws {
+        let secrets = InMemorySecretStore()
+        let transport = QueueClerkTransport([
+            clerkReply(startResponse, clientToken: "client_A"),
+            clerkReply(#"{"errors":[{"message":"Bad nonce"}]}"#, status: 400, clientToken: "client_B")
+        ])
+        let clerk = ClerkClient(
+            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            transport: transport
+        )
+        let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
+        let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
+
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, messageSurface: .settings)
+        await appState.handleManagedOAuthCallback(nonce: "bad_nonce")
+
+        XCTAssertEqual(appState.managedSignInStage, .idle)
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertNil(appState.managedError)
+        XCTAssertNotNil(appState.managedError(for: .settings))
     }
 
     func testStaleManagedOAuthCallbackDoesNotClearEmailCodeStage() async {

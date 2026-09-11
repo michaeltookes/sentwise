@@ -22,8 +22,8 @@ extension AppState {
 
     /// Begins OpenRouter provisioning: mints a PKCE pair, stores the verifier, and
     /// returns the authorization URL to open in the browser. Returns `nil` (and
-    /// sets `llmError`) in hunt mode or if the verifier can't be stored. Disabled
-    /// in Prowl hunt mode so hunts never reach the network.
+    /// sets the surface-specific LLM error) in hunt mode or if the verifier can't
+    /// be stored. Disabled in Prowl hunt mode so hunts never reach the network.
     func beginOpenRouterProvisioning(messageSurface: TransientMessageSurface = .shared) -> URL? {
         setLLMError(nil, for: messageSurface)
         guard !ProwlHuntRuntime.current.isEnabled else {
@@ -32,6 +32,7 @@ extension AppState {
         }
         if isOpenRouterProvisioning || secrets.hasValue(for: .openRouterPKCEVerifier) {
             isOpenRouterProvisioning = true
+            pendingOpenRouterProvisioningMessageSurface = messageSurface
             setLLMError("Finish OpenRouter setup in your browser, or cancel it and try again.", for: messageSurface)
             return nil
         }
@@ -43,6 +44,7 @@ extension AppState {
             return nil
         }
         isOpenRouterProvisioning = true
+        pendingOpenRouterProvisioningMessageSurface = messageSurface
         return OpenRouterKeyProvisioner().authorizationURL(
             callbackURL: Self.openRouterCallbackURL,
             challenge: codes.challenge
@@ -63,6 +65,7 @@ extension AppState {
     func cancelOpenRouterProvisioning(messageSurface: TransientMessageSurface = .shared) {
         setLLMError(nil, for: messageSurface)
         isOpenRouterProvisioning = false
+        pendingOpenRouterProvisioningMessageSurface = .shared
         do {
             try secrets.remove(.openRouterPKCEVerifier)
         } catch {
@@ -113,13 +116,15 @@ extension AppState {
         code: String,
         provisioner: OpenRouterKeyProvisioner = OpenRouterKeyProvisioner()
     ) async {
-        llmError = nil
+        let messageSurface = pendingOpenRouterProvisioningMessageSurface
+        setLLMError(nil, for: messageSurface)
+        let settingsMessageGeneration = settingsTransientMessageGeneration
         guard let verifier = (try? secrets.value(for: .openRouterPKCEVerifier)) ?? nil, !verifier.isEmpty else {
             isOpenRouterProvisioning = false
-            llmError = "OpenRouter sign-in didn't start on this Mac. Try connecting again."
+            pendingOpenRouterProvisioningMessageSurface = .shared
+            setLLMError("OpenRouter sign-in didn't start on this Mac. Try connecting again.", for: messageSurface)
             return
         }
-        let settingsMessageGeneration = settingsTransientMessageGeneration
 
         isTestingLLM = true
         defer { isTestingLLM = false }
@@ -129,8 +134,11 @@ extension AppState {
             key = try await provisioner.exchangeCodeForKey(code: code, codeVerifier: verifier)
         } catch {
             isOpenRouterProvisioning = false
-            guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
-            llmError = Self.llmMessage(for: error)
+            reportLLMErrorIfCurrent(
+                Self.llmMessage(for: error),
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
             return
         }
         guard isCurrentOpenRouterProvisioning(verifier: verifier) else {
@@ -147,12 +155,16 @@ extension AppState {
             )
         } catch {
             isOpenRouterProvisioning = false
-            guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
-            llmError = Self.keychainLLMMessage(action: "save", error: error)
+            reportLLMErrorIfCurrent(
+                Self.keychainLLMMessage(action: "save", error: error),
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
             return
         }
         try? secrets.remove(.openRouterPKCEVerifier)
         isOpenRouterProvisioning = false
+        pendingOpenRouterProvisioningMessageSurface = .shared
 
         // Activate the OpenAI-compatible provider pointed at OpenRouter.
         llmProviderKind = .openAICompatible

@@ -1,6 +1,10 @@
 import Foundation
 
 struct SettingsTransientMessages: Equatable {
+    var connectionError: String?
+    var workspaceAuthFailure: WorkspaceAuthFailure = .none
+    var workspaceAuthFailureAccountID: String?
+    var workspaceAuthIsCustomDomain: Bool = false
     var llmError: String?
     var managedError: String?
     var voiceError: String?
@@ -25,9 +29,9 @@ extension AppState {
     /// draft/review or menu-bar flow's own status (e.g. `approvalError`,
     /// `draftSavedMessage`, `draftSentMessage`), mailbox-browser row-action
     /// errors (`bodyError`, `draftError`), or active watched-folder failures
-    /// (`transcriptFolderError`). Provider/account/voice controls are shared with
-    /// the Setup Assistant, so Settings uses a separate transient message bucket
-    /// that can be cleared without erasing onboarding feedback.
+    /// (`transcriptFolderError`). Mailbox/provider/account/voice controls are
+    /// shared with the Setup Assistant, so Settings uses a separate transient
+    /// message bucket that can be cleared without erasing onboarding feedback.
     func resetTransientSettingsMessages() {
         settingsTransientMessageGeneration &+= 1
 
@@ -42,7 +46,10 @@ extension AppState {
         resetSettingsBillingAndPlanMessages()
 
         // Account / mailbox panes.
-        connectionError = nil
+        settingsTransientMessages.connectionError = nil
+        settingsTransientMessages.workspaceAuthFailure = .none
+        settingsTransientMessages.workspaceAuthFailureAccountID = nil
+        settingsTransientMessages.workspaceAuthIsCustomDomain = false
         fetchError = nil
 
         // AI provider / managed-account panes.
@@ -65,6 +72,18 @@ extension AppState {
 
     func isCurrentTransientMessageSurface(_ surface: TransientMessageSurface, generation: UInt64) -> Bool {
         surface == .shared || isCurrentSettingsTransientMessageGeneration(generation)
+    }
+
+    func connectionError(for surface: TransientMessageSurface) -> String? {
+        surface == .settings ? settingsTransientMessages.connectionError : connectionError
+    }
+
+    func setConnectionError(_ message: String?, for surface: TransientMessageSurface) {
+        if surface == .settings {
+            settingsTransientMessages.connectionError = message
+        } else {
+            connectionError = message
+        }
     }
 
     func llmError(for surface: TransientMessageSurface) -> String? {

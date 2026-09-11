@@ -26,7 +26,7 @@ extension AppState {
     /// suggestions. An explicit host stays attached while the same custom
     /// domain address is being edited, but recognized or unrelated domains can
     /// supersede a provider host from the previous address.
-    func updateMailEmailFromUser(_ email: String) {
+    func updateMailEmailFromUser(_ email: String, messageSurface: TransientMessageSurface = .shared) {
         let host = mailHost.trimmingCharacters(in: .whitespacesAndNewlines)
         let trackedDomain = mailHostExplicitlyEditedEmail.flatMap(Self.normalizedEmailDomainForHostTracking)
         let hasHostAssociatedWithTrackedEmail = trackedDomain != nil && !host.isEmpty
@@ -35,7 +35,7 @@ extension AppState {
         let changed = mailEmail != email
         mailEmail = email
         if changed {
-            clearWorkspaceAuthGuidance()
+            clearWorkspaceAuthGuidance(for: messageSurface)
         }
 
         if hasHostEnteredBeforeEmail {
@@ -91,11 +91,11 @@ extension AppState {
 
     /// Routes Advanced host-field edits through explicit tracking, so a
     /// provider host typed for a custom domain is not treated as a stale default.
-    func updateMailHostFromUser(_ host: String) {
+    func updateMailHostFromUser(_ host: String, messageSurface: TransientMessageSurface = .shared) {
         let changed = mailHost != host
         mailHost = host
         if changed {
-            clearWorkspaceAuthGuidance()
+            clearWorkspaceAuthGuidance(for: messageSurface)
         }
         let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedEmail = Self.normalizedEmailForHostTracking(mailEmail)
@@ -106,16 +106,16 @@ extension AppState {
         )
     }
 
-    func updateMailAppPasswordFromUser(_ appPassword: String) {
+    func updateMailAppPasswordFromUser(_ appPassword: String, messageSurface: TransientMessageSurface = .shared) {
         guard mailAppPassword != appPassword else { return }
         mailAppPassword = appPassword
-        clearWorkspaceAuthGuidance()
+        clearWorkspaceAuthGuidance(for: messageSurface)
     }
 
-    func updateMailPortFromUser(_ port: Int) {
+    func updateMailPortFromUser(_ port: Int, messageSurface: TransientMessageSurface = .shared) {
         guard mailPort != port else { return }
         mailPort = port
-        clearWorkspaceAuthGuidance()
+        clearWorkspaceAuthGuidance(for: messageSurface)
     }
 
     private func isMailHostReplaceableBySuggestion(

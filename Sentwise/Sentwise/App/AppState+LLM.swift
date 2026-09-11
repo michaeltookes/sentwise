@@ -71,16 +71,19 @@ extension AppState {
     /// Applies a user edit to the custom base URL. Because the endpoint is part
     /// of what a connection test verifies, editing it clears the verified state
     /// so the user must re-test before the provider counts as connected.
-    func updateLLMBaseURLFromUser(_ newValue: String) {
+    func updateLLMBaseURLFromUser(
+        _ newValue: String,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
         guard newValue != llmBaseURL else { return }
         let previousOrigin = currentLLMEndpointOrigin
         let previousAPIKeySecret = currentLLMAPIKeySecret
         llmBaseURL = newValue
         let shouldClearKey = llmProviderKind.supportsCustomBaseURL
             && shouldClearLLMAPIKeyForEndpointChange(from: previousOrigin, to: currentLLMEndpointOrigin)
-        llmError = nil
+        setLLMError(nil, for: messageSurface)
         if shouldClearKey {
-            clearLLMAPIKeyForEndpointChange(secret: previousAPIKeySecret)
+            clearLLMAPIKeyForEndpointChange(secret: previousAPIKeySecret, messageSurface: messageSurface)
         }
         verifiedLLMModel = ""
         refreshLLMConnectionStatus()
@@ -208,7 +211,7 @@ extension AppState {
         resumeInboxWatchingAfterProviderRecoveryIfNeeded()
     }
 
-    private func reportLLMErrorIfCurrent(
+    func reportLLMErrorIfCurrent(
         _ message: String,
         generation: UInt64,
         surface: TransientMessageSurface
@@ -240,8 +243,11 @@ extension AppState {
     /// Disconnects a BYO provider by clearing its stored API key. Defaults to the
     /// active provider; the Settings/onboarding BYO card passes the provider it is
     /// displaying so Disconnect works even while managed inference is active.
-    func disconnectLLM(provider: LLMProviderKind? = nil) {
-        llmError = nil
+    func disconnectLLM(
+        provider: LLMProviderKind? = nil,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
+        setLLMError(nil, for: messageSurface)
         let target = provider ?? llmProviderKind
         // Managed inference has no stored API key; disconnecting it means signing
         // out of the account, which is a distinct, explicit action in the UI.
@@ -250,7 +256,7 @@ extension AppState {
         do {
             try secrets.remove(targetSecret)
         } catch {
-            llmError = Self.keychainLLMMessage(action: "remove", error: error)
+            setLLMError(Self.keychainLLMMessage(action: "remove", error: error), for: messageSurface)
             return
         }
         // Clearing a key for a provider that isn't active leaves the active
@@ -349,12 +355,15 @@ extension AppState {
         oldOrigin != newOrigin || oldOrigin == nil || newOrigin == nil
     }
 
-    private func clearLLMAPIKeyForEndpointChange(secret: SecretKey) {
+    private func clearLLMAPIKeyForEndpointChange(
+        secret: SecretKey,
+        messageSurface: TransientMessageSurface
+    ) {
         llmAPIKey = ""
         do {
             try secrets.remove(secret)
         } catch {
-            llmError = Self.keychainLLMMessage(action: "remove", error: error)
+            setLLMError(Self.keychainLLMMessage(action: "remove", error: error), for: messageSurface)
         }
     }
 

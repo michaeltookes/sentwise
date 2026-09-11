@@ -177,6 +177,44 @@ final class AppStateConnectionStaleResultTests: XCTestCase {
         XCTAssertEqual(appState.mailEmail, "")
         XCTAssertTrue(appState.savedAccounts.isEmpty)
     }
+
+    func testSettingsConnectionFailureUsesSettingsErrorBucket() async {
+        let provider = FakeAppMailProvider(result: .failure(.connectionFailed("offline")))
+        let appState = makeAppState(provider: provider)
+        appState.connectionError = "setup assistant error"
+
+        let didConnect = await appState.testConnection(
+            with: workspaceCredentials(email: "marcus@example.com"),
+            messageSurface: .settings
+        )
+
+        XCTAssertFalse(didConnect)
+        XCTAssertEqual(appState.connectionError, "setup assistant error")
+        XCTAssertTrue(appState.connectionError(for: .settings)?.contains("offline") ?? false)
+    }
+
+    func testSettingsWorkspaceAuthFailureUsesSettingsGuidanceBucket() async {
+        let provider = FakeAppMailProvider(result: .failure(.authenticationFailed(workspaceInvalidCredentials)))
+        let appState = makeAppState(provider: provider)
+        appState.workspaceAuthFailure = .webLoginRequired
+        appState.workspaceAuthFailureAccountID = "setup"
+        appState.workspaceAuthIsCustomDomain = false
+
+        let didConnect = await appState.testConnection(
+            with: workspaceCredentials(email: "marcus@example.com"),
+            messageSurface: .settings
+        )
+
+        XCTAssertFalse(didConnect)
+        XCTAssertEqual(appState.workspaceAuthFailure, .webLoginRequired)
+        XCTAssertEqual(appState.workspaceAuthFailureAccountID, "setup")
+        XCTAssertFalse(appState.workspaceAuthIsCustomDomain)
+        XCTAssertNotNil(appState.workspaceAuthGuidance)
+        XCTAssertNotNil(appState.workspaceAuthGuidance(for: .settings))
+        XCTAssertEqual(appState.settingsTransientMessages.workspaceAuthFailure, .appPasswordRejectedWorkspace)
+        XCTAssertEqual(appState.settingsTransientMessages.workspaceAuthFailureAccountID, "marcus@example.com")
+        XCTAssertTrue(appState.settingsTransientMessages.workspaceAuthIsCustomDomain)
+    }
 }
 
 @MainActor

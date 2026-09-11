@@ -18,7 +18,7 @@ struct WorkspaceAuthGuidanceView: View {
     }
 
     var body: some View {
-        if let guidance = appState.workspaceAuthGuidance {
+        if let guidance = appState.workspaceAuthGuidance(for: messageSurface) {
             content(guidance)
                 .padding(10)
                 .background(

@@ -54,7 +54,7 @@ final class AppStateSettingsResetTests: XCTestCase {
         let appState = makeAppState()
 
         // Every transient message/error a Settings pane can show.
-        appState.connectionError = "conn"
+        appState.connectionError = "setup conn"
         appState.fetchError = "fetch"
         appState.bodyError = "body"
         appState.draftError = "draft"
@@ -62,6 +62,13 @@ final class AppStateSettingsResetTests: XCTestCase {
         appState.managedError = "setup managed"
         appState.voiceError = "setup voice"
         appState.googleOAuthInterestError = "setup oauth"
+        appState.workspaceAuthFailure = .webLoginRequired
+        appState.workspaceAuthFailureAccountID = "setup"
+        appState.workspaceAuthIsCustomDomain = true
+        appState.settingsTransientMessages.connectionError = "settings conn"
+        appState.settingsTransientMessages.workspaceAuthFailure = .imapDisabled
+        appState.settingsTransientMessages.workspaceAuthFailureAccountID = "settings"
+        appState.settingsTransientMessages.workspaceAuthIsCustomDomain = true
         appState.settingsTransientMessages.llmError = "settings llm"
         appState.settingsTransientMessages.managedError = "settings managed"
         appState.settingsTransientMessages.voiceError = "settings voice"
@@ -75,7 +82,8 @@ final class AppStateSettingsResetTests: XCTestCase {
 
         appState.resetTransientSettingsMessages()
 
-        XCTAssertNil(appState.connectionError)
+        XCTAssertEqual(appState.connectionError, "setup conn")
+        XCTAssertNil(appState.settingsTransientMessages.connectionError)
         XCTAssertNil(appState.fetchError)
         XCTAssertEqual(appState.bodyError, "body")
         XCTAssertEqual(appState.draftError, "draft")
@@ -83,6 +91,12 @@ final class AppStateSettingsResetTests: XCTestCase {
         XCTAssertEqual(appState.managedError, "setup managed")
         XCTAssertEqual(appState.voiceError, "setup voice")
         XCTAssertEqual(appState.googleOAuthInterestError, "setup oauth")
+        XCTAssertEqual(appState.workspaceAuthFailure, .webLoginRequired)
+        XCTAssertEqual(appState.workspaceAuthFailureAccountID, "setup")
+        XCTAssertTrue(appState.workspaceAuthIsCustomDomain)
+        XCTAssertEqual(appState.settingsTransientMessages.workspaceAuthFailure, .none)
+        XCTAssertNil(appState.settingsTransientMessages.workspaceAuthFailureAccountID)
+        XCTAssertFalse(appState.settingsTransientMessages.workspaceAuthIsCustomDomain)
         XCTAssertNil(appState.settingsTransientMessages.llmError)
         XCTAssertNil(appState.settingsTransientMessages.managedError)
         XCTAssertNil(appState.settingsTransientMessages.voiceError)

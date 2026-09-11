@@ -285,7 +285,7 @@ struct BYOProviderControls: View {
             ConnectedBadge(text: "Connected")
             Text("Saved to your Keychain.").font(.caption).foregroundStyle(.secondary)
             Button("Disconnect", role: .destructive) {
-                appState.disconnectLLM(provider: appState.llmProviderKind)
+                appState.disconnectLLM(provider: appState.llmProviderKind, messageSurface: messageSurface)
             }
         } else {
             ProviderKeyGuidance(provider: appState.llmProviderKind)
@@ -321,7 +321,7 @@ struct BYOProviderControls: View {
     private var baseURLBinding: Binding<String> {
         Binding(
             get: { appState.llmBaseURL },
-            set: { appState.updateLLMBaseURLFromUser($0) }
+            set: { appState.updateLLMBaseURLFromUser($0, messageSurface: messageSurface) }
         )
     }
 
