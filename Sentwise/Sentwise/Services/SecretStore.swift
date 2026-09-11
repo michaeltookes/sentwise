@@ -55,11 +55,19 @@ struct SecretKey: RawRepresentable, Hashable {
     /// sign-in. Stored so a redirect that arrives after an app relaunch can still
     /// finish the same Clerk flow.
     static let managedOAuthSignInID = SecretKey(rawValue: "managed.oauthSignInID")
+    /// The message surface that initiated the in-progress managed OAuth flow.
+    static let managedOAuthMessageSurface = SecretKey(rawValue: "managed.oauthMessageSurface")
+    /// Marker for a canceled managed OAuth browser flow whose redirect may still arrive.
+    static let managedOAuthCanceledCallbackSurface = SecretKey(rawValue: "managed.oauthCanceledCallbackSurface")
 
     /// The transient PKCE code verifier for an in-progress OpenRouter one-click
     /// key provisioning (item 59). Written when the browser hand-off starts and
     /// read+removed when the `sentwise://openrouter-callback` code comes back.
     static let openRouterPKCEVerifier = SecretKey(rawValue: "openRouter.pkceVerifier")
+    /// The message surface that initiated the in-progress OpenRouter PKCE flow.
+    static let openRouterPKCEMessageSurface = SecretKey(rawValue: "openRouter.pkceMessageSurface")
+    /// Marker for a canceled OpenRouter browser flow whose redirect may still arrive.
+    static let openRouterCanceledCallbackSurface = SecretKey(rawValue: "openRouter.canceledCallbackSurface")
     /// The OpenRouter-provisioned OpenAI-compatible API key. Kept separate from the
     /// generic OpenAI-compatible slot so one-click setup never overwrites a manual
     /// OpenAI or gateway credential.

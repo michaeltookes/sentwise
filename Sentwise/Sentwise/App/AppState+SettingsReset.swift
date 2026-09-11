@@ -15,6 +15,26 @@ extension AppState {
     enum TransientMessageSurface {
         case shared
         case settings
+
+        init?(persistedValue: String) {
+            switch persistedValue {
+            case "shared":
+                self = .shared
+            case "settings":
+                self = .settings
+            default:
+                return nil
+            }
+        }
+
+        var persistedValue: String {
+            switch self {
+            case .shared:
+                return "shared"
+            case .settings:
+                return "settings"
+            }
+        }
     }
 
     /// Clears the transient inline messages and errors shown in the Settings

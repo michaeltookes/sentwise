@@ -135,9 +135,14 @@ extension AppState {
         finalizeManagedSignIn(email: signedInEmail, accountID: result.accountIdentifier)
     }
 
-    func resetManagedSignInFlow(messageSurface: TransientMessageSurface = .shared) {
+    func resetManagedSignInFlow(
+        messageSurface: TransientMessageSurface = .shared,
+        resetPendingMessageSurface: Bool = true
+    ) {
         pendingManagedSignInEmail = nil
-        pendingManagedSignInMessageSurface = .shared
+        if resetPendingMessageSurface {
+            pendingManagedSignInMessageSurface = .shared
+        }
         managedSignInStage = .idle
         managedCodeInput = ""
         setManagedError(nil, for: messageSurface)
@@ -145,8 +150,14 @@ extension AppState {
     }
 
     func cancelManagedSignInFlow(messageSurface: TransientMessageSurface = .shared) async {
+        let wasAwaitingBrowser = managedSignInStage == .awaitingBrowser
+        let canceledSurface = pendingManagedSignInMessageSurface
         await managedAccount.cancelSignIn()
-        resetManagedSignInFlow(messageSurface: messageSurface)
+        resetManagedSignInFlow(messageSurface: messageSurface, resetPendingMessageSurface: false)
+        if wasAwaitingBrowser {
+            clearManagedOAuthMessageSurfaceBestEffort()
+            persistCanceledManagedOAuthCallbackSurfaceBestEffort(canceledSurface)
+        }
     }
 
     /// Signs out of the managed account: clears stored tokens and connected state.

@@ -69,6 +69,7 @@ final class AppStateProviderActivationTests: XCTestCase {
 
         let verifier = try secrets.value(for: .openRouterPKCEVerifier)
         XCTAssertFalse((verifier ?? "").isEmpty)
+        XCTAssertEqual(try secrets.value(for: .openRouterPKCEMessageSurface), "shared")
     }
 
     func testBeginOpenRouterProvisioningDoesNotOverwritePendingVerifier() throws {
@@ -80,6 +81,7 @@ final class AppStateProviderActivationTests: XCTestCase {
 
         XCTAssertNil(url)
         XCTAssertEqual(try secrets.value(for: .openRouterPKCEVerifier), "VER_A")
+        XCTAssertEqual(try secrets.value(for: .openRouterPKCEMessageSurface), "shared")
         XCTAssertTrue(appState.isOpenRouterProvisioning)
         XCTAssertNotNil(appState.llmError)
     }
@@ -370,8 +372,9 @@ final class AppStateProviderActivationTests: XCTestCase {
 
         XCTAssertEqual(appState.managedSignInStage, .idle)
         XCTAssertFalse(appState.isManagedSignedIn)
-        XCTAssertNotNil(appState.managedError)
+        XCTAssertNil(appState.managedError)
         XCTAssertNil(try secrets.value(for: .managedSessionID))
+        XCTAssertNil(try secrets.value(for: .managedOAuthCanceledCallbackSurface))
     }
 
     func testManagedOAuthCallbackFailureUsesInitiatingSettingsSurface() async throws {

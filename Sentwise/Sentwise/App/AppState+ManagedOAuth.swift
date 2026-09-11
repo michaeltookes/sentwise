@@ -34,6 +34,8 @@ extension AppState {
         pendingManagedSignInMessageSurface = .shared
         managedSignInStage = .idle
         isManagedSignedIn = true
+        clearManagedOAuthMessageSurfaceBestEffort()
+        clearCanceledManagedOAuthCallbackSurfaceBestEffort()
 
         // When managed is the active provider path, mark it verified so drafting
         // and the connected UI light up. The model is always the managed default.
@@ -75,8 +77,10 @@ extension AppState {
         let settingsMessageGeneration = settingsTransientMessageGeneration
         managedBusyAction = .google
         defer { managedBusyAction = nil }
+        clearCanceledManagedOAuthCallbackSurfaceBestEffort()
         do {
             let url = try await managedAccount.startGoogleSignIn(redirectURL: Self.managedOAuthRedirectURL)
+            persistManagedOAuthMessageSurfaceBestEffort(messageSurface)
             openURL(url)
             pendingManagedSignInActivatesProvider = activatesManagedProvider
             managedSignInStage = .awaitingBrowser
@@ -92,7 +96,13 @@ extension AppState {
 
     /// Completes Google sign-in from the `sentwise://oauth-callback` redirect.
     func handleManagedOAuthCallback(nonce: String) async {
-        let messageSurface = pendingManagedSignInMessageSurface
+        if managedSignInStage == .idle,
+           !secrets.hasValue(for: .managedOAuthSignInID),
+           consumeCanceledManagedOAuthCallbackSurface() != nil {
+            pendingManagedSignInMessageSurface = .shared
+            return
+        }
+        let messageSurface = currentManagedOAuthMessageSurface()
         setManagedError(nil, for: messageSurface)
         let settingsMessageGeneration = settingsTransientMessageGeneration
         managedBusyAction = .oauthCallback
@@ -119,5 +129,53 @@ extension AppState {
         let email = result.displayIdentifier.flatMap { $0.isEmpty ? nil : $0 } ?? "your Google account"
         finalizeManagedSignIn(email: email, accountID: result.accountIdentifier)
         logger.info("Managed Google sign-in completed")
+    }
+
+    func persistManagedOAuthMessageSurfaceBestEffort(_ surface: TransientMessageSurface) {
+        do {
+            try secrets.set(surface.persistedValue, for: .managedOAuthMessageSurface)
+        } catch {
+            logger.error("Failed to persist managed OAuth message surface: \(error.localizedDescription)")
+        }
+    }
+
+    func clearManagedOAuthMessageSurfaceBestEffort() {
+        do {
+            try secrets.remove(.managedOAuthMessageSurface)
+        } catch {
+            logger.error("Failed to clear managed OAuth message surface: \(error.localizedDescription)")
+        }
+    }
+
+    func persistCanceledManagedOAuthCallbackSurfaceBestEffort(_ surface: TransientMessageSurface) {
+        do {
+            try secrets.set(surface.persistedValue, for: .managedOAuthCanceledCallbackSurface)
+        } catch {
+            logger.error("Failed to persist canceled managed OAuth marker: \(error.localizedDescription)")
+        }
+    }
+
+    func clearCanceledManagedOAuthCallbackSurfaceBestEffort() {
+        do {
+            try secrets.remove(.managedOAuthCanceledCallbackSurface)
+        } catch {
+            logger.error("Failed to clear canceled managed OAuth marker: \(error.localizedDescription)")
+        }
+    }
+
+    private func currentManagedOAuthMessageSurface() -> TransientMessageSurface {
+        Self.managedOAuthMessageSurface(secrets: secrets) ?? pendingManagedSignInMessageSurface
+    }
+
+    static func managedOAuthMessageSurface(secrets: SecretStore) -> TransientMessageSurface? {
+        let value = (try? secrets.value(for: .managedOAuthMessageSurface)) ?? nil
+        return value.flatMap(TransientMessageSurface.init(persistedValue:))
+    }
+
+    private func consumeCanceledManagedOAuthCallbackSurface() -> TransientMessageSurface? {
+        let value = (try? secrets.value(for: .managedOAuthCanceledCallbackSurface)) ?? nil
+        let surface = value.flatMap(TransientMessageSurface.init(persistedValue:))
+        clearCanceledManagedOAuthCallbackSurfaceBestEffort()
+        return surface
     }
 }
