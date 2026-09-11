@@ -54,6 +54,7 @@ extension AppState {
                 return
             }
             if let detected = SignatureDetector.detect(fromSentBodies: bodies) {
+                guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
                 guard signaturePolicy == startingSignaturePolicy, signatureText == startingSignatureText else {
                     report(false, "Signature settings changed while detection was running, so your edits were left unchanged.")
                     return
