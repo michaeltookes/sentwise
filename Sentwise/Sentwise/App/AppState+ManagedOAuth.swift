@@ -124,26 +124,34 @@ extension AppState {
     /// Completes Google sign-in from the `sentwise://oauth-callback` redirect.
     func handleManagedOAuthCallback(nonce: String, flowID: String? = nil) async {
         guard shouldHandleManagedOAuthCallback(flowID: flowID) else { return }
+        let messageSurface = currentManagedOAuthMessageSurface()
+        let settingsMessageGeneration = settingsTransientMessageGeneration
+        let signInID: String?
+        do {
+            signInID = try secrets.value(for: .managedOAuthSignInID)
+        } catch {
+            reportManagedOAuthCallbackStateReadError(error, generation: settingsMessageGeneration, surface: messageSurface)
+            return
+        }
         if managedSignInStage == .idle,
-           !secrets.hasValue(for: .managedOAuthSignInID),
+           signInID?.isEmpty != false,
            consumeCanceledManagedOAuthCallbackSurface() != nil {
             pendingManagedSignInMessageSurface = .shared
             return
         }
-        let messageSurface = currentManagedOAuthMessageSurface()
         setManagedError(nil, for: messageSurface)
-        let settingsMessageGeneration = settingsTransientMessageGeneration
-        let signInID = ((try? secrets.value(for: .managedOAuthSignInID)) ?? nil)
         managedBusyAction = .oauthCallback
         defer { managedBusyAction = nil }
         let result: ManagedAccountSignInResult
         do {
             result = try await managedAccount.completeGoogleSignIn(rotatingTokenNonce: nonce)
         } catch {
-            guard isCurrentManagedOAuthCallback(signInID: signInID, flowID: flowID) else {
-                finishIgnoredManagedOAuthCallbackIfEnded()
-                return
-            }
+            guard shouldContinueManagedOAuthCallback(
+                signInID: signInID,
+                flowID: flowID,
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            ) else { return }
             reportManagedOAuthCallbackError(
                 Self.managedMessage(for: error),
                 generation: settingsMessageGeneration,
@@ -157,8 +165,13 @@ extension AppState {
             }
             return
         }
-        guard isCurrentManagedOAuthCallbackFlow(flowID: flowID) else {
-            await discardIgnoredManagedOAuthSuccessIfEnded()
+        do {
+            guard try managedOAuthCallbackFlowMatches(flowID: flowID, resetCanceledWhenMissing: false) else {
+                await discardIgnoredManagedOAuthSuccessIfEnded()
+                return
+            }
+        } catch {
+            reportManagedOAuthCallbackStateReadError(error, generation: settingsMessageGeneration, surface: messageSurface)
             return
         }
         if pendingManagedSignInActivatesProvider, llmProviderKind != .managed {
@@ -167,6 +180,54 @@ extension AppState {
         let email = result.displayIdentifier.flatMap { $0.isEmpty ? nil : $0 } ?? "your Google account"
         finalizeManagedSignIn(email: email, accountID: result.accountIdentifier)
         logger.info("Managed Google sign-in completed")
+    }
+
+    private func shouldContinueManagedOAuthCallback(
+        signInID: String?,
+        flowID: String?,
+        generation: UInt64,
+        surface: TransientMessageSurface
+    ) -> Bool {
+        do {
+            guard try managedOAuthCallbackMatchesCurrent(signInID: signInID, flowID: flowID) else {
+                finishIgnoredManagedOAuthCallbackIfEnded()
+                return false
+            }
+            return true
+        } catch {
+            reportManagedOAuthCallbackStateReadError(error, generation: generation, surface: surface)
+            return false
+        }
+    }
+
+    private func managedOAuthCallbackMatchesCurrent(signInID: String?, flowID: String?) throws -> Bool {
+        guard try secrets.value(for: .managedOAuthSignInID) == signInID else { return false }
+        return try managedOAuthCallbackFlowMatches(flowID: flowID, resetCanceledWhenMissing: false)
+    }
+
+    private func managedOAuthCallbackFlowMatches(
+        flowID: String?,
+        resetCanceledWhenMissing: Bool
+    ) throws -> Bool {
+        let currentFlowID = try secrets.value(for: .managedOAuthFlowID)
+        guard let flowID else { return currentFlowID == nil }
+        if currentFlowID == nil, resetCanceledWhenMissing {
+            _ = consumeCanceledManagedOAuthCallbackSurface()
+            pendingManagedSignInMessageSurface = .shared
+        }
+        return currentFlowID == flowID
+    }
+
+    private func reportManagedOAuthCallbackStateReadError(
+        _ error: Error,
+        generation: UInt64,
+        surface: TransientMessageSurface
+    ) {
+        reportManagedOAuthCallbackError(
+            Self.callbackStateReadMessage(subject: "Sentwise sign-in state", error: error),
+            generation: generation,
+            surface: surface
+        )
     }
 
     private func reportManagedOAuthCallbackError(
@@ -227,26 +288,17 @@ extension AppState {
         Self.managedOAuthMessageSurface(secrets: secrets) ?? pendingManagedSignInMessageSurface
     }
 
-    private func isCurrentManagedOAuthCallback(signInID: String?, flowID: String?) -> Bool {
-        let currentSignInID = ((try? secrets.value(for: .managedOAuthSignInID)) ?? nil)
-        guard currentSignInID == signInID else { return false }
-        return isCurrentManagedOAuthCallbackFlow(flowID: flowID)
-    }
-
-    private func isCurrentManagedOAuthCallbackFlow(flowID: String?) -> Bool {
-        let currentFlowID = ((try? secrets.value(for: .managedOAuthFlowID)) ?? nil)
-        guard let flowID else { return currentFlowID == nil }
-        return currentFlowID == flowID
-    }
-
     private func shouldHandleManagedOAuthCallback(flowID: String?) -> Bool {
-        let currentFlowID = ((try? secrets.value(for: .managedOAuthFlowID)) ?? nil)
-        guard let flowID else { return currentFlowID == nil }
-        if currentFlowID == nil {
-            _ = consumeCanceledManagedOAuthCallbackSurface()
-            pendingManagedSignInMessageSurface = .shared
+        do {
+            return try managedOAuthCallbackFlowMatches(flowID: flowID, resetCanceledWhenMissing: true)
+        } catch {
+            reportManagedOAuthCallbackStateReadError(
+                error,
+                generation: settingsTransientMessageGeneration,
+                surface: currentManagedOAuthMessageSurface()
+            )
+            return false
         }
-        return currentFlowID == flowID
     }
 
     private func finishIgnoredManagedOAuthCallbackIfEnded() {
@@ -257,7 +309,16 @@ extension AppState {
     }
 
     private func discardIgnoredManagedOAuthSuccessIfEnded() async {
-        guard ((try? secrets.value(for: .managedOAuthFlowID)) ?? nil) == nil else { return }
+        do {
+            guard try secrets.value(for: .managedOAuthFlowID) == nil else { return }
+        } catch {
+            reportManagedOAuthCallbackStateReadError(
+                error,
+                generation: settingsTransientMessageGeneration,
+                surface: currentManagedOAuthMessageSurface()
+            )
+            return
+        }
         do {
             try await managedAccount.signOut()
         } catch {

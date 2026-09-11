@@ -143,13 +143,21 @@ extension AppState {
         provisioner: OpenRouterKeyProvisioner = OpenRouterKeyProvisioner()
     ) async {
         guard shouldHandleOpenRouterCallback(flowID: flowID) else { return }
-        guard let verifier = (try? secrets.value(for: .openRouterPKCEVerifier)) ?? nil, !verifier.isEmpty else {
-            handleMissingOpenRouterVerifierCallback()
+        let messageSurface = currentOpenRouterProvisioningMessageSurface()
+        let settingsMessageGeneration = settingsTransientMessageGeneration
+        let verifier: String
+        do {
+            guard let storedVerifier = try secrets.value(for: .openRouterPKCEVerifier),
+                  !storedVerifier.isEmpty else {
+                handleMissingOpenRouterVerifierCallback()
+                return
+            }
+            verifier = storedVerifier
+        } catch {
+            reportOpenRouterCallbackStateReadError(error, generation: settingsMessageGeneration, surface: messageSurface)
             return
         }
-        let messageSurface = currentOpenRouterProvisioningMessageSurface()
         setLLMError(nil, for: messageSurface)
-        let settingsMessageGeneration = settingsTransientMessageGeneration
 
         isTestingLLM = true
         defer { isTestingLLM = false }
@@ -158,10 +166,12 @@ extension AppState {
         do {
             key = try await provisioner.exchangeCodeForKey(code: code, codeVerifier: verifier)
         } catch {
-            guard isCurrentOpenRouterProvisioning(verifier: verifier, flowID: flowID) else {
-                finishIgnoredOpenRouterCallbackIfEnded()
-                return
-            }
+            guard shouldContinueOpenRouterCallback(
+                verifier: verifier,
+                flowID: flowID,
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            ) else { return }
             isOpenRouterProvisioning = false
             reportOpenRouterCallbackError(
                 Self.llmMessage(for: error),
@@ -170,11 +180,25 @@ extension AppState {
             )
             return
         }
-        guard isCurrentOpenRouterProvisioning(verifier: verifier, flowID: flowID) else {
-            finishIgnoredOpenRouterCallbackIfEnded()
-            return
-        }
+        guard shouldContinueOpenRouterCallback(
+            verifier: verifier,
+            flowID: flowID,
+            generation: settingsMessageGeneration,
+            surface: messageSurface
+        ) else { return }
 
+        completeOpenRouterProvisioning(
+            with: key,
+            generation: settingsMessageGeneration,
+            surface: messageSurface
+        )
+    }
+
+    private func completeOpenRouterProvisioning(
+        with key: String,
+        generation: UInt64,
+        surface: TransientMessageSurface
+    ) {
         do {
             try secrets.set(
                 key,
@@ -187,8 +211,8 @@ extension AppState {
             isOpenRouterProvisioning = false
             reportOpenRouterCallbackError(
                 Self.keychainLLMMessage(action: "save", error: error),
-                generation: settingsMessageGeneration,
-                surface: messageSurface
+                generation: generation,
+                surface: surface
             )
             return
         }
@@ -202,19 +226,27 @@ extension AppState {
         activateProvisionedOpenRouterKey(key)
     }
 
-    private func isCurrentOpenRouterProvisioning(verifier: String) -> Bool {
-        ((try? secrets.value(for: .openRouterPKCEVerifier)) ?? nil) == verifier
+    private func shouldContinueOpenRouterCallback(
+        verifier: String,
+        flowID: String?,
+        generation: UInt64,
+        surface: TransientMessageSurface
+    ) -> Bool {
+        do {
+            guard try openRouterProvisioningMatchesCurrent(verifier: verifier, flowID: flowID) else {
+                finishIgnoredOpenRouterCallbackIfEnded()
+                return false
+            }
+            return true
+        } catch {
+            reportOpenRouterCallbackStateReadError(error, generation: generation, surface: surface)
+            return false
+        }
     }
 
-    private func isCurrentOpenRouterProvisioning(verifier: String, flowID: String?) -> Bool {
-        isCurrentOpenRouterProvisioning(verifier: verifier)
-            && isCurrentOpenRouterCallbackFlow(flowID: flowID)
-    }
-
-    private func isCurrentOpenRouterCallbackFlow(flowID: String?) -> Bool {
-        let currentFlowID = ((try? secrets.value(for: .openRouterPKCEFlowID)) ?? nil)
-        guard let flowID else { return currentFlowID == nil }
-        return currentFlowID == flowID
+    private func openRouterProvisioningMatchesCurrent(verifier: String, flowID: String?) throws -> Bool {
+        guard try secrets.value(for: .openRouterPKCEVerifier) == verifier else { return false }
+        return try openRouterCallbackFlowMatches(flowID: flowID, resetCanceledWhenMissing: false)
     }
 
     private func handleMissingOpenRouterVerifierCallback() {
@@ -247,6 +279,31 @@ extension AppState {
         }
     }
 
+    private func reportOpenRouterCallbackStateReadError(
+        _ error: Error,
+        generation: UInt64,
+        surface: TransientMessageSurface
+    ) {
+        reportOpenRouterCallbackError(
+            Self.callbackStateReadMessage(subject: "OpenRouter sign-in state", error: error),
+            generation: generation,
+            surface: surface
+        )
+    }
+
+    static func callbackStateReadMessage(subject: String, error: Error) -> String {
+        let detail: String
+        switch error {
+        case KeychainError.unexpectedStatus(let status):
+            detail = "Keychain returned status \(status)."
+        case KeychainError.dataEncodingFailed:
+            detail = "Keychain could not decode the saved value."
+        default:
+            detail = error.localizedDescription
+        }
+        return "Couldn't read \(subject) from Keychain. \(detail)"
+    }
+
     private func activateProvisionedOpenRouterKey(_ key: String) {
         llmProviderKind = .openAICompatible
         llmBaseURL = OpenRouterKeyProvisioner.apiBaseURL
@@ -267,9 +324,25 @@ extension AppState {
     }
 
     private func shouldHandleOpenRouterCallback(flowID: String?) -> Bool {
-        let currentFlowID = ((try? secrets.value(for: .openRouterPKCEFlowID)) ?? nil)
+        do {
+            return try openRouterCallbackFlowMatches(flowID: flowID, resetCanceledWhenMissing: true)
+        } catch {
+            reportOpenRouterCallbackStateReadError(
+                error,
+                generation: settingsTransientMessageGeneration,
+                surface: currentOpenRouterProvisioningMessageSurface()
+            )
+            return false
+        }
+    }
+
+    private func openRouterCallbackFlowMatches(
+        flowID: String?,
+        resetCanceledWhenMissing: Bool
+    ) throws -> Bool {
+        let currentFlowID = try secrets.value(for: .openRouterPKCEFlowID)
         guard let flowID else { return currentFlowID == nil }
-        if currentFlowID == nil {
+        if currentFlowID == nil, resetCanceledWhenMissing {
             _ = consumeCanceledOpenRouterCallbackSurface()
             pendingOpenRouterProvisioningMessageSurface = .shared
         }

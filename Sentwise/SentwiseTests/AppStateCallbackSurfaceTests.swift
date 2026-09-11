@@ -195,6 +195,33 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         XCTAssertNil(appState.llmError(for: .settings))
     }
 
+    func testOpenRouterCallbackFlowIDReadFailureReportsErrorWithoutExchange() async throws {
+        let secrets = ManagedAccountFailingSecretStore(seed: [
+            .openRouterPKCEVerifier: "VER",
+            .openRouterPKCEFlowID: "FLOW",
+            .openRouterPKCEMessageSurface: "settings"
+        ])
+        secrets.failOnValueKeys = [.openRouterPKCEFlowID]
+        let appState = makeAppState(secrets: secrets)
+        let transport = CallbackSurfaceJSONTransport(
+            HTTPResponse(statusCode: 200, body: Data(#"{"key":"sk-or-unreached"}"#.utf8))
+        )
+
+        await appState.handleOpenRouterCallback(
+            code: "CODE",
+            flowID: "FLOW",
+            provisioner: OpenRouterKeyProvisioner(transport: transport)
+        )
+
+        XCTAssertEqual(transport.callCount, 0)
+        XCTAssertTrue(appState.isOpenRouterProvisioning)
+        XCTAssertNil(appState.llmError)
+        XCTAssertTrue(try XCTUnwrap(appState.llmError(for: .settings)).contains("OpenRouter sign-in state"))
+        XCTAssertEqual(try secrets.value(for: .openRouterPKCEVerifier), "VER")
+        secrets.failOnValueKeys = []
+        XCTAssertEqual(try secrets.value(for: .openRouterPKCEFlowID), "FLOW")
+    }
+
     func testCanceledSettingsManagedOAuthCallbackDoesNotDisturbReplacementFlow() async throws {
         let secrets = InMemorySecretStore()
         let secondStartResponse = startResponse.replacingOccurrences(of: #""id":"sia_1""#, with: #""id":"sia_2""#)
@@ -255,6 +282,34 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         XCTAssertEqual(try secrets.value(for: .managedOAuthFlowID), flowB)
         XCTAssertNil(appState.managedError)
         XCTAssertNil(appState.managedError(for: .settings))
+    }
+
+    func testManagedOAuthCallbackFlowIDReadFailureReportsErrorWithoutCompletionRequest() async throws {
+        let secrets = ManagedAccountFailingSecretStore(seed: [
+            .managedOAuthSignInID: "sia_1",
+            .managedOAuthFlowID: "FLOW",
+            .managedOAuthMessageSurface: "settings"
+        ])
+        secrets.failOnValueKeys = [.managedOAuthFlowID]
+        let transport = QueueClerkTransport([
+            clerkReply(#"{"response":{"id":"sia_1","status":"complete","created_session_id":"sess_1"}}"#)
+        ])
+        let clerk = ClerkClient(
+            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            transport: transport
+        )
+        let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
+        let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
+
+        await appState.handleManagedOAuthCallback(nonce: "nonce_1", flowID: "FLOW")
+
+        XCTAssertEqual(transport.callCount, 0)
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertNil(appState.managedError)
+        XCTAssertTrue(try XCTUnwrap(appState.managedError(for: .settings)).contains("Sentwise sign-in state"))
+        XCTAssertEqual(try secrets.value(for: .managedOAuthSignInID), "sia_1")
+        secrets.failOnValueKeys = []
+        XCTAssertEqual(try secrets.value(for: .managedOAuthFlowID), "FLOW")
     }
 
     func testCanceledSettingsManagedOAuthCallbackIsIgnored() async throws {
