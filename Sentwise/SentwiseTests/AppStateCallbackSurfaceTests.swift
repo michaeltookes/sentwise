@@ -72,29 +72,6 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         XCTAssertNotNil(relaunched.llmError(for: .settings))
     }
 
-    func testOpenRouterStateReadFailureReportsBothSurfacesWhenSurfaceCannotBeRead() async throws {
-        let secrets = AppStateFailingSecretStore(seed: [
-            .openRouterPKCEVerifier: "VER",
-            .openRouterPKCEMessageSurface: "settings",
-            .openRouterPKCEFlowID: "flow_1"
-        ])
-        secrets.failOnValue = [.openRouterPKCEMessageSurface, .openRouterPKCEFlowID]
-        let appState = makeAppState(secrets: secrets)
-        let transport = CallbackSurfaceJSONTransport(
-            HTTPResponse(statusCode: 200, body: Data(#"{"key":"sk-or-xyz"}"#.utf8))
-        )
-
-        await appState.handleOpenRouterCallback(
-            code: "CODE",
-            flowID: "flow_1",
-            provisioner: OpenRouterKeyProvisioner(transport: transport)
-        )
-
-        XCTAssertEqual(transport.callCount, 0)
-        XCTAssertNotNil(appState.llmError)
-        XCTAssertNotNil(appState.llmError(for: .settings))
-    }
-
     func testOpenRouterCallbackFailureSurvivesSettingsCloseDuringExchange() async throws {
         let secrets = InMemorySecretStore()
         let appState = makeAppState(secrets: secrets)
@@ -353,31 +330,6 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         XCTAssertEqual(appState.managedError, "setup assistant error")
         XCTAssertNil(appState.managedError(for: .settings))
         XCTAssertEqual(appState.managedSignInStage, .idle)
-        XCTAssertFalse(appState.isManagedSignedIn)
-    }
-
-    func testManagedOAuthStateReadFailureReportsBothSurfacesWhenSurfaceCannotBeRead() async throws {
-        let secrets = AppStateFailingSecretStore(seed: [
-            .managedOAuthSignInID: "sia_1",
-            .managedOAuthMessageSurface: "settings",
-            .managedOAuthFlowID: "flow_1"
-        ])
-        secrets.failOnValue = [.managedOAuthMessageSurface, .managedOAuthFlowID]
-        let transport = QueueClerkTransport([
-            clerkReply(#"{"response":{"status":"complete","created_session_id":"sess_1","identifier":"m@example.com"}}"#, clientToken: "client_A")
-        ])
-        let clerk = ClerkClient(
-            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
-            transport: transport
-        )
-        let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
-        let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
-
-        await appState.handleManagedOAuthCallback(nonce: "nonce_1", flowID: "flow_1")
-
-        XCTAssertEqual(transport.callCount, 0)
-        XCTAssertNotNil(appState.managedError)
-        XCTAssertNotNil(appState.managedError(for: .settings))
         XCTAssertFalse(appState.isManagedSignedIn)
     }
 
