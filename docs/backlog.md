@@ -44,6 +44,15 @@ Prioritized list of planned features, improvements, and technical debt for **sen
    - ✅ Connected-account indicator and a "disconnect" action in Settings (disconnect clears the token, keeps credentials).
    - ⬜ **Remaining:** verify the live end-to-end consent flow against a real Google client; **empirically verify refresh-token lifetime** (Testing vs Production) and document the setup so users avoid weekly re-auth; optionally show the connected account's email address; consider server-side token revocation on disconnect.
 
+93. **Brand parity: app icon + DMG art on the "Closer" palette** — *owner-raised 2026-09-12; land before item 74 cuts 1.0*
+    The app's visual brand predates the site's: the `AppIcon.appiconset` and the DMG background (`Distribution/assets/dmg-background.svg`) are the 2026-08-14 blue-family owl, while sentwise.ai ships the 2026-09-03 "Closer" brand (emerald + gold on forest). A first-time user goes emerald site → blue Dock/menu-bar/notification icon and blue DMG art — a discontinuity at the conversion moment and on every draft-ready notification.
+    *As a first-time user coming from sentwise.ai, I want the app I install to look like the product I was sold, so that nothing feels off between the site and the app.*
+    - Regenerate the app icon set from the site's canonical mark (see the site repo's `src/lib/brandMark.ts` — emerald envelope owl, gold beak, forest ground; adapt for icon legibility at 16–1024px).
+    - Recolor `dmg-background.svg` to the Closer palette and re-export the PNG(s) — **keep the exact baked-in geometry** (660×400 window, icon at (160,214), Applications at (500,214), 128px icons) per `make-dmg.sh`'s warning.
+    - Check the menu-bar template icon and any in-app owl usage for palette drift while in there.
+    - Verify: icon renders crisply at all sizes (Dock, notification banner, Finder); a locally built DMG (`make-dmg.sh`) shows the new art with correct layout.
+    - Rides into the next tagged release automatically; must be merged before the item 74 `1.0.0` release is cut.
+
 74. **Launch readiness: clean-Mac verification, security pass, and the 1.0 release**
     The last item to close before inviting the public. Every release so far was tested on the maintainer's own configured Mac; a stranger's experience — Gatekeeper, fresh Keychain, no prior Application Support, TCC prompts — has never been observed.
     *As the maintainer, I want proof that a first-time user on a clean Mac gets from download to first draft without help, so that launch day isn't debugging day.*
