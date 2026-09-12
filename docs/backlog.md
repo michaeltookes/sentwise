@@ -267,6 +267,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Fall back to the current `management_urls` path if the portal-session create fails, so billing management never regresses to a dead button.
     - Tests: action → deep-link mapping, fallback path, no caching of session URLs.
     - Live-verify in sandbox: Manage billing and Cancel both land signed-in, no email step.
+    - ✅ **Built — pending live verification** *(2026-09-11; service branch `portal-sessions`, reviewed)*: manage-billing now mints a fresh `POST /customers/{customerId}/portal-sessions` (scoped via `subscription_ids`) and returns the per-subscription authenticated deep link (`cancel` → `cancel_subscription`, `update_payment_method` → `update_subscription_payment_method`), matched by subscription id with `general.overview` as the in-session fallback; customer id comes from the webhook-stored `privateMetadata.subscription` with live-subscription recovery for older accounts; any session failure falls back to the legacy `management_urls` path (never a dead button); response stays `{managementUrl}` + `no-store`; 366 service tests green (+16). **Remaining:** owner PR + merge, deploy, then live sandbox verify (Manage billing + Cancel land signed-in, no email step) — which also completes the item 90 cancel verify.
 
 ## Low Priority
 
