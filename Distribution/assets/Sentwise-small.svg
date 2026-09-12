@@ -1,42 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Sentwise">
   <title>Sentwise (small-size variant)</title>
   <!--
-    Hand-tuned 16/32px variant of Sentwise.svg, per the design handoff's
-    small-size recipe: pupils dropped, eye rings collapsed to solid dots,
-    creases thickened, beak enlarged ~15%, and all blur filters/sheen
-    removed (they read as mud below 32px). Use ONLY for the 16 and 32px
-    icon slots; every larger size renders from Sentwise.svg.
+    Hand-tuned 16/32px variant of Sentwise.svg on the "Closer" palette
+    (2026-09-12). Below ~32px the large mark's emerald outline vanishes (a
+    hairline stroke downscales to sub-pixel) and the flap creases merge with the
+    eyes into mud, so the small mark is deliberately reduced to the three cues
+    that survive at 16px: a FILLED emerald envelope (#3FD99B) for figure/ground
+    on the forest plate (#0A3D2D), two bold forest-950 eyes (#072A20) with the
+    rings/pupils collapsed to solid dots, and the enlarged signature gold beak
+    (#F2B705). Creases dropped and all blur filters/sheen removed (they read as
+    mud below 32px). Use ONLY for the 16 and 32px icon slots; every larger size
+    renders from Sentwise.svg.
   -->
-  <defs>
-    <linearGradient id="plate" x1="0.42" y1="0" x2="0.58" y2="1">
-      <stop offset="0" stop-color="#48ABD1"></stop>
-      <stop offset="0.46" stop-color="#2E6EB2"></stop>
-      <stop offset="1" stop-color="#1E407C"></stop>
-    </linearGradient>
-    <linearGradient id="beak" x1="0.1" y1="0" x2="0.9" y2="1">
-      <stop offset="0" stop-color="#F8E6A0"></stop>
-      <stop offset="1" stop-color="#F0AE3C"></stop>
-    </linearGradient>
-    <clipPath id="envClip">
-      <rect x="176" y="300" width="672" height="448" rx="60" ry="60"></rect>
-    </clipPath>
-  </defs>
-
   <g transform="translate(100, 88) scale(0.8047)">
-    <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229" fill="url(#plate)"></rect>
+    <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229" fill="#0A3D2D"></rect>
 
-    <rect x="176" y="300" width="672" height="448" rx="60" ry="60" fill="#FFFFFF"></rect>
+    <rect x="176" y="300" width="672" height="448" rx="60" ry="60" fill="#3FD99B"></rect>
 
-    <g clip-path="url(#envClip)" stroke="#2662A6" stroke-width="60" stroke-linecap="round">
-      <line x1="212" y1="334" x2="547" y2="587"></line>
-      <line x1="812" y1="334" x2="477" y2="587"></line>
+    <g fill="#072A20">
+      <circle cx="372" cy="500" r="84"></circle>
+      <circle cx="652" cy="500" r="84"></circle>
     </g>
 
-    <g fill="#185294">
-      <circle cx="368" cy="504" r="72"></circle>
-      <circle cx="656" cy="504" r="72"></circle>
-    </g>
-
-    <polygon points="443,558 581,558 512,691" fill="url(#beak)"></polygon>
+    <polygon points="430,556 594,556 512,706" fill="#F2B705"></polygon>
   </g>
 </svg>
