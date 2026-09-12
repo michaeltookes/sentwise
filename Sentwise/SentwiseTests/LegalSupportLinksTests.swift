@@ -13,7 +13,7 @@ final class LegalSupportLinksTests: XCTestCase {
                 LegalSupportLinks.terms,
                 LegalSupportLinks.privacy,
                 LegalSupportLinks.security,
-                LegalSupportLinks.support,
+                LegalSupportLinks.support
             ]
         )
     }

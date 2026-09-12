@@ -23,81 +23,82 @@ struct AboutPane: View {
     }
 
     var body: some View {
-        VStack(spacing: 18) {
-            VStack(spacing: 10) {
-                Image(nsImage: appIcon)
-                    .resizable()
-                    .frame(width: 88, height: 88)
-                    .accessibilityHidden(true)
+        ScrollView {
+            VStack(spacing: 18) {
+                VStack(spacing: 10) {
+                    Image(nsImage: appIcon)
+                        .resizable()
+                        .frame(width: 88, height: 88)
+                        .accessibilityHidden(true)
 
-                Text("Sentwise")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    Text("Sentwise")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
 
-                Text("Version \(appVersion) (\(buildNumber))")
-                    .font(.subheadline)
+                    Text("Version \(appVersion) (\(buildNumber))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Version \(appVersion), build \(buildNumber)")
+                }
+
+                Text(AppState.privacyStatement)
+                    .font(.caption)
+                    .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel("Version \(appVersion), build \(buildNumber)")
+                    .frame(maxWidth: 380)
+
+                Divider()
+                    .frame(maxWidth: 200)
+
+                VStack(spacing: 10) {
+                    Link(destination: URL(string: "https://github.com/michaeltookes/sentwise")!) {
+                        Label("GitHub Repository", systemImage: "chevron.left.forwardslash.chevron.right")
+                    }
+                    .accessibilityLabel("Open the Sentwise GitHub repository")
+
+                    Link(destination: URL(string: "https://sentwise.ai")!) {
+                        Label("sentwise.ai", systemImage: "globe")
+                    }
+                    .accessibilityLabel("Open sentwise.ai")
+                }
+
+                Divider()
+                    .frame(maxWidth: 200)
+
+                LegalSupportSection()
+
+                Divider()
+                    .frame(maxWidth: 200)
+
+                VStack(spacing: 4) {
+                    Button("Check for Updates…") {
+                        updateManager.checkForUpdates()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .disabled(!updateManager.canCheckForUpdates)
+                    .accessibilityLabel("Check for Sentwise updates")
+
+                    if !updateManager.canCheckForUpdates,
+                       let reason = updateManager.unavailableReason {
+                        Text(reason)
+                            .font(.caption2)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: 320)
+                    }
+                }
+
+                Text("\(copyrightYear) Sentwise · Made with Swift and SwiftUI")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
-
-            Text(AppState.privacyStatement)
-                .font(.caption)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: 380)
-
-            Divider()
-                .frame(maxWidth: 200)
-
-            VStack(spacing: 10) {
-                Link(destination: URL(string: "https://github.com/michaeltookes/sentwise")!) {
-                    Label("GitHub Repository", systemImage: "chevron.left.forwardslash.chevron.right")
-                }
-                .accessibilityLabel("Open the Sentwise GitHub repository")
-
-                Link(destination: URL(string: "https://sentwise.ai")!) {
-                    Label("sentwise.ai", systemImage: "globe")
-                }
-                .accessibilityLabel("Open sentwise.ai")
-            }
-
-            Divider()
-                .frame(maxWidth: 200)
-
-            LegalSupportSection()
-
-            Divider()
-                .frame(maxWidth: 200)
-
-            VStack(spacing: 4) {
-                Button("Check for Updates…") {
-                    updateManager.checkForUpdates()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .disabled(!updateManager.canCheckForUpdates)
-                .accessibilityLabel("Check for Sentwise updates")
-
-                if !updateManager.canCheckForUpdates,
-                   let reason = updateManager.unavailableReason {
-                    Text(reason)
-                        .font(.caption2)
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: 320)
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            Text("\(copyrightYear) Sentwise · Made with Swift and SwiftUI")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 24)
-        .padding(.bottom, 16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var appVersion: String {
