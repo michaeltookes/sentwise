@@ -18,8 +18,8 @@ template, Sparkle wiring, DMG assets) lives under `Distribution/`.
 | In the repo (this branch) | You supply at release time |
 | --- | --- |
 | `Distribution/scripts/release.sh` — the pipeline | Developer ID Application cert (in login Keychain) |
-| `Distribution/scripts/make-dmg.sh` / `make-icns.sh` | notarytool keychain profile |
-| `Distribution/assets/**` — branded DMG background + icon masters | Sparkle EdDSA **private** key matching the committed public key |
+| `Distribution/scripts/make-dmg.sh` / `make-icns.sh` / `make-appiconset.sh` | notarytool keychain profile |
+| `Distribution/assets/**` — branded DMG background + icon masters (Closer palette) | Sparkle EdDSA **private** key matching the committed public key |
 | `Distribution/sentwise.rb` — Homebrew cask template | |
 | `Sentwise/Info.plist` — Sparkle feed URL + established `SUPublicEDKey` | |
 

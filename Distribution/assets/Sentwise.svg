@@ -1,68 +1,66 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Sentwise">
   <title>Sentwise</title>
+  <!--
+    "Closer" brand app-icon master (2026-09-12). The dark-ground owl-from-an-
+    envelope mark from sentwise.ai (src/lib/brandMark.ts / src/app/icon.svg),
+    placed on the macOS icon grid: a forest rounded-square plate with the
+    standard margin (translate(100,88) scale(0.8047) -> an 824px squircle in the
+    1024 canvas) and the system drop shadow. Palette is the Closer @theme tokens
+    from the site's globals.css: forest ground (#0A3D2D/#072A20), emerald
+    envelope outline (#3FD99B), cloud line-work/eyes (#EAF4EE), emerald eye-ring
+    (#0B6E47), forest-950 pupils (#072A20), gold beak (#F2B705). The 16/32px
+    slots render from Sentwise-small.svg instead (see that file's recipe).
+  -->
   <defs>
-    <linearGradient id="plate" x1="0.42" y1="0" x2="0.58" y2="1">
-      <stop offset="0" stop-color="#48ABD1"></stop>
-      <stop offset="0.46" stop-color="#2E6EB2"></stop>
-      <stop offset="1" stop-color="#1E407C"></stop>
+    <linearGradient id="plate" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#0E4A37"></stop>
+      <stop offset="0.5" stop-color="#0A3D2D"></stop>
+      <stop offset="1" stop-color="#072A20"></stop>
     </linearGradient>
     <radialGradient id="sheen" cx="0.26" cy="0.06" r="0.95">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.32"></stop>
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"></stop>
       <stop offset="0.58" stop-color="#ffffff" stop-opacity="0"></stop>
     </radialGradient>
-    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff"></stop>
-      <stop offset="1" stop-color="#E8EDF8"></stop>
-    </linearGradient>
-    <linearGradient id="beak" x1="0.1" y1="0" x2="0.9" y2="1">
-      <stop offset="0" stop-color="#F8E6A0"></stop>
-      <stop offset="1" stop-color="#F0AE3C"></stop>
-    </linearGradient>
     <clipPath id="plateClip">
       <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229"></rect>
     </clipPath>
     <clipPath id="envClip">
       <rect x="176" y="300" width="672" height="448" rx="60" ry="60"></rect>
     </clipPath>
-    <filter id="envShadow" x="-30%" y="-30%" width="160%" height="180%">
-      <feDropShadow dx="0" dy="26" stdDeviation="22" flood-color="#0A1A40" flood-opacity="0.34"></feDropShadow>
-    </filter>
     <filter id="dropShadow" x="-25%" y="-25%" width="150%" height="170%">
-      <feDropShadow dx="0" dy="40" stdDeviation="35" flood-color="#102048" flood-opacity="0.34"></feDropShadow>
+      <feDropShadow dx="0" dy="40" stdDeviation="35" flood-color="#031A12" flood-opacity="0.40"></feDropShadow>
     </filter>
   </defs>
 
-  
+
   <g transform="translate(100, 88) scale(0.8047)" filter="url(#dropShadow)">
     <g clip-path="url(#plateClip)">
       <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229" fill="url(#plate)"></rect>
       <rect x="0" y="0" width="1024" height="1024" fill="url(#sheen)"></rect>
-      <rect x="0" y="0" width="1024" height="16" fill="#ffffff" opacity="0.30"></rect>
-      <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229" fill="none" stroke="#000000" stroke-opacity="0.14" stroke-width="10"></rect>
+      <rect x="0" y="0" width="1024" height="14" fill="#ffffff" opacity="0.14"></rect>
+      <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229" fill="none" stroke="#000000" stroke-opacity="0.18" stroke-width="10"></rect>
     </g>
 
-    
-    <g filter="url(#envShadow)">
-      <rect x="176" y="300" width="672" height="448" rx="60" ry="60" fill="url(#paper)"></rect>
-    </g>
 
-    
-    <g clip-path="url(#envClip)" stroke="#2662A6" stroke-width="24" stroke-linecap="round">
+    <rect x="176" y="300" width="672" height="448" rx="60" ry="60" fill="none" stroke="#3FD99B" stroke-width="28"></rect>
+
+
+    <g clip-path="url(#envClip)" stroke="#EAF4EE" stroke-width="24" stroke-linecap="round">
       <line x1="212" y1="334" x2="547" y2="587"></line>
       <line x1="812" y1="334" x2="477" y2="587"></line>
     </g>
 
-    
-    <g fill="#ffffff" stroke="#185294" stroke-width="24">
+
+    <g fill="#EAF4EE" stroke="#0B6E47" stroke-width="24">
       <circle cx="376" cy="496" r="80"></circle>
       <circle cx="648" cy="496" r="80"></circle>
     </g>
-    <g fill="#183766">
+    <g fill="#072A20">
       <circle cx="390" cy="510" r="38"></circle>
       <circle cx="634" cy="510" r="38"></circle>
     </g>
 
-    
-    <polygon points="452,566 572,566 512,678" fill="url(#beak)"></polygon>
+
+    <polygon points="452,566 572,566 512,678" fill="#F2B705"></polygon>
   </g>
 </svg>
