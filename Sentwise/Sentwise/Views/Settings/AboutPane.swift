@@ -64,6 +64,11 @@ struct AboutPane: View {
             Divider()
                 .frame(maxWidth: 200)
 
+            LegalSupportSection()
+
+            Divider()
+                .frame(maxWidth: 200)
+
             VStack(spacing: 4) {
                 Button("Check for Updates…") {
                     updateManager.checkForUpdates()
@@ -105,5 +110,30 @@ struct AboutPane: View {
 
     private var copyrightYear: String {
         String(Calendar.current.component(.year, from: Date()))
+    }
+}
+
+/// The "Legal & Support" block of the About pane (item 72): outbound links to the
+/// hosted Terms, Privacy, Security, and Support pages on sentwise.ai. Definitions
+/// live in `LegalSupportLinks` so the destinations stay testable; this view is a
+/// plain declarative render of `LegalSupportLinks.all`.
+private struct LegalSupportSection: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            Text("Legal & Support")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .accessibilityAddTraits(.isHeader)
+
+            ForEach(LegalSupportLinks.all) { item in
+                Link(destination: item.url) {
+                    Label(item.title, systemImage: item.systemImage)
+                }
+                .accessibilityIdentifier(item.id)
+                .accessibilityLabel(item.accessibilityLabel)
+            }
+        }
     }
 }
