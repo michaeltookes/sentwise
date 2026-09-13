@@ -44,11 +44,40 @@ Prioritized list of planned features, improvements, and technical debt for **sen
    - ✅ Connected-account indicator and a "disconnect" action in Settings (disconnect clears the token, keeps credentials).
    - ⬜ **Remaining:** verify the live end-to-end consent flow against a real Google client; **empirically verify refresh-token lifetime** (Testing vs Production) and document the setup so users avoid weekly re-auth; optionally show the connected account's email address; consider server-side token revocation on disconnect.
 
+94. **Service hardening from the 2026-09-13 security pass** — *pre-launch; findings S-M1/S-M2/S-L1/S-L3/S-L4/S-I2 in `docs/security-pass-2026-09-13.md`*
+    The worker audit came back clean on auth, webhooks, IDOR, quota isolation, and privacy — but left two Mediums that must close before the public link: Clerk-lookup ordering (a scripted trial account can DoS the whole service via Clerk's per-instance backend limits) and soft quota enforcement (unbounded Anthropic spend per throwaway trial account).
+    *As the maintainer, I want one abusive free account to be unable to take down the service or run up my Anthropic bill, so that launch can't be ruined by a single script.*
+    - **S-M1:** on `POST /v1/draft`, run the DO `quotaCheck` (rate limit) BEFORE `requireActiveTrial`'s Clerk lookup; add a short-TTL per-user cache (or coarse limiter) in front of Clerk lookups on the other authenticated routes (`src/auth.ts:67` TODO).
+    - **S-M2:** hard quota enforcement for **trial** accounts at minimum — flip trials to `hard` (or a low trial-tier `weeklyDraftLimit` at trial init) so caps actually block; paid tiers may stay soft per the 56b measure-first decision.
+    - **S-L1:** pass `authorizedParties` to Clerk `verifyToken`.
+    - **S-L3:** add `Content-Security-Policy` (incl. `frame-ancestors 'none'`) to the callback landing pages.
+    - **S-L4:** unknown Paddle subscription statuses must not fail open to `active` — default to the stored status or `canceled` on non-activation events.
+    - **S-I2:** switch the analytics userId hash to a keyed HMAC (server secret).
+    - Tests for each; no-body-logging guard stays green.
+
+95. **App hardening from the 2026-09-13 security pass** — *pre-launch; findings A-M2/A-L1/A-L3/A-L4 in `docs/security-pass-2026-09-13.md`*
+    The app audit verified secrets, logging, TLS, callbacks, and Sparkle clean; four fixes remain, led by the checkout WebView being navigable to arbitrary web content inside a trusted in-app sheet.
+    *As a paying user, I want the in-app checkout sheet to only ever show checkout, so that a compromised script can't turn a trusted surface into a phishing page.*
+    - **A-M2:** add `decidePolicyFor` to `PaddleCheckoutSheet` — allow only the local harness page and Paddle/payment hosts in-sheet; open everything else in the default browser.
+    - **A-L1:** stop honoring `SENTWISE_INFERENCE_URL` in release builds (`#if DEBUG`, or require https + allow-listed host).
+    - **A-L3:** best-effort server-side Clerk session revocation in `signOut()` before local cleanup.
+    - **A-L4:** stop logging account emails `privacy: .public` in `KeychainStore` failure paths (hash or `.private`).
+    - Tests per fix; Prowl hunt-safety unchanged.
+
+96. **Purge local mail artifacts on disconnect / account removal (+ "erase all local data")** — *from security-pass finding A-L2; privacy-product expectation gap*
+    Disconnecting or removing a mail account deletes the Keychain password and settings entry but leaves `PendingDrafts.json` (full message bodies + drafts), `ActivityEvents.json` (sender + subject per event), `VoiceProfile.json`, `ProcessedMessages.json`, and `SkippedMessages.json` on disk; `deleteManagedAccount` documents leaving local data. For a nothing-stored privacy product, "remove my account" should mean the mail content is gone.
+    *As a privacy-conscious user removing a mailbox, I want its locally cached mail content actually deleted, so that "disconnected" means gone.*
+    - Disconnect/remove-account purges (or explicitly offers to purge) the account-scoped artifacts above; managed-account deletion states clearly what stays local and offers the purge.
+    - A distinct "Erase all local data" action (Settings) that removes everything under Application Support and per-account Keychain entries, with a typed confirmation.
+    - Watcher/queue state stays consistent after purge (no resurrection of processed-message dedup for a re-added account unless intended — decide and document).
+    - Tests: purge coverage per file, erase-all, re-add-account behavior.
+
 74. **Launch readiness: clean-Mac verification, security pass, and the 1.0 release**
     The last item to close before inviting the public. Every release so far was tested on the maintainer's own configured Mac; a stranger's experience — Gatekeeper, fresh Keychain, no prior Application Support, TCC prompts — has never been observed.
     *As the maintainer, I want proof that a first-time user on a clean Mac gets from download to first draft without help, so that launch day isn't debugging day.*
     - **Clean-machine run** (fresh macOS user account or VM): DMG install via browser download (Gatekeeper/notarization path), `brew install --cask` path, first-run onboarding with sign-in/trial + Gmail app password, voice learn, first inbox draft, first transcript follow-up, approve via notification, Sparkle update from the previous version. Every friction point logged as a backlog item.
-    - **Security pass** via `/security-review` on the app and the service repo: token handling, proxy auth, Keychain usage, log redaction, dependency audit.
+    - ✅ **Security pass — done 2026-09-13** (full-repo audit of app + service; report in `docs/security-pass-2026-09-13.md`). Remediation: items **94** (service) / **95** (app) / **96** (local-data purge) must land pre-launch; accepted/noted findings recorded in the report.
+    - **Security-pass launch config (from the report):** flip `ENFORCEMENT_MODE` off soft for trials (with item 94); verify the shipped `SUPublicEDKey` matches the real release keypair and the private key is held offline (A-I3); verify Cloudflare secrets are non-empty (`wrangler secret` TTY gotcha) and `ADMIN_TOKEN` has real entropy.
     - **Release hygiene:** version **1.0.0** via `/release-prep`; CHANGELOG written for humans; cask and appcast verified from a machine that isn't the maintainer's; GitHub release notes link the quickstart (item 71).
     - **Feedback inbox live:** the `feedback@sentwise.ai` address wired into the app's "Report a Problem" (item 36) must be a real, monitored mailbox before launch (Google Workspace setup) — the app ships the address regardless, but a stranger's feedback must actually reach the maintainer.
     - **Production Paddle cutover** (**unblocked 2026-09-12 — Paddle vendor account fully verified**; from item 56): point `PaddleConfig.active` / `PADDLE_API_BASE` at the live token + price ids, and mint the **live API key with the `customer_portal_session.write` permission** — discovered 2026-09-12 (item 91): without it the portal-session create fails silently and billing links regress to the email sign-in page. Also: production Clerk instance needs a real Google OAuth client + its own `/auth/callback` redirect-allowlist entry (item 89), and real per-tier allotment numbers set from 56b measurements.
