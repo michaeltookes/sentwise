@@ -40,6 +40,21 @@ final class ManagedInferenceClientTests: XCTestCase {
         HTTPResponse(statusCode: status, body: Data(string.utf8), headers: headers)
     }
 
+    // MARK: - Base-URL override gating (A-L1)
+
+    func testBaseURLDefaultsToDeployedWorkerWithoutOverride() throws {
+        // When no SENTWISE_INFERENCE_URL override is set the base URL is the
+        // deployed Worker in every build configuration. (Release builds ignore the
+        // override entirely — finding A-L1 — so a shipped app cannot be redirected
+        // by an environment variable.)
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["SENTWISE_INFERENCE_URL"]?.isEmpty == false,
+            "SENTWISE_INFERENCE_URL is set in this environment"
+        )
+        XCTAssertEqual(ManagedInference.baseURL.absoluteString, ManagedInference.defaultBaseURLString)
+        XCTAssertTrue(ManagedInference.draftEndpoint.absoluteString.hasPrefix(ManagedInference.defaultBaseURLString))
+    }
+
     func testSendsBearerTokenAndMapsResponse() async throws {
         let transport = FakeLLMTransport(response: json(
             #"{"text":"Hi Marcus,","usage":{"inputTokens":40,"outputTokens":12}}"#

@@ -1,20 +1,28 @@
 import Foundation
 
 /// Compile-time configuration for the Sentwise managed-inference service
-/// (`sentwise-service`, backlog item 56a). The base URL is a constant with a
-/// `SENTWISE_INFERENCE_URL` environment override for dev/tests pointing at a
-/// local `wrangler dev` or a staging deployment.
+/// (`sentwise-service`, backlog item 56a). The base URL is a constant; DEBUG
+/// builds additionally honor a `SENTWISE_INFERENCE_URL` environment override for
+/// dev/tests pointing at a local `wrangler dev` or a staging deployment.
 enum ManagedInference {
     /// The deployed production Worker. Recorded here and in the service README.
     static let defaultBaseURLString = "https://sentwise-inference.sentwise-service.workers.dev"
 
-    /// The base URL honoring the `SENTWISE_INFERENCE_URL` override.
+    /// The base URL. Release builds are pinned to `defaultBaseURLString`; the
+    /// `SENTWISE_INFERENCE_URL` override is honored in DEBUG builds only, so a
+    /// shipped app cannot have all managed-drafting traffic (mail content + the
+    /// session JWT) silently redirected by an environment variable (security
+    /// finding A-L1). Prowl hunts run fully offline and never set the override,
+    /// and the live end-to-end tests build their own base URL from the env var
+    /// directly, so neither path relies on this override in a Release build.
     static var baseURL: URL {
+        #if DEBUG
         let override = ProcessInfo.processInfo.environment["SENTWISE_INFERENCE_URL"]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let override, !override.isEmpty, let url = URL(string: override) {
             return url
         }
+        #endif
         // The default string is a compile-time constant we control, so this is safe.
         return URL(string: defaultBaseURLString)!
     }
