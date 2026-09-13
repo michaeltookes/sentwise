@@ -212,24 +212,6 @@ actor ManagedAccountService: ManagedSessionProviding {
         }
     }
 
-    /// Fires a best-effort server-side revocation of the Clerk session and returns
-    /// immediately (security finding A-L3). The network call runs detached, off the
-    /// actor, so a failed or slow revocation can never block or fail local
-    /// sign-out; all errors are swallowed and logged only.
-    private func fireServerSessionRevocation(sessionID: String, clientToken: String) {
-        let clerk = self.clerk
-        Task.detached {
-            do {
-                let response = try await clerk.revokeSession(sessionId: sessionID, clientToken: clientToken)
-                if !response.isSuccess {
-                    logger.error("Clerk session revocation returned HTTP \(response.statusCode, privacy: .public)")
-                }
-            } catch {
-                logger.error("Clerk session revocation failed: \(String(describing: error), privacy: .public)")
-            }
-        }
-    }
-
     // MARK: - ManagedSessionProviding
 
     /// Mints a fresh, short-lived session JWT for the proxy. Rotates and re-stores
