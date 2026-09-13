@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import WebKit
 import os
@@ -312,6 +313,36 @@ private struct PaddleCheckoutWebView: NSViewRepresentable {
             }
             let event = PaddleBridgeEvent.make(name: name, detail: detail)
             MainActor.assumeIsolated { model.handle(event) }
+        }
+
+        // MARK: Navigation policy — keep the trusted checkout sheet on checkout
+
+        /// Restricts what the checkout sheet's *top-level* document may navigate to
+        /// (security finding A-M2). The overlay, its payment-provider frames, and
+        /// 3-D Secure step-up run in sub-frames and are allowed generally; the
+        /// top-level document is confined to the harness origin and Paddle hosts,
+        /// and every other web navigation is handed to the default browser so the
+        /// trusted, chrome-less sheet can never become a phishing surface.
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            // `targetFrame` is nil for would-be new-window navigations (popups);
+            // treat those as top-level so they can't bypass the sheet restriction.
+            let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
+            switch CheckoutNavigationPolicy.decision(
+                for: navigationAction.request.url,
+                isMainFrameNavigation: isMainFrame
+            ) {
+            case .allowInSheet:
+                decisionHandler(.allow)
+            case .openExternally(let url):
+                decisionHandler(.cancel)
+                NSWorkspace.shared.open(url)
+            case .block:
+                decisionHandler(.cancel)
+            }
         }
 
         // MARK: Navigation → tell the model the page is ready
