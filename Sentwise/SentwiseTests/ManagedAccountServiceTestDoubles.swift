@@ -97,6 +97,32 @@ final class MultiSuspendedClerkTransport: ClerkHTTPTransport, @unchecked Sendabl
     }
 }
 
+/// Records every POST and returns a settable result, with an `onPost` hook so a
+/// test can await a fire-and-forget request (e.g. the sign-out session
+/// revocation) via an expectation.
+final class RecordingClerkTransport: ClerkHTTPTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var postedURLs: [URL] = []
+    var result: Result<ClerkHTTPResponse, Error> = .success(ClerkHTTPResponse(statusCode: 200, headers: [:], body: Data()))
+    var onPost: ((URL) -> Void)?
+
+    func postForm(_ url: URL, headers: [String: String], form: [String: String]) async throws -> ClerkHTTPResponse {
+        lock.lock()
+        postedURLs.append(url)
+        let onPost = self.onPost
+        let result = self.result
+        lock.unlock()
+        onPost?(url)
+        return try result.get()
+    }
+
+    var recordedURLs: [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return postedURLs
+    }
+}
+
 func clerkReply(_ json: String, status: Int = 200, clientToken: String? = nil) -> ClerkHTTPResponse {
     var headers: [String: String] = [:]
     if let clientToken { headers["authorization"] = "Bearer \(clientToken)" }

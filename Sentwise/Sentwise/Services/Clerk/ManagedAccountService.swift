@@ -170,10 +170,20 @@ actor ManagedAccountService: ManagedSessionProviding {
         clearPendingOAuthSignInIDBestEffort(context: "after sign-in")
     }
 
-    /// Signs out: clears the stored device token and session id. Local mail data
-    /// is untouched.
-    func signOut() throws {
+    /// Signs out: best-effort revokes the Clerk session server-side, then clears
+    /// the stored device token and session id. Local mail data is untouched.
+    ///
+    /// `revokeServerSession` defaults to off during Prowl hunts and test runs,
+    /// which run fully offline; production sign-outs revoke by default. The
+    /// revocation is fire-and-forget — a failed or slow network call must never
+    /// block or fail the local sign-out (security finding A-L3).
+    func signOut(revokeServerSession: Bool = !ProwlHuntRuntime.current.isEnabled) throws {
         let wasSignedIn = isSignedIn
+        if revokeServerSession, wasSignedIn,
+           let sessionID = storedSessionID,
+           let clientToken = storedClientToken, !clientToken.isEmpty {
+            fireServerSessionRevocation(sessionID: sessionID, clientToken: clientToken)
+        }
         pendingSignIn = nil
         pendingOAuthSignIn = nil
         reauthenticationClientToken = nil
@@ -199,6 +209,24 @@ actor ManagedAccountService: ManagedSessionProviding {
         clearReauthenticationClientTokenBestEffort(context: "after sign-out")
         if let firstError {
             throw firstError
+        }
+    }
+
+    /// Fires a best-effort server-side revocation of the Clerk session and returns
+    /// immediately (security finding A-L3). The network call runs detached, off the
+    /// actor, so a failed or slow revocation can never block or fail local
+    /// sign-out; all errors are swallowed and logged only.
+    private func fireServerSessionRevocation(sessionID: String, clientToken: String) {
+        let clerk = self.clerk
+        Task.detached {
+            do {
+                let response = try await clerk.revokeSession(sessionId: sessionID, clientToken: clientToken)
+                if !response.isSuccess {
+                    logger.error("Clerk session revocation returned HTTP \(response.statusCode, privacy: .public)")
+                }
+            } catch {
+                logger.error("Clerk session revocation failed: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 
