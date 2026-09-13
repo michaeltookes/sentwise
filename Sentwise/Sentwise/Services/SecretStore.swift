@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// A typed key identifying a secret in a `SecretStore`.
@@ -76,6 +77,20 @@ struct SecretKey: RawRepresentable, Hashable {
     /// generic OpenAI-compatible slot so one-click setup never overwrites a manual
     /// OpenAI or gateway credential.
     static let openRouterAPIKey = SecretKey(rawValue: "llm.openRouter.apiKey")
+
+    /// A log-safe identifier for this key. Some raw values embed an account email
+    /// (e.g. `mail.appPassword.<email>`), so the full `rawValue` must never be
+    /// logged at `.public` (security finding A-L4). This returns the key's *kind*
+    /// — the first two dot-separated segments, which never include the email —
+    /// plus a short, stable, non-reversible hash of the full raw value. That keeps
+    /// logs useful for diagnosing which *kind* of key (and, stably, which specific
+    /// item) failed, without revealing any PII.
+    var logSafeIdentifier: String {
+        let kind = rawValue.split(separator: ".").prefix(2).joined(separator: ".")
+        let digest = SHA256.hash(data: Data(rawValue.utf8))
+        let shortHash = digest.prefix(4).map { String(format: "%02x", $0) }.joined()
+        return "\(kind.isEmpty ? "secret" : kind)#\(shortHash)"
+    }
 }
 
 /// Secure storage for sensitive strings — OAuth tokens, API keys, client secrets.
