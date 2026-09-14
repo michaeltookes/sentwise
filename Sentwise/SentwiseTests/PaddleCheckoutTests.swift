@@ -305,8 +305,27 @@ final class PaddleCheckoutTests: XCTestCase {
         // WebKit's loadHTMLString bootstrap can present about:blank as the main
         // frame; it must be allowed so the harness can render.
         XCTAssertEqual(
-            CheckoutNavigationPolicy.decision(for: url("about:blank"), isMainFrameNavigation: true),
+            CheckoutNavigationPolicy.decision(
+                for: url("about:blank"),
+                isMainFrameNavigation: true,
+                allowsAboutBlankBootstrap: true
+            ),
             .allowInSheet
+        )
+    }
+
+    func testLaterTopLevelAboutNavigationIsBlocked() {
+        XCTAssertEqual(
+            CheckoutNavigationPolicy.decision(for: url("about:blank"), isMainFrameNavigation: true),
+            .block
+        )
+        XCTAssertEqual(
+            CheckoutNavigationPolicy.decision(
+                for: url("about:srcdoc"),
+                isMainFrameNavigation: true,
+                allowsAboutBlankBootstrap: true
+            ),
+            .block
         )
     }
 

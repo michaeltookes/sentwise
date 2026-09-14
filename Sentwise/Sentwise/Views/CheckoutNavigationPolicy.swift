@@ -27,9 +27,10 @@ enum CheckoutNavigationDecision: Equatable {
 ///   restricting them would break real payments. Only the top-level document is
 ///   a phishing risk.
 /// * **Top-level navigations** may stay in the sheet only for the harness origin
-///   (`sentwise.ai`, plus the `about:` bootstrap load `loadHTMLString` drives)
-///   and the Paddle payment hosts. Any other `http(s)` top-level navigation is
-///   cancelled and opened in the default browser; anything non-web is blocked.
+///   (`sentwise.ai`, plus the one-shot `about:blank` bootstrap load
+///   `loadHTMLString` drives) and the Paddle payment hosts. Any other `http(s)`
+///   top-level navigation is cancelled and opened in the default browser;
+///   anything non-web is blocked.
 enum CheckoutNavigationPolicy {
     /// Host suffixes whose pages may load as the sheet's *top-level* document.
     /// `sentwise.ai` is the harness origin; the Paddle hosts cover the CDN and the
@@ -46,7 +47,8 @@ enum CheckoutNavigationPolicy {
     /// main frame.
     static func decision(
         for url: URL?,
-        isMainFrameNavigation: Bool
+        isMainFrameNavigation: Bool,
+        allowsAboutBlankBootstrap: Bool = false
     ) -> CheckoutNavigationDecision {
         // Sub-frame navigations (the overlay iframe, payment-provider frames, and
         // 3-D Secure step-up) are allowed generally — see the type doc.
@@ -55,9 +57,15 @@ enum CheckoutNavigationPolicy {
         guard let url else { return .block }
         let scheme = url.scheme?.lowercased()
 
-        // WebKit drives the initial `loadHTMLString` bootstrap through `about:`
-        // URLs; allow those so the harness page can load.
-        if scheme == "about" { return .allowInSheet }
+        // WebKit drives the initial `loadHTMLString` bootstrap through
+        // `about:blank`. Later top-level `about:` navigations are blocked so a
+        // hostile sub-frame cannot replace the trusted chrome-less sheet.
+        if scheme == "about" {
+            guard allowsAboutBlankBootstrap,
+                  url.absoluteString.lowercased() == "about:blank"
+            else { return .block }
+            return .allowInSheet
+        }
 
         // Only web navigations can stay in-sheet or open externally; block the
         // rest (file:, data:, custom app schemes) rather than following them.

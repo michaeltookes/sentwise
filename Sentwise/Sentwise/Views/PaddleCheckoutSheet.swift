@@ -281,6 +281,10 @@ private struct PaddleCheckoutWebView: NSViewRepresentable {
         private let model: PaddleCheckoutModel
         /// Guards `sentwiseOpenCheckout` to a single evaluation.
         var didOpen = false
+        /// WebKit may surface the initial `loadHTMLString` navigation as
+        /// `about:blank`; allow that once, then block later top-level `about:`
+        /// navigations.
+        private var allowsInitialAboutBlankNavigation = true
 
         init(model: PaddleCheckoutModel) {
             self.model = model
@@ -331,10 +335,16 @@ private struct PaddleCheckoutWebView: NSViewRepresentable {
             // `targetFrame` is nil for would-be new-window navigations (popups);
             // treat those as top-level so they can't bypass the sheet restriction.
             let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
-            switch CheckoutNavigationPolicy.decision(
+            let allowsAboutBlankBootstrap = isMainFrame && allowsInitialAboutBlankNavigation
+            let decision = CheckoutNavigationPolicy.decision(
                 for: navigationAction.request.url,
-                isMainFrameNavigation: isMainFrame
-            ) {
+                isMainFrameNavigation: isMainFrame,
+                allowsAboutBlankBootstrap: allowsAboutBlankBootstrap
+            )
+            if isMainFrame {
+                allowsInitialAboutBlankNavigation = false
+            }
+            switch decision {
             case .allowInSheet:
                 decisionHandler(.allow)
             case .openExternally(let url):
