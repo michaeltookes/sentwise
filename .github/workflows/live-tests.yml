@@ -1,0 +1,101 @@
+# Live tests — the env-gated live suite, executed on the Lucius Mac mini.
+#
+# This is the ONLY place the SENTWISE_LIVE_* tests actually run. They hit real
+# services (Clerk, the sentwise-service Worker, Paddle sandbox, live IMAP
+# mailboxes) and drafting spends real Anthropic budget, so they never run per
+# PR-commit and never on a developer's machine — only here, on merge to main and
+# on demand for a branch (via the /live-verify skill's workflow_dispatch).
+#
+# Runner: the SAME self-hosted macOS runner prowl-qa.yml targets — the Lucius Mac
+# mini (labels [self-hosted, macOS]). WebKit's window server (the Paddle
+# checkout-overlay test) and any GUI-dependent flow require the runner to be
+# started from Lucius's on-console GUI (Aqua) session — `svc.sh` from that
+# session, never over SSH/sudo (see docs/live-testing.md and .prowl/README.md).
+# GitHub-hosted macOS runners cannot provide this.
+#
+# Trust: only workflow_dispatch (requires repo write access) and push-to-main
+# (trusted, post-merge) trigger this — never a fork PR — so no untrusted code
+# runs live against real credentials on the persistent runner.
+
+name: Live tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or SHA to live-verify on Lucius
+        required: false
+        default: main
+  push:
+    branches: [main]
+
+# One live run at a time: a single Lucius GUI session and shared live test
+# accounts cannot be exercised concurrently. Never cancel an in-flight run — a
+# half-run live suite can leave a test draft or session behind.
+concurrency:
+  group: live-tests
+  cancel-in-progress: false
+
+jobs:
+  live-tests:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Build for testing
+        run: |
+          xcodebuild build-for-testing \
+            -project Sentwise/Sentwise.xcodeproj \
+            -scheme Sentwise \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Inject live env into the .xctestrun
+        # Only the secrets actually provisioned are injected; any left unset make
+        # their gated test skip cleanly (see Distribution/scripts/inject-live-env.sh).
+        # The script logs variable NAMES only, so no secret reaches the CI log.
+        env:
+          SENTWISE_LIVE_PADDLE_CHECKOUT: ${{ secrets.SENTWISE_LIVE_PADDLE_CHECKOUT }}
+          SENTWISE_LIVE_CLERK_TEST: ${{ secrets.SENTWISE_LIVE_CLERK_TEST }}
+          SENTWISE_LIVE_CLERK_SESSION_TOKEN: ${{ secrets.SENTWISE_LIVE_CLERK_SESSION_TOKEN }}
+          SENTWISE_INFERENCE_URL: ${{ secrets.SENTWISE_INFERENCE_URL }}
+          SENTWISE_LIVE_GMAIL_EMAIL: ${{ secrets.SENTWISE_LIVE_GMAIL_EMAIL }}
+          SENTWISE_LIVE_GMAIL_APP_PASSWORD: ${{ secrets.SENTWISE_LIVE_GMAIL_APP_PASSWORD }}
+          SENTWISE_LIVE_ATTNET_EMAIL: ${{ secrets.SENTWISE_LIVE_ATTNET_EMAIL }}
+          SENTWISE_LIVE_ATTNET_APP_PASSWORD: ${{ secrets.SENTWISE_LIVE_ATTNET_APP_PASSWORD }}
+        run: |
+          XCTESTRUN=$(find build/Build/Products -maxdepth 1 -name "*.xctestrun" | head -1)
+          echo "Injecting live env into $XCTESTRUN"
+          Distribution/scripts/inject-live-env.sh "$XCTESTRUN"
+
+      - name: Run live tests
+        # -only-testing keeps this to the env-gated live classes so the full unit
+        # suite is not re-run here (it runs in prowl-qa / normal CI). Each class
+        # self-skips when its gate secret is absent.
+        run: |
+          XCTESTRUN=$(find build/Build/Products -maxdepth 1 -name "*.xctestrun" | head -1)
+          xcodebuild test-without-building \
+            -xctestrun "$XCTESTRUN" \
+            -destination 'platform=macOS' \
+            -resultBundlePath build/LiveTests.xcresult \
+            -only-testing:SentwiseTests/PaddleCheckoutLiveTests \
+            -only-testing:SentwiseTests/ClerkLiveSignInTests \
+            -only-testing:SentwiseTests/ManagedInferenceLiveTests \
+            -only-testing:SentwiseTests/GmailLiveSendTests \
+            -only-testing:SentwiseTests/ReplyWorthinessLiveTests \
+            -only-testing:SentwiseTests/AttNetLiveDraftTests
+
+      - name: Upload xcresult on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-tests-xcresult
+          path: build/LiveTests.xcresult
+          if-no-files-found: ignore
+          retention-days: 14
