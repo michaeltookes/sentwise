@@ -186,9 +186,10 @@ completed by a hijacked callback.
   `SENTWISE_INFERENCE_URL`. `SENTWISE_LIVE_MANAGED_INFERENCE` is the explicit
   gate for the `/v1/me` account-shape payload so no short-lived Clerk JWT is
   stored as a repo secret. The live `/v1/draft` spend check is additionally gated
-  by `SENTWISE_LIVE_MANAGED_DRAFT`, which should only be provisioned after the
-  deterministic Clerk test user has a durable Worker entitlement or trial bypass
-  and cannot age out of the normal trial under recurring push-to-main runs.
+  by `SENTWISE_LIVE_MANAGED_DRAFT` and uses
+  `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL`, a dedicated Clerk test email whose Worker
+  account has a durable entitlement or trial bypass and cannot age out of the
+  normal trial under recurring push-to-main runs.
 
 ## Settings migration (14 → 15)
 

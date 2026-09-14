@@ -30,7 +30,7 @@ completes a purchase.
 | `AttNetLiveDraftTests` | 44 | Saves a reply to the real Drafts mailbox through the app's save path (IMAP `APPEND` with `\Draft`), fetches it back to assert addressing + threading, then trashes it. |
 | `ReplyWorthinessLiveTests` | 66 | **Read-only.** Runs a fresh reply-worthiness pass (the same `AppState.replyWorthinessSkipReason` the watcher uses, including the live `HEADER.FIELDS` fetch) over recent inbox mail and asserts that known machine-sending senders (GitHub, Stripe/Anthropic receipts, AWS cost alerts, recruiting blasts) produce a skip — zero drafts — while personal mail stays worthy. Never drafts, sends, or mutates the mailbox; reuses the Gmail credentials below. |
 | `ClerkLiveSignInTests` | 59 | Email-code sign-in against the real Clerk dev instance via the Frontend API, exercising the real `ClerkClient`. Uses Clerk's `+clerk_test` address + universal code `424242` — no real inbox, no secret key. Gated on `SENTWISE_LIVE_CLERK_TEST`. See `docs/managed-inference.md`. |
-| `ManagedInferenceLiveTests` | 56b / 73 / 97 | Calls the deployed `sentwise-service` Worker with a fresh Clerk session JWT minted during the run through Clerk's test email-code flow. `/v1/me` and optional quota/subscription blocks are gated on `SENTWISE_LIVE_MANAGED_INFERENCE`, `SENTWISE_LIVE_CLERK_TEST`, and `SENTWISE_INFERENCE_URL`; `/v1/draft` also requires `SENTWISE_LIVE_MANAGED_DRAFT` so recurring runs only draft once the test user has a durable entitlement or trial bypass. |
+| `ManagedInferenceLiveTests` | 56b / 73 / 97 | Calls the deployed `sentwise-service` Worker with a fresh Clerk session JWT minted during the run through Clerk's test email-code flow. `/v1/me` and optional quota/subscription blocks are gated on `SENTWISE_LIVE_MANAGED_INFERENCE`, `SENTWISE_LIVE_CLERK_TEST`, and `SENTWISE_INFERENCE_URL`; `/v1/draft` also requires `SENTWISE_LIVE_MANAGED_DRAFT` and `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL`, an entitled/nonexpiring Clerk test account. |
 | `PaddleCheckoutLiveTests` | 95 / 97 | **No purchase.** Loads the real `PaddleCheckoutHTML` harness in a `WKWebView` under the real `CheckoutNavigationPolicy` navigation rule and drives the harness's own `window.sentwiseOpenCheckout` to open the **Paddle sandbox** overlay by `items` (client-side token + a sandbox price id). Asserts the overlay reaches Paddle's real `checkout.loaded` event and that the navigation policy blocked none of the Paddle navigations the overlay needs — catching the "navigation policy too tight" regression class. Needs a window server (Lucius GUI session). Gated on `SENTWISE_LIVE_PADDLE_CHECKOUT`. |
 
 ## Credentials
@@ -64,8 +64,10 @@ mode to mint a fresh session token at runtime:
   email-code flow (required)
 - `SENTWISE_INFERENCE_URL` — deployed Worker base URL (required)
 - `SENTWISE_LIVE_MANAGED_DRAFT` — optional; enables the `/v1/draft` spend check
-  only after the deterministic Clerk test user has a durable Worker entitlement
-  or trial bypass
+  only with the dedicated draft test email below
+- `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL` — optional with
+  `SENTWISE_LIVE_MANAGED_DRAFT`; a Clerk `+clerk_test` email whose Worker
+  account has a durable entitlement or trial bypass
 
 **Paddle** (`PaddleCheckoutLiveTests`) — sandbox only, no purchase:
 

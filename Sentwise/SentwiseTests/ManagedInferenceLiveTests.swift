@@ -14,17 +14,20 @@ private struct EnvSessionProvider: ManagedSessionProviding {
 ///   SENTWISE_INFERENCE_URL          — the deployed Worker base URL
 ///
 /// `testLiveDraftReturnsText` also requires `SENTWISE_LIVE_MANAGED_DRAFT`,
-/// which should only be enabled once the Clerk test user has a durable Worker
-/// entitlement or trial bypass. Otherwise a recurring push-to-main run would
-/// start passing today and fail permanently after the normal trial expires.
+/// plus `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL`, a Clerk test user with a durable
+/// Worker entitlement or trial bypass. Otherwise a recurring push-to-main run
+/// would start passing today and fail permanently after the normal trial
+/// expires.
 ///
 /// The tests mint a short-lived Clerk JWT during each run using Clerk's test
 /// email-code flow, avoiding a stale session-token repository secret.
 final class ManagedInferenceLiveTests: XCTestCase {
 
-    /// A deterministic Clerk test email. `+clerk_test` triggers test mode; the
-    /// universal code below verifies without sending email.
-    private static let testEmail = "sentwise-live+clerk_test@sentwise.ai"
+    /// A deterministic Clerk test email for account-shape checks. `+clerk_test`
+    /// triggers test mode; the universal code below verifies without sending
+    /// email. Draft checks use `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL` instead so
+    /// the recurring spend payload can point at a nonexpiring entitled user.
+    private static let accountShapeTestEmail = "sentwise-live+clerk_test@sentwise.ai"
     private static let testCode = "424242"
 
     private func liveConfig(
@@ -44,7 +47,11 @@ final class ManagedInferenceLiveTests: XCTestCase {
         else {
             throw XCTSkip("Set SENTWISE_INFERENCE_URL to run live managed-inference tests.")
         }
-        return (try await mintLiveSessionToken(), baseURL)
+        let email = try clerkTestEmail(
+            in: env,
+            requiresDurableDraftEntitlement: requiresDurableDraftEntitlement
+        )
+        return (try await mintLiveSessionToken(email: email), baseURL)
     }
 
     private func requireTruthy(_ name: String, in env: [String: String]) throws {
@@ -68,9 +75,25 @@ final class ManagedInferenceLiveTests: XCTestCase {
         return normalized == "1" || normalized == "true" || normalized == "yes"
     }
 
-    private func mintLiveSessionToken() async throws -> String {
+    private func clerkTestEmail(
+        in env: [String: String],
+        requiresDurableDraftEntitlement: Bool
+    ) throws -> String {
+        guard requiresDurableDraftEntitlement else { return Self.accountShapeTestEmail }
+        guard
+            let email = env["SENTWISE_LIVE_MANAGED_DRAFT_EMAIL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !email.isEmpty
+        else {
+            throw XCTSkip(
+                "Set SENTWISE_LIVE_MANAGED_DRAFT_EMAIL to a Clerk test user with durable draft entitlement."
+            )
+        }
+        return email
+    }
+
+    private func mintLiveSessionToken(email: String) async throws -> String {
         let clerk = ClerkClient()
-        let handle = try await clerk.sendEmailCode(email: Self.testEmail, clientToken: "")
+        let handle = try await clerk.sendEmailCode(email: email, clientToken: "")
         let verified = try await clerk.verifyEmailCode(
             signInId: handle.signInId,
             code: Self.testCode,
