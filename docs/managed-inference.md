@@ -181,12 +181,14 @@ completed by a hijacked callback.
   Email code remains the other enabled method.
 - The native flow is implemented to Clerk's Frontend-API spec and is covered by
   the env-gated `ClerkLiveSignInTests` test address flow. `ManagedInferenceLiveTests`
-  verifies the **Worker** (`/v1/me`, optional quota/subscription blocks, and
-  `/v1/draft`) by minting a fresh Clerk session token during the run via
-  `SENTWISE_LIVE_CLERK_TEST`, then calling the deployed URL supplied in
+  verifies the **Worker** by minting a fresh Clerk session token during the run
+  via `SENTWISE_LIVE_CLERK_TEST`, then calling the deployed URL supplied in
   `SENTWISE_INFERENCE_URL`. `SENTWISE_LIVE_MANAGED_INFERENCE` is the explicit
-  gate for the Worker payload so no short-lived Clerk JWT is stored as a repo
-  secret.
+  gate for the `/v1/me` account-shape payload so no short-lived Clerk JWT is
+  stored as a repo secret. The live `/v1/draft` spend check is additionally gated
+  by `SENTWISE_LIVE_MANAGED_DRAFT`, which should only be provisioned after the
+  deterministic Clerk test user has a durable Worker entitlement or trial bypass
+  and cannot age out of the normal trial under recurring push-to-main runs.
 
 ## Settings migration (14 → 15)
 

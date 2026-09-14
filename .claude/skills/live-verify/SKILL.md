@@ -108,9 +108,11 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
   repo secret is not provisioned (see `docs/live-testing.md` for the owner
   checklist). Skipped is not a failure, but call it out so the owner knows that
   payload was not actually exercised.
-- Only one live run happens at a time (the workflow's concurrency group). If a
-  run is already in progress, the dispatched run queues behind it — watch is
-  still correct, it just waits.
+- Only one live run happens at a time because Lucius is the single eligible
+  self-hosted macOS runner. If a run is already in progress, the dispatched run
+  queues behind it — watch is still correct, it just waits. Do not add a global
+  workflow concurrency group; GitHub can cancel older pending dispatches even
+  when `cancel-in-progress` is false.
 - Merges to `main` are live-verified automatically by the workflow's push
   trigger; this skill is for verifying a branch **before** merge, or re-running
   on demand.

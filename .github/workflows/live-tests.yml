@@ -34,13 +34,6 @@ on:
   push:
     branches: [main]
 
-# One live run at a time: a single Lucius GUI session and shared live test
-# accounts cannot be exercised concurrently. Never cancel an in-flight run — a
-# half-run live suite can leave a test draft or session behind.
-concurrency:
-  group: live-tests
-  cancel-in-progress: false
-
 jobs:
   live-tests:
     runs-on: [self-hosted, macOS]
@@ -69,6 +62,7 @@ jobs:
           SENTWISE_LIVE_PADDLE_CHECKOUT: ${{ secrets.SENTWISE_LIVE_PADDLE_CHECKOUT }}
           SENTWISE_LIVE_CLERK_TEST: ${{ secrets.SENTWISE_LIVE_CLERK_TEST }}
           SENTWISE_LIVE_MANAGED_INFERENCE: ${{ secrets.SENTWISE_LIVE_MANAGED_INFERENCE }}
+          SENTWISE_LIVE_MANAGED_DRAFT: ${{ secrets.SENTWISE_LIVE_MANAGED_DRAFT }}
           SENTWISE_INFERENCE_URL: ${{ secrets.SENTWISE_INFERENCE_URL }}
           SENTWISE_LIVE_GMAIL_EMAIL: ${{ secrets.SENTWISE_LIVE_GMAIL_EMAIL }}
           SENTWISE_LIVE_GMAIL_APP_PASSWORD: ${{ secrets.SENTWISE_LIVE_GMAIL_APP_PASSWORD }}

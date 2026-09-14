@@ -13,6 +13,11 @@ private struct EnvSessionProvider: ManagedSessionProviding {
 ///   SENTWISE_LIVE_CLERK_TEST        — enables the Clerk test email-code flow
 ///   SENTWISE_INFERENCE_URL          — the deployed Worker base URL
 ///
+/// `testLiveDraftReturnsText` also requires `SENTWISE_LIVE_MANAGED_DRAFT`,
+/// which should only be enabled once the Clerk test user has a durable Worker
+/// entitlement or trial bypass. Otherwise a recurring push-to-main run would
+/// start passing today and fail permanently after the normal trial expires.
+///
 /// The tests mint a short-lived Clerk JWT during each run using Clerk's test
 /// email-code flow, avoiding a stale session-token repository secret.
 final class ManagedInferenceLiveTests: XCTestCase {
@@ -22,10 +27,15 @@ final class ManagedInferenceLiveTests: XCTestCase {
     private static let testEmail = "sentwise-live+clerk_test@sentwise.ai"
     private static let testCode = "424242"
 
-    private func liveConfig() async throws -> (token: String, baseURL: URL) {
+    private func liveConfig(
+        requiresDurableDraftEntitlement: Bool = false
+    ) async throws -> (token: String, baseURL: URL) {
         let env = ProcessInfo.processInfo.environment
         try requireTruthy("SENTWISE_LIVE_MANAGED_INFERENCE", in: env)
         try requireTruthy("SENTWISE_LIVE_CLERK_TEST", in: env)
+        if requiresDurableDraftEntitlement {
+            try requireTruthy("SENTWISE_LIVE_MANAGED_DRAFT", in: env)
+        }
 
         guard
             let urlString = env["SENTWISE_INFERENCE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -38,6 +48,14 @@ final class ManagedInferenceLiveTests: XCTestCase {
     }
 
     private func requireTruthy(_ name: String, in env: [String: String]) throws {
+        if name == "SENTWISE_LIVE_MANAGED_DRAFT" {
+            guard Self.isTruthy(env[name]) else {
+                throw XCTSkip(
+                    "Set SENTWISE_LIVE_MANAGED_DRAFT=1 only for a Clerk test user with durable draft entitlement."
+                )
+            }
+            return
+        }
         guard Self.isTruthy(env[name]) else {
             throw XCTSkip("Set \(name)=1 to run live managed-inference tests.")
         }
@@ -126,7 +144,7 @@ final class ManagedInferenceLiveTests: XCTestCase {
     }
 
     func testLiveDraftReturnsText() async throws {
-        let (token, baseURL) = try await liveConfig()
+        let (token, baseURL) = try await liveConfig(requiresDurableDraftEntitlement: true)
         let client = ManagedInferenceClient(
             sessionProvider: EnvSessionProvider(token: token),
             transport: URLSessionTransport(),

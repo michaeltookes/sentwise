@@ -29,10 +29,10 @@ run only:
 - **on `workflow_dispatch`** with a `ref` input — on demand for a branch, which
   is what `/live-verify` triggers.
 
-A `concurrency` group (`live-tests`, `cancel-in-progress: false`) caps it at one
-live run at a time: there is a single Lucius GUI session and the live test
-accounts are shared, so two runs would collide, and a cancelled half-run could
-leave a stray test draft or session behind.
+Live execution is serialized by the single Lucius self-hosted runner. Do **not**
+add a global Actions `concurrency` group for this workflow: GitHub keeps at most
+one pending run per group and can cancel older pending dispatches, which would
+violate the "verify every merge / watch the exact dispatch" guarantee.
 
 ## Scope guardrail (standing)
 
@@ -83,7 +83,8 @@ is not exercised, so provision the ones you want covered.
 | `SENTWISE_LIVE_GMAIL_APP_PASSWORD` | same | 16-char Google app password (2FA required). |
 | `SENTWISE_LIVE_ATTNET_EMAIL` | `AttNetLiveDraftTests` | The att.net address (item 44 save-as-draft verify). |
 | `SENTWISE_LIVE_ATTNET_APP_PASSWORD` | same | AT&T Secure Mail Key. |
-| `SENTWISE_LIVE_MANAGED_INFERENCE` | `ManagedInferenceLiveTests` | Any truthy value (`1`). Explicitly opts the Worker end-to-end tests into spending live Anthropic budget. The test mints a fresh Clerk session JWT during the run using `SENTWISE_LIVE_CLERK_TEST`; no JWT is stored as a repo secret. |
+| `SENTWISE_LIVE_MANAGED_INFERENCE` | `ManagedInferenceLiveTests` | Any truthy value (`1`). Explicitly opts the Worker account-shape tests into live Worker calls. The test mints a fresh Clerk session JWT during the run using `SENTWISE_LIVE_CLERK_TEST`; no JWT is stored as a repo secret. |
+| `SENTWISE_LIVE_MANAGED_DRAFT` | `ManagedInferenceLiveTests.testLiveDraftReturnsText` | Optional. Any truthy value (`1`) enables the live `/v1/draft` spend check. Provision only after the deterministic Clerk test user has a durable Worker entitlement or trial bypass; otherwise recurring push-to-main runs will eventually fail when the normal trial expires. |
 | `SENTWISE_INFERENCE_URL` | `ManagedInferenceLiveTests` | The deployed Worker base URL (`https://sentwise-inference.sentwise-service.workers.dev`). |
 
 Optional IMAP host/port overrides (`SENTWISE_LIVE_GMAIL_HOST` / `_PORT`,
@@ -116,6 +117,12 @@ tests cannot. It needs a window server, which is why it runs only on Lucius's GU
 session. See the file's header for why it opens by `items` rather than chaining a
 live Clerk sign-in + server-minted transaction (the overlay and its sub-frames
 render identically either way, with far fewer live dependencies).
+
+`ManagedInferenceLiveTests` mints a fresh Clerk session token during each run.
+The `/v1/me` account-shape checks run under `SENTWISE_LIVE_MANAGED_INFERENCE`;
+the `/v1/draft` spend check has the extra `SENTWISE_LIVE_MANAGED_DRAFT` gate so
+recurring runs only enable drafting once the test account cannot age out of its
+trial.
 
 ## Dispatching a run
 
@@ -173,7 +180,9 @@ Same constraint as `prowl-qa.yml` (see `.prowl/README.md`):
   window server (the checkout-overlay test) and any GUI-dependent flow fail if
   the runner is detached from the on-console session. A detached runner shows up
   as `{"trusted":false}` Accessibility failures / missing window server.
-- Only one live run executes at a time (the workflow's concurrency group).
+- Only one live run executes at a time because the Lucius runner is the single
+  eligible self-hosted macOS runner. Preserve every queued run; do not add a
+  global workflow concurrency group.
 - Known infra flake: `xcodebuild test` occasionally fails with undefined NIO
   symbols or a hung test runner — an environment flake, not a code bug. Recover
   by killing any stray `Sentwise` process, `rm -rf ./build`, `pkill xctest` and
