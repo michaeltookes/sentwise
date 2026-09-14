@@ -151,6 +151,31 @@ final class ManagedSignOutDurabilityTests: XCTestCase {
         XCTAssertEqual(try secrets.value(for: .managedCredentialsInvalidated), "1")
     }
 
+    func testSignOutCancelsServerRevocationWhenLocalCleanupIsNonDurable() async throws {
+        let secrets = ManagedAccountFailingSecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        secrets.failOnSetKeys = [.managedCredentialsInvalidated]
+        secrets.failOnRemoveKeys = [.managedClientToken, .managedSessionID]
+        let transport = RecordingClerkTransport()
+        let account = service(transport, secrets: secrets)
+
+        do {
+            try await account.signOut(revokeServerSession: true)
+            XCTFail("Expected sign-out failure")
+        } catch let error as ManagedAccountSignOutError {
+            XCTAssertFalse(error.didDurablySignOut)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(transport.recordedURLs.isEmpty)
+        let signedIn = await account.isSignedIn
+        XCTAssertTrue(signedIn)
+    }
+
     func testSignOutReportsNonDurableWhenCleanupAndPostCleanupReadsFail() async throws {
         let secrets = ManagedAccountFailingSecretStore(seed: [
             .managedClientToken: "client_X",

@@ -64,12 +64,15 @@ extension ManagedAccountService {
         )
         let hadPersistedInvalidationMarker = areStoredCredentialsInvalidated
             && secrets.hasValue(for: .managedCredentialsInvalidated)
+        let revocationRequestID: UUID?
         if let revocation {
-            scheduleServerSessionRevocation(
+            revocationRequestID = scheduleServerSessionRevocation(
                 sessionID: revocation.sessionID,
                 clientToken: revocation.clientToken,
                 generation: revocation.generation
             )
+        } else {
+            revocationRequestID = nil
         }
         clearTransientSignOutState()
         let invalidation = persistCredentialInvalidationForSignOutIfNeeded(
@@ -84,6 +87,9 @@ extension ManagedAccountService {
             hadPersistedInvalidationMarker: hadPersistedInvalidationMarker,
             invalidatedStoredCredentials: shouldInvalidateStoredCredentials
         )
+        if !result.didDurablySignOut, let revocationRequestID {
+            cancelServerSessionRevocation(requestID: revocationRequestID)
+        }
         if let firstError = result.error {
             throw ManagedAccountSignOutError(
                 underlying: firstError,
@@ -129,7 +135,11 @@ extension ManagedAccountService {
         }
     }
 
-    private func scheduleServerSessionRevocation(sessionID: String, clientToken: String, generation: Int) {
+    private func scheduleServerSessionRevocation(
+        sessionID: String,
+        clientToken: String,
+        generation: Int
+    ) -> UUID {
         let requestID = UUID()
         pendingServerSessionRevocations[requestID] = (
             sessionID: sessionID,
@@ -138,6 +148,11 @@ extension ManagedAccountService {
             clientToken: clientToken
         )
         Task { await self.firePendingServerSessionRevocation(requestID) }
+        return requestID
+    }
+
+    private func cancelServerSessionRevocation(requestID: UUID) {
+        pendingServerSessionRevocations[requestID] = nil
     }
 
     private func firePendingServerSessionRevocation(_ requestID: UUID) async {
