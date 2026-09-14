@@ -47,6 +47,8 @@ extension ManagedAccountService {
             revokeServerSession: revokeServerSession,
             wasSignedIn: wasSignedIn
         )
+        let hadPersistedInvalidationMarker = areStoredCredentialsInvalidated
+            && secrets.hasValue(for: .managedCredentialsInvalidated)
         clearTransientSignOutState()
         let invalidation = persistCredentialInvalidationForSignOutIfNeeded(wasSignedIn: wasSignedIn)
         if let revocation {
@@ -58,6 +60,7 @@ extension ManagedAccountService {
         let result = finishLocalCredentialCleanup(
             cleanup: cleanup,
             invalidation: invalidation,
+            hadPersistedInvalidationMarker: hadPersistedInvalidationMarker,
             wasSignedIn: wasSignedIn
         )
         if let firstError = result.error {
@@ -163,16 +166,18 @@ extension ManagedAccountService {
     private func finishLocalCredentialCleanup(
         cleanup: SignOutCredentialCleanup,
         invalidation: SignOutInvalidationAttempt,
+        hadPersistedInvalidationMarker: Bool,
         wasSignedIn: Bool
     ) -> (error: Error?, didDurablySignOut: Bool) {
         var firstError = cleanup.firstError
-        let durableSignedOutState = invalidation.markerPersisted || cleanup.removedAnyCredential
+        let hasDurableInvalidationMarker = invalidation.markerPersisted || hadPersistedInvalidationMarker
+        let durableSignedOutState = hasDurableInvalidationMarker || cleanup.removedAnyCredential
         if durableSignedOutState {
-            areStoredCredentialsInvalidated = invalidation.markerPersisted && !cleanup.removedAnyCredential
+            areStoredCredentialsInvalidated = hasDurableInvalidationMarker && !cleanup.removedAnyCredential
             if wasSignedIn {
                 authenticationGeneration &+= 1
             }
-        } else {
+        } else if !hasStoredManagedCredential {
             areStoredCredentialsInvalidated = false
         }
 
