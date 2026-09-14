@@ -11,7 +11,12 @@ private struct SignOutInvalidationAttempt {
 private struct SignOutCredentialSnapshot {
     let clientToken: String?
     let sessionID: String?
-    let firstReadError: Error?
+    let clientTokenReadError: Error?
+    let sessionIDReadError: Error?
+
+    var firstReadError: Error? {
+        clientTokenReadError ?? sessionIDReadError
+    }
 
     var hasCompleteCredentialPair: Bool {
         clientToken != nil && sessionID != nil
@@ -20,16 +25,20 @@ private struct SignOutCredentialSnapshot {
     var mayHaveStoredCredential: Bool {
         clientToken != nil || sessionID != nil || firstReadError != nil
     }
+
+    var observedClientTokenAbsent: Bool {
+        clientToken == nil && clientTokenReadError == nil
+    }
+
+    var observedSessionIDAbsent: Bool {
+        sessionID == nil && sessionIDReadError == nil
+    }
 }
 
 private struct SignOutCredentialCleanup {
     let clientTokenRemoved: Bool
     let sessionIDRemoved: Bool
     let firstError: Error?
-
-    var removedAllCredentials: Bool {
-        clientTokenRemoved && sessionIDRemoved
-    }
 }
 
 struct ManagedAccountSignOutError: Error {
@@ -83,6 +92,7 @@ extension ManagedAccountService {
         clearPendingOAuthSignInIDBestEffort(context: "after sign-out")
         let result = finishLocalCredentialCleanup(
             cleanup: cleanup,
+            credentialSnapshot: credentialSnapshot,
             invalidation: invalidation,
             hadPersistedInvalidationMarker: hadPersistedInvalidationMarker,
             invalidatedStoredCredentials: shouldInvalidateStoredCredentials
@@ -205,7 +215,8 @@ extension ManagedAccountService {
         return SignOutCredentialSnapshot(
             clientToken: clientToken.value,
             sessionID: sessionID.value,
-            firstReadError: clientToken.error ?? sessionID.error
+            clientTokenReadError: clientToken.error,
+            sessionIDReadError: sessionID.error
         )
     }
 
@@ -243,15 +254,19 @@ extension ManagedAccountService {
 
     private func finishLocalCredentialCleanup(
         cleanup: SignOutCredentialCleanup,
+        credentialSnapshot: SignOutCredentialSnapshot,
         invalidation: SignOutInvalidationAttempt,
         hadPersistedInvalidationMarker: Bool,
         invalidatedStoredCredentials: Bool
     ) -> (error: Error?, didDurablySignOut: Bool) {
         var firstError = cleanup.firstError
         let hasDurableInvalidationMarker = invalidation.markerPersisted || hadPersistedInvalidationMarker
-        let durableSignedOutState = hasDurableInvalidationMarker || cleanup.sessionIDRemoved
+        let sessionDurablyCleared = cleanup.sessionIDRemoved || credentialSnapshot.observedSessionIDAbsent
+        let removedAllCredentials = (cleanup.clientTokenRemoved || credentialSnapshot.observedClientTokenAbsent)
+            && sessionDurablyCleared
+        let durableSignedOutState = hasDurableInvalidationMarker || sessionDurablyCleared
         if durableSignedOutState {
-            areStoredCredentialsInvalidated = hasDurableInvalidationMarker && !cleanup.removedAllCredentials
+            areStoredCredentialsInvalidated = hasDurableInvalidationMarker && !removedAllCredentials
             if invalidatedStoredCredentials {
                 authenticationGeneration &+= 1
             }
@@ -259,7 +274,7 @@ extension ManagedAccountService {
             areStoredCredentialsInvalidated = false
         }
 
-        if cleanup.removedAllCredentials {
+        if removedAllCredentials {
             let markerClearError = clearCredentialInvalidationMarkerBestEffort(context: "after sign-out")
             if markerClearError != nil {
                 areStoredCredentialsInvalidated = hasDurableInvalidationMarker
