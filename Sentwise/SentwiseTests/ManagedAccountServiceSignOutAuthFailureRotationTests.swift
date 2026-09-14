@@ -10,6 +10,33 @@ final class ManagedSignOutAuthFailureRotationTests: XCTestCase {
         return ManagedAccountService(secrets: secrets, clerk: clerk)
     }
 
+    func testCurrentSessionAuthFailureWithRotatedTokenDoesNotRetry() async throws {
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        let transport = QueueClerkTransport([
+            clerkReply(#"{"errors":[{"message":"expired"}]}"#, status: 401, clientToken: "client_Y"),
+            clerkReply(#"{"jwt":"should.not.retry"}"#, clientToken: "client_Z")
+        ])
+        let account = service(transport, secrets: secrets)
+
+        do {
+            _ = try await account.currentSessionToken()
+            XCTFail("Expected managedNotSignedIn")
+        } catch LLMError.managedNotSignedIn {
+            // expected
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertEqual(transport.callCount, 1)
+        let signedIn = await account.isSignedIn
+        XCTAssertFalse(signedIn)
+        XCTAssertNil(try secrets.value(for: .managedClientToken))
+        XCTAssertNil(try secrets.value(for: .managedSessionID))
+    }
+
     func testPendingRevocationUsesRotatedClientTokenFromStoredAuthFailure() async throws {
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",

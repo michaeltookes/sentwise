@@ -160,12 +160,19 @@ extension ManagedAccountService {
                 return try await clerk.mintSessionToken(sessionId: sessionID, clientToken: clientToken)
             } catch ClerkError.http(let status, _, let rotatedClientToken) where status == 401 || status == 404 {
                 switch preserveFailureClientToken {
-                case .pending, .pendingOAuth, .stored:
+                case .pending, .pendingOAuth:
                     try preserveRotatedClientTokenFromMintFailure(
                         rotatedClientToken,
                         sessionID: sessionID,
                         clientToken: clientToken,
                         handling: preserveFailureClientToken
+                    )
+                case .stored(let generation, let originalClientToken):
+                    updatePendingRevocationClientTokenFromAuthFailure(
+                        rotatedClientToken,
+                        generation: generation,
+                        sessionID: sessionID,
+                        originalClientToken: originalClientToken
                     )
                 case .none:
                     break
@@ -182,6 +189,21 @@ extension ManagedAccountService {
                 // surface as a transport error so the user sees the "couldn't reach" message.
                 throw LLMError.transport("managed session token request failed")
             }
+        }
+
+        func updatePendingRevocationClientTokenFromAuthFailure(
+            _ rotatedClientToken: String?,
+            generation: Int,
+            sessionID: String,
+            originalClientToken: String
+        ) {
+            guard let rotatedClientToken, !rotatedClientToken.isEmpty else { return }
+            updatePendingServerSessionRevocations(
+                generation: generation,
+                sessionID: sessionID,
+                originalClientToken: originalClientToken,
+                clientToken: rotatedClientToken
+            )
         }
 
         func preserveRotatedClientTokenFromMintFailure(
