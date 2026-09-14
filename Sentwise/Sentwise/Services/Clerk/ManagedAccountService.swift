@@ -247,23 +247,32 @@ actor ManagedAccountService: ManagedSessionProviding {
     private func mintCurrentManagedSession() async throws -> ManagedSessionToken {
         while true {
             guard !areStoredCredentialsInvalidated,
-                  let clientToken = storedClientToken,
+                  let storedClientToken = storedClientToken,
                   let sessionID = storedSessionID
             else {
                 throw LLMError.managedNotSignedIn
             }
             let generation = authenticationGeneration
+            let clientToken = storedClientTokenRotation(
+                generation: generation,
+                sessionID: sessionID,
+                originalClientToken: storedClientToken
+            ) ?? storedClientToken
             do {
                 let minted = try await mintSessionToken(
                     sessionID: sessionID,
                     clientToken: clientToken,
-                    preserveFailureClientToken: .stored(generation: generation)
+                    preserveFailureClientToken: .stored(
+                        generation: generation,
+                        originalClientToken: storedClientToken
+                    )
                 )
                 if let session = try managedSessionFromMintedStoredSession(
                     minted,
                     generation: generation,
                     sessionID: sessionID,
-                    clientToken: clientToken
+                    clientToken: clientToken,
+                    originalClientToken: storedClientToken
                 ) {
                     return session
                 } else {

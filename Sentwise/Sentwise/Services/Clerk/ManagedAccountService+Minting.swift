@@ -34,7 +34,7 @@ extension ManagedAccountService {
             case none
             case pending(ClerkSignInHandle)
             case pendingOAuth(ClerkOAuthHandle)
-            case stored(generation: Int)
+            case stored(generation: Int, originalClientToken: String)
         }
 
         func recordStoredClientTokenRotation(
@@ -73,7 +73,7 @@ extension ManagedAccountService {
             unpersistedStoredClientTokenRotation = nil
         }
 
-        func consumeStoredClientTokenRotation(
+        func storedClientTokenRotation(
             generation: Int,
             sessionID: String,
             originalClientToken: String
@@ -83,7 +83,6 @@ extension ManagedAccountService {
                   rotation.sessionID == sessionID,
                   rotation.originalClientToken == originalClientToken
             else { return nil }
-            unpersistedStoredClientTokenRotation = nil
             return rotation.clientToken
         }
 
@@ -94,28 +93,38 @@ extension ManagedAccountService {
             else {
                 return .signedOutOrReplaced
             }
-            return storedClientToken == clientToken ? .current : .rotated
+            if storedClientToken == clientToken {
+                return .current
+            }
+            guard let rotation = unpersistedStoredClientTokenRotation,
+                  rotation.generation == generation,
+                  rotation.sessionID == sessionID,
+                  rotation.clientToken == clientToken
+            else { return .rotated }
+            return .current
         }
 
         func managedSessionFromMintedStoredSession(
             _ minted: ClerkMintedToken,
             generation: Int,
             sessionID: String,
-            clientToken: String
+            clientToken: String,
+            originalClientToken: String
         ) throws -> ManagedSessionToken? {
+            let state = credentialState(generation: generation, sessionID: sessionID, clientToken: clientToken)
             recordStoredClientTokenRotation(
                 generation: generation,
                 sessionID: sessionID,
-                originalClientToken: clientToken,
+                originalClientToken: originalClientToken,
                 clientToken: minted.clientToken
             )
-            switch credentialState(generation: generation, sessionID: sessionID, clientToken: clientToken) {
+            switch state {
             case .current:
                 try persistClientToken(minted.clientToken)
                 clearStoredClientTokenRotation(
                     generation: generation,
                     sessionID: sessionID,
-                    originalClientToken: clientToken,
+                    originalClientToken: originalClientToken,
                     clientToken: minted.clientToken
                 )
                 return ManagedSessionToken(
@@ -127,7 +136,7 @@ extension ManagedAccountService {
                 clearStoredClientTokenRotation(
                     generation: generation,
                     sessionID: sessionID,
-                    originalClientToken: clientToken,
+                    originalClientToken: originalClientToken,
                     clientToken: minted.clientToken
                 )
                 return nil
@@ -135,7 +144,7 @@ extension ManagedAccountService {
                 clearStoredClientTokenRotation(
                     generation: generation,
                     sessionID: sessionID,
-                    originalClientToken: clientToken,
+                    originalClientToken: originalClientToken,
                     clientToken: minted.clientToken
                 )
                 throw LLMError.managedNotSignedIn
@@ -182,11 +191,11 @@ extension ManagedAccountService {
             handling: MintFailureClientTokenHandling
         ) throws {
             guard let rotatedClientToken, !rotatedClientToken.isEmpty else { return }
-            if case .stored(let generation) = handling {
+            if case .stored(let generation, let originalClientToken) = handling {
                 recordStoredClientTokenRotation(
                     generation: generation,
                     sessionID: sessionID,
-                    originalClientToken: clientToken,
+                    originalClientToken: originalClientToken,
                     clientToken: rotatedClientToken
                 )
             }
@@ -197,7 +206,7 @@ extension ManagedAccountService {
                 updatePendingSignIn(handle, clientToken: rotatedClientToken)
             case .pendingOAuth(let handle):
                 updatePendingOAuthSignIn(handle, clientToken: rotatedClientToken)
-            case .stored(let generation):
+            case .stored(let generation, let originalClientToken):
                 guard credentialState(
                     generation: generation,
                     sessionID: sessionID,
@@ -206,7 +215,7 @@ extension ManagedAccountService {
                     clearStoredClientTokenRotation(
                         generation: generation,
                         sessionID: sessionID,
-                        originalClientToken: clientToken,
+                        originalClientToken: originalClientToken,
                         clientToken: rotatedClientToken
                     )
                     return
@@ -215,7 +224,7 @@ extension ManagedAccountService {
                 clearStoredClientTokenRotation(
                     generation: generation,
                     sessionID: sessionID,
-                    originalClientToken: clientToken,
+                    originalClientToken: originalClientToken,
                     clientToken: rotatedClientToken
                 )
             }

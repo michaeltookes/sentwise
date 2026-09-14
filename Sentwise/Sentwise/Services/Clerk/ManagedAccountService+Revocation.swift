@@ -97,7 +97,9 @@ extension ManagedAccountService {
             hadPersistedInvalidationMarker: hadPersistedInvalidationMarker,
             invalidatedStoredCredentials: shouldInvalidateStoredCredentials
         )
-        if !result.didDurablySignOut, let revocationRequestID {
+        if result.didDurablySignOut {
+            unpersistedStoredClientTokenRotation = nil
+        } else if let revocationRequestID {
             cancelServerSessionRevocation(requestID: revocationRequestID)
         }
         if let firstError = result.error {
@@ -184,7 +186,7 @@ extension ManagedAccountService {
               !clientToken.isEmpty
         else { return nil }
         let generation = authenticationGeneration
-        let revocationClientToken = consumeStoredClientTokenRotation(
+        let revocationClientToken = storedClientTokenRotation(
             generation: generation,
             sessionID: sessionID,
             originalClientToken: clientToken
