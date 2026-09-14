@@ -61,11 +61,47 @@ final class ManagedProviderAppStateTests: XCTestCase {
         XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_1")
     }
 
-    func testSignOutManagedKeepsPublishedStateWhenKeychainRemovalFails() async throws {
+    func testSignOutManagedClearsPublishedStateWhenInvalidationMarkerSurvivesRemovalFailure() async throws {
         let secrets = ManagedProviderFailingRemoveSecretStore(seed: [
             .managedClientToken: "client_X",
             .managedSessionID: "sess_X"
         ])
+        secrets.failOnRemoveKeys = [.managedClientToken, .managedSessionID]
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed",
+            llmVerifiedModel: LLMProviderKind.managed.defaultModel,
+            managedAccountEmail: "marcus@example.com"
+        ))
+        let appState = AppState(
+            persistence: persistence,
+            secrets: secrets,
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: FakeLLMProvider(result: .success(()))
+        )
+        XCTAssertTrue(appState.isManagedSignedIn)
+        XCTAssertTrue(appState.isLLMConnected)
+
+        await appState.signOutManaged()
+
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertFalse(appState.isLLMConnected)
+        XCTAssertEqual(appState.managedAccountEmail, "")
+        XCTAssertEqual(appState.managedAccountID, "")
+        XCTAssertEqual(appState.verifiedLLMModel, "")
+        XCTAssertNotNil(appState.managedError)
+        XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_X")
+        XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_X")
+        XCTAssertEqual(try secrets.value(for: .managedCredentialsInvalidated), "1")
+    }
+
+    func testSignOutManagedKeepsPublishedStateWhenNoDurableInvalidationOrCleanupSucceeded() async throws {
+        let secrets = ManagedProviderFailingRemoveSecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        secrets.failOnSetKeys = [.managedCredentialsInvalidated]
         secrets.failOnRemoveKeys = [.managedClientToken, .managedSessionID]
         let persistence = AppStateMemoryPersistence(settings: Settings(
             schemaVersion: Settings.currentSchemaVersion,
@@ -91,6 +127,7 @@ final class ManagedProviderAppStateTests: XCTestCase {
         XCTAssertNotNil(appState.managedError)
         XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_X")
         XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_X")
+        XCTAssertNil(try secrets.value(for: .managedCredentialsInvalidated))
     }
 
     func testSignOutManagedClearsPublishedStateWhenCredentialRemovalIsPartial() async throws {

@@ -3,6 +3,11 @@ import os
 
 private let revocationLogger = Logger(subsystem: "com.tookes.Sentwise", category: "ManagedAccountService")
 
+private struct SignOutInvalidationAttempt {
+    let markerPersisted: Bool
+    let error: Error?
+}
+
 extension ManagedAccountService {
     /// Signs out: best-effort revokes the Clerk session server-side, then clears
     /// the stored device token and session id. Local mail data is untouched.
@@ -22,14 +27,18 @@ extension ManagedAccountService {
             wasSignedIn: wasSignedIn
         )
         clearTransientSignOutState()
-        let invalidationError = invalidateCredentialsForSignOutIfNeeded(wasSignedIn: wasSignedIn)
+        let invalidation = persistCredentialInvalidationForSignOutIfNeeded(wasSignedIn: wasSignedIn)
         if let revocation {
             fireServerSessionRevocation(sessionID: revocation.sessionID, clientToken: revocation.clientToken)
         }
 
         var firstError = removeStoredManagedCredentials()
         clearPendingOAuthSignInIDBestEffort(context: "after sign-out")
-        firstError = finishLocalCredentialCleanup(firstError: firstError, invalidationError: invalidationError)
+        firstError = finishLocalCredentialCleanup(
+            firstError: firstError,
+            invalidation: invalidation,
+            wasSignedIn: wasSignedIn
+        )
         if let firstError {
             throw firstError
         }
@@ -87,21 +96,21 @@ extension ManagedAccountService {
         reauthenticationClientToken = nil
     }
 
-    private func invalidateCredentialsForSignOutIfNeeded(wasSignedIn: Bool) -> Error? {
-        guard wasSignedIn else { return nil }
-        let invalidationError: Error?
+    private func persistCredentialInvalidationForSignOutIfNeeded(
+        wasSignedIn: Bool
+    ) -> SignOutInvalidationAttempt {
+        guard wasSignedIn else {
+            return SignOutInvalidationAttempt(markerPersisted: false, error: nil)
+        }
         do {
             try secrets.set(Self.invalidatedCredentialsMarkerValue, for: .managedCredentialsInvalidated)
-            invalidationError = nil
+            return SignOutInvalidationAttempt(markerPersisted: true, error: nil)
         } catch {
-            invalidationError = error
             revocationLogger.error(
                 "Failed to persist managed credential invalidation marker before sign-out: \(error.localizedDescription)"
             )
+            return SignOutInvalidationAttempt(markerPersisted: false, error: error)
         }
-        areStoredCredentialsInvalidated = true
-        authenticationGeneration &+= 1
-        return invalidationError
     }
 
     private func removeStoredManagedCredentials() -> Error? {
@@ -119,12 +128,27 @@ extension ManagedAccountService {
         return firstError
     }
 
-    private func finishLocalCredentialCleanup(firstError: Error?, invalidationError: Error?) -> Error? {
+    private func finishLocalCredentialCleanup(
+        firstError: Error?,
+        invalidation: SignOutInvalidationAttempt,
+        wasSignedIn: Bool
+    ) -> Error? {
         var firstError = firstError
+        let hasCompleteCredentialPair = storedClientToken != nil && storedSessionID != nil
+        let durableSignedOutState = invalidation.markerPersisted || !hasCompleteCredentialPair
+        if durableSignedOutState {
+            areStoredCredentialsInvalidated = invalidation.markerPersisted && hasStoredManagedCredential
+            if wasSignedIn {
+                authenticationGeneration &+= 1
+            }
+        } else {
+            areStoredCredentialsInvalidated = false
+        }
+
         if !hasStoredManagedCredential {
             areStoredCredentialsInvalidated = false
             clearCredentialInvalidationMarkerBestEffort(context: "after sign-out")
-        } else if let invalidationError {
+        } else if !durableSignedOutState, let invalidationError = invalidation.error {
             firstError = firstError ?? invalidationError
         }
         clearReauthenticationClientTokenBestEffort(context: "after sign-out")

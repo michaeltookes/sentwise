@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 /// A typed key identifying a secret in a `SecretStore`.
@@ -80,16 +79,11 @@ struct SecretKey: RawRepresentable, Hashable {
 
     /// A log-safe identifier for this key. Some raw values embed an account email
     /// (e.g. `mail.appPassword.<email>`), so the full `rawValue` must never be
-    /// logged at `.public` (security finding A-L4). This returns the key's *kind*
-    /// — the first two dot-separated segments, which never include the email —
-    /// plus a short, stable, non-reversible hash of the full raw value. That keeps
-    /// logs useful for diagnosing which *kind* of key (and, stably, which specific
-    /// item) failed, without revealing any PII.
+    /// logged at `.public` (security finding A-L4). This returns only the key's
+    /// kind — the first two dot-separated segments, which never include the email.
     var logSafeIdentifier: String {
         let kind = rawValue.split(separator: ".").prefix(2).joined(separator: ".")
-        let digest = SHA256.hash(data: Data(rawValue.utf8))
-        let shortHash = digest.prefix(4).map { String(format: "%02x", $0) }.joined()
-        return "\(kind.isEmpty ? "secret" : kind)#\(shortHash)"
+        return kind.isEmpty ? "secret" : kind
     }
 }
 

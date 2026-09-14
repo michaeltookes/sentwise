@@ -96,28 +96,26 @@ final class SecretStoreTests: XCTestCase {
     func testLogSafeIdentifierNeverLeaksAccountEmail() {
         let email = "marcus@example.com"
         let identifier = SecretKey.mailAppPassword(email: email).logSafeIdentifier
-        // The kind prefix stays useful, but the account email is never present.
-        XCTAssertTrue(identifier.hasPrefix("mail.appPassword#"), identifier)
+        // The kind stays useful, but no stable per-account digest is published.
+        XCTAssertEqual(identifier, "mail.appPassword")
         XCTAssertFalse(identifier.contains(email))
         XCTAssertFalse(identifier.contains("marcus"))
         XCTAssertFalse(identifier.contains("example.com"))
     }
 
-    func testLogSafeIdentifierIsStableAndPerKeyDistinct() {
-        // Stable across calls (SHA-256, not the per-process-randomized Hasher)…
+    func testLogSafeIdentifierDoesNotDistinguishAccountScopedKeys() {
         XCTAssertEqual(
             SecretKey.mailAppPassword(email: "me@gmail.com").logSafeIdentifier,
             SecretKey.mailAppPassword(email: "me@gmail.com").logSafeIdentifier
         )
-        // …and distinct per account, so a specific failing item is still traceable.
-        XCTAssertNotEqual(
+        XCTAssertEqual(
             SecretKey.mailAppPassword(email: "me@gmail.com").logSafeIdentifier,
             SecretKey.mailAppPassword(email: "me@att.net").logSafeIdentifier
         )
     }
 
     func testLogSafeIdentifierKindPrefixForWellKnownKeys() {
-        XCTAssertTrue(SecretKey.managedClientToken.logSafeIdentifier.hasPrefix("managed.clientToken#"))
-        XCTAssertTrue(SecretKey.gmailToken.logSafeIdentifier.hasPrefix("gmail.token#"))
+        XCTAssertEqual(SecretKey.managedClientToken.logSafeIdentifier, "managed.clientToken")
+        XCTAssertEqual(SecretKey.gmailToken.logSafeIdentifier, "gmail.token")
     }
 }

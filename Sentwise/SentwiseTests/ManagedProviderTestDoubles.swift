@@ -21,10 +21,12 @@ struct FixedSessionProvider: ManagedSessionProviding {
 }
 
 enum ManagedProviderSecretError: Error {
+    case setDenied
     case removeDenied
 }
 
 final class ManagedProviderFailingRemoveSecretStore: SecretStore {
+    var failOnSetKeys: Set<SecretKey> = []
     var failOnRemoveKeys: Set<SecretKey> = []
     private var storage: [String: String]
 
@@ -35,6 +37,9 @@ final class ManagedProviderFailingRemoveSecretStore: SecretStore {
     }
 
     func set(_ value: String, for key: SecretKey) throws {
+        if failOnSetKeys.contains(key) {
+            throw ManagedProviderSecretError.setDenied
+        }
         storage[key.rawValue] = value
     }
 
