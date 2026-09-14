@@ -181,7 +181,7 @@ final class ManagedAccountServiceSessionTests: XCTestCase {
 
         let tokenTask = Task { try await account.currentSessionToken() }
         await fulfillment(of: [requestStarted], timeout: 1.0)
-        try await account.signOut()
+        try await account.signOut(revokeServerSession: false)
         let awaited10 = await account.isSignedIn
         XCTAssertFalse(awaited10)
 

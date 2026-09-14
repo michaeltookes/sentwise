@@ -51,7 +51,7 @@ extension ManagedAccountService {
                 }
             } catch {
                 revocationLogger.error(
-                    "Clerk session revocation failed: \(String(describing: error), privacy: .public)"
+                    "Clerk session revocation failed: \(String(describing: error), privacy: .private)"
                 )
             }
         }
