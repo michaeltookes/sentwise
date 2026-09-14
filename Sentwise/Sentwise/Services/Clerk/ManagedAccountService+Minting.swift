@@ -87,6 +87,14 @@ extension ManagedAccountService {
             handling: MintFailureClientTokenHandling
         ) throws {
             guard let rotatedClientToken, !rotatedClientToken.isEmpty else { return }
+            if case .stored(let generation) = handling {
+                updatePendingServerSessionRevocations(
+                    generation: generation,
+                    sessionID: sessionID,
+                    originalClientToken: clientToken,
+                    clientToken: rotatedClientToken
+                )
+            }
             switch handling {
             case .none:
                 return

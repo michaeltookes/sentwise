@@ -35,13 +35,11 @@ extension ManagedAccountService {
     ///
     /// `revokeServerSession` defaults to off during Prowl hunts and test runs,
     /// which run fully offline; production sign-outs revoke by default. The
-    /// revocation is fire-and-forget after any in-flight token mint finishes, so
-    /// it uses Clerk's latest rotated client token without letting a failed or slow
-    /// network call fail the local sign-out (security finding A-L3).
+    /// local cleanup runs immediately; only the fire-and-forget revocation waits
+    /// for an in-flight token mint so it can use Clerk's latest rotated client
+    /// token without letting a failed or slow network call fail sign-out
+    /// (security finding A-L3).
     func signOut(revokeServerSession: Bool = !ProwlHuntRuntime.current.isEnabled) async throws {
-        let serializedRevocation = await beginRevocationMintTurnIfNeeded(revokeServerSession)
-        defer { endRevocationMintTurnIfNeeded(serializedRevocation) }
-
         let wasSignedIn = isSignedIn
         let revocation = serverSessionRevocationRequest(
             revokeServerSession: revokeServerSession,
@@ -49,11 +47,15 @@ extension ManagedAccountService {
         )
         let hadPersistedInvalidationMarker = areStoredCredentialsInvalidated
             && secrets.hasValue(for: .managedCredentialsInvalidated)
+        if let revocation {
+            scheduleServerSessionRevocation(
+                sessionID: revocation.sessionID,
+                clientToken: revocation.clientToken,
+                generation: revocation.generation
+            )
+        }
         clearTransientSignOutState()
         let invalidation = persistCredentialInvalidationForSignOutIfNeeded(wasSignedIn: wasSignedIn)
-        if let revocation {
-            fireServerSessionRevocation(sessionID: revocation.sessionID, clientToken: revocation.clientToken)
-        }
 
         let cleanup = removeStoredManagedCredentials()
         clearPendingOAuthSignInIDBestEffort(context: "after sign-out")
@@ -68,6 +70,21 @@ extension ManagedAccountService {
                 underlying: firstError,
                 didDurablySignOut: result.didDurablySignOut
             )
+        }
+    }
+
+    func updatePendingServerSessionRevocations(
+        generation: Int,
+        sessionID: String,
+        originalClientToken: String,
+        clientToken: String
+    ) {
+        guard !clientToken.isEmpty else { return }
+        for (requestID, revocation) in pendingServerSessionRevocations
+        where revocation.generation == generation
+            && revocation.sessionID == sessionID
+            && revocation.originalClientToken == originalClientToken {
+            pendingServerSessionRevocations[requestID]?.clientToken = clientToken
         }
     }
 
@@ -93,28 +110,35 @@ extension ManagedAccountService {
         }
     }
 
-    private func beginRevocationMintTurnIfNeeded(_ revokeServerSession: Bool) async -> Bool {
-        guard revokeServerSession, isSignedIn else { return false }
-        await beginMintTurn()
-        return true
+    private func scheduleServerSessionRevocation(sessionID: String, clientToken: String, generation: Int) {
+        let requestID = UUID()
+        pendingServerSessionRevocations[requestID] = (
+            sessionID: sessionID,
+            generation: generation,
+            originalClientToken: clientToken,
+            clientToken: clientToken
+        )
+        Task { await self.firePendingServerSessionRevocation(requestID) }
     }
 
-    private func endRevocationMintTurnIfNeeded(_ shouldEnd: Bool) {
-        guard shouldEnd else { return }
-        endMintTurn()
+    private func firePendingServerSessionRevocation(_ requestID: UUID) async {
+        await beginMintTurn()
+        defer { endMintTurn() }
+        guard let revocation = pendingServerSessionRevocations.removeValue(forKey: requestID) else { return }
+        fireServerSessionRevocation(sessionID: revocation.sessionID, clientToken: revocation.clientToken)
     }
 
     private func serverSessionRevocationRequest(
         revokeServerSession: Bool,
         wasSignedIn: Bool
-    ) -> (sessionID: String, clientToken: String)? {
+    ) -> (sessionID: String, clientToken: String, generation: Int)? {
         guard revokeServerSession,
               wasSignedIn,
               let sessionID = storedSessionID,
               let clientToken = storedClientToken,
               !clientToken.isEmpty
         else { return nil }
-        return (sessionID, clientToken)
+        return (sessionID, clientToken, authenticationGeneration)
     }
 
     private func clearTransientSignOutState() {

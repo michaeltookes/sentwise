@@ -237,7 +237,7 @@ final class ManagedAccountServiceSessionTests: XCTestCase {
         XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_Z")
     }
 
-    func testSignOutRevocationWaitsForInFlightMintAndUsesRotatedClientToken() async throws {
+    func testSignOutDoesNotWaitForInFlightMintButRevocationUsesRotatedClientToken() async throws {
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",
             .managedSessionID: "sess_X"
@@ -260,10 +260,20 @@ final class ManagedAccountServiceSessionTests: XCTestCase {
         let signOutTask = Task { try await account.signOut(revokeServerSession: true) }
         try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertEqual(transport.requestCount, 1)
+        let signedIn = await account.isSignedIn
+        XCTAssertFalse(signedIn)
+        XCTAssertNil(try secrets.value(for: .managedClientToken))
+        XCTAssertNil(try secrets.value(for: .managedSessionID))
 
         transport.resumeNext(with: clerkReply(#"{"jwt":"fresh.jwt"}"#, clientToken: "client_Y"))
-        let minted = try await tokenTask.value
-        XCTAssertEqual(minted, "fresh.jwt")
+        do {
+            _ = try await tokenTask.value
+            XCTFail("Expected managedNotSignedIn")
+        } catch LLMError.managedNotSignedIn {
+            // expected
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
 
         try await signOutTask.value
         await fulfillment(of: [revocationStarted], timeout: 1.0)

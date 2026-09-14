@@ -47,6 +47,9 @@ actor ManagedAccountService: ManagedSessionProviding {
     /// released while the network request is suspended.
     var isMintingSessionToken = false
     var mintWaiters: [CheckedContinuation<Void, Never>] = []
+    var pendingServerSessionRevocations: [
+        UUID: (sessionID: String, generation: Int, originalClientToken: String, clientToken: String)
+    ] = [:]
 
     init(secrets: SecretStore, clerk: ClerkClient = ClerkClient()) {
         self.secrets = secrets
@@ -250,6 +253,12 @@ actor ManagedAccountService: ManagedSessionProviding {
                     sessionID: sessionID,
                     clientToken: clientToken,
                     preserveFailureClientToken: .stored(generation: generation)
+                )
+                updatePendingServerSessionRevocations(
+                    generation: generation,
+                    sessionID: sessionID,
+                    originalClientToken: clientToken,
+                    clientToken: minted.clientToken
                 )
                 switch credentialState(generation: generation, sessionID: sessionID, clientToken: clientToken) {
                 case .current:
