@@ -16,6 +16,10 @@ private struct SignOutCredentialCleanup {
     var removedAnyCredential: Bool {
         clientTokenRemoved || sessionIDRemoved
     }
+
+    var removedAllCredentials: Bool {
+        clientTokenRemoved && sessionIDRemoved
+    }
 }
 
 struct ManagedAccountSignOutError: Error {
@@ -197,7 +201,7 @@ extension ManagedAccountService {
         let hasDurableInvalidationMarker = invalidation.markerPersisted || hadPersistedInvalidationMarker
         let durableSignedOutState = hasDurableInvalidationMarker || cleanup.removedAnyCredential
         if durableSignedOutState {
-            areStoredCredentialsInvalidated = hasDurableInvalidationMarker && !cleanup.removedAnyCredential
+            areStoredCredentialsInvalidated = hasDurableInvalidationMarker && !cleanup.removedAllCredentials
             if wasSignedIn {
                 authenticationGeneration &+= 1
             }
@@ -205,7 +209,7 @@ extension ManagedAccountService {
             areStoredCredentialsInvalidated = false
         }
 
-        if cleanup.removedAnyCredential {
+        if cleanup.removedAllCredentials {
             clearCredentialInvalidationMarkerBestEffort(context: "after sign-out")
         } else if !durableSignedOutState, let invalidationError = invalidation.error {
             firstError = firstError ?? invalidationError
