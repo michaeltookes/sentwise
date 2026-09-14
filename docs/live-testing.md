@@ -83,7 +83,7 @@ is not exercised, so provision the ones you want covered.
 | `SENTWISE_LIVE_GMAIL_APP_PASSWORD` | same | 16-char Google app password (2FA required). |
 | `SENTWISE_LIVE_ATTNET_EMAIL` | `AttNetLiveDraftTests` | The att.net address (item 44 save-as-draft verify). |
 | `SENTWISE_LIVE_ATTNET_APP_PASSWORD` | same | AT&T Secure Mail Key. |
-| `SENTWISE_LIVE_CLERK_SESSION_TOKEN` | `ManagedInferenceLiveTests` | A real Clerk **session JWT**. **Short-lived** — a static repo secret expires quickly, so this test usually skips in scheduled runs. Provide a fresh token only when deliberately exercising the Worker end-to-end. |
+| `SENTWISE_LIVE_MANAGED_INFERENCE` | `ManagedInferenceLiveTests` | Any truthy value (`1`). Explicitly opts the Worker end-to-end tests into spending live Anthropic budget. The test mints a fresh Clerk session JWT during the run using `SENTWISE_LIVE_CLERK_TEST`; no JWT is stored as a repo secret. |
 | `SENTWISE_INFERENCE_URL` | `ManagedInferenceLiveTests` | The deployed Worker base URL (`https://sentwise-inference.sentwise-service.workers.dev`). |
 
 Optional IMAP host/port overrides (`SENTWISE_LIVE_GMAIL_HOST` / `_PORT`,
@@ -109,7 +109,7 @@ SentwiseTests/AttNetLiveDraftTests
 95's pending live check): it loads the real `PaddleCheckoutHTML` harness in a
 `WKWebView` under the real `CheckoutNavigationPolicy` navigation rule, opens the
 Paddle **sandbox** overlay by `items` (client-side token + a sandbox price id),
-and asserts the overlay reaches its loaded/opened harness event while the
+and asserts the overlay reaches Paddle's real `checkout.loaded` event while the
 navigation policy blocked none of the Paddle navigations the overlay needs. This
 catches the "navigation policy too tight" regression class that offline unit
 tests cannot. It needs a window server, which is why it runs only on Lucius's GUI
@@ -123,21 +123,44 @@ render identically either way, with far fewer live dependencies).
 
 Use the **`/live-verify`** skill (`.claude/skills/live-verify/SKILL.md`). It
 resolves the ref (current branch by default), runs
-`gh workflow run live-tests.yml --ref <ref>`, watches the run to completion, and
-reports pass/fail with `gh run view --log-failed` excerpts. It never runs a test
-locally. It is wired into the `/kickoff` lifecycle as the final live-verify step
-after `/validate-feature` passes and the branch is pushed; merges to `main` are
+`gh workflow run live-tests.yml` with a branch/tag workflow ref and a separate
+checkout `ref` input, watches the correlated run to completion, and reports
+pass/fail with `gh run view --log-failed` excerpts. It never runs a test locally.
+It is wired into the `/kickoff` lifecycle as the final live-verify step after
+`/validate-feature` passes and the branch is pushed; merges to `main` are
 covered automatically by the push trigger.
 
 ### Manually
 
 ```bash
-gh workflow run live-tests.yml --ref <branch>
-gh run watch "$(gh run list --workflow=live-tests.yml --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status
+REQUESTED_REF=<branch-or-tag-or-sha>
+WORKFLOW_REF=<branch-or-tag-containing-live-tests-yml>
+CORRELATION_ID="manual-live-$(date -u +%Y%m%dT%H%M%SZ)"
+CREATED_AFTER="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+gh workflow run live-tests.yml \
+  --ref "$WORKFLOW_REF" \
+  -f ref="$REQUESTED_REF" \
+  -f correlation_id="$CORRELATION_ID"
+
+RUN_ID=""
+for _ in {1..24}; do
+  RUN_ID=$(gh run list \
+    --workflow=live-tests.yml \
+    --event workflow_dispatch \
+    --created ">=$CREATED_AFTER" \
+    --json databaseId,displayTitle \
+    --jq "map(select((.displayTitle // \"\") | contains(\"$CORRELATION_ID\"))) | .[0].databaseId // \"\"")
+  [ -n "$RUN_ID" ] && break
+  sleep 5
+done
+[ -n "$RUN_ID" ] || { echo "run not found: $CORRELATION_ID" >&2; exit 1; }
+gh run watch "$RUN_ID" --exit-status
 ```
 
-The branch must be pushed to `origin` first — the runner checks the ref out from
-GitHub.
+Branches and tags must be pushed to `origin` first; SHA inputs must be reachable
+from the repository so `actions/checkout` can fetch them. For a SHA, dispatch
+the workflow definition from a branch or tag and pass the SHA only as `ref`.
 
 ## Runner hygiene (Lucius)
 

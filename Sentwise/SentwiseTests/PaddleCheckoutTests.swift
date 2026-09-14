@@ -52,7 +52,7 @@ final class PaddleCheckoutTests: XCTestCase {
     func testBridgeEventMapping() {
         XCTAssertEqual(PaddleBridgeEvent.make(name: "checkout.completed"), .completed)
         XCTAssertEqual(PaddleBridgeEvent.make(name: "checkout.closed"), .closed)
-        // The overlay actually opened — paddle.opened / checkout.loaded.
+        // The app treats accepted-open and overlay-loaded bridge events as ready.
         XCTAssertEqual(PaddleBridgeEvent.make(name: "paddle.opened"), .ready)
         XCTAssertEqual(PaddleBridgeEvent.make(name: "checkout.loaded"), .ready)
         // paddle.ready is init-only now (before any overlay opens) → ignored.
@@ -276,8 +276,9 @@ final class PaddleCheckoutTests: XCTestCase {
         XCTAssertTrue(html.contains("test_7a55409b65e7f906b94b863e63a"))
         XCTAssertTrue(html.contains("window.sentwiseOpenCheckout"))
         XCTAssertTrue(html.contains("messageHandlers.sentwise"))
-        // The overlay-open signal the app now relies on to mark "presenting".
+        // The accepted-open diagnostic and Paddle's real overlay-loaded signal.
         XCTAssertTrue(html.contains("paddle.opened"))
+        XCTAssertTrue(html.contains(#"post("checkout.loaded")"#))
         XCTAssertTrue(html.contains("__captureRawErrorPayload"))
         XCTAssertTrue(html.contains("paddle.errorMeta"))
         XCTAssertTrue(html.contains("paddle.errorPayload"))

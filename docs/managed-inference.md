@@ -179,12 +179,14 @@ completed by a hijacked callback.
 
 - **Google sign-in was deferred out of 56a and delivered in item 59** (above).
   Email code remains the other enabled method.
-- The native flow is implemented to Clerk's Frontend-API spec. It is fully
-  unit-tested, but a real end-to-end sign-in against the live dev instance
-  (which needs an email inbox for the code) has **not** been exercised in CI.
-  The env-gated live test (`ManagedInferenceLiveTests`) verifies the **Worker**
-  (`/v1/me`, `/v1/draft`) with a manually supplied session token via
-  `SENTWISE_LIVE_CLERK_SESSION_TOKEN` + `SENTWISE_INFERENCE_URL`.
+- The native flow is implemented to Clerk's Frontend-API spec and is covered by
+  the env-gated `ClerkLiveSignInTests` test address flow. `ManagedInferenceLiveTests`
+  verifies the **Worker** (`/v1/me`, optional quota/subscription blocks, and
+  `/v1/draft`) by minting a fresh Clerk session token during the run via
+  `SENTWISE_LIVE_CLERK_TEST`, then calling the deployed URL supplied in
+  `SENTWISE_INFERENCE_URL`. `SENTWISE_LIVE_MANAGED_INFERENCE` is the explicit
+  gate for the Worker payload so no short-lived Clerk JWT is stored as a repo
+  secret.
 
 ## Settings migration (14 → 15)
 

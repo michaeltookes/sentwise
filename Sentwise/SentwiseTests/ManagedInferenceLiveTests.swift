@@ -1,34 +1,74 @@
 import XCTest
 @testable import Sentwise
 
-/// A `ManagedSessionProviding` returning a pre-obtained live session token.
+/// A `ManagedSessionProviding` returning a freshly minted live session token.
 private struct EnvSessionProvider: ManagedSessionProviding {
     let token: String
     func currentSessionToken() async throws -> String { token }
 }
 
 /// End-to-end tests against the deployed `sentwise-service` Worker. Skipped
-/// unless BOTH env vars are set, so CI and normal runs stay offline:
-///   SENTWISE_LIVE_CLERK_SESSION_TOKEN  — a real Clerk session JWT
-///   SENTWISE_INFERENCE_URL             — the deployed Worker base URL
+/// unless all gates are set, so CI and normal runs stay offline:
+///   SENTWISE_LIVE_MANAGED_INFERENCE — explicit Worker live-test gate
+///   SENTWISE_LIVE_CLERK_TEST        — enables the Clerk test email-code flow
+///   SENTWISE_INFERENCE_URL          — the deployed Worker base URL
 ///
-/// Obtain a session token by signing in through the app (or via Clerk) and
-/// reading the minted token; it is short-lived, so run these promptly.
+/// The tests mint a short-lived Clerk JWT during each run using Clerk's test
+/// email-code flow, avoiding a stale session-token repository secret.
 final class ManagedInferenceLiveTests: XCTestCase {
 
-    private func liveConfig() throws -> (token: String, baseURL: URL) {
+    /// A deterministic Clerk test email. `+clerk_test` triggers test mode; the
+    /// universal code below verifies without sending email.
+    private static let testEmail = "sentwise-live+clerk_test@sentwise.ai"
+    private static let testCode = "424242"
+
+    private func liveConfig() async throws -> (token: String, baseURL: URL) {
         let env = ProcessInfo.processInfo.environment
+        try requireTruthy("SENTWISE_LIVE_MANAGED_INFERENCE", in: env)
+        try requireTruthy("SENTWISE_LIVE_CLERK_TEST", in: env)
+
         guard
-            let token = env["SENTWISE_LIVE_CLERK_SESSION_TOKEN"], !token.isEmpty,
-            let urlString = env["SENTWISE_INFERENCE_URL"], let baseURL = URL(string: urlString)
+            let urlString = env["SENTWISE_INFERENCE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !urlString.isEmpty,
+            let baseURL = URL(string: urlString)
         else {
-            throw XCTSkip("Set SENTWISE_LIVE_CLERK_SESSION_TOKEN and SENTWISE_INFERENCE_URL to run live tests.")
+            throw XCTSkip("Set SENTWISE_INFERENCE_URL to run live managed-inference tests.")
         }
-        return (token, baseURL)
+        return (try await mintLiveSessionToken(), baseURL)
+    }
+
+    private func requireTruthy(_ name: String, in env: [String: String]) throws {
+        guard Self.isTruthy(env[name]) else {
+            throw XCTSkip("Set \(name)=1 to run live managed-inference tests.")
+        }
+    }
+
+    private static func isTruthy(_ value: String?) -> Bool {
+        let normalized = value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return normalized == "1" || normalized == "true" || normalized == "yes"
+    }
+
+    private func mintLiveSessionToken() async throws -> String {
+        let clerk = ClerkClient()
+        let handle = try await clerk.sendEmailCode(email: Self.testEmail, clientToken: "")
+        let verified = try await clerk.verifyEmailCode(
+            signInId: handle.signInId,
+            code: Self.testCode,
+            clientToken: handle.clientToken,
+            flow: handle.flow
+        )
+        let minted = try await clerk.mintSessionToken(
+            sessionId: verified.sessionId,
+            clientToken: verified.clientToken
+        )
+        XCTAssertFalse(minted.jwt.isEmpty, "expected a freshly minted session JWT")
+        return minted.jwt
     }
 
     func testLiveMeReturnsAccountAndTrial() async throws {
-        let (token, baseURL) = try liveConfig()
+        let (token, baseURL) = try await liveConfig()
         var request = URLRequest(url: baseURL.appendingPathComponent("v1/me"))
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
@@ -45,7 +85,7 @@ final class ManagedInferenceLiveTests: XCTestCase {
     /// one. Tolerates its absence so the app half can land before the service half
     /// (item 56b) — an older Worker build simply omits `quota`.
     func testLiveMeQuotaShapeWhenPresent() async throws {
-        let (token, baseURL) = try liveConfig()
+        let (token, baseURL) = try await liveConfig()
         let client = ManagedInferenceClient(
             sessionProvider: EnvSessionProvider(token: token),
             transport: URLSessionTransport()
@@ -66,7 +106,7 @@ final class ManagedInferenceLiveTests: XCTestCase {
     /// returns one (item 73). Tolerates its absence so the app half can land
     /// before the service half — an older Worker build simply omits `subscription`.
     func testLiveMeSubscriptionShapeWhenPresent() async throws {
-        let (token, baseURL) = try liveConfig()
+        let (token, baseURL) = try await liveConfig()
         let client = ManagedInferenceClient(
             sessionProvider: EnvSessionProvider(token: token),
             transport: URLSessionTransport()
@@ -86,7 +126,7 @@ final class ManagedInferenceLiveTests: XCTestCase {
     }
 
     func testLiveDraftReturnsText() async throws {
-        let (token, baseURL) = try liveConfig()
+        let (token, baseURL) = try await liveConfig()
         let client = ManagedInferenceClient(
             sessionProvider: EnvSessionProvider(token: token),
             transport: URLSessionTransport(),

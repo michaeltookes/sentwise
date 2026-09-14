@@ -140,8 +140,9 @@ final class PaddleCheckoutModel: ObservableObject {
         transition(to: .failed(message))
     }
 
-    /// Folds a bridge event into the phase. `.ready` (the overlay actually opened)
-    /// advances a pre-open phase to `.presenting`. `.completed` wins over a
+    /// Folds a bridge event into the phase. `.ready` (the overlay started
+    /// presenting or loaded) advances a pre-open phase to `.presenting`.
+    /// `.completed` wins over a
     /// subsequent `.closed` (Paddle emits `checkout.closed` after
     /// `checkout.completed`), and no event overrides a terminal failure except a
     /// completion.

@@ -51,7 +51,7 @@ import XCTest
 ///
 /// So this is the strongest *reliably verifiable* variant: it drives the real
 /// harness's own `window.sentwiseOpenCheckout` entry point and reaches the
-/// overlay's loaded/opened harness event, proving the overlay renders inside the
+/// overlay's `checkout.loaded` harness event, proving the overlay renders inside the
 /// restricted WebView. (The full transaction-id chain remains available as a
 /// future payload once the Worker holds a sandbox Paddle key — noted in
 /// `docs/live-testing.md`.)
@@ -113,15 +113,15 @@ final class PaddleCheckoutLiveTests: XCTestCase {
             webView?.evaluateJavaScript("window.sentwiseOpenCheckout(\(itemsJSON));", completionHandler: nil)
         }
 
-        // Wait (generously) for the overlay to reach its loaded/opened harness
-        // event, or for a harness/checkout failure.
+        // Wait (generously) for Paddle's real checkout.loaded event, or for a
+        // harness/checkout failure.
         let outcome = try await driver.awaitOverlayOutcome(timeout: 90)
 
         switch outcome {
-        case .opened(let signal):
-            // The harness opened the overlay inside the restricted WebView. Prove
-            // the navigation policy did not block anything the overlay needed —
-            // this is the "policy too tight" regression guard.
+        case .loaded(let signal):
+            // Paddle reported the overlay loaded inside the restricted WebView.
+            // Prove the navigation policy did not block anything the overlay
+            // needed — this is the "policy too tight" regression guard.
             let blockedPaddleHosts = driver.blockedNavigations.filter { record in
                 guard let host = record.url?.host?.lowercased() else { return false }
                 return CheckoutNavigationPolicy.isAllowedTopLevelHost(host)
@@ -153,7 +153,7 @@ final class PaddleCheckoutLiveTests: XCTestCase {
 private final class CheckoutOverlayDriver: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     enum Outcome {
-        case opened(String)
+        case loaded(String)
         case failed(String, String?)
     }
 
@@ -175,7 +175,7 @@ private final class CheckoutOverlayDriver: NSObject, WKScriptMessageHandler, WKN
     private var settledOutcome: Outcome?
     private var allowsInitialAboutBlankNavigation = true
 
-    /// Awaits the first terminal overlay signal: opened/loaded (success) or
+    /// Awaits the first terminal overlay signal: `checkout.loaded` (success) or
     /// failed/error. Times out with a descriptive error.
     func awaitOverlayOutcome(timeout seconds: TimeInterval) async throws -> Outcome {
         if let settledOutcome { return settledOutcome }
@@ -212,8 +212,8 @@ private final class CheckoutOverlayDriver: NSObject, WKScriptMessageHandler, WKN
         let detail = dict["detail"] as? String
         eventLog.append(name)
         switch name {
-        case "paddle.opened", "checkout.loaded":
-            settle(.opened(name))
+        case "checkout.loaded":
+            settle(.loaded(name))
         case "paddle.failed", "checkout.error":
             settle(.failed(name, detail))
         default:
@@ -278,7 +278,7 @@ private enum LiveOverlayError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .timedOut(let seconds, let eventLog):
-            return "Paddle overlay did not reach a loaded/opened event within \(Int(seconds))s. Events seen: \(eventLog)"
+            return "Paddle overlay did not reach checkout.loaded within \(Int(seconds))s. Events seen: \(eventLog)"
         }
     }
 }

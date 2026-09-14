@@ -25,33 +25,64 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
 
 ## What it does
 
-1. **Resolve the ref.** Default to the current branch; accept an explicit ref
-   argument (branch, tag, or SHA).
+1. **Resolve the requested checkout ref.** Default to the current branch; accept
+   an explicit ref argument (branch, tag, or SHA). A SHA is passed only through
+   the workflow's `ref` input; the workflow file itself must be dispatched from
+   a branch or tag.
 
    ```bash
-   REF="${1:-$(git rev-parse --abbrev-ref HEAD)}"
+   REQUESTED_REF="${1:-$(git rev-parse --abbrev-ref HEAD)}"
+   DEFAULT_BRANCH="$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"
+   WORKFLOW_REF="$DEFAULT_BRANCH"
    ```
 
-   The branch must exist on `origin` (the runner checks it out from GitHub), so
-   confirm it is pushed:
+   Prefer dispatching the workflow definition from the same branch/tag when that
+   branch/tag exists on `origin`. If the requested ref is a local branch that is
+   not pushed, stop and ask the owner to push it first. If it is a commit SHA,
+   dispatch the workflow definition from the default branch and let the workflow
+   checkout step use the SHA input.
 
    ```bash
-   git ls-remote --exit-code --heads origin "$REF" >/dev/null 2>&1 \
-     || echo "warning: $REF is not on origin; push it first (dispatch checks out the remote ref)."
+   if git ls-remote --exit-code --heads origin "$REQUESTED_REF" >/dev/null 2>&1; then
+     WORKFLOW_REF="$REQUESTED_REF"
+   elif git ls-remote --exit-code --tags origin "$REQUESTED_REF" >/dev/null 2>&1; then
+     WORKFLOW_REF="$REQUESTED_REF"
+   elif git show-ref --verify --quiet "refs/heads/$REQUESTED_REF"; then
+     echo "error: branch '$REQUESTED_REF' is not on origin; push it first." >&2
+     exit 1
+   else
+     echo "info: dispatching live-tests.yml from '$WORKFLOW_REF' and checking out '$REQUESTED_REF'."
+   fi
    ```
 
-2. **Dispatch the workflow** for that ref:
+2. **Dispatch the workflow** with a unique correlation id:
 
    ```bash
-   gh workflow run live-tests.yml --ref "$REF" -f ref="$REF"
+   CORRELATION_ID="live-verify-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM"
+   CREATED_AFTER="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+   gh workflow run live-tests.yml \
+     --ref "$WORKFLOW_REF" \
+     -f ref="$REQUESTED_REF" \
+     -f correlation_id="$CORRELATION_ID"
    ```
 
-3. **Find the run** it started (give Actions a moment to register it), then
-   **watch** it to completion:
+3. **Find the exact run** it started, then **watch** it to completion. Do not use
+   `--limit 1` unfiltered; another workflow_dispatch or push-to-main run may
+   register while Actions is still creating this one.
 
    ```bash
-   sleep 5
-   RUN_ID=$(gh run list --workflow=live-tests.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+   RUN_ID=""
+   for _ in {1..24}; do
+     RUN_ID=$(gh run list \
+       --workflow=live-tests.yml \
+       --event workflow_dispatch \
+       --created ">=$CREATED_AFTER" \
+       --json databaseId,displayTitle \
+       --jq "map(select((.displayTitle // \"\") | contains(\"$CORRELATION_ID\"))) | .[0].databaseId // \"\"")
+     [ -n "$RUN_ID" ] && break
+     sleep 5
+   done
+   [ -n "$RUN_ID" ] || { echo "error: dispatched run '$CORRELATION_ID' was not found." >&2; exit 1; }
    gh run watch "$RUN_ID" --exit-status
    ```
 

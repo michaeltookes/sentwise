@@ -19,13 +19,18 @@
 
 name: Live tests
 
+run-name: Live tests (${{ github.event.inputs.ref || github.ref_name }}) [${{ github.event.inputs.correlation_id || github.run_id }}]
+
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Branch, tag, or SHA to live-verify on Lucius
+        description: Branch, tag, or SHA to check out and live-verify on Lucius
         required: false
         default: main
+      correlation_id:
+        description: Opaque ID used by /live-verify to find the dispatched run
+        required: false
   push:
     branches: [main]
 
@@ -63,7 +68,7 @@ jobs:
         env:
           SENTWISE_LIVE_PADDLE_CHECKOUT: ${{ secrets.SENTWISE_LIVE_PADDLE_CHECKOUT }}
           SENTWISE_LIVE_CLERK_TEST: ${{ secrets.SENTWISE_LIVE_CLERK_TEST }}
-          SENTWISE_LIVE_CLERK_SESSION_TOKEN: ${{ secrets.SENTWISE_LIVE_CLERK_SESSION_TOKEN }}
+          SENTWISE_LIVE_MANAGED_INFERENCE: ${{ secrets.SENTWISE_LIVE_MANAGED_INFERENCE }}
           SENTWISE_INFERENCE_URL: ${{ secrets.SENTWISE_INFERENCE_URL }}
           SENTWISE_LIVE_GMAIL_EMAIL: ${{ secrets.SENTWISE_LIVE_GMAIL_EMAIL }}
           SENTWISE_LIVE_GMAIL_APP_PASSWORD: ${{ secrets.SENTWISE_LIVE_GMAIL_APP_PASSWORD }}
