@@ -342,11 +342,14 @@ actor ManagedAccountService: ManagedSessionProviding {
         try secrets.remove(.managedCredentialsInvalidated)
     }
 
-    func clearCredentialInvalidationMarkerBestEffort(context: String) {
+    @discardableResult
+    func clearCredentialInvalidationMarkerBestEffort(context: String) -> Error? {
         do {
             try clearCredentialInvalidationMarker()
+            return nil
         } catch {
             logger.error("Failed to clear managed credential invalidation marker \(context): \(error.localizedDescription)")
+            return error
         }
     }
 
