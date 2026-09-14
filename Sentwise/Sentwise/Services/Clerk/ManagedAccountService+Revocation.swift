@@ -77,6 +77,7 @@ extension ManagedAccountService {
         if let revocation {
             revocationRequestID = scheduleServerSessionRevocation(
                 sessionID: revocation.sessionID,
+                originalClientToken: revocation.originalClientToken,
                 clientToken: revocation.clientToken,
                 generation: revocation.generation
             )
@@ -149,6 +150,7 @@ extension ManagedAccountService {
 
     private func scheduleServerSessionRevocation(
         sessionID: String,
+        originalClientToken: String,
         clientToken: String,
         generation: Int
     ) -> UUID {
@@ -156,7 +158,7 @@ extension ManagedAccountService {
         pendingServerSessionRevocations[requestID] = (
             sessionID: sessionID,
             generation: generation,
-            originalClientToken: clientToken,
+            originalClientToken: originalClientToken,
             clientToken: clientToken
         )
         Task { await self.firePendingServerSessionRevocation(requestID) }
@@ -178,7 +180,7 @@ extension ManagedAccountService {
         revokeServerSession: Bool,
         wasSignedIn: Bool,
         credentialSnapshot: SignOutCredentialSnapshot
-    ) -> (sessionID: String, clientToken: String, generation: Int)? {
+    ) -> (sessionID: String, originalClientToken: String, clientToken: String, generation: Int)? {
         guard revokeServerSession,
               wasSignedIn,
               let sessionID = credentialSnapshot.sessionID,
@@ -191,7 +193,7 @@ extension ManagedAccountService {
             sessionID: sessionID,
             originalClientToken: clientToken
         ) ?? clientToken
-        return (sessionID, revocationClientToken, generation)
+        return (sessionID, clientToken, revocationClientToken, generation)
     }
 
     private func clearTransientSignOutState() {

@@ -272,6 +272,63 @@ final class ManagedSignOutDurabilityTests: XCTestCase {
         transport.resumeNext(with: ClerkHTTPResponse(statusCode: 200, headers: [:], body: Data()))
     }
 
+    func testPendingRevocationFollowsRetryRotationAfterUnpersistedToken() async throws {
+        let secrets = ManagedAccountFailingSecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        secrets.failOnSetKeys = [.managedClientToken]
+        let transport = MultiSuspendedClerkTransport()
+        let firstMintStarted = expectation(description: "first mint request started")
+        let secondMintStarted = expectation(description: "second mint request started")
+        let revocationStarted = expectation(description: "revocation request started")
+        transport.onRequest = { requestNumber in
+            if requestNumber == 1 {
+                firstMintStarted.fulfill()
+            } else if requestNumber == 2 {
+                secondMintStarted.fulfill()
+            } else if requestNumber == 3 {
+                revocationStarted.fulfill()
+            }
+        }
+        let account = service(transport, secrets: secrets)
+
+        let firstTokenTask = Task { try await account.currentSessionToken() }
+        await fulfillment(of: [firstMintStarted], timeout: 1.0)
+        transport.resumeNext(with: clerkReply(#"{"jwt":"stale.jwt"}"#, clientToken: "client_Y"))
+
+        do {
+            _ = try await firstTokenTask.value
+            XCTFail("Expected token persistence failure")
+        } catch ManagedAccountTestSecretError.setDenied {
+            // expected
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        let secondTokenTask = Task { try await account.currentSessionToken() }
+        await fulfillment(of: [secondMintStarted], timeout: 1.0)
+        XCTAssertEqual(transport.authorizationHeader(at: 1), "Bearer client_Y")
+
+        try await account.signOut(revokeServerSession: true)
+        XCTAssertEqual(transport.requestCount, 2)
+
+        transport.resumeNext(with: clerkReply(#"{"jwt":"fresh.jwt"}"#, clientToken: "client_Z"))
+        do {
+            _ = try await secondTokenTask.value
+            XCTFail("Expected managedNotSignedIn")
+        } catch LLMError.managedNotSignedIn {
+            // expected
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        await fulfillment(of: [revocationStarted], timeout: 1.0)
+        XCTAssertEqual(transport.url(at: 2)?.path, "/v1/client/sessions/sess_X/remove")
+        XCTAssertEqual(transport.authorizationHeader(at: 2), "Bearer client_Z")
+        transport.resumeNext(with: ClerkHTTPResponse(statusCode: 200, headers: [:], body: Data()))
+    }
+
     func testNonDurableSignOutKeepsUnpersistedRotationForNextMint() async throws {
         let secrets = ManagedAccountFailingSecretStore(seed: [
             .managedClientToken: "client_X",
