@@ -8,14 +8,24 @@ private struct SignOutInvalidationAttempt {
     let error: Error?
 }
 
+private struct SignOutCredentialSnapshot {
+    let clientToken: String?
+    let sessionID: String?
+    let firstReadError: Error?
+
+    var hasCompleteCredentialPair: Bool {
+        clientToken != nil && sessionID != nil
+    }
+
+    var mayHaveStoredCredential: Bool {
+        clientToken != nil || sessionID != nil || firstReadError != nil
+    }
+}
+
 private struct SignOutCredentialCleanup {
     let clientTokenRemoved: Bool
     let sessionIDRemoved: Bool
     let firstError: Error?
-
-    var removedAnyCredential: Bool {
-        clientTokenRemoved || sessionIDRemoved
-    }
 
     var removedAllCredentials: Bool {
         clientTokenRemoved && sessionIDRemoved
@@ -44,10 +54,13 @@ extension ManagedAccountService {
     /// token without letting a failed or slow network call fail sign-out
     /// (security finding A-L3).
     func signOut(revokeServerSession: Bool = !ProwlHuntRuntime.current.isEnabled) async throws {
-        let wasSignedIn = isSignedIn
+        let credentialSnapshot = storedCredentialSnapshotForSignOut()
+        let wasSignedIn = !areStoredCredentialsInvalidated && credentialSnapshot.hasCompleteCredentialPair
+        let shouldInvalidateStoredCredentials = credentialSnapshot.mayHaveStoredCredential
         let revocation = serverSessionRevocationRequest(
             revokeServerSession: revokeServerSession,
-            wasSignedIn: wasSignedIn
+            wasSignedIn: wasSignedIn,
+            credentialSnapshot: credentialSnapshot
         )
         let hadPersistedInvalidationMarker = areStoredCredentialsInvalidated
             && secrets.hasValue(for: .managedCredentialsInvalidated)
@@ -59,7 +72,9 @@ extension ManagedAccountService {
             )
         }
         clearTransientSignOutState()
-        let invalidation = persistCredentialInvalidationForSignOutIfNeeded(wasSignedIn: wasSignedIn)
+        let invalidation = persistCredentialInvalidationForSignOutIfNeeded(
+            shouldInvalidateStoredCredentials: shouldInvalidateStoredCredentials
+        )
 
         let cleanup = removeStoredManagedCredentials()
         clearPendingOAuthSignInIDBestEffort(context: "after sign-out")
@@ -67,7 +82,7 @@ extension ManagedAccountService {
             cleanup: cleanup,
             invalidation: invalidation,
             hadPersistedInvalidationMarker: hadPersistedInvalidationMarker,
-            wasSignedIn: wasSignedIn
+            invalidatedStoredCredentials: shouldInvalidateStoredCredentials
         )
         if let firstError = result.error {
             throw ManagedAccountSignOutError(
@@ -134,12 +149,13 @@ extension ManagedAccountService {
 
     private func serverSessionRevocationRequest(
         revokeServerSession: Bool,
-        wasSignedIn: Bool
+        wasSignedIn: Bool,
+        credentialSnapshot: SignOutCredentialSnapshot
     ) -> (sessionID: String, clientToken: String, generation: Int)? {
         guard revokeServerSession,
               wasSignedIn,
-              let sessionID = storedSessionID,
-              let clientToken = storedClientToken,
+              let sessionID = credentialSnapshot.sessionID,
+              let clientToken = credentialSnapshot.clientToken,
               !clientToken.isEmpty
         else { return nil }
         return (sessionID, clientToken, authenticationGeneration)
@@ -152,9 +168,9 @@ extension ManagedAccountService {
     }
 
     private func persistCredentialInvalidationForSignOutIfNeeded(
-        wasSignedIn: Bool
+        shouldInvalidateStoredCredentials: Bool
     ) -> SignOutInvalidationAttempt {
-        guard wasSignedIn else {
+        guard shouldInvalidateStoredCredentials else {
             return SignOutInvalidationAttempt(markerPersisted: false, error: nil)
         }
         do {
@@ -165,6 +181,25 @@ extension ManagedAccountService {
                 "Failed to persist managed credential invalidation marker before sign-out: \(error.localizedDescription)"
             )
             return SignOutInvalidationAttempt(markerPersisted: false, error: error)
+        }
+    }
+
+    private func storedCredentialSnapshotForSignOut() -> SignOutCredentialSnapshot {
+        let clientToken = storedCredentialValueForSignOut(.managedClientToken)
+        let sessionID = storedCredentialValueForSignOut(.managedSessionID)
+        return SignOutCredentialSnapshot(
+            clientToken: clientToken.value,
+            sessionID: sessionID.value,
+            firstReadError: clientToken.error ?? sessionID.error
+        )
+    }
+
+    private func storedCredentialValueForSignOut(_ key: SecretKey) -> (value: String?, error: Error?) {
+        do {
+            let value = try secrets.value(for: key)
+            return ((value?.isEmpty == false) ? value : nil, nil)
+        } catch {
+            return (nil, error)
         }
     }
 
@@ -195,14 +230,14 @@ extension ManagedAccountService {
         cleanup: SignOutCredentialCleanup,
         invalidation: SignOutInvalidationAttempt,
         hadPersistedInvalidationMarker: Bool,
-        wasSignedIn: Bool
+        invalidatedStoredCredentials: Bool
     ) -> (error: Error?, didDurablySignOut: Bool) {
         var firstError = cleanup.firstError
         let hasDurableInvalidationMarker = invalidation.markerPersisted || hadPersistedInvalidationMarker
-        let durableSignedOutState = hasDurableInvalidationMarker || cleanup.removedAnyCredential
+        let durableSignedOutState = hasDurableInvalidationMarker || cleanup.sessionIDRemoved
         if durableSignedOutState {
             areStoredCredentialsInvalidated = hasDurableInvalidationMarker && !cleanup.removedAllCredentials
-            if wasSignedIn {
+            if invalidatedStoredCredentials {
                 authenticationGeneration &+= 1
             }
         } else if !hasStoredManagedCredential {
