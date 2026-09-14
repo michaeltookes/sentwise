@@ -37,6 +37,56 @@ extension ManagedAccountService {
             case stored(generation: Int)
         }
 
+        func recordStoredClientTokenRotation(
+            generation: Int,
+            sessionID: String,
+            originalClientToken: String,
+            clientToken: String
+        ) {
+            guard !clientToken.isEmpty else { return }
+            unpersistedStoredClientTokenRotation = (
+                sessionID: sessionID,
+                generation: generation,
+                originalClientToken: originalClientToken,
+                clientToken: clientToken
+            )
+            updatePendingServerSessionRevocations(
+                generation: generation,
+                sessionID: sessionID,
+                originalClientToken: originalClientToken,
+                clientToken: clientToken
+            )
+        }
+
+        func clearStoredClientTokenRotation(
+            generation: Int,
+            sessionID: String,
+            originalClientToken: String,
+            clientToken: String
+        ) {
+            guard let rotation = unpersistedStoredClientTokenRotation,
+                  rotation.generation == generation,
+                  rotation.sessionID == sessionID,
+                  rotation.originalClientToken == originalClientToken,
+                  rotation.clientToken == clientToken
+            else { return }
+            unpersistedStoredClientTokenRotation = nil
+        }
+
+        func consumeStoredClientTokenRotation(
+            generation: Int,
+            sessionID: String,
+            originalClientToken: String
+        ) -> String? {
+            guard let rotation = unpersistedStoredClientTokenRotation,
+                  rotation.generation == generation,
+                  rotation.sessionID == sessionID,
+                  rotation.originalClientToken == originalClientToken
+            else { return nil }
+            unpersistedStoredClientTokenRotation = nil
+            return rotation.clientToken
+        }
+
         func credentialState(generation: Int, sessionID: String, clientToken: String) -> MintCredentialState {
             guard !areStoredCredentialsInvalidated,
                   generation == authenticationGeneration,
@@ -45,6 +95,51 @@ extension ManagedAccountService {
                 return .signedOutOrReplaced
             }
             return storedClientToken == clientToken ? .current : .rotated
+        }
+
+        func managedSessionFromMintedStoredSession(
+            _ minted: ClerkMintedToken,
+            generation: Int,
+            sessionID: String,
+            clientToken: String
+        ) throws -> ManagedSessionToken? {
+            recordStoredClientTokenRotation(
+                generation: generation,
+                sessionID: sessionID,
+                originalClientToken: clientToken,
+                clientToken: minted.clientToken
+            )
+            switch credentialState(generation: generation, sessionID: sessionID, clientToken: clientToken) {
+            case .current:
+                try persistClientToken(minted.clientToken)
+                clearStoredClientTokenRotation(
+                    generation: generation,
+                    sessionID: sessionID,
+                    originalClientToken: clientToken,
+                    clientToken: minted.clientToken
+                )
+                return ManagedSessionToken(
+                    jwt: minted.jwt,
+                    credentialIdentity: credentialIdentity(generation: generation, sessionID: sessionID),
+                    accountKey: ManagedUsageAccountKey.make(from: "clerk-session:\(sessionID)")
+                )
+            case .rotated:
+                clearStoredClientTokenRotation(
+                    generation: generation,
+                    sessionID: sessionID,
+                    originalClientToken: clientToken,
+                    clientToken: minted.clientToken
+                )
+                return nil
+            case .signedOutOrReplaced:
+                clearStoredClientTokenRotation(
+                    generation: generation,
+                    sessionID: sessionID,
+                    originalClientToken: clientToken,
+                    clientToken: minted.clientToken
+                )
+                throw LLMError.managedNotSignedIn
+            }
         }
 
         func mintSessionToken(
@@ -88,7 +183,7 @@ extension ManagedAccountService {
         ) throws {
             guard let rotatedClientToken, !rotatedClientToken.isEmpty else { return }
             if case .stored(let generation) = handling {
-                updatePendingServerSessionRevocations(
+                recordStoredClientTokenRotation(
                     generation: generation,
                     sessionID: sessionID,
                     originalClientToken: clientToken,
@@ -108,9 +203,21 @@ extension ManagedAccountService {
                     sessionID: sessionID,
                     clientToken: clientToken
                 ) == .current else {
+                    clearStoredClientTokenRotation(
+                        generation: generation,
+                        sessionID: sessionID,
+                        originalClientToken: clientToken,
+                        clientToken: rotatedClientToken
+                    )
                     return
                 }
                 try persistClientToken(rotatedClientToken)
+                clearStoredClientTokenRotation(
+                    generation: generation,
+                    sessionID: sessionID,
+                    originalClientToken: clientToken,
+                    clientToken: rotatedClientToken
+                )
             }
         }
 

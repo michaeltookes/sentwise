@@ -183,7 +183,13 @@ extension ManagedAccountService {
               let clientToken = credentialSnapshot.clientToken,
               !clientToken.isEmpty
         else { return nil }
-        return (sessionID, clientToken, authenticationGeneration)
+        let generation = authenticationGeneration
+        let revocationClientToken = consumeStoredClientTokenRotation(
+            generation: generation,
+            sessionID: sessionID,
+            originalClientToken: clientToken
+        ) ?? clientToken
+        return (sessionID, revocationClientToken, generation)
     }
 
     private func clearTransientSignOutState() {

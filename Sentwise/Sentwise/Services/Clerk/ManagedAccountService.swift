@@ -47,9 +47,14 @@ actor ManagedAccountService: ManagedSessionProviding {
     /// released while the network request is suspended.
     var isMintingSessionToken = false
     var mintWaiters: [CheckedContinuation<Void, Never>] = []
-    var pendingServerSessionRevocations: [
-        UUID: (sessionID: String, generation: Int, originalClientToken: String, clientToken: String)
-    ] = [:]
+    typealias StoredClientTokenRotation = (
+        sessionID: String,
+        generation: Int,
+        originalClientToken: String,
+        clientToken: String
+    )
+    var pendingServerSessionRevocations: [UUID: StoredClientTokenRotation] = [:]
+    var unpersistedStoredClientTokenRotation: StoredClientTokenRotation?
 
     init(secrets: SecretStore, clerk: ClerkClient = ClerkClient()) {
         self.secrets = secrets
@@ -254,24 +259,15 @@ actor ManagedAccountService: ManagedSessionProviding {
                     clientToken: clientToken,
                     preserveFailureClientToken: .stored(generation: generation)
                 )
-                updatePendingServerSessionRevocations(
+                if let session = try managedSessionFromMintedStoredSession(
+                    minted,
                     generation: generation,
                     sessionID: sessionID,
-                    originalClientToken: clientToken,
-                    clientToken: minted.clientToken
-                )
-                switch credentialState(generation: generation, sessionID: sessionID, clientToken: clientToken) {
-                case .current:
-                    try persistClientToken(minted.clientToken)
-                    return ManagedSessionToken(
-                        jwt: minted.jwt,
-                        credentialIdentity: credentialIdentity(generation: generation, sessionID: sessionID),
-                        accountKey: ManagedUsageAccountKey.make(from: "clerk-session:\(sessionID)")
-                    )
-                case .rotated:
+                    clientToken: clientToken
+                ) {
+                    return session
+                } else {
                     continue
-                case .signedOutOrReplaced:
-                    throw LLMError.managedNotSignedIn
                 }
             } catch LLMError.managedNotSignedIn {
                 switch credentialState(generation: generation, sessionID: sessionID, clientToken: clientToken) {
