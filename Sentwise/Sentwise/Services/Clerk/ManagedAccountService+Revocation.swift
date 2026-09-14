@@ -271,12 +271,15 @@ extension ManagedAccountService {
     ) -> (error: Error?, didDurablySignOut: Bool) {
         var firstError = cleanup.firstError
         let hasDurableInvalidationMarker = invalidation.markerPersisted || hadPersistedInvalidationMarker
+        let clientTokenDurablyCleared = cleanup.clientTokenRemoved || credentialSnapshot.observedClientTokenAbsent
         let sessionDurablyCleared = cleanup.sessionIDRemoved || credentialSnapshot.observedSessionIDAbsent
-        let removedAllCredentials = (cleanup.clientTokenRemoved || credentialSnapshot.observedClientTokenAbsent)
-            && sessionDurablyCleared
-        let durableSignedOutState = hasDurableInvalidationMarker || sessionDurablyCleared
+        let removedAllCredentials = clientTokenDurablyCleared && sessionDurablyCleared
+        let durableSignedOutState = hasDurableInvalidationMarker
+            || clientTokenDurablyCleared
+            || sessionDurablyCleared
         if durableSignedOutState {
-            areStoredCredentialsInvalidated = hasDurableInvalidationMarker && !removedAllCredentials
+            areStoredCredentialsInvalidated = !removedAllCredentials
+                && (hasDurableInvalidationMarker || !sessionDurablyCleared)
             if invalidatedStoredCredentials {
                 authenticationGeneration &+= 1
             }

@@ -68,6 +68,48 @@ final class ManagedSignOutDurabilityTests: XCTestCase {
         XCTAssertNil(try secrets.value(for: .managedCredentialsInvalidated))
     }
 
+    func testClientTokenRemovalDurablySignsOutAndKeepsSignInTokenSeparateFromStaleSession() async throws {
+        let secrets = ManagedAccountFailingSecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        secrets.failOnSetKeys = [.managedCredentialsInvalidated]
+        secrets.failOnRemoveKeys = [.managedSessionID]
+        let transport = QueueClerkTransport([
+            clerkReply(
+                #"{"response":{"id":"sia_1","supported_first_factors":[{"strategy":"email_code","email_address_id":"ema_1"}]}}"#,
+                clientToken: "client_A"
+            ),
+            clerkReply(#"{"response":{"id":"sia_1"}}"#, clientToken: "client_B")
+        ])
+        let account = service(transport, secrets: secrets)
+
+        do {
+            try await account.signOut(revokeServerSession: false)
+            XCTFail("Expected sign-out failure")
+        } catch let error as ManagedAccountSignOutError {
+            XCTAssertTrue(error.didDurablySignOut)
+            guard case ManagedAccountTestSecretError.removeDenied = error.underlying else {
+                return XCTFail("Unexpected underlying error: \(error.underlying)")
+            }
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        let signedIn = await account.isSignedIn
+        XCTAssertFalse(signedIn)
+        XCTAssertNil(try secrets.value(for: .managedClientToken))
+        XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_X")
+        XCTAssertNil(try secrets.value(for: .managedCredentialsInvalidated))
+
+        try await account.startSignIn(email: "marcus@example.com")
+
+        XCTAssertEqual(transport.requests.first?.headers["authorization"], "Bearer ")
+        XCTAssertNil(try secrets.value(for: .managedClientToken))
+        XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_X")
+        XCTAssertEqual(try secrets.value(for: .managedReauthenticationClientToken), "client_B")
+    }
+
     func testSignOutPreservesExistingInvalidationMarkerWhenCleanupFails() async throws {
         let secrets = ManagedAccountFailingSecretStore(seed: [
             .managedClientToken: "client_X",
@@ -230,6 +272,15 @@ final class ManagedSignOutDurabilityTests: XCTestCase {
         XCTAssertTrue(transport.recordedURLs.isEmpty)
         let signedIn = await account.isSignedIn
         XCTAssertTrue(signedIn)
+    }
+}
+final class ManagedSignOutRotationTests: XCTestCase {
+    private func service(_ transport: ClerkHTTPTransport, secrets: SecretStore) -> ManagedAccountService {
+        let clerk = ClerkClient(
+            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            transport: transport
+        )
+        return ManagedAccountService(secrets: secrets, clerk: clerk)
     }
 
     func testSignOutUsesUnpersistedRotatedClientTokenAfterMintPersistenceFailure() async throws {

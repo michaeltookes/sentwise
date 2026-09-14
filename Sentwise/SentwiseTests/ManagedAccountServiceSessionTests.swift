@@ -102,7 +102,8 @@ final class ManagedAccountServiceSessionTests: XCTestCase {
         XCTAssertEqual(transport.requests.first?.headers["authorization"], "Bearer ")
         let awaited9 = await account.isSignedIn
         XCTAssertFalse(awaited9)
-        XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_B")
+        XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_X")
+        XCTAssertEqual(try secrets.value(for: .managedReauthenticationClientToken), "client_B")
     }
 
     func testStartSignInAfterInvalidationReusesFreshReauthTokenOnRetry() async throws {
@@ -134,7 +135,7 @@ final class ManagedAccountServiceSessionTests: XCTestCase {
 
         XCTAssertEqual(transport.requests[0].headers["authorization"], "Bearer ")
         XCTAssertEqual(transport.requests[1].headers["authorization"], "Bearer client_A")
-        XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_B")
+        XCTAssertEqual(try secrets.value(for: .managedClientToken), "stale_client")
         XCTAssertEqual(try secrets.value(for: .managedReauthenticationClientToken), "client_B")
 
         try await account.startSignIn(email: "marcus@example.com")
@@ -143,6 +144,8 @@ final class ManagedAccountServiceSessionTests: XCTestCase {
         XCTAssertEqual(transport.requests[3].headers["authorization"], "Bearer client_C")
         let signedIn = await account.isSignedIn
         XCTAssertFalse(signedIn)
+        XCTAssertEqual(try secrets.value(for: .managedClientToken), "stale_client")
+        XCTAssertEqual(try secrets.value(for: .managedReauthenticationClientToken), "client_D")
     }
 
     func testCurrentSessionTokenSurfacesRotatedClientTokenPersistenceFailure() async throws {

@@ -322,8 +322,13 @@ actor ManagedAccountService: ManagedSessionProviding {
     }
 
     func persistClientTokenBestEffort(_ token: String?, context: String) {
+        persistSignInClientTokenBestEffort(token, context: context)
+    }
+
+    private func persistSignInClientTokenBestEffort(_ token: String?, context: String) {
         guard let token, !token.isEmpty else { return }
         persistReauthenticationClientTokenIfNeeded(token)
+        guard !(areStoredCredentialsInvalidated && storedSessionID != nil) else { return }
         do {
             try persistClientToken(token)
         } catch {
@@ -432,12 +437,7 @@ actor ManagedAccountService: ManagedSessionProviding {
             clientToken: clientToken,
             flow: handle.flow
         )
-        persistReauthenticationClientTokenIfNeeded(clientToken)
-        do {
-            try persistClientToken(clientToken)
-        } catch {
-            logger.error("Failed to persist Clerk client token after sign-in attempt: \(error.localizedDescription)")
-        }
+        persistSignInClientTokenBestEffort(clientToken, context: "after sign-in attempt")
     }
 
     func isPendingOAuthSignIn(_ handle: ClerkOAuthHandle) -> Bool {
@@ -454,11 +454,6 @@ actor ManagedAccountService: ManagedSessionProviding {
             externalRedirectURL: handle.externalRedirectURL,
             clientToken: clientToken
         )
-        persistReauthenticationClientTokenIfNeeded(clientToken)
-        do {
-            try persistClientToken(clientToken)
-        } catch {
-            logger.error("Failed to persist Clerk client token after OAuth sign-in attempt: \(error.localizedDescription)")
-        }
+        persistSignInClientTokenBestEffort(clientToken, context: "after OAuth sign-in attempt")
     }
 }
