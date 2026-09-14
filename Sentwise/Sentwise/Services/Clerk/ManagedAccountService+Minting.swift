@@ -191,14 +191,6 @@ extension ManagedAccountService {
             handling: MintFailureClientTokenHandling
         ) throws {
             guard let rotatedClientToken, !rotatedClientToken.isEmpty else { return }
-            if case .stored(let generation, let originalClientToken) = handling {
-                recordStoredClientTokenRotation(
-                    generation: generation,
-                    sessionID: sessionID,
-                    originalClientToken: originalClientToken,
-                    clientToken: rotatedClientToken
-                )
-            }
             switch handling {
             case .none:
                 return
@@ -207,6 +199,12 @@ extension ManagedAccountService {
             case .pendingOAuth(let handle):
                 updatePendingOAuthSignIn(handle, clientToken: rotatedClientToken)
             case .stored(let generation, let originalClientToken):
+                recordStoredClientTokenRotation(
+                    generation: generation,
+                    sessionID: sessionID,
+                    originalClientToken: originalClientToken,
+                    clientToken: rotatedClientToken
+                )
                 guard credentialState(
                     generation: generation,
                     sessionID: sessionID,
