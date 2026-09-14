@@ -44,17 +44,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
    - ✅ Connected-account indicator and a "disconnect" action in Settings (disconnect clears the token, keeps credentials).
    - ⬜ **Remaining:** verify the live end-to-end consent flow against a real Google client; **empirically verify refresh-token lifetime** (Testing vs Production) and document the setup so users avoid weekly re-auth; optionally show the connected account's email address; consider server-side token revocation on disconnect.
 
-94. **Service hardening from the 2026-09-13 security pass** — *pre-launch; findings S-M1/S-M2/S-L1/S-L3/S-L4/S-I2 in `docs/security-pass-2026-09-13.md`*
-    The worker audit came back clean on auth, webhooks, IDOR, quota isolation, and privacy — but left two Mediums that must close before the public link: Clerk-lookup ordering (a scripted trial account can DoS the whole service via Clerk's per-instance backend limits) and soft quota enforcement (unbounded Anthropic spend per throwaway trial account).
-    *As the maintainer, I want one abusive free account to be unable to take down the service or run up my Anthropic bill, so that launch can't be ruined by a single script.*
-    - **S-M1:** on `POST /v1/draft`, run the DO `quotaCheck` (rate limit) BEFORE `requireActiveTrial`'s Clerk lookup; add a short-TTL per-user cache (or coarse limiter) in front of Clerk lookups on the other authenticated routes (`src/auth.ts:67` TODO).
-    - **S-M2:** hard quota enforcement for **trial** accounts at minimum — flip trials to `hard` (or a low trial-tier `weeklyDraftLimit` at trial init) so caps actually block; paid tiers may stay soft per the 56b measure-first decision.
-    - **S-L1:** pass `authorizedParties` to Clerk `verifyToken`.
-    - **S-L3:** add `Content-Security-Policy` (incl. `frame-ancestors 'none'`) to the callback landing pages.
-    - **S-L4:** unknown Paddle subscription statuses must not fail open to `active` — default to the stored status or `canceled` on non-activation events.
-    - **S-I2:** switch the analytics userId hash to a keyed HMAC (server secret).
-    - Tests for each; no-body-logging guard stays green.
-
 96. **Purge local mail artifacts on disconnect / account removal (+ "erase all local data")** — *from security-pass finding A-L2; privacy-product expectation gap*
     Disconnecting or removing a mail account deletes the Keychain password and settings entry but leaves `PendingDrafts.json` (full message bodies + drafts), `ActivityEvents.json` (sender + subject per event), `VoiceProfile.json`, `ProcessedMessages.json`, and `SkippedMessages.json` on disk; `deleteManagedAccount` documents leaving local data. For a nothing-stored privacy product, "remove my account" should mean the mail content is gone.
     *As a privacy-conscious user removing a mailbox, I want its locally cached mail content actually deleted, so that "disconnected" means gone.*
