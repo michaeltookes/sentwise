@@ -237,6 +237,41 @@ final class ManagedAccountServiceSessionTests: XCTestCase {
         XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_Z")
     }
 
+    func testSignOutRevocationWaitsForInFlightMintAndUsesRotatedClientToken() async throws {
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        let transport = MultiSuspendedClerkTransport()
+        let mintStarted = expectation(description: "mint request started")
+        let revocationStarted = expectation(description: "revocation request started")
+        transport.onRequest = { requestNumber in
+            if requestNumber == 1 {
+                mintStarted.fulfill()
+            } else if requestNumber == 2 {
+                revocationStarted.fulfill()
+            }
+        }
+        let account = service(transport, secrets: secrets)
+
+        let tokenTask = Task { try await account.currentSessionToken() }
+        await fulfillment(of: [mintStarted], timeout: 1.0)
+
+        let signOutTask = Task { try await account.signOut(revokeServerSession: true) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(transport.requestCount, 1)
+
+        transport.resumeNext(with: clerkReply(#"{"jwt":"fresh.jwt"}"#, clientToken: "client_Y"))
+        let minted = try await tokenTask.value
+        XCTAssertEqual(minted, "fresh.jwt")
+
+        try await signOutTask.value
+        await fulfillment(of: [revocationStarted], timeout: 1.0)
+        XCTAssertEqual(transport.url(at: 1)?.path, "/v1/client/sessions/sess_X/remove")
+        XCTAssertEqual(transport.authorizationHeader(at: 1), "Bearer client_Y")
+        transport.resumeNext(with: ClerkHTTPResponse(statusCode: 200, headers: [:], body: Data()))
+    }
+
     func testSignOutClearsStoredCredentials() async throws {
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",
@@ -252,7 +287,7 @@ final class ManagedAccountServiceSessionTests: XCTestCase {
         XCTAssertNil(try secrets.value(for: .managedSessionID))
     }
 
-    func testSignOutSurfacesKeychainRemovalFailures() async throws {
+    func testSignOutSurfacesKeychainRemovalFailuresButInvalidatesCredentials() async throws {
         let secrets = ManagedAccountFailingSecretStore(seed: [
             .managedClientToken: "client_X",
             .managedSessionID: "sess_X"
@@ -270,9 +305,42 @@ final class ManagedAccountServiceSessionTests: XCTestCase {
         }
 
         let awaited13 = await account.isSignedIn
-        XCTAssertTrue(awaited13)
+        XCTAssertFalse(awaited13)
         XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_X")
         XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_X")
+        XCTAssertEqual(try secrets.value(for: .managedCredentialsInvalidated), "1")
+    }
+
+    func testSignOutInvalidatesCredentialsBeforeCleanupFailureAfterRevocation() async throws {
+        let secrets = ManagedAccountFailingSecretStore(seed: [
+            .managedClientToken: "client_X",
+            .managedSessionID: "sess_X"
+        ])
+        secrets.failOnRemoveKeys = [.managedClientToken, .managedSessionID]
+        let transport = RecordingClerkTransport()
+        let revoked = expectation(description: "server-side session revocation POST")
+        transport.onPost = { url in
+            if url.absoluteString.contains("/v1/client/sessions/sess_X/remove") {
+                revoked.fulfill()
+            }
+        }
+        let account = service(transport, secrets: secrets)
+
+        do {
+            try await account.signOut(revokeServerSession: true)
+            XCTFail("Expected sign-out failure")
+        } catch ManagedAccountTestSecretError.removeDenied {
+            // expected
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        await fulfillment(of: [revoked], timeout: 1.0)
+        let signedIn = await account.isSignedIn
+        XCTAssertFalse(signedIn)
+        XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_X")
+        XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_X")
+        XCTAssertEqual(try secrets.value(for: .managedCredentialsInvalidated), "1")
     }
 
     func testSignOutRevokesServerSessionThenClearsCredentials() async throws {

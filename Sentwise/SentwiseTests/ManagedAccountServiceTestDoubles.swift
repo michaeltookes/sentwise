@@ -95,6 +95,13 @@ final class MultiSuspendedClerkTransport: ClerkHTTPTransport, @unchecked Sendabl
         guard recordedRequests.indices.contains(index) else { return nil }
         return recordedRequests[index].headers["authorization"]
     }
+
+    func url(at index: Int) -> URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard recordedRequests.indices.contains(index) else { return nil }
+        return recordedRequests[index].url
+    }
 }
 
 /// Records every POST and returns a settable result, with an `onPost` hook so a

@@ -20,14 +20,14 @@ struct ManagedAccountSignInResult: Sendable, Equatable {
 /// its mutable in-progress sign-in state stays serialized. `AppState` (main
 /// actor) drives it via `await`.
 actor ManagedAccountService: ManagedSessionProviding {
-    private let secrets: SecretStore
+    let secrets: SecretStore
     /// Internal so the OAuth flow in the split `+OAuth` extension can reach it.
     let clerk: ClerkClient
-    private static let invalidatedCredentialsMarkerValue = "1"
+    static let invalidatedCredentialsMarkerValue = "1"
 
     /// In-progress sign-in handle (transient — only valid between `startSignIn`
     /// and `completeSignIn`).
-    private var pendingSignIn: ClerkSignInHandle?
+    var pendingSignIn: ClerkSignInHandle?
     /// In-progress OAuth (Google) sign-in handle (transient — only valid between
     /// `startGoogleSignIn` and `completeGoogleSignIn`). Internal so the OAuth flow,
     /// which lives in a split extension file, can drive it.
@@ -41,7 +41,7 @@ actor ManagedAccountService: ManagedSessionProviding {
     /// Latest client-token rotation from an in-progress reauthentication after
     /// stored credentials were invalidated. This is deliberately separate from
     /// the rejected session credential identity.
-    private var reauthenticationClientToken: String?
+    var reauthenticationClientToken: String?
     /// Clerk rotates the client token on every mint, so only one mint may be in
     /// flight at a time. Actor reentrancy alone is not enough because the actor is
     /// released while the network request is suspended.
@@ -170,48 +170,6 @@ actor ManagedAccountService: ManagedSessionProviding {
         clearPendingOAuthSignInIDBestEffort(context: "after sign-in")
     }
 
-    /// Signs out: best-effort revokes the Clerk session server-side, then clears
-    /// the stored device token and session id. Local mail data is untouched.
-    ///
-    /// `revokeServerSession` defaults to off during Prowl hunts and test runs,
-    /// which run fully offline; production sign-outs revoke by default. The
-    /// revocation is fire-and-forget — a failed or slow network call must never
-    /// block or fail the local sign-out (security finding A-L3).
-    func signOut(revokeServerSession: Bool = !ProwlHuntRuntime.current.isEnabled) throws {
-        let wasSignedIn = isSignedIn
-        if revokeServerSession, wasSignedIn,
-           let sessionID = storedSessionID,
-           let clientToken = storedClientToken, !clientToken.isEmpty {
-            fireServerSessionRevocation(sessionID: sessionID, clientToken: clientToken)
-        }
-        pendingSignIn = nil
-        pendingOAuthSignIn = nil
-        reauthenticationClientToken = nil
-        var firstError: Error?
-        do {
-            try secrets.remove(.managedClientToken)
-        } catch {
-            firstError = error
-        }
-        do {
-            try secrets.remove(.managedSessionID)
-        } catch {
-            firstError = firstError ?? error
-        }
-        clearPendingOAuthSignInIDBestEffort(context: "after sign-out")
-        if wasSignedIn && !isSignedIn {
-            authenticationGeneration &+= 1
-        }
-        if !hasStoredManagedCredential {
-            areStoredCredentialsInvalidated = false
-            clearCredentialInvalidationMarkerBestEffort(context: "after sign-out")
-        }
-        clearReauthenticationClientTokenBestEffort(context: "after sign-out")
-        if let firstError {
-            throw firstError
-        }
-    }
-
     // MARK: - ManagedSessionProviding
 
     /// Mints a fresh, short-lived session JWT for the proxy. Rotates and re-stores
@@ -333,7 +291,7 @@ actor ManagedAccountService: ManagedSessionProviding {
         return (value?.isEmpty == false) ? value : nil
     }
 
-    private var hasStoredManagedCredential: Bool {
+    var hasStoredManagedCredential: Bool {
         storedClientToken != nil || storedSessionID != nil
     }
 
@@ -375,7 +333,7 @@ actor ManagedAccountService: ManagedSessionProviding {
         try secrets.remove(.managedCredentialsInvalidated)
     }
 
-    private func clearCredentialInvalidationMarkerBestEffort(context: String) {
+    func clearCredentialInvalidationMarkerBestEffort(context: String) {
         do {
             try clearCredentialInvalidationMarker()
         } catch {
@@ -397,7 +355,7 @@ actor ManagedAccountService: ManagedSessionProviding {
         try secrets.remove(.managedReauthenticationClientToken)
     }
 
-    private func clearReauthenticationClientTokenBestEffort(context: String) {
+    func clearReauthenticationClientTokenBestEffort(context: String) {
         do {
             try clearReauthenticationClientToken()
         } catch {
@@ -437,7 +395,7 @@ actor ManagedAccountService: ManagedSessionProviding {
         try secrets.remove(.managedOAuthSignInID)
     }
 
-    private func clearPendingOAuthSignInIDBestEffort(context: String) {
+    func clearPendingOAuthSignInIDBestEffort(context: String) {
         do {
             try clearPendingOAuthSignInID()
         } catch {
