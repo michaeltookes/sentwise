@@ -685,3 +685,11 @@ shell `env` (or `TEST_RUNNER_…`) does **not** propagate into a macOS app-hoste
 → `test-without-building -destination 'platform=macOS'`). Google/OpenRouter remain browser
 round-trips and are not automatable as live tests — they are covered by the deterministic hunt-mode
 fake and unit tests instead.
+
+**Automated pipeline (item 97):** this `.xctestrun` env-injection recipe is what the
+`.github/workflows/live-tests.yml` workflow runs on the **Lucius** self-hosted runner, via the
+shellcheck-clean `Distribution/scripts/inject-live-env.sh` (it writes every provisioned
+`SENTWISE_LIVE_*` repo secret into the xctestrun's `EnvironmentVariables`, logging names only).
+The workflow runs on merge to `main` and on demand through the `/live-verify` skill; it is the
+standing home for `ClerkLiveSignInTests`, `PaddleCheckoutLiveTests`, and the mailbox live tests.
+See `docs/live-testing.md`.

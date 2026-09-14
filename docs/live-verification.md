@@ -1,16 +1,26 @@
 # Live verification tests
 
-Some integration tests exercise the **real** IMAP/SMTP path against a live
-mailbox instead of a test double. They are the headless-XCTest equivalent of a
-manual click-through (the standing QA preference) and close the remaining
-"verify against a real account" criteria of backlog items 9, 44, and 66.
+Some integration tests exercise **real** services — a live IMAP/SMTP mailbox, the
+real Clerk instance, or the Paddle sandbox — instead of a test double. They are
+the headless-XCTest equivalent of a manual click-through (the standing QA
+preference) and close the remaining "verify against a real account" criteria of
+backlog items 9, 44, 66, and 95.
 
-They are **credential-gated**: with no credentials in the environment they throw
+They are **env-gated**: with no credentials/flags in the environment they throw
 `XCTSkip` and pass as skipped, so CI and any machine without a live account stay
-green. Nothing is ever delivered to a third party — every message is
+green. Nothing is ever delivered to a third party — every mail test is
 **self-addressed** (the recipient is the account's own address) and is moved to
 Trash at the end of the test (recoverable, non-destructive), even when a
-verification assertion fails.
+verification assertion fails; the checkout test never enters card data or
+completes a purchase.
+
+> These tests are the **payloads** of the live-testing pipeline: they run on the
+> **Lucius** self-hosted runner via `.github/workflows/live-tests.yml`, dispatched
+> by the `/live-verify` skill or automatically on merge to `main`. This document
+> catalogs the tests and their credentials; the pipeline itself (workflow,
+> triggers, repo-secret provisioning, runner hygiene) is documented in
+> [`docs/live-testing.md`](live-testing.md). **Live tests are never run on the
+> owner's Mac** — they run on Lucius.
 
 ## Tests
 
@@ -19,6 +29,8 @@ verification assertion fails.
 | `GmailLiveSendTests` | 9 | Dispatches a reply through the app's real auto-send path (`AppState.performSend` → SMTP submission over implicit TLS on the derived `smtp.` host, port 465), then fetches the delivered copy back from the inbox and asserts recipient addressing, the marker subject, and the `In-Reply-To` threading header. Also confirms Gmail auto-filed a copy in Sent Mail, then trashes every copy. |
 | `AttNetLiveDraftTests` | 44 | Saves a reply to the real Drafts mailbox through the app's save path (IMAP `APPEND` with `\Draft`), fetches it back to assert addressing + threading, then trashes it. |
 | `ReplyWorthinessLiveTests` | 66 | **Read-only.** Runs a fresh reply-worthiness pass (the same `AppState.replyWorthinessSkipReason` the watcher uses, including the live `HEADER.FIELDS` fetch) over recent inbox mail and asserts that known machine-sending senders (GitHub, Stripe/Anthropic receipts, AWS cost alerts, recruiting blasts) produce a skip — zero drafts — while personal mail stays worthy. Never drafts, sends, or mutates the mailbox; reuses the Gmail credentials below. |
+| `ClerkLiveSignInTests` | 59 | Email-code sign-in against the real Clerk dev instance via the Frontend API, exercising the real `ClerkClient`. Uses Clerk's `+clerk_test` address + universal code `424242` — no real inbox, no secret key. Gated on `SENTWISE_LIVE_CLERK_TEST`. See `docs/managed-inference.md`. |
+| `PaddleCheckoutLiveTests` | 95 / 97 | **No purchase.** Loads the real `PaddleCheckoutHTML` harness in a `WKWebView` under the real `CheckoutNavigationPolicy` navigation rule and drives the harness's own `window.sentwiseOpenCheckout` to open the **Paddle sandbox** overlay by `items` (client-side token + a sandbox price id). Asserts the overlay reaches its loaded/opened harness event and that the navigation policy blocked none of the Paddle navigations the overlay needs — catching the "navigation policy too tight" regression class. Needs a window server (Lucius GUI session). Gated on `SENTWISE_LIVE_PADDLE_CHECKOUT`. |
 
 ## Credentials
 
@@ -38,6 +50,17 @@ gated; optional host/port vars default to the provider's standard IMAP endpoint.
 - `SENTWISE_LIVE_ATTNET_APP_PASSWORD` — its Secure Mail Key (required)
 - `SENTWISE_LIVE_ATTNET_HOST` — IMAP host (optional; default `imap.mail.att.net`)
 - `SENTWISE_LIVE_ATTNET_PORT` — IMAP port (optional; default `993`)
+
+**Clerk** (`ClerkLiveSignInTests`) — no real credentials needed (Clerk test mode):
+
+- `SENTWISE_LIVE_CLERK_TEST` — any truthy value (`1`) to run it (required)
+
+**Paddle** (`PaddleCheckoutLiveTests`) — sandbox only, no purchase:
+
+- `SENTWISE_LIVE_PADDLE_CHECKOUT` — any truthy value (`1`) to run it (required).
+  The sandbox client-side token and price ids are embedded in `PaddleConfig`;
+  `sentwise.ai` must be an approved domain in the Paddle sandbox account (it is
+  the harness base origin).
 
 The SMTP submission host and port are **derived** from the IMAP host: a leading
 `imap.` is swapped for `smtp.` (Gmail: `smtp.gmail.com`) and the port defaults to
