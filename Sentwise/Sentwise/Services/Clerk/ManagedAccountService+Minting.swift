@@ -160,14 +160,14 @@ extension ManagedAccountService {
                 return try await clerk.mintSessionToken(sessionId: sessionID, clientToken: clientToken)
             } catch ClerkError.http(let status, _, let rotatedClientToken) where status == 401 || status == 404 {
                 switch preserveFailureClientToken {
-                case .pending, .pendingOAuth:
+                case .pending, .pendingOAuth, .stored:
                     try preserveRotatedClientTokenFromMintFailure(
                         rotatedClientToken,
                         sessionID: sessionID,
                         clientToken: clientToken,
                         handling: preserveFailureClientToken
                     )
-                case .none, .stored:
+                case .none:
                     break
                 }
                 throw LLMError.managedNotSignedIn
