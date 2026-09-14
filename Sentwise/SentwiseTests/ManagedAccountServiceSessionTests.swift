@@ -148,6 +148,28 @@ final class ManagedAccountServiceSessionTests: XCTestCase {
         XCTAssertEqual(try secrets.value(for: .managedReauthenticationClientToken), "client_D")
     }
 
+    func testStartSignInWithUnreadableOrphanedSessionKeepsTokenSeparate() async throws {
+        let secrets = ManagedAccountFailingSecretStore(seed: [
+            .managedSessionID: "sess_X"
+        ])
+        secrets.failOnValueKeys = [.managedSessionID]
+        let startedResponse = #"{"response":{"id":"sia_1","supported_first_factors":["#
+            + #"{"strategy":"email_code","email_address_id":"ema_1"}]}}"#
+        let transport = QueueClerkTransport([
+            clerkReply(startedResponse, clientToken: "client_A"),
+            clerkReply(#"{"response":{"id":"sia_1"}}"#, clientToken: "client_B")
+        ])
+        let account = service(transport, secrets: secrets)
+
+        try await account.startSignIn(email: "marcus@example.com")
+
+        XCTAssertEqual(transport.requests.first?.headers["authorization"], "Bearer ")
+        XCTAssertNil(try secrets.value(for: .managedClientToken))
+        XCTAssertEqual(secrets.storedValueIgnoringFailures(for: .managedSessionID), "sess_X")
+        XCTAssertEqual(try secrets.value(for: .managedCredentialsInvalidated), "1")
+        XCTAssertEqual(try secrets.value(for: .managedReauthenticationClientToken), "client_B")
+    }
+
     func testCurrentSessionTokenSurfacesRotatedClientTokenPersistenceFailure() async throws {
         let secrets = ManagedAccountFailingSecretStore(seed: [
             .managedClientToken: "client_X",

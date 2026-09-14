@@ -340,16 +340,39 @@ actor ManagedAccountService: ManagedSessionProviding {
     }
 
     private func prepareForSignInClientTokenPersistence(context: String) -> Bool {
-        guard storedClientToken == nil, storedSessionID != nil else { return true }
+        let storedCredentials: (clientToken: String?, sessionID: String?)
+        do {
+            storedCredentials = try storedCredentialsForSignInTokenPersistence()
+        } catch {
+            markStoredCredentialsInvalidatedAfterSignInTokenPersistenceFailure(error, context: context)
+            return false
+        }
+        guard storedCredentials.clientToken == nil, storedCredentials.sessionID != nil else { return true }
         do {
             try secrets.remove(.managedSessionID)
             return true
         } catch {
-            areStoredCredentialsInvalidated = true
-            persistCredentialInvalidationMarker()
-            logger.error("Failed to remove orphaned managed session id \(context): \(error.localizedDescription)")
+            markStoredCredentialsInvalidatedAfterSignInTokenPersistenceFailure(error, context: context)
             return false
         }
+    }
+
+    private func storedCredentialsForSignInTokenPersistence() throws -> (clientToken: String?, sessionID: String?) {
+        let clientToken = try secrets.value(for: .managedClientToken)
+        let sessionID = try secrets.value(for: .managedSessionID)
+        return (
+            clientToken: (clientToken?.isEmpty == false) ? clientToken : nil,
+            sessionID: (sessionID?.isEmpty == false) ? sessionID : nil
+        )
+    }
+
+    private func markStoredCredentialsInvalidatedAfterSignInTokenPersistenceFailure(
+        _ error: Error,
+        context: String
+    ) {
+        areStoredCredentialsInvalidated = true
+        persistCredentialInvalidationMarker()
+        logger.error("Failed to verify managed credential state \(context): \(error.localizedDescription)")
     }
 
     private func persistSessionID(_ sessionID: String) throws {
