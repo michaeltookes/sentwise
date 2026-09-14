@@ -1,8 +1,6 @@
 import XCTest
 @testable import Sentwise
 
-/// Sign-out durability edge cases that should stay separate from the already
-/// broad session-token suite.
 final class ManagedSignOutDurabilityTests: XCTestCase {
 
     private func service(_ transport: ClerkHTTPTransport, secrets: SecretStore) -> ManagedAccountService {
@@ -102,12 +100,14 @@ final class ManagedSignOutDurabilityTests: XCTestCase {
         XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_X")
         XCTAssertNil(try secrets.value(for: .managedCredentialsInvalidated))
 
-        try await account.startSignIn(email: "marcus@example.com")
+        secrets.failOnRemoveKeys = []
+        let relaunchedAccount = service(transport, secrets: secrets)
+        try await relaunchedAccount.startSignIn(email: "marcus@example.com")
 
         XCTAssertEqual(transport.requests.first?.headers["authorization"], "Bearer ")
-        XCTAssertNil(try secrets.value(for: .managedClientToken))
-        XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_X")
-        XCTAssertEqual(try secrets.value(for: .managedReauthenticationClientToken), "client_B")
+        XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_B")
+        XCTAssertNil(try secrets.value(for: .managedSessionID))
+        XCTAssertNil(try secrets.value(for: .managedReauthenticationClientToken))
     }
 
     func testSignOutPreservesExistingInvalidationMarkerWhenCleanupFails() async throws {

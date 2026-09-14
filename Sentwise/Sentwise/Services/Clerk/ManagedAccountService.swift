@@ -327,12 +327,28 @@ actor ManagedAccountService: ManagedSessionProviding {
 
     private func persistSignInClientTokenBestEffort(_ token: String?, context: String) {
         guard let token, !token.isEmpty else { return }
+        let canPersistStoredCredential = prepareForSignInClientTokenPersistence(context: context)
         persistReauthenticationClientTokenIfNeeded(token)
-        guard !(areStoredCredentialsInvalidated && storedSessionID != nil) else { return }
+        guard canPersistStoredCredential,
+              !(areStoredCredentialsInvalidated && storedSessionID != nil)
+        else { return }
         do {
             try persistClientToken(token)
         } catch {
             logger.error("Failed to persist Clerk client token \(context): \(error.localizedDescription)")
+        }
+    }
+
+    private func prepareForSignInClientTokenPersistence(context: String) -> Bool {
+        guard storedClientToken == nil, storedSessionID != nil else { return true }
+        do {
+            try secrets.remove(.managedSessionID)
+            return true
+        } catch {
+            areStoredCredentialsInvalidated = true
+            persistCredentialInvalidationMarker()
+            logger.error("Failed to remove orphaned managed session id \(context): \(error.localizedDescription)")
+            return false
         }
     }
 
