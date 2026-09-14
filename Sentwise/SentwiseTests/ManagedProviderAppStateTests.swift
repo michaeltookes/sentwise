@@ -103,6 +103,7 @@ final class ManagedProviderAppStateTests: XCTestCase {
         ])
         secrets.failOnSetKeys = [.managedCredentialsInvalidated]
         secrets.failOnRemoveKeys = [.managedClientToken, .managedSessionID]
+        secrets.failOnValueAfterRemoveAttemptKeys = [.managedClientToken, .managedSessionID]
         let persistence = AppStateMemoryPersistence(settings: Settings(
             schemaVersion: Settings.currentSchemaVersion,
             pollIntervalSeconds: 300,
@@ -125,8 +126,8 @@ final class ManagedProviderAppStateTests: XCTestCase {
         XCTAssertTrue(appState.isLLMConnected)
         XCTAssertEqual(appState.managedAccountEmail, "marcus@example.com")
         XCTAssertNotNil(appState.managedError)
-        XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_X")
-        XCTAssertEqual(try secrets.value(for: .managedSessionID), "sess_X")
+        XCTAssertEqual(secrets.storedValueIgnoringFailures(for: .managedClientToken), "client_X")
+        XCTAssertEqual(secrets.storedValueIgnoringFailures(for: .managedSessionID), "sess_X")
         XCTAssertNil(try secrets.value(for: .managedCredentialsInvalidated))
     }
 

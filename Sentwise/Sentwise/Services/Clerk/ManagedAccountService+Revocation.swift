@@ -8,6 +8,27 @@ private struct SignOutInvalidationAttempt {
     let error: Error?
 }
 
+private struct SignOutCredentialCleanup {
+    let clientTokenRemoved: Bool
+    let sessionIDRemoved: Bool
+    let firstError: Error?
+
+    var removedAnyCredential: Bool {
+        clientTokenRemoved || sessionIDRemoved
+    }
+}
+
+struct ManagedAccountSignOutError: Error {
+    let underlying: Error
+    let didDurablySignOut: Bool
+}
+
+extension ManagedAccountSignOutError: LocalizedError {
+    var errorDescription: String? {
+        underlying.localizedDescription
+    }
+}
+
 extension ManagedAccountService {
     /// Signs out: best-effort revokes the Clerk session server-side, then clears
     /// the stored device token and session id. Local mail data is untouched.
@@ -32,15 +53,18 @@ extension ManagedAccountService {
             fireServerSessionRevocation(sessionID: revocation.sessionID, clientToken: revocation.clientToken)
         }
 
-        var firstError = removeStoredManagedCredentials()
+        let cleanup = removeStoredManagedCredentials()
         clearPendingOAuthSignInIDBestEffort(context: "after sign-out")
-        firstError = finishLocalCredentialCleanup(
-            firstError: firstError,
+        let result = finishLocalCredentialCleanup(
+            cleanup: cleanup,
             invalidation: invalidation,
             wasSignedIn: wasSignedIn
         )
-        if let firstError {
-            throw firstError
+        if let firstError = result.error {
+            throw ManagedAccountSignOutError(
+                underlying: firstError,
+                didDurablySignOut: result.didDurablySignOut
+            )
         }
     }
 
@@ -113,31 +137,38 @@ extension ManagedAccountService {
         }
     }
 
-    private func removeStoredManagedCredentials() -> Error? {
+    private func removeStoredManagedCredentials() -> SignOutCredentialCleanup {
+        var clientTokenRemoved = false
+        var sessionIDRemoved = false
         var firstError: Error?
         do {
             try secrets.remove(.managedClientToken)
+            clientTokenRemoved = true
         } catch {
             firstError = error
         }
         do {
             try secrets.remove(.managedSessionID)
+            sessionIDRemoved = true
         } catch {
             firstError = firstError ?? error
         }
-        return firstError
+        return SignOutCredentialCleanup(
+            clientTokenRemoved: clientTokenRemoved,
+            sessionIDRemoved: sessionIDRemoved,
+            firstError: firstError
+        )
     }
 
     private func finishLocalCredentialCleanup(
-        firstError: Error?,
+        cleanup: SignOutCredentialCleanup,
         invalidation: SignOutInvalidationAttempt,
         wasSignedIn: Bool
-    ) -> Error? {
-        var firstError = firstError
-        let hasCompleteCredentialPair = storedClientToken != nil && storedSessionID != nil
-        let durableSignedOutState = invalidation.markerPersisted || !hasCompleteCredentialPair
+    ) -> (error: Error?, didDurablySignOut: Bool) {
+        var firstError = cleanup.firstError
+        let durableSignedOutState = invalidation.markerPersisted || cleanup.removedAnyCredential
         if durableSignedOutState {
-            areStoredCredentialsInvalidated = invalidation.markerPersisted && hasStoredManagedCredential
+            areStoredCredentialsInvalidated = invalidation.markerPersisted && !cleanup.removedAnyCredential
             if wasSignedIn {
                 authenticationGeneration &+= 1
             }
@@ -145,13 +176,12 @@ extension ManagedAccountService {
             areStoredCredentialsInvalidated = false
         }
 
-        if !hasStoredManagedCredential {
-            areStoredCredentialsInvalidated = false
+        if cleanup.removedAnyCredential {
             clearCredentialInvalidationMarkerBestEffort(context: "after sign-out")
         } else if !durableSignedOutState, let invalidationError = invalidation.error {
             firstError = firstError ?? invalidationError
         }
         clearReauthenticationClientTokenBestEffort(context: "after sign-out")
-        return firstError
+        return (firstError, durableSignedOutState)
     }
 }

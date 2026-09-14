@@ -145,7 +145,9 @@ enum ManagedAccountTestSecretError: Error {
 final class ManagedAccountFailingSecretStore: SecretStore {
     var failOnSetKeys: Set<SecretKey> = []
     var failOnValueKeys: Set<SecretKey> = []
+    var failOnValueAfterRemoveAttemptKeys: Set<SecretKey> = []
     var failOnRemoveKeys: Set<SecretKey> = []
+    private var removeAttemptedKeys: Set<SecretKey> = []
     private var storage: [String: String]
 
     init(seed: [SecretKey: String]) {
@@ -162,13 +164,19 @@ final class ManagedAccountFailingSecretStore: SecretStore {
     }
 
     func value(for key: SecretKey) throws -> String? {
-        if failOnValueKeys.contains(key) {
+        if failOnValueKeys.contains(key)
+            || failOnValueAfterRemoveAttemptKeys.contains(key) && removeAttemptedKeys.contains(key) {
             throw ManagedAccountTestSecretError.readDenied
         }
         return storage[key.rawValue]
     }
 
+    func storedValueIgnoringFailures(for key: SecretKey) -> String? {
+        storage[key.rawValue]
+    }
+
     func remove(_ key: SecretKey) throws {
+        removeAttemptedKeys.insert(key)
         if failOnRemoveKeys.contains(key) {
             throw ManagedAccountTestSecretError.removeDenied
         }
