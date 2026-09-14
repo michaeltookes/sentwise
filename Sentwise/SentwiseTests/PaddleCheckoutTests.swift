@@ -283,4 +283,126 @@ final class PaddleCheckoutTests: XCTestCase {
         XCTAssertTrue(html.contains("paddle.errorPayload"))
         XCTAssertTrue(html.contains(#"post("checkout.error", checkoutErrorDetail(data));"#))
     }
+
+    // MARK: - Navigation policy (A-M2)
+
+    private func url(_ string: String) -> URL {
+        guard let url = URL(string: string) else {
+            fatalError("bad test URL: \(string)")
+        }
+        return url
+    }
+
+    func testTopLevelHarnessOriginStaysInSheet() {
+        // The initial harness load (base URL spoofed to sentwise.ai) must load.
+        XCTAssertEqual(
+            CheckoutNavigationPolicy.decision(for: url("https://sentwise.ai/"), isMainFrameNavigation: true),
+            .allowInSheet
+        )
+    }
+
+    func testTopLevelAboutBootstrapStaysInSheet() {
+        // WebKit's loadHTMLString bootstrap can present about:blank as the main
+        // frame; it must be allowed so the harness can render.
+        XCTAssertEqual(
+            CheckoutNavigationPolicy.decision(
+                for: url("about:blank"),
+                isMainFrameNavigation: true,
+                allowsAboutBlankBootstrap: true
+            ),
+            .allowInSheet
+        )
+    }
+
+    func testLaterTopLevelAboutNavigationIsBlocked() {
+        XCTAssertEqual(
+            CheckoutNavigationPolicy.decision(for: url("about:blank"), isMainFrameNavigation: true),
+            .block
+        )
+        XCTAssertEqual(
+            CheckoutNavigationPolicy.decision(
+                for: url("about:srcdoc"),
+                isMainFrameNavigation: true,
+                allowsAboutBlankBootstrap: true
+            ),
+            .block
+        )
+    }
+
+    func testTopLevelPaddleHostsStayInSheet() {
+        for host in [
+            "https://cdn.paddle.com/paddle/v2/paddle.js",
+            "https://buy.paddle.com/checkout",
+            "https://sandbox-buy.paddle.com/checkout",
+            "https://checkout-service.paddle.com/transaction",
+            "https://assets.paddlecdn.com/x.js"
+        ] {
+            XCTAssertEqual(
+                CheckoutNavigationPolicy.decision(for: url(host), isMainFrameNavigation: true),
+                .allowInSheet,
+                "expected \(host) to stay in the sheet"
+            )
+        }
+    }
+
+    func testTopLevelUnknownHostOpensExternally() {
+        // A phishing redirect of the sheet's own document is cancelled and handed
+        // to the default browser instead of rendering inside the trusted surface.
+        let target = url("https://evil.example.com/login")
+        XCTAssertEqual(
+            CheckoutNavigationPolicy.decision(for: target, isMainFrameNavigation: true),
+            .openExternally(target)
+        )
+    }
+
+    func testTopLevelLookalikeHostIsNotTreatedAsPaddle() {
+        // Suffix matching must be anchored on a dot boundary so a lookalike like
+        // `paddle.com.evil.net` is treated as external, not a Paddle host.
+        let target = url("https://paddle.com.evil.net/checkout")
+        XCTAssertEqual(
+            CheckoutNavigationPolicy.decision(for: target, isMainFrameNavigation: true),
+            .openExternally(target)
+        )
+        XCTAssertFalse(CheckoutNavigationPolicy.isAllowedTopLevelHost("paddle.com.evil.net"))
+        XCTAssertFalse(CheckoutNavigationPolicy.isAllowedTopLevelHost("notsentwise.ai"))
+    }
+
+    func testTopLevelInsecureAllowlistedHostOpensExternally() {
+        // Even an allow-listed host must not load the top-level document over http.
+        let target = url("http://sentwise.ai/")
+        XCTAssertEqual(
+            CheckoutNavigationPolicy.decision(for: target, isMainFrameNavigation: true),
+            .openExternally(target)
+        )
+    }
+
+    func testTopLevelNonWebSchemeIsBlocked() {
+        // Non-web schemes on the top frame are dropped, not opened in the browser.
+        XCTAssertEqual(
+            CheckoutNavigationPolicy.decision(for: url("file:///etc/passwd"), isMainFrameNavigation: true),
+            .block
+        )
+        XCTAssertEqual(
+            CheckoutNavigationPolicy.decision(for: nil, isMainFrameNavigation: true),
+            .block
+        )
+    }
+
+    func testSubframeNavigationsAreAllowedGenerally() {
+        // The overlay iframe, payment-provider frames, and 3-D Secure step-up load
+        // inside sub-frames on hosts we cannot enumerate — allow them all so real
+        // checkout (and bank redirects) keeps working.
+        for host in [
+            "https://buy.paddle.com/checkout",
+            "https://acs.some-issuing-bank.example/3ds/challenge",
+            "https://js.stripe.com/v3/",
+            "https://sentwise.ai/"
+        ] {
+            XCTAssertEqual(
+                CheckoutNavigationPolicy.decision(for: url(host), isMainFrameNavigation: false),
+                .allowInSheet,
+                "expected sub-frame \(host) to be allowed"
+            )
+        }
+    }
 }

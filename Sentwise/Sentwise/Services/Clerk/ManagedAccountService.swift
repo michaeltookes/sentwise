@@ -20,14 +20,14 @@ struct ManagedAccountSignInResult: Sendable, Equatable {
 /// its mutable in-progress sign-in state stays serialized. `AppState` (main
 /// actor) drives it via `await`.
 actor ManagedAccountService: ManagedSessionProviding {
-    private let secrets: SecretStore
+    let secrets: SecretStore
     /// Internal so the OAuth flow in the split `+OAuth` extension can reach it.
     let clerk: ClerkClient
-    private static let invalidatedCredentialsMarkerValue = "1"
+    static let invalidatedCredentialsMarkerValue = "1"
 
     /// In-progress sign-in handle (transient — only valid between `startSignIn`
     /// and `completeSignIn`).
-    private var pendingSignIn: ClerkSignInHandle?
+    var pendingSignIn: ClerkSignInHandle?
     /// In-progress OAuth (Google) sign-in handle (transient — only valid between
     /// `startGoogleSignIn` and `completeGoogleSignIn`). Internal so the OAuth flow,
     /// which lives in a split extension file, can drive it.
@@ -41,12 +41,20 @@ actor ManagedAccountService: ManagedSessionProviding {
     /// Latest client-token rotation from an in-progress reauthentication after
     /// stored credentials were invalidated. This is deliberately separate from
     /// the rejected session credential identity.
-    private var reauthenticationClientToken: String?
+    var reauthenticationClientToken: String?
     /// Clerk rotates the client token on every mint, so only one mint may be in
     /// flight at a time. Actor reentrancy alone is not enough because the actor is
     /// released while the network request is suspended.
     var isMintingSessionToken = false
     var mintWaiters: [CheckedContinuation<Void, Never>] = []
+    typealias StoredClientTokenRotation = (
+        sessionID: String,
+        generation: Int,
+        originalClientToken: String,
+        clientToken: String
+    )
+    var pendingServerSessionRevocations: [UUID: StoredClientTokenRotation] = [:]
+    var unpersistedStoredClientTokenRotation: StoredClientTokenRotation?
 
     init(secrets: SecretStore, clerk: ClerkClient = ClerkClient()) {
         self.secrets = secrets
@@ -170,38 +178,6 @@ actor ManagedAccountService: ManagedSessionProviding {
         clearPendingOAuthSignInIDBestEffort(context: "after sign-in")
     }
 
-    /// Signs out: clears the stored device token and session id. Local mail data
-    /// is untouched.
-    func signOut() throws {
-        let wasSignedIn = isSignedIn
-        pendingSignIn = nil
-        pendingOAuthSignIn = nil
-        reauthenticationClientToken = nil
-        var firstError: Error?
-        do {
-            try secrets.remove(.managedClientToken)
-        } catch {
-            firstError = error
-        }
-        do {
-            try secrets.remove(.managedSessionID)
-        } catch {
-            firstError = firstError ?? error
-        }
-        clearPendingOAuthSignInIDBestEffort(context: "after sign-out")
-        if wasSignedIn && !isSignedIn {
-            authenticationGeneration &+= 1
-        }
-        if !hasStoredManagedCredential {
-            areStoredCredentialsInvalidated = false
-            clearCredentialInvalidationMarkerBestEffort(context: "after sign-out")
-        }
-        clearReauthenticationClientTokenBestEffort(context: "after sign-out")
-        if let firstError {
-            throw firstError
-        }
-    }
-
     // MARK: - ManagedSessionProviding
 
     /// Mints a fresh, short-lived session JWT for the proxy. Rotates and re-stores
@@ -271,30 +247,36 @@ actor ManagedAccountService: ManagedSessionProviding {
     private func mintCurrentManagedSession() async throws -> ManagedSessionToken {
         while true {
             guard !areStoredCredentialsInvalidated,
-                  let clientToken = storedClientToken,
+                  let storedClientToken = storedClientToken,
                   let sessionID = storedSessionID
             else {
                 throw LLMError.managedNotSignedIn
             }
             let generation = authenticationGeneration
+            let clientToken = storedClientTokenRotation(
+                generation: generation,
+                sessionID: sessionID,
+                originalClientToken: storedClientToken
+            ) ?? storedClientToken
             do {
                 let minted = try await mintSessionToken(
                     sessionID: sessionID,
                     clientToken: clientToken,
-                    preserveFailureClientToken: .stored(generation: generation)
-                )
-                switch credentialState(generation: generation, sessionID: sessionID, clientToken: clientToken) {
-                case .current:
-                    try persistClientToken(minted.clientToken)
-                    return ManagedSessionToken(
-                        jwt: minted.jwt,
-                        credentialIdentity: credentialIdentity(generation: generation, sessionID: sessionID),
-                        accountKey: ManagedUsageAccountKey.make(from: "clerk-session:\(sessionID)")
+                    preserveFailureClientToken: .stored(
+                        generation: generation,
+                        originalClientToken: storedClientToken
                     )
-                case .rotated:
+                )
+                if let session = try managedSessionFromMintedStoredSession(
+                    minted,
+                    generation: generation,
+                    sessionID: sessionID,
+                    clientToken: clientToken,
+                    originalClientToken: storedClientToken
+                ) {
+                    return session
+                } else {
                     continue
-                case .signedOutOrReplaced:
-                    throw LLMError.managedNotSignedIn
                 }
             } catch LLMError.managedNotSignedIn {
                 switch credentialState(generation: generation, sessionID: sessionID, clientToken: clientToken) {
@@ -323,7 +305,7 @@ actor ManagedAccountService: ManagedSessionProviding {
         return (value?.isEmpty == false) ? value : nil
     }
 
-    private var hasStoredManagedCredential: Bool {
+    var hasStoredManagedCredential: Bool {
         storedClientToken != nil || storedSessionID != nil
     }
 
@@ -340,13 +322,57 @@ actor ManagedAccountService: ManagedSessionProviding {
     }
 
     func persistClientTokenBestEffort(_ token: String?, context: String) {
+        persistSignInClientTokenBestEffort(token, context: context)
+    }
+
+    private func persistSignInClientTokenBestEffort(_ token: String?, context: String) {
         guard let token, !token.isEmpty else { return }
+        let canPersistStoredCredential = prepareForSignInClientTokenPersistence(context: context)
         persistReauthenticationClientTokenIfNeeded(token)
+        guard canPersistStoredCredential,
+              !(areStoredCredentialsInvalidated && storedSessionID != nil)
+        else { return }
         do {
             try persistClientToken(token)
         } catch {
             logger.error("Failed to persist Clerk client token \(context): \(error.localizedDescription)")
         }
+    }
+
+    private func prepareForSignInClientTokenPersistence(context: String) -> Bool {
+        let storedCredentials: (clientToken: String?, sessionID: String?)
+        do {
+            storedCredentials = try storedCredentialsForSignInTokenPersistence()
+        } catch {
+            markStoredCredentialsInvalidatedAfterSignInTokenPersistenceFailure(error, context: context)
+            return false
+        }
+        guard storedCredentials.clientToken == nil, storedCredentials.sessionID != nil else { return true }
+        do {
+            try secrets.remove(.managedSessionID)
+            return true
+        } catch {
+            markStoredCredentialsInvalidatedAfterSignInTokenPersistenceFailure(error, context: context)
+            return false
+        }
+    }
+
+    private func storedCredentialsForSignInTokenPersistence() throws -> (clientToken: String?, sessionID: String?) {
+        let clientToken = try secrets.value(for: .managedClientToken)
+        let sessionID = try secrets.value(for: .managedSessionID)
+        return (
+            clientToken: (clientToken?.isEmpty == false) ? clientToken : nil,
+            sessionID: (sessionID?.isEmpty == false) ? sessionID : nil
+        )
+    }
+
+    private func markStoredCredentialsInvalidatedAfterSignInTokenPersistenceFailure(
+        _ error: Error,
+        context: String
+    ) {
+        areStoredCredentialsInvalidated = true
+        persistCredentialInvalidationMarker()
+        logger.error("Failed to verify managed credential state \(context): \(error.localizedDescription)")
     }
 
     private func persistSessionID(_ sessionID: String) throws {
@@ -365,11 +391,14 @@ actor ManagedAccountService: ManagedSessionProviding {
         try secrets.remove(.managedCredentialsInvalidated)
     }
 
-    private func clearCredentialInvalidationMarkerBestEffort(context: String) {
+    @discardableResult
+    func clearCredentialInvalidationMarkerBestEffort(context: String) -> Error? {
         do {
             try clearCredentialInvalidationMarker()
+            return nil
         } catch {
             logger.error("Failed to clear managed credential invalidation marker \(context): \(error.localizedDescription)")
+            return error
         }
     }
 
@@ -387,7 +416,7 @@ actor ManagedAccountService: ManagedSessionProviding {
         try secrets.remove(.managedReauthenticationClientToken)
     }
 
-    private func clearReauthenticationClientTokenBestEffort(context: String) {
+    func clearReauthenticationClientTokenBestEffort(context: String) {
         do {
             try clearReauthenticationClientToken()
         } catch {
@@ -427,7 +456,7 @@ actor ManagedAccountService: ManagedSessionProviding {
         try secrets.remove(.managedOAuthSignInID)
     }
 
-    private func clearPendingOAuthSignInIDBestEffort(context: String) {
+    func clearPendingOAuthSignInIDBestEffort(context: String) {
         do {
             try clearPendingOAuthSignInID()
         } catch {
@@ -447,12 +476,7 @@ actor ManagedAccountService: ManagedSessionProviding {
             clientToken: clientToken,
             flow: handle.flow
         )
-        persistReauthenticationClientTokenIfNeeded(clientToken)
-        do {
-            try persistClientToken(clientToken)
-        } catch {
-            logger.error("Failed to persist Clerk client token after sign-in attempt: \(error.localizedDescription)")
-        }
+        persistSignInClientTokenBestEffort(clientToken, context: "after sign-in attempt")
     }
 
     func isPendingOAuthSignIn(_ handle: ClerkOAuthHandle) -> Bool {
@@ -469,11 +493,6 @@ actor ManagedAccountService: ManagedSessionProviding {
             externalRedirectURL: handle.externalRedirectURL,
             clientToken: clientToken
         )
-        persistReauthenticationClientTokenIfNeeded(clientToken)
-        do {
-            try persistClientToken(clientToken)
-        } catch {
-            logger.error("Failed to persist Clerk client token after OAuth sign-in attempt: \(error.localizedDescription)")
-        }
+        persistSignInClientTokenBestEffort(clientToken, context: "after OAuth sign-in attempt")
     }
 }

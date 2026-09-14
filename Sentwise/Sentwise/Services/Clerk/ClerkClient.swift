@@ -420,6 +420,20 @@ struct ClerkClient: Sendable {
         return ClerkMintedToken(jwt: jwt, clientToken: response.clientToken ?? clientToken, userID: ClerkJWT.subject(from: jwt))
     }
 
+    /// Revokes a session server-side via the native Frontend API
+    /// (`POST /v1/client/sessions/{id}/remove` with the client token). Used on
+    /// sign-out so an exfiltrated token can't outlive the local sign-out until
+    /// Clerk's own expiry (security finding A-L3). Returns the raw response so the
+    /// caller can log a non-2xx; throws only on transport failure.
+    @discardableResult
+    func revokeSession(sessionId: String, clientToken: String) async throws -> ClerkHTTPResponse {
+        try await post(
+            path: "v1/client/sessions/\(sessionId)/remove",
+            form: [:],
+            clientToken: clientToken
+        )
+    }
+
     // MARK: - Internals
 
     private func post(

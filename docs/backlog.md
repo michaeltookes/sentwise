@@ -55,15 +55,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - **S-I2:** switch the analytics userId hash to a keyed HMAC (server secret).
     - Tests for each; no-body-logging guard stays green.
 
-95. **App hardening from the 2026-09-13 security pass** — *pre-launch; findings A-M2/A-L1/A-L3/A-L4 in `docs/security-pass-2026-09-13.md`*
-    The app audit verified secrets, logging, TLS, callbacks, and Sparkle clean; four fixes remain, led by the checkout WebView being navigable to arbitrary web content inside a trusted in-app sheet.
-    *As a paying user, I want the in-app checkout sheet to only ever show checkout, so that a compromised script can't turn a trusted surface into a phishing page.*
-    - **A-M2:** add `decidePolicyFor` to `PaddleCheckoutSheet` — allow only the local harness page and Paddle/payment hosts in-sheet; open everything else in the default browser.
-    - **A-L1:** stop honoring `SENTWISE_INFERENCE_URL` in release builds (`#if DEBUG`, or require https + allow-listed host).
-    - **A-L3:** best-effort server-side Clerk session revocation in `signOut()` before local cleanup.
-    - **A-L4:** stop logging account emails `privacy: .public` in `KeychainStore` failure paths (hash or `.private`).
-    - Tests per fix; Prowl hunt-safety unchanged.
-
 96. **Purge local mail artifacts on disconnect / account removal (+ "erase all local data")** — *from security-pass finding A-L2; privacy-product expectation gap*
     Disconnecting or removing a mail account deletes the Keychain password and settings entry but leaves `PendingDrafts.json` (full message bodies + drafts), `ActivityEvents.json` (sender + subject per event), `VoiceProfile.json`, `ProcessedMessages.json`, and `SkippedMessages.json` on disk; `deleteManagedAccount` documents leaving local data. For a nothing-stored privacy product, "remove my account" should mean the mail content is gone.
     *As a privacy-conscious user removing a mailbox, I want its locally cached mail content actually deleted, so that "disconnected" means gone.*

@@ -287,4 +287,20 @@ final class ClerkClientTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    // MARK: - Session revocation (A-L3)
+
+    func testRevokeSessionPostsToNativeRemoveEndpointWithClientToken() async throws {
+        let transport = FakeClerkTransport([clerkResponse(#"{"response":{}}"#)])
+
+        _ = try await client(transport).revokeSession(sessionId: "sess_ABC", clientToken: "client_T")
+
+        let request = try XCTUnwrap(transport.requests.first)
+        XCTAssertTrue(
+            request.url.absoluteString.contains("/v1/client/sessions/sess_ABC/remove"),
+            request.url.absoluteString
+        )
+        XCTAssertTrue(request.url.absoluteString.contains("_is_native=1"))
+        XCTAssertEqual(request.headers["authorization"], "Bearer client_T")
+    }
 }

@@ -60,7 +60,7 @@ final class KeychainStore: SecretStore {
         case errSecItemNotFound:
             break
         default:
-            logger.error("Keychain update failed for \(key.rawValue, privacy: .public): \(updateStatus)")
+            logger.error("Keychain update failed for \(key.logSafeIdentifier, privacy: .public): \(updateStatus)")
             throw KeychainError.unexpectedStatus(updateStatus)
         }
 
@@ -75,11 +75,11 @@ final class KeychainStore: SecretStore {
         case errSecDuplicateItem:
             let retryStatus = updateItem(baseQuery(for: key) as CFDictionary, updateAttributes as CFDictionary)
             guard retryStatus == errSecSuccess else {
-                logger.error("Keychain retry update failed for \(key.rawValue, privacy: .public): \(retryStatus)")
+                logger.error("Keychain retry update failed for \(key.logSafeIdentifier, privacy: .public): \(retryStatus)")
                 throw KeychainError.unexpectedStatus(retryStatus)
             }
         default:
-            logger.error("Keychain set failed for \(key.rawValue, privacy: .public): \(addStatus)")
+            logger.error("Keychain set failed for \(key.logSafeIdentifier, privacy: .public): \(addStatus)")
             throw KeychainError.unexpectedStatus(addStatus)
         }
     }
@@ -102,7 +102,7 @@ final class KeychainStore: SecretStore {
         case errSecItemNotFound:
             return nil
         default:
-            logger.error("Keychain read failed for \(key.rawValue, privacy: .public): \(status)")
+            logger.error("Keychain read failed for \(key.logSafeIdentifier, privacy: .public): \(status)")
             throw KeychainError.unexpectedStatus(status)
         }
     }

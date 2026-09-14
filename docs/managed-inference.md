@@ -24,9 +24,14 @@ README explains the no-storage/no-logging design.
 ## Where the endpoint comes from
 
 `ManagedInference.baseURL` is a compile-time constant
-(`https://sentwise-inference.sentwise-service.workers.dev`) with a
-`SENTWISE_INFERENCE_URL` environment override for dev/staging and the env-gated
-live test.
+(`https://sentwise-inference.sentwise-service.workers.dev`). **DEBUG builds only**
+honor a `SENTWISE_INFERENCE_URL` environment override for dev/staging; Release
+builds ignore it entirely and are pinned to the constant, so a shipped app cannot
+have all managed-drafting traffic (mail content + session JWT) silently
+redirected by an environment variable (security finding A-L1). Prowl hunts run
+fully offline and never set the override, and the env-gated live test builds its
+own base URL from `SENTWISE_INFERENCE_URL` directly rather than through
+`ManagedInference.baseURL`.
 
 ## Trial
 
@@ -429,6 +434,24 @@ alone.
   callers. A `checkout.closed` after a completion is ignored (Paddle's own
   teardown), and a terminal failure is only overridden by a completion. In Prowl
   hunt mode there is no network and no poll.
+- **Navigation policy** (`Views/CheckoutNavigationPolicy.swift`, wired via the
+  coordinator's `decidePolicyFor` in `PaddleCheckoutSheet.swift`) confines the
+  trusted, chrome-less sheet to checkout (security finding A-M2). The harness page
+  loads with its base URL spoofed to `https://sentwise.ai`, so without a policy
+  page script could point the sheet's own **top-level** document anywhere, turning
+  it into a phishing surface. The rule, a pure `CheckoutNavigationPolicy.decision`
+  function so it is testable without a live `WKWebView`:
+  - **Sub-frame navigations are allowed unconditionally** — the overlay iframe,
+    payment-provider frames, and 3-D Secure step-up load in nested frames on hosts
+    we can't enumerate (card issuers, ACS servers); restricting them would break
+    real payments.
+  - **Top-level navigations** stay in the sheet only for the harness origin
+    (`sentwise.ai`, plus the `about:` bootstrap load) and the Paddle payment hosts
+    (`paddle.com`, `paddlecdn.com`), over https, with suffix matching anchored on a
+    dot boundary (so `paddle.com.evil.net` is not a Paddle host). Any other http(s)
+    top-level navigation is cancelled and opened in the **default browser**
+    (`NSWorkspace.open`); non-web schemes are blocked outright. New-window/popup
+    navigations (nil target frame) are treated as top-level.
 
 - **Paddle API key scopes (server-side `PADDLE_API_KEY` secret)** — the Worker's
   Paddle key must grant **`transaction.read` / `transaction.write`** (checkout
@@ -463,10 +486,28 @@ retryable). The pane's confirmation sheet (`DeleteAccountSheet`) states exactly
 what is removed (Sentwise account + server-side usage counters) and what is not
 (mail, voice profile, drafts, and settings on this Mac), and gates the action
 behind typing `DELETE`. On `204`, `AppState.deleteManagedAccount` clears the
-managed credentials locally (`ManagedAccountService.signOut` semantics), resets
+managed credentials locally (`ManagedAccountService.signOut` semantics — see
+**Sign-out and server-side session revocation** below), resets
 to the managed-signed-out state, and flips `didDeleteManagedAccount` for the
 brief signed-out confirmation. Local data is untouched. On failure the account is
 kept and the mapped message is shown.
+
+### Sign-out and server-side session revocation
+
+`ManagedAccountService.signOut` removes the device token (`managed.clientToken`)
+and session id (`managed.sessionID`) from the Keychain. Before that local
+cleanup it makes a **best-effort server-side revocation** of the Clerk session —
+`ClerkClient.revokeSession` → `POST /v1/client/sessions/{id}/remove` (native,
+`_is_native=1`, `Authorization: Bearer <clientToken>`) — so an exfiltrated
+session token can't stay valid until Clerk's own expiry (security finding A-L3).
+
+The revocation is **fire-and-forget on a detached task**: a failed or slow
+network call never blocks or fails the local sign-out (which always proceeds and
+clears local credentials regardless). It is gated by
+`signOut(revokeServerSession:)`, which defaults to
+`!ProwlHuntRuntime.current.isEnabled` — off under Prowl hunts and test runs
+(both fully offline), on in production. `AppState.deleteManagedAccount` reuses the
+same local-cleanup semantics after the account is already deleted server-side.
 
 ### Refresh points
 
@@ -543,8 +584,9 @@ demand signal for reviving the parked bundled-OAuth + CASA path (item 3).
   Content`** on success; **`401`** (unauth) maps to `LLMError.managedNotSignedIn`
   and invalidates the session; other non-2xx statuses reuse
   `ManagedInferenceClient.mapError` (same error-envelope shape as the other
-  routes). Endpoint: `ManagedInference.interestEndpoint` (`…/v1/interest`, honoring
-  the `SENTWISE_INFERENCE_URL` override).
+  routes). Endpoint: `ManagedInference.interestEndpoint` (`…/v1/interest`; the
+  `SENTWISE_INFERENCE_URL` override applies in DEBUG builds only — see "Where the
+  endpoint comes from").
 - **Consent:** clicking the button is an explicit user action — consent — but
   nothing is ever sent without the click, matching the opt-in telemetry rule. The
   button is **hidden unless a managed account is signed in** (`isManagedSignedIn`;

@@ -29,8 +29,61 @@ extension AppState {
         setManagedError(nil, for: messageSurface)
     }
 
+    func handleManagedSignOutError(
+        _ error: ManagedAccountSignOutError,
+        generation: UInt64,
+        messageSurface: TransientMessageSurface
+    ) {
+        if error.didDurablySignOut {
+            applyManagedSignedOutState(clearEmailInput: true, messageSurface: messageSurface)
+            reportManagedErrorIfCurrent(
+                Self.managedMessage(for: error),
+                generation: generation,
+                surface: messageSurface
+            )
+            saveSettings()
+            return
+        }
+        reportManagedErrorIfCurrent(
+            Self.managedMessage(for: error),
+            generation: generation,
+            surface: messageSurface
+        )
+    }
+
+    func applyManagedSignedOutState(
+        clearEmailInput: Bool,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
+        clearManagedQuotaCache()
+        isManagedSignedIn = false
+        managedAccountEmail = ""
+        managedAccountID = ""
+        if clearEmailInput {
+            managedEmailInput = ""
+        }
+        managedCodeInput = ""
+        pendingManagedSignInEmail = nil
+        pendingManagedSignInMessageSurface = .shared
+        clearManagedOAuthMessageSurfaceBestEffort()
+        clearManagedOAuthFlowIDBestEffort()
+        clearCanceledManagedOAuthCallbackSurfaceBestEffort()
+        pendingManagedSignInActivatesProvider = true
+        managedSignInStage = .idle
+        googleOAuthInterestRegistered = false
+        setGoogleOAuthInterestError(nil, for: messageSurface)
+        if llmProviderKind == .managed {
+            verifiedLLMModel = ""
+            refreshLLMConnectionStatus()
+            resetDraftPreviewForLLMChange()
+        }
+    }
+
     static func managedMessage(for error: Error) -> String {
-        managedClerkMessage(for: error)
+        if let error = error as? ManagedAccountSignOutError {
+            return managedMessage(for: error.underlying)
+        }
+        return managedClerkMessage(for: error)
             ?? managedLLMMessage(for: error)
             ?? managedKeychainMessage(for: error)
             ?? error.localizedDescription

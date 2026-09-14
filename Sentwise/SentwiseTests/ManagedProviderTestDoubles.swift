@@ -21,11 +21,17 @@ struct FixedSessionProvider: ManagedSessionProviding {
 }
 
 enum ManagedProviderSecretError: Error {
+    case setDenied
+    case readDenied
     case removeDenied
 }
 
 final class ManagedProviderFailingRemoveSecretStore: SecretStore {
+    var failOnSetKeys: Set<SecretKey> = []
+    var failOnValueKeys: Set<SecretKey> = []
+    var failOnValueAfterRemoveAttemptKeys: Set<SecretKey> = []
     var failOnRemoveKeys: Set<SecretKey> = []
+    private var removeAttemptedKeys: Set<SecretKey> = []
     private var storage: [String: String]
 
     init(seed: [SecretKey: String]) {
@@ -35,14 +41,26 @@ final class ManagedProviderFailingRemoveSecretStore: SecretStore {
     }
 
     func set(_ value: String, for key: SecretKey) throws {
+        if failOnSetKeys.contains(key) {
+            throw ManagedProviderSecretError.setDenied
+        }
         storage[key.rawValue] = value
     }
 
     func value(for key: SecretKey) throws -> String? {
+        if failOnValueKeys.contains(key)
+            || failOnValueAfterRemoveAttemptKeys.contains(key) && removeAttemptedKeys.contains(key) {
+            throw ManagedProviderSecretError.readDenied
+        }
+        return storage[key.rawValue]
+    }
+
+    func storedValueIgnoringFailures(for key: SecretKey) -> String? {
         storage[key.rawValue]
     }
 
     func remove(_ key: SecretKey) throws {
+        removeAttemptedKeys.insert(key)
         if failOnRemoveKeys.contains(key) {
             throw ManagedProviderSecretError.removeDenied
         }

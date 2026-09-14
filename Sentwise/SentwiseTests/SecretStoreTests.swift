@@ -90,4 +90,32 @@ final class SecretStoreTests: XCTestCase {
         XCTAssertNil(try store.value(for: .mailAppPassword(email: "me@gmail.com")))
         XCTAssertEqual(try store.value(for: .mailAppPassword(email: "me@att.net")), "att-pw")
     }
+
+    // MARK: - Log-safe identifier (A-L4)
+
+    func testLogSafeIdentifierNeverLeaksAccountEmail() {
+        let email = "marcus@example.com"
+        let identifier = SecretKey.mailAppPassword(email: email).logSafeIdentifier
+        // The kind stays useful, but no stable per-account digest is published.
+        XCTAssertEqual(identifier, "mail.appPassword")
+        XCTAssertFalse(identifier.contains(email))
+        XCTAssertFalse(identifier.contains("marcus"))
+        XCTAssertFalse(identifier.contains("example.com"))
+    }
+
+    func testLogSafeIdentifierDoesNotDistinguishAccountScopedKeys() {
+        XCTAssertEqual(
+            SecretKey.mailAppPassword(email: "me@gmail.com").logSafeIdentifier,
+            SecretKey.mailAppPassword(email: "me@gmail.com").logSafeIdentifier
+        )
+        XCTAssertEqual(
+            SecretKey.mailAppPassword(email: "me@gmail.com").logSafeIdentifier,
+            SecretKey.mailAppPassword(email: "me@att.net").logSafeIdentifier
+        )
+    }
+
+    func testLogSafeIdentifierKindPrefixForWellKnownKeys() {
+        XCTAssertEqual(SecretKey.managedClientToken.logSafeIdentifier, "managed.clientToken")
+        XCTAssertEqual(SecretKey.gmailToken.logSafeIdentifier, "gmail.token")
+    }
 }

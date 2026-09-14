@@ -170,6 +170,13 @@ extension AppState {
         defer { managedBusyAction = nil }
         do {
             try await managedAccount.signOut()
+        } catch let error as ManagedAccountSignOutError {
+            handleManagedSignOutError(
+                error,
+                generation: settingsMessageGeneration,
+                messageSurface: messageSurface
+            )
+            return
         } catch {
             if await managedAccount.isSignedIn {
                 reportManagedErrorIfCurrent(
@@ -231,6 +238,10 @@ extension AppState {
         // invalidation marker so a later launch cannot restore the deleted account.
         do {
             try await managedAccount.signOut()
+        } catch let error as ManagedAccountSignOutError where error.didDurablySignOut {
+            logger.error(
+                "Managed account deletion cleanup finished with a durable local sign-out: \(error.localizedDescription)"
+            )
         } catch {
             do {
                 try await managedAccount.invalidateStoredCredentialsForDeletedAccount()
@@ -248,34 +259,6 @@ extension AppState {
         didDeleteManagedAccount = true
         saveSettings()
         return true
-    }
-
-    private func applyManagedSignedOutState(
-        clearEmailInput: Bool,
-        messageSurface: TransientMessageSurface = .shared
-    ) {
-        clearManagedQuotaCache()
-        isManagedSignedIn = false
-        managedAccountEmail = ""
-        managedAccountID = ""
-        if clearEmailInput {
-            managedEmailInput = ""
-        }
-        managedCodeInput = ""
-        pendingManagedSignInEmail = nil
-        pendingManagedSignInMessageSurface = .shared
-        clearManagedOAuthMessageSurfaceBestEffort()
-        clearManagedOAuthFlowIDBestEffort()
-        clearCanceledManagedOAuthCallbackSurfaceBestEffort()
-        pendingManagedSignInActivatesProvider = true
-        managedSignInStage = .idle
-        googleOAuthInterestRegistered = false
-        setGoogleOAuthInterestError(nil, for: messageSurface)
-        if llmProviderKind == .managed {
-            verifiedLLMModel = ""
-            refreshLLMConnectionStatus()
-            resetDraftPreviewForLLMChange()
-        }
     }
 
     var managedAccountDisplayEmail: String {

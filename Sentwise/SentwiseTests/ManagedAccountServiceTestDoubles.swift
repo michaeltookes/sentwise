@@ -95,6 +95,39 @@ final class MultiSuspendedClerkTransport: ClerkHTTPTransport, @unchecked Sendabl
         guard recordedRequests.indices.contains(index) else { return nil }
         return recordedRequests[index].headers["authorization"]
     }
+
+    func url(at index: Int) -> URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard recordedRequests.indices.contains(index) else { return nil }
+        return recordedRequests[index].url
+    }
+}
+
+/// Records every POST and returns a settable result, with an `onPost` hook so a
+/// test can await a fire-and-forget request (e.g. the sign-out session
+/// revocation) via an expectation.
+final class RecordingClerkTransport: ClerkHTTPTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var postedURLs: [URL] = []
+    var result: Result<ClerkHTTPResponse, Error> = .success(ClerkHTTPResponse(statusCode: 200, headers: [:], body: Data()))
+    var onPost: ((URL) -> Void)?
+
+    func postForm(_ url: URL, headers: [String: String], form: [String: String]) async throws -> ClerkHTTPResponse {
+        lock.lock()
+        postedURLs.append(url)
+        let onPost = self.onPost
+        let result = self.result
+        lock.unlock()
+        onPost?(url)
+        return try result.get()
+    }
+
+    var recordedURLs: [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return postedURLs
+    }
 }
 
 func clerkReply(_ json: String, status: Int = 200, clientToken: String? = nil) -> ClerkHTTPResponse {
@@ -112,7 +145,9 @@ enum ManagedAccountTestSecretError: Error {
 final class ManagedAccountFailingSecretStore: SecretStore {
     var failOnSetKeys: Set<SecretKey> = []
     var failOnValueKeys: Set<SecretKey> = []
+    var failOnValueAfterRemoveAttemptKeys: Set<SecretKey> = []
     var failOnRemoveKeys: Set<SecretKey> = []
+    private var removeAttemptedKeys: Set<SecretKey> = []
     private var storage: [String: String]
 
     init(seed: [SecretKey: String]) {
@@ -129,13 +164,19 @@ final class ManagedAccountFailingSecretStore: SecretStore {
     }
 
     func value(for key: SecretKey) throws -> String? {
-        if failOnValueKeys.contains(key) {
+        if failOnValueKeys.contains(key)
+            || failOnValueAfterRemoveAttemptKeys.contains(key) && removeAttemptedKeys.contains(key) {
             throw ManagedAccountTestSecretError.readDenied
         }
         return storage[key.rawValue]
     }
 
+    func storedValueIgnoringFailures(for key: SecretKey) -> String? {
+        storage[key.rawValue]
+    }
+
     func remove(_ key: SecretKey) throws {
+        removeAttemptedKeys.insert(key)
         if failOnRemoveKeys.contains(key) {
             throw ManagedAccountTestSecretError.removeDenied
         }
