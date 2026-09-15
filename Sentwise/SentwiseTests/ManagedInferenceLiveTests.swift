@@ -19,9 +19,20 @@ private struct EnvSessionProvider: ManagedSessionProviding {
 /// would start passing today and fail permanently after the normal trial
 /// expires.
 ///
+/// `testLiveManageBillingReturnsPortalURL` requires
+/// `SENTWISE_LIVE_MANAGED_PORTAL`, plus `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL`, a
+/// subscribed Clerk test user. It is read-only: it fetches the fresh portal link
+/// from the Worker but never opens the URL or touches billing controls.
+///
 /// The tests mint a short-lived Clerk JWT during each run using Clerk's test
 /// email-code flow, avoiding a stale session-token repository secret.
 final class ManagedInferenceLiveTests: XCTestCase {
+
+    private enum LiveAccount {
+        case accountShape
+        case durableDraft
+        case subscribedPortal
+    }
 
     /// A deterministic Clerk test email for account-shape checks. `+clerk_test`
     /// triggers test mode; the universal code below verifies without sending
@@ -31,13 +42,18 @@ final class ManagedInferenceLiveTests: XCTestCase {
     private static let testCode = "424242"
 
     private func liveConfig(
-        requiresDurableDraftEntitlement: Bool = false
+        account: LiveAccount = .accountShape
     ) async throws -> (token: String, baseURL: URL) {
         let env = ProcessInfo.processInfo.environment
         try requireTruthy("SENTWISE_LIVE_MANAGED_INFERENCE", in: env)
         try requireTruthy("SENTWISE_LIVE_CLERK_TEST", in: env)
-        if requiresDurableDraftEntitlement {
+        switch account {
+        case .accountShape:
+            break
+        case .durableDraft:
             try requireTruthy("SENTWISE_LIVE_MANAGED_DRAFT", in: env)
+        case .subscribedPortal:
+            try requireTruthy("SENTWISE_LIVE_MANAGED_PORTAL", in: env)
         }
 
         guard
@@ -47,10 +63,7 @@ final class ManagedInferenceLiveTests: XCTestCase {
         else {
             throw XCTSkip("Set SENTWISE_INFERENCE_URL to run live managed-inference tests.")
         }
-        let email = try clerkTestEmail(
-            in: env,
-            requiresDurableDraftEntitlement: requiresDurableDraftEntitlement
-        )
+        let email = try clerkTestEmail(in: env, account: account)
         return (try await mintLiveSessionToken(email: email), baseURL)
     }
 
@@ -59,6 +72,14 @@ final class ManagedInferenceLiveTests: XCTestCase {
             guard Self.isTruthy(env[name]) else {
                 throw XCTSkip(
                     "Set SENTWISE_LIVE_MANAGED_DRAFT=1 only for a Clerk test user with durable draft entitlement."
+                )
+            }
+            return
+        }
+        if name == "SENTWISE_LIVE_MANAGED_PORTAL" {
+            guard Self.isTruthy(env[name]) else {
+                throw XCTSkip(
+                    "Set SENTWISE_LIVE_MANAGED_PORTAL=1 only for a subscribed Clerk test user."
                 )
             }
             return
@@ -75,18 +96,36 @@ final class ManagedInferenceLiveTests: XCTestCase {
         return normalized == "1" || normalized == "true" || normalized == "yes"
     }
 
-    private func clerkTestEmail(
+    private func clerkTestEmail(in env: [String: String], account: LiveAccount) throws -> String {
+        switch account {
+        case .accountShape:
+            return Self.accountShapeTestEmail
+        case .durableDraft:
+            return try requiredEmail(
+                "SENTWISE_LIVE_MANAGED_DRAFT_EMAIL",
+                in: env,
+                skipMessage: "Set SENTWISE_LIVE_MANAGED_DRAFT_EMAIL "
+                    + "to a Clerk test user with durable draft entitlement."
+            )
+        case .subscribedPortal:
+            return try requiredEmail(
+                "SENTWISE_LIVE_MANAGED_PORTAL_EMAIL",
+                in: env,
+                skipMessage: "Set SENTWISE_LIVE_MANAGED_PORTAL_EMAIL to a subscribed Clerk test user."
+            )
+        }
+    }
+
+    private func requiredEmail(
+        _ name: String,
         in env: [String: String],
-        requiresDurableDraftEntitlement: Bool
+        skipMessage: String
     ) throws -> String {
-        guard requiresDurableDraftEntitlement else { return Self.accountShapeTestEmail }
         guard
-            let email = env["SENTWISE_LIVE_MANAGED_DRAFT_EMAIL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+            let email = env[name]?.trimmingCharacters(in: .whitespacesAndNewlines),
             !email.isEmpty
         else {
-            throw XCTSkip(
-                "Set SENTWISE_LIVE_MANAGED_DRAFT_EMAIL to a Clerk test user with durable draft entitlement."
-            )
+            throw XCTSkip(skipMessage)
         }
         return email
     }
@@ -166,8 +205,41 @@ final class ManagedInferenceLiveTests: XCTestCase {
         XCTAssertNotNil(status.userID, "a live account should carry a userId")
     }
 
+    func testLiveManageBillingReturnsPortalURL() async throws {
+        let (token, baseURL) = try await liveConfig(account: .subscribedPortal)
+        let client = ManagedInferenceClient(
+            sessionProvider: EnvSessionProvider(token: token),
+            transport: URLSessionTransport()
+        )
+
+        let url = try await client.fetchManageBillingURL(
+            endpoint: baseURL.appendingPathComponent("v1/paddle/manage-billing")
+        )
+
+        let scheme = try XCTUnwrap(url.scheme?.lowercased())
+        XCTAssertTrue(
+            ["http", "https"].contains(scheme),
+            "expected an http(s) portal URL: \(url)"
+        )
+        let host = try XCTUnwrap(url.host?.lowercased())
+        XCTAssertTrue(host.contains("paddle.com"), "expected a Paddle portal URL, got \(url)")
+        let lowercased = url.absoluteString.lowercased()
+        XCTAssertFalse(
+            lowercased.contains("login"),
+            "portal URL looks like a sign-in fallback: \(url)"
+        )
+        XCTAssertFalse(
+            lowercased.contains("sign-in"),
+            "portal URL looks like a sign-in fallback: \(url)"
+        )
+        XCTAssertFalse(
+            lowercased.contains("signin"),
+            "portal URL looks like a sign-in fallback: \(url)"
+        )
+    }
+
     func testLiveDraftReturnsText() async throws {
-        let (token, baseURL) = try await liveConfig(requiresDurableDraftEntitlement: true)
+        let (token, baseURL) = try await liveConfig(account: .durableDraft)
         let client = ManagedInferenceClient(
             sessionProvider: EnvSessionProvider(token: token),
             transport: URLSessionTransport(),

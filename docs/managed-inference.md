@@ -189,7 +189,11 @@ completed by a hijacked callback.
   by `SENTWISE_LIVE_MANAGED_DRAFT` and uses
   `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL`, a dedicated Clerk test email whose Worker
   account has a durable entitlement or trial bypass and cannot age out of the
-  normal trial under recurring push-to-main runs.
+  normal trial under recurring push-to-main runs. The live
+  `/v1/paddle/manage-billing` portal-link fetch is separately gated by
+  `SENTWISE_LIVE_MANAGED_PORTAL` and uses
+  `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL`, a subscribed Clerk test email; it fetches
+  the fresh URL only and never opens the billing portal.
 
 ## Settings migration (14 → 15)
 
