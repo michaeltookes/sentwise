@@ -40,6 +40,21 @@ final class ManagedInferenceLiveTests: XCTestCase {
     /// the recurring spend payload can point at a nonexpiring entitled user.
     private static let accountShapeTestEmail = "sentwise-live+clerk_test@sentwise.ai"
     private static let testCode = "424242"
+    private static let customerPortalHosts: Set<String> = [
+        "customer-portal.paddle.com",
+        "sandbox-customer-portal.paddle.com"
+    ]
+    private static let portalSessionIDPrefix = "cpl_"
+    private static let paddleIDBodyLength = 26
+    private static let authenticatedPortalActions: Set<String> = [
+        "overview",
+        "cancel_subscription",
+        "update_subscription_payment_method"
+    ]
+    private static let subscriptionScopedPortalActions: Set<String> = [
+        "cancel_subscription",
+        "update_subscription_payment_method"
+    ]
 
     private func liveConfig(
         account: LiveAccount = .accountShape
@@ -94,6 +109,64 @@ final class ManagedInferenceLiveTests: XCTestCase {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         return normalized == "1" || normalized == "true" || normalized == "yes"
+    }
+
+    private static func authenticatedPortalSessionURLIssue(for url: URL) -> String? {
+        guard url.scheme?.lowercased() == "https" else {
+            return "expected an https Paddle portal-session URL, got \(url)"
+        }
+        guard
+            let host = url.host?.lowercased(),
+            customerPortalHosts.contains(host)
+        else {
+            return "expected an exact Paddle customer portal host, got \(url)"
+        }
+
+        let sessionPathComponents = url.pathComponents.filter { $0 != "/" }
+        guard
+            sessionPathComponents.count == 1,
+            let sessionID = sessionPathComponents.first,
+            isPaddleID(sessionID, prefix: portalSessionIDPrefix)
+        else {
+            return "expected a Paddle portal-session path like /cpl_..., got \(url)"
+        }
+
+        guard
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            let queryItems = components.queryItems
+        else {
+            return "expected portal-session query parameters, got \(url)"
+        }
+        let query = Dictionary(queryItems.compactMap { item in
+            item.value.map { (item.name, $0) }
+        }, uniquingKeysWith: { first, _ in first })
+
+        guard
+            let action = query["action"],
+            authenticatedPortalActions.contains(action)
+        else {
+            return "expected a documented Paddle portal-session action, got \(url)"
+        }
+        guard
+            let token = query["token"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+            token.hasPrefix("pga_")
+        else {
+            return "expected a temporary Paddle portal-session token, got \(url)"
+        }
+
+        if subscriptionScopedPortalActions.contains(action),
+           !isPaddleID(query["subscription_id"], prefix: "sub_") {
+            return "expected subscription-scoped Paddle portal URL to include subscription_id, got \(url)"
+        }
+
+        return nil
+    }
+
+    private static func isPaddleID(_ value: String?, prefix: String) -> Bool {
+        guard let value, value.hasPrefix(prefix) else { return false }
+        let idBody = value.dropFirst(prefix.count)
+        return idBody.count == paddleIDBodyLength
+            && idBody.allSatisfy { $0.isLowercase || $0.isNumber }
     }
 
     private func clerkTestEmail(in env: [String: String], account: LiveAccount) throws -> String {
@@ -205,6 +278,41 @@ final class ManagedInferenceLiveTests: XCTestCase {
         XCTAssertNotNil(status.userID, "a live account should carry a userId")
     }
 
+    func testPortalSessionURLValidationAcceptsAuthenticatedPaddleLinks() throws {
+        let overview = try XCTUnwrap(URL(string:
+            "https://customer-portal.paddle.com/cpl_01j7zbyqs3vah3aafp4jf62qaw"
+                + "?action=overview&token=pga_test"
+        ))
+        XCTAssertNil(Self.authenticatedPortalSessionURLIssue(for: overview))
+
+        let subscriptionScoped = try XCTUnwrap(URL(string:
+            "https://sandbox-customer-portal.paddle.com/cpl_01j7zbyqs3vah3aafp4jf62qaw"
+                + "?action=update_subscription_payment_method"
+                + "&subscription_id=sub_01h04vsc0qhwtsbsxh3422wjs4"
+                + "&token=pga_test"
+        ))
+        XCTAssertNil(Self.authenticatedPortalSessionURLIssue(for: subscriptionScoped))
+    }
+
+    func testPortalSessionURLValidationRejectsSignInFallbacks() throws {
+        let fallbackURLs = [
+            "https://paddle.com/customer-portal",
+            "https://customer-portal.paddle.com/",
+            "https://customer-portal.paddle.com/login?action=overview&token=pga_test",
+            "https://customer-portal.paddle.com/cpl_01j7zbyqs3vah3aafp4jf62qaw?action=overview",
+            "https://customer-portal.paddle.com/cpl_01j7zbyqs3vah3aafp4jf62qaw"
+                + "?action=update_subscription_payment_method&token=pga_test"
+        ]
+
+        for rawURL in fallbackURLs {
+            let url = try XCTUnwrap(URL(string: rawURL))
+            XCTAssertNotNil(
+                Self.authenticatedPortalSessionURLIssue(for: url),
+                "expected validator to reject \(rawURL)"
+            )
+        }
+    }
+
     func testLiveManageBillingReturnsPortalURL() async throws {
         let (token, baseURL) = try await liveConfig(account: .subscribedPortal)
         let client = ManagedInferenceClient(
@@ -216,26 +324,7 @@ final class ManagedInferenceLiveTests: XCTestCase {
             endpoint: baseURL.appendingPathComponent("v1/paddle/manage-billing")
         )
 
-        let scheme = try XCTUnwrap(url.scheme?.lowercased())
-        XCTAssertTrue(
-            ["http", "https"].contains(scheme),
-            "expected an http(s) portal URL: \(url)"
-        )
-        let host = try XCTUnwrap(url.host?.lowercased())
-        XCTAssertTrue(host.contains("paddle.com"), "expected a Paddle portal URL, got \(url)")
-        let lowercased = url.absoluteString.lowercased()
-        XCTAssertFalse(
-            lowercased.contains("login"),
-            "portal URL looks like a sign-in fallback: \(url)"
-        )
-        XCTAssertFalse(
-            lowercased.contains("sign-in"),
-            "portal URL looks like a sign-in fallback: \(url)"
-        )
-        XCTAssertFalse(
-            lowercased.contains("signin"),
-            "portal URL looks like a sign-in fallback: \(url)"
-        )
+        XCTAssertNil(Self.authenticatedPortalSessionURLIssue(for: url))
     }
 
     func testLiveDraftReturnsText() async throws {

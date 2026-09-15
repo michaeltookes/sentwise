@@ -193,7 +193,8 @@ completed by a hijacked callback.
   `/v1/paddle/manage-billing` portal-link fetch is separately gated by
   `SENTWISE_LIVE_MANAGED_PORTAL` and uses
   `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL`, a subscribed Clerk test email; it fetches
-  the fresh URL only and never opens the billing portal.
+  the fresh authenticated Paddle customer-portal-session URL only and never opens
+  the billing portal.
 
 ## Settings migration (14 → 15)
 

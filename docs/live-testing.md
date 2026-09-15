@@ -129,8 +129,8 @@ with a Clerk test account that cannot age out of its trial. The
 `/v1/paddle/manage-billing` portal-link fetch has the extra
 `SENTWISE_LIVE_MANAGED_PORTAL` gate and uses
 `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL`, a subscribed Clerk test account; it only
-fetches and validates the fresh Paddle portal URL and never opens the billing
-portal.
+fetches and validates the fresh authenticated Paddle customer-portal-session URL
+and never opens the billing portal.
 
 ## Dispatching a run
 
