@@ -143,12 +143,13 @@ covered automatically by the push trigger.
 ```bash
 REQUESTED_REF=<branch-or-tag-or-sha>
 WORKFLOW_REF=<branch-or-tag-containing-live-tests-yml>
+CHECKOUT_REF=<exact-pushed-sha-or-requested-tag-or-sha>
 CORRELATION_ID="manual-live-$(date -u +%Y%m%dT%H%M%SZ)"
 CREATED_AFTER="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 gh workflow run live-tests.yml \
   --ref "$WORKFLOW_REF" \
-  -f ref="$REQUESTED_REF" \
+  -f ref="$CHECKOUT_REF" \
   -f correlation_id="$CORRELATION_ID"
 
 RUN_ID=""
@@ -167,8 +168,10 @@ gh run watch "$RUN_ID" --exit-status
 ```
 
 Branches and tags must be pushed to `origin` first; SHA inputs must be reachable
-from the repository so `actions/checkout` can fetch them. For a SHA, dispatch
-the workflow definition from a branch or tag and pass the SHA only as `ref`.
+from the repository so `actions/checkout` can fetch them. For branch refs,
+compare the local branch object id with the remote branch object id first, then
+pass that exact pushed SHA as `CHECKOUT_REF`. For an explicit SHA, dispatch the
+workflow definition from a branch or tag and pass the SHA only as `CHECKOUT_REF`.
 
 ## Runner hygiene (Lucius)
 

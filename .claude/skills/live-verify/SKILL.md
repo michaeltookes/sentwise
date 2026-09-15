@@ -34,18 +34,35 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
    REQUESTED_REF="${1:-$(git rev-parse --abbrev-ref HEAD)}"
    DEFAULT_BRANCH="$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"
    WORKFLOW_REF="$DEFAULT_BRANCH"
+   CHECKOUT_REF="$REQUESTED_REF"
    ```
 
    Prefer dispatching the workflow definition from the same branch/tag when that
-   branch/tag exists on `origin`. If the requested ref is a local branch that is
-   not pushed, stop and ask the owner to push it first. If it is a commit SHA,
-   dispatch the workflow definition from the default branch and let the workflow
-   checkout step use the SHA input.
+   branch/tag exists on `origin`. If the requested ref is a local branch, its
+   local object id must match the remote branch object id; otherwise stop and ask
+   the owner to push or sync it first. For a matched branch, pass the exact
+   pushed SHA through the workflow's checkout `ref` input so the run verifies the
+   code that was checked. If the requested ref is a commit SHA, dispatch the
+   workflow definition from the default branch and let the workflow checkout step
+   use the SHA input.
 
    ```bash
-   if git ls-remote --exit-code --heads origin "$REQUESTED_REF" >/dev/null 2>&1; then
+   REMOTE_BRANCH_OID="$(git ls-remote --heads origin "$REQUESTED_REF" | awk 'NR == 1 {print $1}')"
+   REMOTE_TAG_OID="$(git ls-remote --tags origin "$REQUESTED_REF" | awk 'NR == 1 {print $1}')"
+
+   if [ -n "$REMOTE_BRANCH_OID" ]; then
+     if git show-ref --verify --quiet "refs/heads/$REQUESTED_REF"; then
+       LOCAL_BRANCH_OID="$(git rev-parse "refs/heads/$REQUESTED_REF")"
+       if [ "$LOCAL_BRANCH_OID" != "$REMOTE_BRANCH_OID" ]; then
+         echo "error: branch '$REQUESTED_REF' differs from origin; push or sync it before live verification." >&2
+         echo "local:  $LOCAL_BRANCH_OID" >&2
+         echo "origin: $REMOTE_BRANCH_OID" >&2
+         exit 1
+       fi
+     fi
      WORKFLOW_REF="$REQUESTED_REF"
-   elif git ls-remote --exit-code --tags origin "$REQUESTED_REF" >/dev/null 2>&1; then
+     CHECKOUT_REF="$REMOTE_BRANCH_OID"
+   elif [ -n "$REMOTE_TAG_OID" ]; then
      WORKFLOW_REF="$REQUESTED_REF"
    elif git show-ref --verify --quiet "refs/heads/$REQUESTED_REF"; then
      echo "error: branch '$REQUESTED_REF' is not on origin; push it first." >&2
@@ -62,7 +79,7 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
    CREATED_AFTER="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
    gh workflow run live-tests.yml \
      --ref "$WORKFLOW_REF" \
-     -f ref="$REQUESTED_REF" \
+     -f ref="$CHECKOUT_REF" \
      -f correlation_id="$CORRELATION_ID"
    ```
 
