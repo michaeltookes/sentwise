@@ -44,10 +44,10 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
    Prefer dispatching the workflow definition from the same branch/tag when that
    branch/tag exists on `origin`. Query fully qualified remote refs (not suffix
    patterns) so `foo` cannot accidentally match `team/foo`. If the requested ref
-   is a local branch, its local object id must match the remote branch object id;
+   is a local branch or tag, its local object id must match the remote object id;
    otherwise stop and ask the owner to push or sync it first. For a matched
-   branch, pass the exact pushed SHA through the workflow's checkout `ref` input
-   so the run verifies the code that was checked. If the requested ref is a
+   branch or tag, pass the exact pushed SHA through the workflow's checkout `ref`
+   input so the run verifies the code that was checked. If the requested ref is a
    commit SHA, dispatch the workflow definition from the default branch and let
    the workflow checkout step use the SHA input.
 
@@ -65,6 +65,7 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
 
    REMOTE_BRANCH_OID="$(remote_oid_for_ref "refs/heads/$REQUESTED_REF")"
    REMOTE_TAG_OID="$(remote_oid_for_ref "refs/tags/$REQUESTED_REF")"
+   REMOTE_TAG_TARGET_OID="$(remote_oid_for_ref "refs/tags/$REQUESTED_REF^{}")"
 
    if [ -n "$REMOTE_BRANCH_OID" ]; then
      if git show-ref --verify --quiet "refs/heads/$REQUESTED_REF"; then
@@ -79,9 +80,22 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
      WORKFLOW_REF="$REQUESTED_REF"
      CHECKOUT_REF="$REMOTE_BRANCH_OID"
    elif [ -n "$REMOTE_TAG_OID" ]; then
+     if git show-ref --verify --quiet "refs/tags/$REQUESTED_REF"; then
+       LOCAL_TAG_OID="$(git rev-parse "refs/tags/$REQUESTED_REF")"
+       if [ "$LOCAL_TAG_OID" != "$REMOTE_TAG_OID" ]; then
+         echo "error: tag '$REQUESTED_REF' differs from origin; push or sync it before live verification." >&2
+         echo "local:  $LOCAL_TAG_OID" >&2
+         echo "origin: $REMOTE_TAG_OID" >&2
+         exit 1
+       fi
+     fi
      WORKFLOW_REF="$REQUESTED_REF"
+     CHECKOUT_REF="${REMOTE_TAG_TARGET_OID:-$REMOTE_TAG_OID}"
    elif git show-ref --verify --quiet "refs/heads/$REQUESTED_REF"; then
      echo "error: branch '$REQUESTED_REF' is not on origin; push it first." >&2
+     exit 1
+   elif git show-ref --verify --quiet "refs/tags/$REQUESTED_REF"; then
+     echo "error: tag '$REQUESTED_REF' is not on origin; push it first." >&2
      exit 1
    else
      echo "info: dispatching live-tests.yml from '$WORKFLOW_REF' and checking out '$REQUESTED_REF'."

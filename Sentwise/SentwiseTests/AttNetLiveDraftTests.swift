@@ -75,10 +75,9 @@ final class AttNetLiveDraftTests: XCTestCase {
         app.mailHost = credentials.host
         app.mailPort = credentials.port
 
-        // Save through the normal save path (IMAP APPEND to Drafts with \Draft).
-        try await app.performSave(draft, credentials: credentials)
-
         do {
+            // Save through the normal save path (IMAP APPEND to Drafts with \Draft).
+            try await app.performSave(draft, credentials: credentials)
             try await verifySavedDraft(
                 provider: provider,
                 credentials: credentials,
