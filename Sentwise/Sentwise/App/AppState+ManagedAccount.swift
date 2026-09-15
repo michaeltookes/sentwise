@@ -202,7 +202,9 @@ extension AppState {
     /// Deletes the Sentwise account server-side (`DELETE /v1/me`, item 73), then
     /// clears or durably invalidates the managed credentials locally. Returns
     /// `true` when the account was deleted and local credentials cannot restore it.
-    /// Local mail, voice profile, drafts, and settings on this Mac are untouched.
+    /// Local mail, voice profile, drafts, and settings on this Mac are untouched
+    /// unless `purgeLocalData` is set, in which case the account-scoped mail
+    /// artifacts are also purged after a successful deletion (item 96).
     /// On failure the account is kept and `managedError` carries the mapped message.
     /// In Prowl hunt mode this is a
     /// deterministic, zero-network no-op that reports success without tearing down
@@ -210,6 +212,7 @@ extension AppState {
     /// injectable for unit tests.
     @discardableResult
     func deleteManagedAccount(
+        purgeLocalData: Bool = false,
         isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
         messageSurface: TransientMessageSurface = .shared
     ) async -> Bool {
@@ -257,6 +260,13 @@ extension AppState {
         }
         applyManagedSignedOutState(clearEmailInput: true, messageSurface: messageSurface)
         didDeleteManagedAccount = true
+        // Server-side deletion removes the Sentwise account; the local mailbox
+        // cache is separate. If the user asked, purge the account-scoped mail
+        // artifacts on this Mac too (item 96) — the confirmation states plainly
+        // that this is what stays local otherwise.
+        if purgeLocalData {
+            purgeLocalMailArtifacts()
+        }
         saveSettings()
         return true
     }

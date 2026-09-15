@@ -493,14 +493,17 @@ reachability signal (item 27) rather than a parallel network monitor.
 server-side usage counters); `401` → `LLMError.managedNotSignedIn`; `502
 account_deletion_failed` → `LLMError.managedAccountDeletionFailed` (kept account,
 retryable). The pane's confirmation sheet (`DeleteAccountSheet`) states exactly
-what is removed (Sentwise account + server-side usage counters) and what is not
-(mail, voice profile, drafts, and settings on this Mac), and gates the action
-behind typing `DELETE`. On `204`, `AppState.deleteManagedAccount` clears the
-managed credentials locally (`ManagedAccountService.signOut` semantics — see
-**Sign-out and server-side session revocation** below), resets
-to the managed-signed-out state, and flips `didDeleteManagedAccount` for the
-brief signed-out confirmation. Local data is untouched. On failure the account is
-kept and the mapped message is shown.
+what is removed (Sentwise account + server-side usage counters) and what stays
+local by default (mail, voice profile, drafts, and settings on this Mac), and
+gates the action behind typing `DELETE`. It also offers an opt-in — **"Also erase
+my local mail data on this Mac"** — that, on success, runs the account-scoped
+local-data purge (item 96; see `AppState+LocalDataPurge`). On `204`,
+`AppState.deleteManagedAccount(purgeLocalData:)` clears the managed credentials
+locally (`ManagedAccountService.signOut` semantics — see **Sign-out and
+server-side session revocation** below), resets to the managed-signed-out state,
+flips `didDeleteManagedAccount` for the brief signed-out confirmation, and — when
+the opt-in was set — purges the local mail artifacts. Otherwise local data is
+untouched. On failure the account is kept and the mapped message is shown.
 
 ### Sign-out and server-side session revocation
 

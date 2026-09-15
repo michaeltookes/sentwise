@@ -131,6 +131,19 @@ guardrails:
     - "Test"
     - "test"
     - "Disconnect"
+    # Local-data purge / erase (item 96). Disconnect and remove-account now offer a
+    # "…& Erase Local Data" variant alongside the plain one; both variants mutate
+    # persisted state, so they are forbidden. The plain disconnect opener is already
+    # caught by "Disconnect" (open-and-assert); its id is intentionally not forbidden
+    # so a hunt can see it. "Erase"/"erase" cover the erase-all button, its typed
+    # confirmation sheet, and every "…& Erase…" label/id; the "…Only" ids below cover
+    # the non-erase destructive variants that neither "Disconnect" nor "Remove " catch.
+    # In hunt mode the persistence seam is the in-memory provider, so even a stray
+    # activation would be disk-free — but these still change observable state.
+    - "Erase"
+    - "erase"
+    - "disconnectOnly"
+    - "removeAccountOnly"
     - "Search"
     - "search"
     - "Start"

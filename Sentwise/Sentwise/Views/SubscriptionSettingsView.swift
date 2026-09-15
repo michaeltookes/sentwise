@@ -194,14 +194,16 @@ struct SubscriptionSettingsView: View {
 }
 
 /// Confirmation sheet for irreversible account deletion (item 73). States exactly
-/// what is removed (Sentwise account + server-side usage counters) and what is
-/// not (mail, voice profile, drafts, and settings on this Mac), and gates the
+/// what is removed (Sentwise account + server-side usage counters) and what stays
+/// local by default (mail, voice profile, drafts, and settings on this Mac), while
+/// offering an opt-in to also erase the local mail data (item 96). Gates the
 /// destructive action behind typing `DELETE`.
 struct DeleteAccountSheet: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var confirmText = ""
     @State private var isDeleting = false
+    @State private var alsoEraseLocalData = false
     @State private var errorMessage: String?
 
     private var canConfirm: Bool { confirmText == "DELETE" && !isDeleting }
@@ -219,9 +221,21 @@ struct DeleteAccountSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("This does NOT touch anything on this Mac:").font(.callout).bold()
+                Text("By default this does NOT touch anything on this Mac:").font(.callout).bold()
                 Text("• Your mail\n• Your learned voice profile\n• Your drafts\n• Your settings")
                     .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Toggle(isOn: $alsoEraseLocalData) {
+                Text("Also erase my local mail data on this Mac")
+            }
+            .accessibilityIdentifier("deleteAccountAlsoEraseLocalData")
+            .accessibilityLabel("Also erase local mail data on this Mac")
+            if alsoEraseLocalData {
+                Text("Deletes this Mac's cached mail — pending drafts, activity history, learned "
+                     + "voice profile, and the skipped-message log. Your settings and mailbox are kept.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
@@ -268,7 +282,10 @@ struct DeleteAccountSheet: View {
     private func performDelete() async {
         errorMessage = nil
         isDeleting = true
-        let succeeded = await appState.deleteManagedAccount(messageSurface: .settings)
+        let succeeded = await appState.deleteManagedAccount(
+            purgeLocalData: alsoEraseLocalData,
+            messageSurface: .settings
+        )
         isDeleting = false
         if succeeded {
             dismiss()
