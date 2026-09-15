@@ -25,30 +25,46 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
 
 ## What it does
 
-1. **Resolve the requested checkout ref.** Default to the current branch; accept
-   an explicit ref argument (branch, tag, or SHA). A SHA is passed only through
-   the workflow's `ref` input; the workflow file itself must be dispatched from
-   a branch or tag.
+1. **Resolve the requested checkout ref.** Default to the current branch, or to
+   the checked-out commit SHA when the invoking checkout is detached; accept an
+   explicit ref argument (branch, tag, or SHA). A SHA is passed only through the
+   workflow's `ref` input; the workflow file itself must be dispatched from a
+   branch or tag.
 
    ```bash
    REQUESTED_REF="${1:-$(git rev-parse --abbrev-ref HEAD)}"
+   if [ "$REQUESTED_REF" = "HEAD" ]; then
+     REQUESTED_REF="$(git rev-parse HEAD)"
+   fi
    DEFAULT_BRANCH="$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"
    WORKFLOW_REF="$DEFAULT_BRANCH"
    CHECKOUT_REF="$REQUESTED_REF"
    ```
 
    Prefer dispatching the workflow definition from the same branch/tag when that
-   branch/tag exists on `origin`. If the requested ref is a local branch, its
-   local object id must match the remote branch object id; otherwise stop and ask
-   the owner to push or sync it first. For a matched branch, pass the exact
-   pushed SHA through the workflow's checkout `ref` input so the run verifies the
-   code that was checked. If the requested ref is a commit SHA, dispatch the
-   workflow definition from the default branch and let the workflow checkout step
-   use the SHA input.
+   branch/tag exists on `origin`. Query fully qualified remote refs (not suffix
+   patterns) so `foo` cannot accidentally match `team/foo`. If the requested ref
+   is a local branch, its local object id must match the remote branch object id;
+   otherwise stop and ask the owner to push or sync it first. For a matched
+   branch, pass the exact pushed SHA through the workflow's checkout `ref` input
+   so the run verifies the code that was checked. If the requested ref is a
+   commit SHA, dispatch the workflow definition from the default branch and let
+   the workflow checkout step use the SHA input.
 
    ```bash
-   REMOTE_BRANCH_OID="$(git ls-remote --heads origin "$REQUESTED_REF" | awk 'NR == 1 {print $1}')"
-   REMOTE_TAG_OID="$(git ls-remote --tags origin "$REQUESTED_REF" | awk 'NR == 1 {print $1}')"
+   remote_oid_for_ref() {
+     full_ref="$1"
+     matches="$(git ls-remote origin "$full_ref" | awk -v ref="$full_ref" '$2 == ref {print $1}')"
+     match_count="$(printf '%s\n' "$matches" | sed '/^$/d' | wc -l | tr -d ' ')"
+     if [ "$match_count" -gt 1 ]; then
+       echo "error: origin returned multiple matches for '$full_ref'; refusing to guess." >&2
+       exit 1
+     fi
+     printf '%s\n' "$matches" | sed -n '1p'
+   }
+
+   REMOTE_BRANCH_OID="$(remote_oid_for_ref "refs/heads/$REQUESTED_REF")"
+   REMOTE_TAG_OID="$(remote_oid_for_ref "refs/tags/$REQUESTED_REF")"
 
    if [ -n "$REMOTE_BRANCH_OID" ]; then
      if git show-ref --verify --quiet "refs/heads/$REQUESTED_REF"; then
