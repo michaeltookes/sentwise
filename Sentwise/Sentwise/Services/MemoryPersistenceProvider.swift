@@ -127,6 +127,45 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         saveDraftFeedback(records)
     }
 
+    // MARK: - Local-data purge (item 96)
+
+    func removeProcessedMessages() {
+        withLock { processedMessages = ProcessedMessages() }
+    }
+
+    func removePendingDrafts() {
+        withLock { pendingDrafts = [] }
+    }
+
+    func removeSkippedMessages() {
+        withLock { skippedMessages = [] }
+    }
+
+    func removeApprovedDraftIdentities() {
+        withLock { approvedDraftIdentities = [] }
+    }
+
+    func removeActivityEvents() {
+        withLock { activityEvents = [] }
+    }
+
+    func removeDraftFeedback() {
+        withLock { draftFeedback = [] }
+    }
+
+    func eraseAllLocalData() {
+        withLock {
+            settings = Settings.default.validated()
+            voiceProfile = nil
+            processedMessages = ProcessedMessages()
+            pendingDrafts = []
+            skippedMessages = []
+            approvedDraftIdentities = []
+            activityEvents = []
+            draftFeedback = []
+        }
+    }
+
     private func withLock<Value>(_ body: () throws -> Value) rethrows -> Value {
         lock.lock()
         defer { lock.unlock() }

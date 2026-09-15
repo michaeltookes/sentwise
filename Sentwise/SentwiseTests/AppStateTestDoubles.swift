@@ -65,7 +65,10 @@ final class AppStateMemoryPersistence: PersistenceProvider {
 
     func loadVoiceProfile() -> VoiceProfile? { voiceProfile }
     func saveVoiceProfile(_ profile: VoiceProfile) { voiceProfile = profile }
-    func removeVoiceProfile() { voiceProfile = nil }
+    func removeVoiceProfile() {
+        voiceProfile = nil
+        removedArtifacts.append("voice")
+    }
 
     func loadProcessedMessages() -> ProcessedMessages { processedMessages }
     func saveProcessedMessages(_ processed: ProcessedMessages) {
@@ -126,6 +129,53 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         }
         draftFeedback = records
         draftFeedbackSyncSaveCount += 1
+    }
+
+    // MARK: - Local-data purge (item 96)
+
+    private(set) var removedArtifacts: [String] = []
+    private(set) var eraseAllCount = 0
+
+    func removeProcessedMessages() {
+        processedMessages = ProcessedMessages()
+        removedArtifacts.append("processed")
+    }
+
+    func removePendingDrafts() {
+        pendingDrafts = []
+        removedArtifacts.append("pending")
+    }
+
+    func removeSkippedMessages() {
+        skippedMessages = []
+        removedArtifacts.append("skipped")
+    }
+
+    func removeApprovedDraftIdentities() {
+        approvedDraftIdentities = []
+        removedArtifacts.append("approved")
+    }
+
+    func removeActivityEvents() {
+        activityEvents = []
+        removedArtifacts.append("activity")
+    }
+
+    func removeDraftFeedback() {
+        draftFeedback = []
+        removedArtifacts.append("feedback")
+    }
+
+    func eraseAllLocalData() {
+        settings = .default
+        voiceProfile = nil
+        processedMessages = ProcessedMessages()
+        pendingDrafts = []
+        skippedMessages = []
+        approvedDraftIdentities = []
+        activityEvents = []
+        draftFeedback = []
+        eraseAllCount += 1
     }
 }
 

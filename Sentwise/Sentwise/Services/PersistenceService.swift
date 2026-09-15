@@ -54,6 +54,50 @@ protocol PersistenceProvider {
     /// Persists the feedback store synchronously, used during graceful termination
     /// so recent terminal draft signals are durable before process exit.
     func saveDraftFeedbackSync(_ records: [DraftFeedbackRecord]) throws
+
+    // MARK: - Local-data purge (item 96)
+
+    /// Removes the stored processed-message dedup set.
+    func removeProcessedMessages()
+    /// Removes the stored pending drafts (full incoming bodies + generated drafts).
+    func removePendingDrafts()
+    /// Removes the stored recoverable-skip log (sender + subject per entry).
+    func removeSkippedMessages()
+    /// Removes the stored approved-draft tombstone identities.
+    func removeApprovedDraftIdentities()
+    /// Removes the stored activity history (sender + subject per event).
+    func removeActivityEvents()
+    /// Removes the stored approval-signal feedback records.
+    func removeDraftFeedback()
+
+    /// Erases every locally persisted store this provider owns, returning it to a
+    /// pristine first-run state — the app-global Settings file included. For the
+    /// file-backed provider this clears everything under the app's Application
+    /// Support directory; for the in-memory provider it resets every store to its
+    /// default. Backs the Settings "Erase all local data" action (item 96).
+    func eraseAllLocalData()
+}
+
+extension PersistenceProvider {
+
+    /// Purges every account-scoped, mail-content-bearing artifact — the voice
+    /// profile, processed-message dedup, pending drafts, recoverable skips,
+    /// approved-draft tombstones, activity history, and approval-signal feedback —
+    /// while leaving the app-global Settings file intact. With the single-account
+    /// architecture every one of these is effectively account-scoped: each is keyed
+    /// to (or derived from) the connected mailbox's mail, so "disconnected" can mean
+    /// the cached mail content is actually gone (item 96 / security finding A-L2).
+    /// Runs through the persistence seam, so it is disk-free under the in-memory
+    /// provider used by Prowl hunts and tests.
+    func purgeAccountScopedArtifacts() {
+        removeVoiceProfile()
+        removeProcessedMessages()
+        removePendingDrafts()
+        removeSkippedMessages()
+        removeApprovedDraftIdentities()
+        removeActivityEvents()
+        removeDraftFeedback()
+    }
 }
 
 /// File-based persistence for non-secret application settings.
@@ -68,6 +112,7 @@ final class PersistenceService: PersistenceProvider {
 
     // MARK: - Properties
 
+    private let directory: URL
     private let settingsURL: URL
     private let voiceProfileURL: URL
     private let processedMessagesURL: URL
@@ -99,6 +144,7 @@ final class PersistenceService: PersistenceProvider {
             .first!
         let directory = appSupport.appendingPathComponent("Sentwise", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        self.directory = directory
         settingsURL = directory.appendingPathComponent("Settings.json")
         voiceProfileURL = directory.appendingPathComponent("VoiceProfile.json")
         processedMessagesURL = directory.appendingPathComponent("ProcessedMessages.json")
@@ -349,6 +395,57 @@ final class PersistenceService: PersistenceProvider {
         } catch {
             logger.error("Failed to save draft feedback (sync): \(error.localizedDescription)")
             throw error
+        }
+    }
+
+    // MARK: - Local-data purge (item 96)
+
+    func removeProcessedMessages() {
+        removeFile(at: processedMessagesURL)
+    }
+
+    func removePendingDrafts() {
+        removeFile(at: pendingDraftsURL)
+    }
+
+    func removeSkippedMessages() {
+        removeFile(at: skippedMessagesURL)
+    }
+
+    func removeApprovedDraftIdentities() {
+        removeFile(at: approvedDraftsURL)
+    }
+
+    func removeActivityEvents() {
+        removeFile(at: activityEventsURL)
+    }
+
+    func removeDraftFeedback() {
+        removeFile(at: draftFeedbackURL)
+    }
+
+    private func removeFile(at url: URL) {
+        ioQueue.async {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    func eraseAllLocalData() {
+        // Remove the whole Application Support subtree — not just the known JSON
+        // files — so "erase all local data" leaves nothing behind (any stray or
+        // future file included), then recreate the empty directory so subsequent
+        // saves have somewhere to land. Synchronous so callers observe a clean
+        // slate before they reset in-memory state.
+        ioQueue.sync { [directory] in
+            let fileManager = FileManager.default
+            do {
+                if fileManager.fileExists(atPath: directory.path) {
+                    try fileManager.removeItem(at: directory)
+                }
+            } catch {
+                logger.error("Failed to erase local data directory: \(error.localizedDescription)")
+            }
+            try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
     }
 }
