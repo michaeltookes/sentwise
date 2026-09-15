@@ -6,6 +6,7 @@ import SwiftUI
 /// dedicated tabs).
 struct GeneralSettingsView: View {
     @EnvironmentObject var appState: AppState
+    @State private var showEraseAllSheet = false
 
     var body: some View {
         Form {
@@ -108,8 +109,26 @@ struct GeneralSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Local data") {
+                Button("Erase all local data", role: .destructive) {
+                    showEraseAllSheet = true
+                }
+                .accessibilityIdentifier("eraseAllData")
+                .accessibilityLabel("Erase all local data")
+                Text("Deletes everything Sentwise stores on this Mac — accounts, drafts, "
+                     + "activity, learned voice profile, settings, and Keychain secrets — and "
+                     + "returns the app to its first-run state. Your mailbox is never touched.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("eraseAllDataInfo")
+            }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $showEraseAllSheet) {
+            EraseAllDataSheet()
+                .environmentObject(appState)
+        }
     }
 
     private func chooseWatchedFolder() {

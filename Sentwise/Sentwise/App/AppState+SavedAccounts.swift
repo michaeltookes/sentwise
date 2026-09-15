@@ -305,7 +305,17 @@ extension AppState {
     /// secret and drops it from the list. If it was the active account, the app
     /// goes offline and the account inputs are cleared. Other accounts' secrets
     /// are never touched.
-    func removeSavedAccount(_ account: SavedMailAccount, messageSurface: TransientMessageSurface = .shared) {
+    ///
+    /// When `purgeLocalData` is set (the user chose "Remove & erase local data"),
+    /// the account-scoped mail artifacts are purged after a successful removal
+    /// (item 96). With the single-account architecture these stores belong to the
+    /// account being removed, so the purge runs regardless of whether it was the
+    /// active one; it never runs if the Keychain/settings mutation rolls back.
+    func removeSavedAccount(
+        _ account: SavedMailAccount,
+        purgeLocalData: Bool = false,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
         setConnectionError(nil, for: messageSurface)
         guard !isConnecting else {
             setConnectionError("Wait for the current connection test to finish before removing an account.", for: messageSurface)
@@ -368,6 +378,9 @@ extension AppState {
         if shouldClearCurrentAccount || ownsWorkspaceGuidance { clearWorkspaceAuthGuidance(for: messageSurface) }
         if shouldClearCurrentAccount {
             goOfflineAfterRemovingActiveAccount()
+        }
+        if purgeLocalData {
+            purgeLocalMailArtifacts()
         }
         logger.info("Saved account removed")
     }

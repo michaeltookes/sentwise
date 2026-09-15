@@ -155,8 +155,16 @@ extension AppState {
             && lhs.port == rhs.port
     }
 
-    /// Disconnects the mailbox by clearing the stored app password.
-    func disconnectMail(messageSurface: TransientMessageSurface = .shared) {
+    /// Disconnects the mailbox by clearing the stored app password. When
+    /// `purgeLocalData` is set (the user chose "Disconnect & erase local data" in
+    /// the confirmation), the account-scoped mail artifacts are purged after a
+    /// successful disconnect so "disconnected" means the cached mail is gone
+    /// (item 96). The purge runs only once the disconnect itself succeeds — a
+    /// rollback path leaves both the account and its data untouched.
+    func disconnectMail(
+        purgeLocalData: Bool = false,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
         setConnectionError(nil, for: messageSurface)
         clearWorkspaceAuthGuidance(for: messageSurface)
         guard !isConnecting else {
@@ -185,6 +193,9 @@ extension AppState {
         stopWatching()
         resetMessagePreviewForAccountChange(clearSkippedMessages: false)
         skippedMessages = []
+        if purgeLocalData {
+            purgeLocalMailArtifacts()
+        }
         logger.info("Mailbox disconnected")
     }
 
