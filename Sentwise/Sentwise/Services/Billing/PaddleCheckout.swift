@@ -46,9 +46,9 @@ struct PaddleCheckoutRequest: Equatable, Sendable {
 /// (`paddle.ready` when init + open succeeds, `paddle.failed` when the script or
 /// initialization fails to load).
 enum PaddleBridgeEvent: Equatable, Sendable {
-    /// The checkout overlay actually opened — `paddle.opened` (posted by the
-    /// harness right after `Paddle.Checkout.open(...)` succeeds) or Paddle's own
-    /// `checkout.loaded`. Drives the transition to `.presenting`. Note: the
+    /// The checkout overlay has started presenting — `paddle.opened` (posted by
+    /// the harness right after `Paddle.Checkout.open(...)` succeeds) or Paddle's
+    /// own `checkout.loaded`. Drives the transition to `.presenting`. Note: the
     /// harness's `paddle.ready` (fired on `Paddle.Initialize`, before any overlay
     /// is opened) is intentionally *not* mapped here — with the async
     /// transaction fetch it can fire long before the overlay opens.

@@ -9,10 +9,10 @@ import Foundation
 /// The page exposes `window.sentwiseOpenCheckout(argsObject)`, which Swift calls
 /// (via `evaluateJavaScript`) with the `{ transactionId }` argument once the
 /// server has minted the transaction and the page is ready. The harness emits
-/// three non-Paddle signals: `paddle.ready` (script loaded + initialized),
-/// `paddle.opened` (the overlay was actually opened), and `paddle.failed` (load
-/// or init error), so the Swift model can tell a wiring failure from a user close
-/// and only mark the checkout "presenting" once the overlay truly opens.
+/// non-Paddle signals for its own state: `paddle.ready` (script loaded +
+/// initialized), `paddle.opened` (the open call was accepted), and
+/// `paddle.failed` (load or init error). Paddle's own `checkout.loaded` callback
+/// is forwarded separately once the real overlay has rendered.
 enum PaddleCheckoutHTML {
 
     /// The full HTML document string for `config`. Load it into a WKWebView with
@@ -131,9 +131,8 @@ enum PaddleCheckoutHTML {
             Paddle.Checkout.open(__pendingArgs);
             __pendingArgs = null;
             setStatus("Complete your purchase in the checkout window.");
-            // Signal that the overlay actually opened. With the server-minted
-            // transaction the open is async from init, so this — not paddle.ready
-            // (init only) — is what advances the app to the presenting state.
+            // Signal that the open call was accepted. Paddle later emits
+            // checkout.loaded when the real overlay has rendered.
             post("paddle.opened");
           } catch (e) {
             post("paddle.failed", e && e.message ? e.message : e);
@@ -157,6 +156,7 @@ enum PaddleCheckoutHTML {
                 post("paddle.debug", name);
                 if (name === "checkout.completed") { post("checkout.completed"); }
                 else if (name === "checkout.closed") { post("checkout.closed"); }
+                else if (name === "checkout.loaded") { post("checkout.loaded"); }
                 else if (name === "checkout.error") {
                   var code = checkoutErrorCode(data);
                   if (code) { post("paddle.errorMeta", code); }

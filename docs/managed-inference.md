@@ -179,12 +179,22 @@ completed by a hijacked callback.
 
 - **Google sign-in was deferred out of 56a and delivered in item 59** (above).
   Email code remains the other enabled method.
-- The native flow is implemented to Clerk's Frontend-API spec. It is fully
-  unit-tested, but a real end-to-end sign-in against the live dev instance
-  (which needs an email inbox for the code) has **not** been exercised in CI.
-  The env-gated live test (`ManagedInferenceLiveTests`) verifies the **Worker**
-  (`/v1/me`, `/v1/draft`) with a manually supplied session token via
-  `SENTWISE_LIVE_CLERK_SESSION_TOKEN` + `SENTWISE_INFERENCE_URL`.
+- The native flow is implemented to Clerk's Frontend-API spec and is covered by
+  the env-gated `ClerkLiveSignInTests` test address flow. `ManagedInferenceLiveTests`
+  verifies the **Worker** by minting a fresh Clerk session token during the run
+  via `SENTWISE_LIVE_CLERK_TEST`, then calling the deployed URL supplied in
+  `SENTWISE_INFERENCE_URL`. `SENTWISE_LIVE_MANAGED_INFERENCE` is the explicit
+  gate for the `/v1/me` account-shape payload so no short-lived Clerk JWT is
+  stored as a repo secret. The live `/v1/draft` spend check is additionally gated
+  by `SENTWISE_LIVE_MANAGED_DRAFT` and uses
+  `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL`, a dedicated Clerk test email whose Worker
+  account has a durable entitlement or trial bypass and cannot age out of the
+  normal trial under recurring push-to-main runs. The live
+  `/v1/paddle/manage-billing` portal-link fetch is separately gated by
+  `SENTWISE_LIVE_MANAGED_PORTAL` and uses
+  `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL`, a subscribed Clerk test email; it fetches
+  the fresh authenticated Paddle customer-portal-session URL only and never opens
+  the billing portal.
 
 ## Settings migration (14 → 15)
 
@@ -685,3 +695,11 @@ shell `env` (or `TEST_RUNNER_…`) does **not** propagate into a macOS app-hoste
 → `test-without-building -destination 'platform=macOS'`). Google/OpenRouter remain browser
 round-trips and are not automatable as live tests — they are covered by the deterministic hunt-mode
 fake and unit tests instead.
+
+**Automated pipeline (item 97):** this `.xctestrun` env-injection recipe is what the
+`.github/workflows/live-tests.yml` workflow runs on the **Lucius** self-hosted runner, via the
+shellcheck-clean `Distribution/scripts/inject-live-env.sh` (it writes every provisioned
+`SENTWISE_LIVE_*` repo secret into the xctestrun's `EnvironmentVariables`, logging names only).
+The workflow runs on merge to `main` and on demand through the `/live-verify` skill; it is the
+standing home for `ClerkLiveSignInTests`, `PaddleCheckoutLiveTests`, and the mailbox live tests.
+See `docs/live-testing.md`.
