@@ -25,7 +25,8 @@ Paddle **sandbox**, and live IMAP mailboxes — and drafting spends real Anthrop
 budget. Running them on every PR commit would be slow, flaky, and costly. So they
 run only:
 
-- **on `push` to `main`** — every merge is re-verified automatically; and
+- **on `push` to `main`** — every merge is re-verified automatically at its
+  triggering `github.sha`; and
 - **on `workflow_dispatch`** with a `ref` input — on demand for a branch, which
   is what `/live-verify` triggers.
 
