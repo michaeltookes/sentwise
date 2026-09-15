@@ -41,15 +41,17 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
    CHECKOUT_REF="$REQUESTED_REF"
    ```
 
-   Prefer dispatching the workflow definition from the same branch/tag when that
-   branch/tag exists on `origin`. Query fully qualified remote refs (not suffix
-   patterns) so `foo` cannot accidentally match `team/foo`. If the requested ref
-   is a local branch or tag, its local object id must match the remote object id;
-   otherwise stop and ask the owner to push or sync it first. For a matched
-   branch or tag, pass the exact pushed SHA through the workflow's checkout `ref`
-   input so the run verifies the code that was checked. If the requested ref is a
-   commit SHA, dispatch the workflow definition from the default branch and let
-   the workflow checkout step use the SHA input.
+   Prefer dispatching the workflow definition from the same branch/tag only when
+   that branch/tag exists on `origin` and contains `.github/workflows/live-tests.yml`.
+   Query fully qualified remote refs (not suffix patterns) so `foo` cannot
+   accidentally match `team/foo`. If the requested ref is a local branch or tag,
+   its local object id must match the remote object id; otherwise stop and ask
+   the owner to push or sync it first. For a matched branch or tag, pass the exact
+   pushed SHA through the workflow's checkout `ref` input so the run verifies the
+   code that was checked. If the requested remote branch/tag is historical and
+   lacks the workflow file, or if the requested ref is a commit SHA, dispatch the
+   workflow definition from the default branch and let the workflow checkout step
+   use the exact requested SHA/OID input.
 
    ```bash
    remote_oid_for_ref() {
@@ -61,6 +63,16 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
        exit 1
      fi
      printf '%s\n' "$matches" | sed -n '1p'
+   }
+
+   remote_ref_has_live_workflow() {
+     full_ref="$1"
+     checkout_oid="$2"
+     if ! git fetch --quiet origin "$full_ref" >/dev/null 2>&1; then
+       echo "warning: could not fetch '$full_ref' to inspect workflow file; dispatching from default branch." >&2
+       return 1
+     fi
+     git cat-file -e "$checkout_oid:.github/workflows/live-tests.yml" 2>/dev/null
    }
 
    REMOTE_BRANCH_OID="$(remote_oid_for_ref "refs/heads/$REQUESTED_REF")"
@@ -77,8 +89,12 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
          exit 1
        fi
      fi
-     WORKFLOW_REF="$REQUESTED_REF"
      CHECKOUT_REF="$REMOTE_BRANCH_OID"
+     if remote_ref_has_live_workflow "refs/heads/$REQUESTED_REF" "$CHECKOUT_REF"; then
+       WORKFLOW_REF="$REQUESTED_REF"
+     else
+       echo "info: origin branch '$REQUESTED_REF' lacks live-tests.yml; dispatching from '$WORKFLOW_REF'."
+     fi
    elif [ -n "$REMOTE_TAG_OID" ]; then
      if git show-ref --verify --quiet "refs/tags/$REQUESTED_REF"; then
        LOCAL_TAG_OID="$(git rev-parse "refs/tags/$REQUESTED_REF")"
@@ -89,8 +105,12 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
          exit 1
        fi
      fi
-     WORKFLOW_REF="$REQUESTED_REF"
      CHECKOUT_REF="${REMOTE_TAG_TARGET_OID:-$REMOTE_TAG_OID}"
+     if remote_ref_has_live_workflow "refs/tags/$REQUESTED_REF" "$CHECKOUT_REF"; then
+       WORKFLOW_REF="$REQUESTED_REF"
+     else
+       echo "info: origin tag '$REQUESTED_REF' lacks live-tests.yml; dispatching from '$WORKFLOW_REF'."
+     fi
    elif git show-ref --verify --quiet "refs/heads/$REQUESTED_REF"; then
      echo "error: branch '$REQUESTED_REF' is not on origin; push it first." >&2
      exit 1
