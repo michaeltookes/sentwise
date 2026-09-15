@@ -44,14 +44,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
    - ✅ Connected-account indicator and a "disconnect" action in Settings (disconnect clears the token, keeps credentials).
    - ⬜ **Remaining:** verify the live end-to-end consent flow against a real Google client; **empirically verify refresh-token lifetime** (Testing vs Production) and document the setup so users avoid weekly re-auth; optionally show the connected account's email address; consider server-side token revocation on disconnect.
 
-96. **Purge local mail artifacts on disconnect / account removal (+ "erase all local data")** — *from security-pass finding A-L2; privacy-product expectation gap*
-    Disconnecting or removing a mail account deletes the Keychain password and settings entry but leaves `PendingDrafts.json` (full message bodies + drafts), `ActivityEvents.json` (sender + subject per event), `VoiceProfile.json`, `ProcessedMessages.json`, and `SkippedMessages.json` on disk; `deleteManagedAccount` documents leaving local data. For a nothing-stored privacy product, "remove my account" should mean the mail content is gone.
-    *As a privacy-conscious user removing a mailbox, I want its locally cached mail content actually deleted, so that "disconnected" means gone.*
-    - Disconnect/remove-account purges (or explicitly offers to purge) the account-scoped artifacts above; managed-account deletion states clearly what stays local and offers the purge.
-    - A distinct "Erase all local data" action (Settings) that removes everything under Application Support and per-account Keychain entries, with a typed confirmation.
-    - Watcher/queue state stays consistent after purge (no resurrection of processed-message dedup for a re-added account unless intended — decide and document).
-    - Tests: purge coverage per file, erase-all, re-add-account behavior.
-
 74. **Launch readiness: clean-Mac verification, security pass, and the 1.0 release**
     The last item to close before inviting the public. Every release so far was tested on the maintainer's own configured Mac; a stranger's experience — Gatekeeper, fresh Keychain, no prior Application Support, TCC prompts — has never been observed.
     *As the maintainer, I want proof that a first-time user on a clean Mac gets from download to first draft without help, so that launch day isn't debugging day.*
