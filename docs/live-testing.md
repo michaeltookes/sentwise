@@ -13,8 +13,8 @@ division of labor is deliberate:
 Live testing is delegated to Lucius so the owner's own Mac is never locked up by
 a click-through, and so live regressions are caught automatically on merge.
 
-> The per-test details (what each live test exercises, its credentials, and how
-> to run one *locally* against your own account) live in
+> The per-test details (what each live test exercises and which credentials it
+> needs) live in
 > [`docs/live-verification.md`](live-verification.md). This document is about the
 > **pipeline**. The tests themselves are the payloads it runs.
 
@@ -198,7 +198,7 @@ Same constraint as `prowl-qa.yml` (see `.prowl/README.md`):
 - Known infra flake: `xcodebuild test` occasionally fails with undefined NIO
   symbols or a hung test runner — an environment flake, not a code bug. Recover
   by killing any stray `Sentwise` process, `rm -rf ./build`, `pkill xctest` and
-  `pkill testmanagerd`, then re-run. A reboot is never needed.
+  `pkill testmanagerd`, then re-run the workflow. A reboot is never needed.
 
 ## Adding a new live payload
 

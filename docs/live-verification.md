@@ -86,80 +86,15 @@ The SMTP submission host and port are **derived** from the IMAP host: a leading
 `imap.` is swapped for `smtp.` (Gmail: `smtp.gmail.com`) and the port defaults to
 `465` (implicit TLS). There is no separate SMTP credential.
 
-### `.env`
+## Execution
 
-Put the credentials in a repo-root `.env` file (it is **gitignored** — never
-commit it):
+Do **not** run these live tests locally on the owner's Mac. Use the Lucius
+pipeline documented in [`docs/live-testing.md`](live-testing.md): provision the
+repository secrets, dispatch `/live-verify` for branch verification, or rely on
+the automatic push-to-`main` workflow after merge. The workflow injects
+provisioned secrets into the `.xctestrun` via
+`Distribution/scripts/inject-live-env.sh` and keeps live execution on the
+self-hosted runner.
 
-```sh
-# .env — placeholders; fill in real values
-SENTWISE_LIVE_GMAIL_EMAIL=you@gmail.com
-SENTWISE_LIVE_GMAIL_APP_PASSWORD=xxxxxxxxxxxxxxxx
-# att.net (optional — only needed for AttNetLiveDraftTests)
-SENTWISE_LIVE_ATTNET_EMAIL=you@att.net
-SENTWISE_LIVE_ATTNET_APP_PASSWORD=xxxxxxxxxxxxxxxx
-```
-
-## How env vars reach the test process
-
-Under `xcodebuild test`, variables from the invoking shell are **not** inherited
-by the test process. They must be forwarded with the **`TEST_RUNNER_` prefix**:
-Xcode's test runner strips that prefix and passes the variable through to the
-test process's environment (where the test reads it under its bare name).
-
-This is verified: a plain `FOO=bar xcodebuild test …` leaves `FOO` invisible to
-the test (`ProcessInfo` returns `nil`), while `TEST_RUNNER_FOO=bar xcodebuild
-test …` makes the test see `FOO=bar`.
-
-## Working invocation
-
-Source `.env`, then forward each variable with the `TEST_RUNNER_` prefix. This
-runs only the Gmail live send test:
-
-```sh
-set -a; source .env; set +a
-
-xcodebuild test \
-  -project Sentwise/Sentwise.xcodeproj \
-  -scheme Sentwise \
-  -destination 'platform=macOS' \
-  -only-testing:SentwiseTests/GmailLiveSendTests \
-  TEST_RUNNER_SENTWISE_LIVE_GMAIL_EMAIL="$SENTWISE_LIVE_GMAIL_EMAIL" \
-  TEST_RUNNER_SENTWISE_LIVE_GMAIL_APP_PASSWORD="$SENTWISE_LIVE_GMAIL_APP_PASSWORD"
-```
-
-For the att.net draft test, swap the `-only-testing` target and forward the
-att.net vars instead:
-
-```sh
-set -a; source .env; set +a
-
-xcodebuild test \
-  -project Sentwise/Sentwise.xcodeproj \
-  -scheme Sentwise \
-  -destination 'platform=macOS' \
-  -only-testing:SentwiseTests/AttNetLiveDraftTests \
-  TEST_RUNNER_SENTWISE_LIVE_ATTNET_EMAIL="$SENTWISE_LIVE_ATTNET_EMAIL" \
-  TEST_RUNNER_SENTWISE_LIVE_ATTNET_APP_PASSWORD="$SENTWISE_LIVE_ATTNET_APP_PASSWORD"
-```
-
-`ReplyWorthinessLiveTests` reads the **same Gmail vars** — run it by swapping the
-`-only-testing` target to `SentwiseTests/ReplyWorthinessLiveTests` in the Gmail
-invocation above (it forwards `TEST_RUNNER_SENTWISE_LIVE_GMAIL_EMAIL` /
-`_APP_PASSWORD`). It is read-only, so nothing is sent or trashed.
-
-Optional host/port overrides forward the same way (e.g.
-`TEST_RUNNER_SENTWISE_LIVE_GMAIL_HOST="$SENTWISE_LIVE_GMAIL_HOST"`).
-
-Without the `TEST_RUNNER_` arguments the live tests skip and the rest of the
-suite runs normally.
-
-> **Never** print, echo, log, or commit credential values. `.env` is gitignored;
-> keep it that way. The docs above use placeholders only.
-
-## Known infra flakes
-
-`xcodebuild test` occasionally fails with undefined NIO symbols or a hung test
-runner. These are environment flakes, not code bugs. To recover: kill any stray
-`Sentwise` process, `rm -rf ./build`, `pkill` `xctest` and `testmanagerd`,
-then re-run. A reboot is never needed.
+> **Never** print, echo, log, or commit credential values. The pipeline docs use
+> secret names only.
