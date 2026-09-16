@@ -60,12 +60,14 @@ struct UsageAlert: Equatable, Sendable {
             )
         case .hundred:
             let body: String
+            // Parked 2026-09-16 (item 100): the "switch to your own key" option was
+            // removed — managed inference is the only shipped path.
             if quota.enforcement == .hard {
                 body = "You've reached your weekly \(unit) allotment. Buy more usage to keep "
-                    + "drafting, or switch to your own key for unlimited drafting.\(resetPhrase)"
+                    + "drafting.\(resetPhrase)"
             } else {
                 body = "You've reached your weekly \(unit) allotment. Drafting continues for now — "
-                    + "buy more usage or switch to your own key for unlimited drafting.\(resetPhrase)"
+                    + "buy more usage to stay ahead.\(resetPhrase)"
             }
             return UsageAlert(
                 identifier: identifier,

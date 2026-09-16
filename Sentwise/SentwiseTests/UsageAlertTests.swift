@@ -121,7 +121,9 @@ final class UsageAlertTests: XCTestCase {
             accountKey: accountA
         )
         XCTAssertTrue(alert.body.contains("Drafting continues"), alert.body)
-        XCTAssertTrue(alert.body.contains("your own key"), alert.body)
+        // Parked 2026-09-16 (item 100): the soft-cap copy no longer offers a BYO key.
+        XCTAssertTrue(alert.body.contains("buy more usage"), alert.body)
+        XCTAssertFalse(alert.body.contains("your own key"), alert.body)
     }
 
     func testHundredPercentHardCopyPointsToBuyMore() {

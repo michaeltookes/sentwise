@@ -136,7 +136,6 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertEqual(model.planText, "Pro")
         XCTAssertEqual(model.secondaryText?.hasPrefix("Renews"), true)
         XCTAssertFalse(model.isProblemState)
-        XCTAssertFalse(model.showsOwnKeyFallback)
     }
 
     func testActivePaidTiersEachShowTheirNameAndRenewal() {
@@ -184,7 +183,6 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertEqual(model.planText, "Trial")
         XCTAssertNil(model.secondaryText)
         XCTAssertFalse(model.isProblemState)
-        XCTAssertFalse(model.showsOwnKeyFallback)
     }
 
     func testLapsedShowsTrialEndedAndProblemState() {
@@ -192,8 +190,9 @@ final class SubscriptionModelTests: XCTestCase {
         let model = SubscriptionPaneModel.make(from: status(subscription: sub))
         XCTAssertEqual(model.planText, "Trial ended")
         XCTAssertTrue(model.isProblemState)
-        XCTAssertTrue(model.showsOwnKeyFallback)
-        XCTAssertEqual(model.secondaryText?.contains("your own AI key") ?? false, true)
+        // Parked 2026-09-16 (item 100): the paused copy no longer offers a BYO key.
+        XCTAssertEqual(model.secondaryText?.contains("paused") ?? false, true)
+        XCTAssertEqual(model.secondaryText?.contains("your own AI key") ?? false, false)
     }
 
     func testLapsedPaidPlanNamesThePlanNotTheTrial() {
@@ -241,7 +240,6 @@ final class SubscriptionModelTests: XCTestCase {
 
         XCTAssertEqual(model.planText, "Subscription unavailable")
         XCTAssertTrue(model.isProblemState)
-        XCTAssertTrue(model.showsOwnKeyFallback)
         XCTAssertEqual(model.secondaryText?.contains("couldn't confirm") ?? false, true)
     }
 
@@ -281,7 +279,6 @@ final class SubscriptionModelTests: XCTestCase {
 
         XCTAssertEqual(model.planText, "Pro")
         XCTAssertTrue(model.isProblemState)
-        XCTAssertTrue(model.showsOwnKeyFallback)
         XCTAssertEqual(model.secondaryText?.contains("payment") ?? false, true)
     }
 
@@ -342,7 +339,6 @@ final class SubscriptionModelTests: XCTestCase {
         let model = SubscriptionPaneModel.make(from: nil, snapshot: nil, statusIsFresh: false)
         XCTAssertEqual(model.planText, "Subscription unavailable")
         XCTAssertTrue(model.isProblemState)
-        XCTAssertTrue(model.showsOwnKeyFallback)
     }
 
     func testNilStatusIsNeutral() {

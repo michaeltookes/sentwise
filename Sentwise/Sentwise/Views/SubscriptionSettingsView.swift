@@ -101,14 +101,9 @@ struct SubscriptionSettingsView: View {
                     .foregroundStyle(model.isProblemState ? .red : .secondary)
                     .accessibilityIdentifier("subscriptionPlanDetail")
             }
-            if model.showsOwnKeyFallback {
-                Button("Use your own AI key instead") {
-                    appState.openSettingsHandler?(.ai)
-                }
-                .buttonStyle(.link)
-                .accessibilityIdentifier("subscriptionOwnKeyFallback")
-                .accessibilityLabel("Switch to using your own AI key")
-            }
+            // The "use your own AI key" fallback link was parked 2026-09-16 (item
+            // 100): managed inference is the only shipped path, so a paused/lapsed
+            // account has nowhere to fall back to. The problem-state styling stays.
         }
 
         Section("Usage") {

@@ -323,8 +323,10 @@ extension AppState {
             let resetPhrase = resetsAt.map {
                 " Your allotment resets \(ManagedQuota.resetDescription($0))."
             } ?? ""
+            // Parked 2026-09-16 (item 100): no "use your own key" valve — managed is
+            // the only shipped path.
             return "You've used all your weekly Sentwise AI drafts.\(resetPhrase)"
-                + " Buy more usage in Settings → Subscription, or use your own key for unlimited drafting."
+                + " Buy more usage in Settings → Subscription."
         case LLMError.managedRequestTooLarge(let message):
             return message.isEmpty
                 ? "That transcript or thread is too large for a single draft. Trim it and try again."
