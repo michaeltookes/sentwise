@@ -39,6 +39,7 @@ extension AppState {
         subject: String? = nil,
         shouldCommit: (() -> Bool)? = nil
     ) async throws -> Draft {
+        let localDataGeneration = localDataEraseGeneration
         await refreshManagedQuotaIfLicenseStatusStale()
         guard let llmConfiguration = currentDraftLLMConfiguration else {
             throw DraftError.llmUnavailable
@@ -57,6 +58,7 @@ extension AppState {
             await reconcileManagedAccountState(after: error, provider: llmConfiguration.provider)
             throw error
         }
+        try ensureLocalDataNotErased(since: localDataGeneration)
         guard mailCredentials == credentials,
               currentDraftLLMConfiguration == llmConfiguration else {
             throw DraftDispatchError.accountChanged

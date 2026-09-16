@@ -135,7 +135,8 @@ extension AppState {
             guard let draft = try await self.makePendingDraft(
                 for: message,
                 mailbox: mailbox,
-                credentials: credentials
+                credentials: credentials,
+                localDataGeneration: localDataGeneration
             ) else {
                 return .contextChanged
             }

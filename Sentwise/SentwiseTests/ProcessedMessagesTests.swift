@@ -125,6 +125,29 @@ final class ProcessedMessagesTests: XCTestCase {
         XCTAssertNil(store.baselineUID(account: "me@gmail.com", mailbox: .named("Archive")))
     }
 
+    func testRemoveAccountMatchesOnlyLeadingScope() {
+        var store = ProcessedMessages()
+        let retained = message(id: 1, messageID: "<acct=removed@gmail.com|spoof@x.com>", uidValidity: 10)
+        let removed = message(id: 2, messageID: "<normal@x.com>", uidValidity: 11)
+        let retainedDate = Date(timeIntervalSince1970: 1_700_000_000)
+
+        store.insert(retained, account: "other@gmail.com", mailbox: .inbox)
+        store.insert(removed, account: "removed@gmail.com", mailbox: .inbox)
+        store.insertBaseline(account: "other@gmail.com", mailbox: .inbox)
+        store.setBaselineStart(account: "other@gmail.com", mailbox: .inbox, date: retainedDate)
+        store.setBaselineUID(account: "other@gmail.com", mailbox: .inbox, uid: 42, uidValidity: 99)
+        store.insertBaseline(account: "removed@gmail.com", mailbox: .inbox)
+
+        store.removeAccount("removed@gmail.com")
+
+        XCTAssertTrue(store.contains(retained, account: "other@gmail.com", mailbox: .inbox))
+        XCTAssertFalse(store.contains(removed, account: "removed@gmail.com", mailbox: .inbox))
+        XCTAssertTrue(store.hasBaseline(account: "other@gmail.com", mailbox: .inbox))
+        XCTAssertEqual(store.baselineStartDate(account: "other@gmail.com", mailbox: .inbox), retainedDate)
+        XCTAssertEqual(store.baselineUID(account: "other@gmail.com", mailbox: .inbox)?.uid, 42)
+        XCTAssertFalse(store.hasBaseline(account: "removed@gmail.com", mailbox: .inbox))
+    }
+
     func testBaselineIsNotEvictedWithMessageKeys() {
         var store = ProcessedMessages()
         store.insertBaseline(account: "me@gmail.com", mailbox: .inbox)

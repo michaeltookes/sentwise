@@ -96,14 +96,15 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
         persistence: AppStateMemoryPersistence,
         secrets: SecretStore = InMemorySecretStore(seed: [.mailAppPassword(email: "me@gmail.com"): "app-pw"]),
         mailProvider: MailProvider = FakeAppMailProvider(result: .success(())),
-        llm: LLMProviding = DeletableLLM()
+        llm: LLMProviding = DeletableLLM(),
+        notifier: DraftNotifying = FakeDraftNotifier()
     ) -> (AppState, SecretStore) {
         let app = AppState(
             persistence: persistence,
             secrets: secrets,
             mailProvider: mailProvider,
             llm: llm,
-            notifier: FakeDraftNotifier()
+            notifier: notifier
         )
         return (app, secrets)
     }
@@ -288,6 +289,81 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
         XCTAssertNil(persistence.loadVoiceProfile())
     }
 
+    func testManagedDeletePurgeInvalidatesInFlightFollowUpDraft() async throws {
+        let persistence = seededPersistence()
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: account): "app-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-live",
+            .managedClientToken: "client",
+            .managedSessionID: "sess"
+        ])
+        let llm = DeletableSuspendedLLM()
+        let notifier = FakeDraftNotifier()
+        let (app, _) = makeAppState(
+            persistence: persistence,
+            secrets: secrets,
+            llm: llm,
+            notifier: notifier
+        )
+        let ingested = try TranscriptIngest.fromPaste("Marcus: Follow up with Dana.")
+
+        let followUp = Task {
+            try await app.createFollowUp(from: ingested, recipients: [MailAddress(email: "dana@example.com")])
+        }
+        await fulfillment(of: [llm.didStartCompletion], timeout: 1)
+
+        let ok = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
+        llm.completeDraft(with: .success(LLMResponse(text: "Hi Dana,\n\nFollowing up.")))
+        _ = await followUp.result
+
+        XCTAssertTrue(ok)
+        XCTAssertTrue(app.pendingDrafts.isEmpty)
+        XCTAssertTrue(persistence.loadPendingDrafts().isEmpty)
+        XCTAssertTrue(notifier.notifiedDrafts.isEmpty)
+        XCTAssertTrue(persistence.loadActivityEvents().isEmpty)
+    }
+
+    func testManagedDeletePurgeInvalidatesInFlightSkippedMessageForceDraft() async {
+        let persistence = seededPersistence()
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: account): "app-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-live",
+            .managedClientToken: "client",
+            .managedSessionID: "sess"
+        ])
+        let entry = skippedMessage()
+        let mailProvider = FakeAppMailProvider(
+            result: .success(()),
+            bodyResult: .success(Data("Can you take another look?".utf8))
+        )
+        let llm = DeletableSuspendedLLM()
+        let notifier = FakeDraftNotifier()
+        let (app, _) = makeAppState(
+            persistence: persistence,
+            secrets: secrets,
+            mailProvider: mailProvider,
+            llm: llm,
+            notifier: notifier
+        )
+
+        let forceDraft = Task {
+            await app.forceDraftSkippedMessage(entry)
+        }
+        await fulfillment(of: [llm.didStartCompletion], timeout: 1)
+
+        let ok = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
+        llm.completeDraft(with: .success(LLMResponse(text: "Sure, I can help.")))
+        let enqueued = await forceDraft.value
+
+        XCTAssertTrue(ok)
+        XCTAssertFalse(enqueued)
+        XCTAssertTrue(app.pendingDrafts.isEmpty)
+        XCTAssertTrue(persistence.loadPendingDrafts().isEmpty)
+        XCTAssertTrue(notifier.notifiedDrafts.isEmpty)
+        XCTAssertFalse(persistence.loadProcessedMessages().contains(entry.message, account: account, mailbox: .inbox))
+        XCTAssertTrue(persistence.loadActivityEvents().isEmpty)
+    }
+
     func testManagedDeleteWithoutPurgeKeepsLocalMailData() async {
         let persistence = seededPersistence()
         let secrets = InMemorySecretStore(seed: [
@@ -306,12 +382,14 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
 
     func testManagedDeleteWithPurgeErasesRetainedMailDataWhenNoMailboxSelected() async {
         let persistence = seededPersistence()
+        let retainedDraft = try? XCTUnwrap(persistence.loadPendingDrafts().first)
         let secrets = InMemorySecretStore(seed: [
             .mailAppPassword(email: account): "app-pw",
             .managedClientToken: "client",
             .managedSessionID: "sess"
         ])
-        let (app, _) = makeAppState(persistence: persistence, secrets: secrets)
+        let notifier = FakeDraftNotifier()
+        let (app, _) = makeAppState(persistence: persistence, secrets: secrets, notifier: notifier)
         let saved = try? XCTUnwrap(app.savedAccounts.first)
 
         if let saved {
@@ -326,6 +404,7 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
 
         XCTAssertTrue(ok)
         assertAccountArtifactsCleared(persistence)
+        XCTAssertEqual(notifier.removedIdentities, retainedDraft.map { [$0.identity] } ?? [])
     }
 }
 

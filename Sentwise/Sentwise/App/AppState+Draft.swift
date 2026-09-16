@@ -86,7 +86,8 @@ extension AppState {
         mailbox: Mailbox = .inbox,
         requireWatching: Bool = true,
         credentials capturedCredentials: MailAccountCredentials? = nil,
-        userSuppliedFacts: UserSuppliedFacts? = nil
+        userSuppliedFacts: UserSuppliedFacts? = nil,
+        localDataGeneration: UInt64? = nil
     ) async throws -> Draft? {
         guard mailbox.supportsReplyDrafting else {
             throw DraftError.unsupportedSourceMailbox
@@ -105,7 +106,8 @@ extension AppState {
         guard isCurrentDraftContext(
             credentials: credentials,
             llmConfiguration: llmConfiguration,
-            requireWatching: requireWatching
+            requireWatching: requireWatching,
+            localDataGeneration: localDataGeneration
         ) else { return nil }
         let incomingText = MailBodyText.plainText(from: data)
         let context = ReplyContext(
@@ -125,7 +127,8 @@ extension AppState {
         guard isCurrentDraftContext(
             credentials: credentials,
             llmConfiguration: llmConfiguration,
-            requireWatching: requireWatching
+            requireWatching: requireWatching,
+            localDataGeneration: localDataGeneration
         ) else { return nil }
         let draft = Draft(
             id: message.id,
@@ -267,8 +270,12 @@ extension AppState {
     private func isCurrentDraftContext(
         credentials: MailAccountCredentials,
         llmConfiguration: DraftLLMConfiguration,
-        requireWatching: Bool
+        requireWatching: Bool,
+        localDataGeneration: UInt64?
     ) -> Bool {
+        if let localDataGeneration, !isCurrentLocalDataGeneration(localDataGeneration) {
+            return false
+        }
         (!requireWatching || watchStatus == .watching)
             && mailCredentials == credentials
             && currentDraftLLMConfiguration == llmConfiguration

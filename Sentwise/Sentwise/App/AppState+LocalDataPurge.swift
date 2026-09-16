@@ -57,7 +57,11 @@ extension AppState {
     /// the erase, while preserving non-mail account settings and credentials.
     func purgeAllLocalMailArtifacts() throws {
         invalidateLocalDataOperations()
+        let draftsToRemove = pendingDrafts
         try persistence.purgeAllMailArtifacts()
+        for draft in draftsToRemove {
+            notifier.removeNotification(identity: draft.identity)
+        }
         resetInMemoryAccountArtifacts()
         logger.info("Purged all local mail artifacts")
     }

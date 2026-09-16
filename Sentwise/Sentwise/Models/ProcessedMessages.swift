@@ -122,11 +122,11 @@ struct ProcessedMessages: Codable, Equatable {
     mutating func removeAccount(_ account: String) {
         let account = account.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !account.isEmpty else { return }
-        let scopeNeedle = "acct=\(account)|"
-        keys.removeAll { $0.contains(scopeNeedle) }
-        baselines.removeAll { $0.contains(scopeNeedle) }
-        baselineStarts = baselineStarts.filter { !$0.key.contains(scopeNeedle) }
-        baselineUIDs = baselineUIDs.filter { !$0.key.contains(scopeNeedle) }
+        let scopePrefix = "acct=\(account)|"
+        keys.removeAll { $0.hasPrefix("mid:\(scopePrefix)") || $0.hasPrefix("uid:\(scopePrefix)") }
+        baselines.removeAll { $0.hasPrefix("baseline:\(scopePrefix)") }
+        baselineStarts = baselineStarts.filter { !$0.key.hasPrefix("baseline:\(scopePrefix)") }
+        baselineUIDs = baselineUIDs.filter { !$0.key.hasPrefix("baseline:\(scopePrefix)") }
     }
 
     /// A stable identity for a message: its Message-ID when present, else a
