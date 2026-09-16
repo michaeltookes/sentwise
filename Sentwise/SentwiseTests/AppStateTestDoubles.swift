@@ -76,9 +76,11 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         processedSaveCount += 1
         saveEvents.append("processed")
     }
-    func saveProcessedMessagesSync(_ processed: ProcessedMessages) throws {
+    func updateProcessedMessagesSync(_ update: (inout ProcessedMessages) -> Void) throws {
         if let purgeError { throw purgeError }
-        saveProcessedMessages(processed)
+        update(&processedMessages)
+        processedSaveCount += 1
+        saveEvents.append("processed")
     }
 
     func loadPendingDrafts() -> [Draft] { pendingDrafts }
@@ -121,9 +123,10 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         activityEvents = events
         activityEventSaveCount += 1
     }
-    func saveActivityEventsSync(_ events: [ActivityEvent]) throws {
+    func updateActivityEventsSync(_ update: (inout [ActivityEvent]) -> Void) throws {
         if let purgeError { throw purgeError }
-        saveActivityEvents(events)
+        update(&activityEvents)
+        activityEventSaveCount += 1
     }
 
     func loadDraftFeedback() -> [DraftFeedbackRecord] { draftFeedback }
@@ -140,6 +143,14 @@ final class AppStateMemoryPersistence: PersistenceProvider {
             throw draftFeedbackSyncSaveError
         }
         draftFeedback = records
+        draftFeedbackSyncSaveCount += 1
+    }
+    func updateDraftFeedbackSync(_ update: (inout [DraftFeedbackRecord]) -> Void) throws {
+        if let purgeError { throw purgeError }
+        if let draftFeedbackSyncSaveError {
+            throw draftFeedbackSyncSaveError
+        }
+        update(&draftFeedback)
         draftFeedbackSyncSaveCount += 1
     }
 

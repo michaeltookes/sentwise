@@ -73,8 +73,10 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         }
     }
 
-    func saveProcessedMessagesSync(_ processed: ProcessedMessages) throws {
-        saveProcessedMessages(processed)
+    func updateProcessedMessagesSync(_ update: (inout ProcessedMessages) -> Void) throws {
+        withLock {
+            update(&processedMessages)
+        }
     }
 
     func loadPendingDrafts() -> [Draft] {
@@ -117,8 +119,10 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         }
     }
 
-    func saveActivityEventsSync(_ events: [ActivityEvent]) throws {
-        saveActivityEvents(events)
+    func updateActivityEventsSync(_ update: (inout [ActivityEvent]) -> Void) throws {
+        withLock {
+            update(&activityEvents)
+        }
     }
 
     func loadDraftFeedback() -> [DraftFeedbackRecord] {
@@ -133,6 +137,12 @@ final class MemoryPersistenceProvider: PersistenceProvider {
 
     func saveDraftFeedbackSync(_ records: [DraftFeedbackRecord]) throws {
         saveDraftFeedback(records)
+    }
+
+    func updateDraftFeedbackSync(_ update: (inout [DraftFeedbackRecord]) -> Void) throws {
+        withLock {
+            update(&draftFeedback)
+        }
     }
 
     // MARK: - Local-data purge (item 96)

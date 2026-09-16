@@ -28,7 +28,7 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
 
     private func pendingDraft(id: UInt32 = 1, account: String? = nil) -> Draft {
         let account = account ?? self.account
-        Draft(
+        return Draft(
             id: id,
             sourceUIDValidity: 10,
             sourceAccountEmail: account,
@@ -72,7 +72,7 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
 
     private func feedbackRecord(account: String? = nil) -> DraftFeedbackRecord {
         let account = account ?? self.account
-        DraftFeedbackRecord(
+        return DraftFeedbackRecord(
             outcome: .approvedAsIs,
             provenance: .watcher,
             answeredNeedsInfo: false,
@@ -375,6 +375,27 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertEqual(persistence.eraseAllCount, 1)
         XCTAssertTrue(app.pendingDrafts.isEmpty)
         XCTAssertFalse(app.onboardingCompleted)
+    }
+
+    func testEraseAllStopsTranscriptFolderWatcher() async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SentwiseEraseAll-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let persistence = seededPersistence()
+        let (app, _, _) = makeAppState(persistence: persistence)
+        app.transcriptWatchedFolderEnabled = true
+        app.transcriptWatchedFolderPath = folder.path
+        app.startTranscriptFolderWatchingIfEnabled()
+        XCTAssertNotNil(app.transcriptFolderSource)
+
+        let result = await app.eraseAllLocalData()
+
+        XCTAssertTrue(result.succeeded)
+        XCTAssertNil(app.transcriptFolderSource)
+        XCTAssertFalse(app.transcriptWatchedFolderEnabled)
+        XCTAssertEqual(app.transcriptWatchedFolderPath, Settings.default.transcriptWatchedFolderPath)
     }
 
     // MARK: - Managed-account deletion purge offer

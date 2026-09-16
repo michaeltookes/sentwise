@@ -85,11 +85,12 @@ confirmation (mirroring the delete-account sheet). `AppState.eraseAllLocalData()
 4. resets in-memory state to a coherent first-run state (disconnected, signed out,
    default preferences, `onboardingCompleted = false`) without a relaunch.
 
-Before Keychain deletion, erase-all cancels pending managed sign-in handles and
-runs the normal managed sign-out path so an existing Clerk session-revocation
-request is scheduled while the token still exists. It returns a result containing
-any Application Support or Keychain failure so the UI can keep the sheet open and
-describe the partial erase precisely.
+Before Keychain deletion, erase-all stops mail/transcript watchers, cancels
+pending managed sign-in handles, and runs the normal managed sign-out path so an
+existing Clerk session-revocation request is scheduled while the token still
+exists. It returns a result containing any Application Support or Keychain
+failure so the UI can keep the sheet open and describe the partial erase
+precisely.
 
 ## Hunt / test safety
 

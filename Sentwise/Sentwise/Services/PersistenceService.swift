@@ -24,8 +24,8 @@ protocol PersistenceProvider {
     func loadProcessedMessages() -> ProcessedMessages
     /// Persists the processed-message set (replaces the previous one).
     func saveProcessedMessages(_ processed: ProcessedMessages)
-    /// Persists the processed-message set synchronously for privacy-sensitive purge paths.
-    func saveProcessedMessagesSync(_ processed: ProcessedMessages) throws
+    /// Mutates processed messages inside one serialized read/write operation.
+    func updateProcessedMessagesSync(_ update: (inout ProcessedMessages) -> Void) throws
 
     /// Watcher-created drafts awaiting approval.
     func loadPendingDrafts() -> [Draft]
@@ -46,8 +46,8 @@ protocol PersistenceProvider {
     func loadActivityEvents() -> [ActivityEvent]
     /// Persists the activity history (replaces the previous one).
     func saveActivityEvents(_ events: [ActivityEvent])
-    /// Persists the activity history synchronously for privacy-sensitive purge paths.
-    func saveActivityEventsSync(_ events: [ActivityEvent]) throws
+    /// Mutates activity history inside one serialized read/write operation.
+    func updateActivityEventsSync(_ update: (inout [ActivityEvent]) -> Void) throws
 
     /// The on-device approval-signal feedback store (item 83, Phase 1), newest
     /// first. Holds codes/numbers/hashes only (plus local deny "Other" free text).
@@ -58,6 +58,8 @@ protocol PersistenceProvider {
     /// Persists the feedback store synchronously, used during graceful termination
     /// so recent terminal draft signals are durable before process exit.
     func saveDraftFeedbackSync(_ records: [DraftFeedbackRecord]) throws
+    /// Mutates feedback records inside one serialized read/write operation.
+    func updateDraftFeedbackSync(_ update: (inout [DraftFeedbackRecord]) -> Void) throws
 
     // MARK: - Local-data purge (item 96)
 
@@ -210,11 +212,15 @@ final class PersistenceService: PersistenceProvider {
     // MARK: - Processed Messages
 
     func loadProcessedMessages() -> ProcessedMessages {
-        guard FileManager.default.fileExists(atPath: processedMessagesURL.path) else {
+        loadProcessedMessages(from: processedMessagesURL)
+    }
+
+    private func loadProcessedMessages(from url: URL) -> ProcessedMessages {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             return ProcessedMessages()
         }
         do {
-            let data = try Data(contentsOf: processedMessagesURL)
+            let data = try Data(contentsOf: url)
             return try decoder.decode(ProcessedMessages.self, from: data)
         } catch {
             logger.error("Failed to load processed messages: \(error.localizedDescription)")
@@ -233,14 +239,16 @@ final class PersistenceService: PersistenceProvider {
         }
     }
 
-    func saveProcessedMessagesSync(_ processed: ProcessedMessages) throws {
+    func updateProcessedMessagesSync(_ update: (inout ProcessedMessages) -> Void) throws {
         do {
             try ioQueue.sync { [encoder, processedMessagesURL] in
+                var processed = self.loadProcessedMessages(from: processedMessagesURL)
+                update(&processed)
                 let data = try encoder.encode(processed)
                 try data.write(to: processedMessagesURL, options: .atomic)
             }
         } catch {
-            logger.error("Failed to save processed messages (sync): \(error.localizedDescription)")
+            logger.error("Failed to update processed messages (sync): \(error.localizedDescription)")
             throw error
         }
     }
@@ -329,11 +337,15 @@ final class PersistenceService: PersistenceProvider {
     // MARK: - Activity History
 
     func loadActivityEvents() -> [ActivityEvent] {
-        guard FileManager.default.fileExists(atPath: activityEventsURL.path) else {
+        loadActivityEvents(from: activityEventsURL)
+    }
+
+    private func loadActivityEvents(from url: URL) -> [ActivityEvent] {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             return []
         }
         do {
-            let data = try Data(contentsOf: activityEventsURL)
+            let data = try Data(contentsOf: url)
             return try decoder.decode([ActivityEvent].self, from: data)
         } catch {
             logger.error("Failed to load activity events: \(error.localizedDescription)")
@@ -352,14 +364,16 @@ final class PersistenceService: PersistenceProvider {
         }
     }
 
-    func saveActivityEventsSync(_ events: [ActivityEvent]) throws {
+    func updateActivityEventsSync(_ update: (inout [ActivityEvent]) -> Void) throws {
         do {
             try ioQueue.sync { [encoder, activityEventsURL] in
+                var events = self.loadActivityEvents(from: activityEventsURL)
+                update(&events)
                 let data = try encoder.encode(events)
                 try data.write(to: activityEventsURL, options: .atomic)
             }
         } catch {
-            logger.error("Failed to save activity events (sync): \(error.localizedDescription)")
+            logger.error("Failed to update activity events (sync): \(error.localizedDescription)")
             throw error
         }
     }
@@ -367,11 +381,15 @@ final class PersistenceService: PersistenceProvider {
     // MARK: - Draft Feedback (item 83)
 
     func loadDraftFeedback() -> [DraftFeedbackRecord] {
-        guard FileManager.default.fileExists(atPath: draftFeedbackURL.path) else {
+        loadDraftFeedback(from: draftFeedbackURL)
+    }
+
+    private func loadDraftFeedback(from url: URL) -> [DraftFeedbackRecord] {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             return []
         }
         do {
-            let data = try Data(contentsOf: draftFeedbackURL)
+            let data = try Data(contentsOf: url)
             return try decoder.decode([DraftFeedbackRecord].self, from: data)
         } catch {
             logger.error("Failed to load draft feedback: \(error.localizedDescription)")
@@ -398,6 +416,20 @@ final class PersistenceService: PersistenceProvider {
             }
         } catch {
             logger.error("Failed to save draft feedback (sync): \(error.localizedDescription)")
+            throw error
+        }
+    }
+
+    func updateDraftFeedbackSync(_ update: (inout [DraftFeedbackRecord]) -> Void) throws {
+        do {
+            try ioQueue.sync { [encoder, draftFeedbackURL] in
+                var records = self.loadDraftFeedback(from: draftFeedbackURL)
+                update(&records)
+                let data = try encoder.encode(records)
+                try data.write(to: draftFeedbackURL, options: .atomic)
+            }
+        } catch {
+            logger.error("Failed to update draft feedback (sync): \(error.localizedDescription)")
             throw error
         }
     }

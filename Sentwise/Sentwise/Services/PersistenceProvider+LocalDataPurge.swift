@@ -17,9 +17,9 @@ extension PersistenceProvider {
             try removeVoiceProfile()
         }
 
-        var processed = loadProcessedMessages()
-        processed.removeAccount(account)
-        try saveProcessedMessagesSync(processed)
+        try updateProcessedMessagesSync { processed in
+            processed.removeAccount(account)
+        }
 
         let pendingDrafts = loadPendingDrafts().filter {
             !Self.draft($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
@@ -36,15 +36,17 @@ extension PersistenceProvider {
         }
         try saveApprovedDraftIdentitiesSync(approved)
 
-        let activity = loadActivityEvents().filter {
-            !Self.activity($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
+        try updateActivityEventsSync { events in
+            events.removeAll {
+                Self.activity($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
+            }
         }
-        try saveActivityEventsSync(activity)
 
-        let feedback = loadDraftFeedback().filter {
-            !Self.feedback($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
+        try updateDraftFeedbackSync { records in
+            records.removeAll {
+                Self.feedback($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
+            }
         }
-        try saveDraftFeedbackSync(feedback)
     }
 
     private static func draft(

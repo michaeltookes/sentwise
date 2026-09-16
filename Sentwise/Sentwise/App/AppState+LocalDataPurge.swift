@@ -172,6 +172,7 @@ extension AppState {
             notifier.removeNotification(identity: draft.identity)
         }
         stopWatching()
+        stopTranscriptFolderWatching()
 
         await managedAccount.cancelSignIn()
         do {
