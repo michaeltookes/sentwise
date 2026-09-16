@@ -31,7 +31,8 @@ extension AppState {
     func canDraftAfterSenderRulesAndWorthiness(
         _ message: MailMessage,
         credentials: MailAccountCredentials,
-        mailbox: Mailbox
+        mailbox: Mailbox,
+        localDataGeneration: UInt64
     ) async -> Bool {
         let skippedReason = skippedMessageReason(message, account: credentials.email, mailbox: mailbox)
         // Sender rules layer over the reply-worthiness gate: an allowlisted sender
@@ -41,7 +42,9 @@ extension AppState {
         case .block:
             DiagnosticLog.verbose("Inbox watcher candidate skipped; sender rule blocked it")
             guard skippedReason != .senderBlocklisted else { return false }
-            guard watchStatus == .watching, mailCredentials == credentials else { return false }
+            guard isCurrentLocalDataGeneration(localDataGeneration),
+                  watchStatus == .watching,
+                  mailCredentials == credentials else { return false }
             recordSkip(message, reason: .senderBlocklisted, account: credentials.email, mailbox: mailbox)
             return false
         case .forceDraft:
@@ -63,7 +66,9 @@ extension AppState {
                     "Inbox watcher candidate skipped by reply-worthiness gate; "
                     + "reason=\(reason.rawValue)"
                 )
-                guard watchStatus == .watching, mailCredentials == credentials else { return false }
+                guard isCurrentLocalDataGeneration(localDataGeneration),
+                      watchStatus == .watching,
+                      mailCredentials == credentials else { return false }
                 recordSkip(message, reason: reason, account: credentials.email, mailbox: mailbox)
                 return false
             }
@@ -119,13 +124,14 @@ extension AppState {
         _ message: MailMessage,
         credentials: MailAccountCredentials,
         mailbox: Mailbox,
+        localDataGeneration: UInt64,
         bypassModelSkip: Bool = false
     ) async throws -> WatcherDraftResult {
         DiagnosticLog.verbose(
             "Inbox watcher drafting candidate; bypassModelSkip=\(bypassModelSkip)"
         )
         return try await withResilientRetry { () -> WatcherDraftResult in
-            try self.validateWatcherDraftContext(credentials)
+            try self.validateWatcherDraftContext(credentials, localDataGeneration: localDataGeneration)
             guard let draft = try await self.makePendingDraft(
                 for: message,
                 mailbox: mailbox,
@@ -133,6 +139,7 @@ extension AppState {
             ) else {
                 return .contextChanged
             }
+            try self.validateWatcherDraftContext(credentials, localDataGeneration: localDataGeneration)
             if !bypassModelSkip, Self.isModelSkippableDraft(draft) {
                 return .modelSkipped
             }
@@ -184,8 +191,13 @@ extension AppState {
         decisionLogger.error("Watcher draft failed: \(error.localizedDescription)")
     }
 
-    func validateWatcherDraftContext(_ credentials: MailAccountCredentials) throws {
-        guard watchStatus == .watching, mailCredentials == credentials else {
+    func validateWatcherDraftContext(
+        _ credentials: MailAccountCredentials,
+        localDataGeneration: UInt64
+    ) throws {
+        guard isCurrentLocalDataGeneration(localDataGeneration),
+              watchStatus == .watching,
+              mailCredentials == credentials else {
             throw DraftDispatchError.accountChanged
         }
     }

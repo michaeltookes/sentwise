@@ -56,6 +56,7 @@ extension AppState {
     /// Purges every local mail artifact when there is no selected mailbox to scope
     /// the erase, while preserving non-mail account settings and credentials.
     func purgeAllLocalMailArtifacts() throws {
+        invalidateLocalDataOperations()
         try persistence.purgeAllMailArtifacts()
         resetInMemoryAccountArtifacts()
         logger.info("Purged all local mail artifacts")
@@ -70,6 +71,9 @@ extension AppState {
     ) throws {
         let account = SavedMailAccount.normalizedEmail(accountEmail)
         guard !account.isEmpty else { return }
+        if includeUnscopedArtifacts {
+            invalidateLocalDataOperations()
+        }
         try persistence.purgeAccountScopedArtifacts(
             for: account,
             includeUnscopedArtifacts: includeUnscopedArtifacts
@@ -82,6 +86,16 @@ extension AppState {
         guard localDataEraseGeneration == generation else {
             throw DraftDispatchError.accountChanged
         }
+    }
+
+    @discardableResult
+    func invalidateLocalDataOperations() -> UInt64 {
+        localDataEraseGeneration &+= 1
+        return localDataEraseGeneration
+    }
+
+    func isCurrentLocalDataGeneration(_ generation: UInt64) -> Bool {
+        localDataEraseGeneration == generation
     }
 
     /// Clears the published/in-memory mirrors of the account-scoped stores so the UI
@@ -137,6 +151,8 @@ extension AppState {
         if includeUnscopedArtifacts {
             voiceProfile = nil
             denyReasonPrompt = nil
+            lastUsedDenyReason = nil
+            denyReasonPromptSuppressedThisSession = false
         } else if let prompt = denyReasonPrompt,
                   Self.draft(prompt.draft, belongsTo: account, includeUnscopedArtifacts: false) {
             denyReasonPrompt = nil
@@ -185,7 +201,7 @@ extension AppState {
     /// partial erase.
     @discardableResult
     func eraseAllLocalData() async -> LocalDataEraseResult {
-        localDataEraseGeneration &+= 1
+        invalidateLocalDataOperations()
         for draft in pendingDrafts {
             notifier.removeNotification(identity: draft.identity)
         }
@@ -307,6 +323,7 @@ extension AppState {
         googleOAuthInterestStore.clearAll()
         cachedSubscriptionSnapshot = nil
         googleOAuthInterestRegistered = false
+        isRegisteringGoogleOAuthInterest = false
     }
 
     private func cancelSendCountdowns(for identities: Set<String>) {

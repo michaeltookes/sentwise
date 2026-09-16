@@ -89,12 +89,8 @@ extension AppState {
             DiagnosticLog.verbose("Inbox poll skipped; watcher is not active")
             return
         }
-        await refreshManagedQuotaIfLicenseStatusStale()
-        guard canWatch else {
-            DiagnosticLog.verbose("Inbox poll paused; account or AI provider is unavailable")
-            pauseWatching(resumeAfterManagedReauthentication: shouldResumeWatchingAfterManagedLicenseRecovery)
-            return
-        }
+        let localDataGeneration = localDataEraseGeneration
+        guard await prepareWatcherPoll(localDataGeneration: localDataGeneration) else { return }
         // Offline (item 27): skip the poll rather than burn retries against an
         // unreachable server. Reconnect triggers an immediate catch-up poll.
         guard hasConfirmedReachability || !reachability.isStarted else {
@@ -122,11 +118,11 @@ extension AppState {
                 mailbox: mailbox
             )
         } catch {
-            handlePollFetchFailure(error)
+            handlePollFetchFailure(error, localDataGeneration: localDataGeneration)
             return
         }
         DiagnosticLog.verbose("Inbox poll fetched \(messages.count) recent messages")
-        guard watchStatus == .watching, mailCredentials == credentials else {
+        guard isCurrentWatcherPoll(localDataGeneration: localDataGeneration, credentials: credentials) else {
             DiagnosticLog.verbose("Inbox poll discarded; account or watcher changed after fetch")
             return
         }
@@ -145,8 +141,13 @@ extension AppState {
 
         // Oldest first so enqueued drafts read in chronological order.
         for message in messagesToProcess.reversed() {
-            guard watchStatus == .watching, mailCredentials == credentials else { break }
-            await draftMessageIfNeeded(message, credentials: credentials, mailbox: mailbox)
+            guard isCurrentWatcherPoll(localDataGeneration: localDataGeneration, credentials: credentials) else { break }
+            await draftMessageIfNeeded(
+                message,
+                credentials: credentials,
+                mailbox: mailbox,
+                localDataGeneration: localDataGeneration
+            )
         }
         DiagnosticLog.verbose("Inbox poll completed")
     }
@@ -213,7 +214,7 @@ extension AppState {
     /// Handles a poll-fetch failure: transient errors just surface as `watchError`
     /// (the next poll retries), but an auth failure won't self-heal, so we pause
     /// watching and record it (item 27) rather than fail every poll.
-    private func handlePollFetchFailure(_ error: Error) {
+    func handlePollFetchFailure(_ error: Error) {
         watchError = Self.message(for: error)
         if ResilienceClassifier.classify(error) == .authentication {
             recordActivity(ActivityEvent(
@@ -258,17 +259,25 @@ extension AppState {
     private func draftMessageIfNeeded(
         _ message: MailMessage,
         credentials: MailAccountCredentials,
-        mailbox: Mailbox
+        mailbox: Mailbox,
+        localDataGeneration: UInt64
     ) async {
         guard isReplyable(message),
               !processedMessages.contains(message, account: credentials.email, mailbox: mailbox),
               !hasPendingDraft(for: message, account: credentials.email, mailbox: mailbox) else {
             return
         }
-        guard await canDraftAfterSenderRulesAndWorthiness(message, credentials: credentials, mailbox: mailbox) else {
+        guard await canDraftAfterSenderRulesAndWorthiness(
+            message,
+            credentials: credentials,
+            mailbox: mailbox,
+            localDataGeneration: localDataGeneration
+        ) else {
             return
         }
-        guard watchStatus == .watching, mailCredentials == credentials else { return }
+        guard isCurrentLocalDataGeneration(localDataGeneration),
+              watchStatus == .watching,
+              mailCredentials == credentials else { return }
         let draftProvider = currentDraftLLMConfiguration?.provider
 
         do {
@@ -279,11 +288,15 @@ extension AppState {
                 message,
                 credentials: credentials,
                 mailbox: mailbox,
+                localDataGeneration: localDataGeneration,
                 bypassModelSkip: senderRuleDecision(for: message) == .forceDraft
             )
-            guard watchStatus == .watching, mailCredentials == credentials else { return }
+            guard isCurrentLocalDataGeneration(localDataGeneration),
+                  watchStatus == .watching,
+                  mailCredentials == credentials else { return }
             handleWatcherDraftResult(result, for: message, credentials: credentials, mailbox: mailbox)
         } catch {
+            guard isCurrentLocalDataGeneration(localDataGeneration) else { return }
             handleWatcherDraftError(error, draftProvider: draftProvider)
         }
     }
@@ -367,134 +380,4 @@ extension AppState {
         }
     }
 
-    private static func isMessage(
-        _ message: MailMessage,
-        afterBaselineUID baselineUID: ProcessedMessages.BaselineUIDCutoff?,
-        onOrAfterBaselineStart startDate: Date?
-    ) -> Bool {
-        guard let baselineUID else {
-            return isMessage(message, onOrAfterBaselineStart: startDate)
-        }
-        guard isMessageUIDComparable(message, baselineUID: baselineUID) else {
-            return isMessage(message, onOrAfterBaselineStart: startDate)
-        }
-        return isMessage(message, afterBaselineUID: baselineUID)
-    }
-
-    private static func isBaselineUIDComparable(
-        messages: [MailMessage],
-        baselineUID: ProcessedMessages.BaselineUIDCutoff
-    ) -> Bool {
-        guard let baselineUIDValidity = baselineUID.uidValidity else { return true }
-        return !messages.contains {
-            guard let messageUIDValidity = $0.uidValidity else { return false }
-            return messageUIDValidity != baselineUIDValidity
-        }
-    }
-
-    private static func isMessage(
-        _ message: MailMessage,
-        afterBaselineUID baselineUID: ProcessedMessages.BaselineUIDCutoff
-    ) -> Bool {
-        guard isMessageUIDComparable(message, baselineUID: baselineUID) else { return true }
-        return message.id > baselineUID.uid
-    }
-
-    private static func isMessage(
-        _ message: MailMessage,
-        atOrBeforeBaselineUID baselineUID: ProcessedMessages.BaselineUIDCutoff
-    ) -> Bool {
-        guard isMessageUIDComparable(message, baselineUID: baselineUID) else { return false }
-        return message.id <= baselineUID.uid
-    }
-
-    private static func isMessageUIDComparable(
-        _ message: MailMessage,
-        baselineUID: ProcessedMessages.BaselineUIDCutoff
-    ) -> Bool {
-        guard let baselineUIDValidity = baselineUID.uidValidity,
-              let messageUIDValidity = message.uidValidity else {
-            return true
-        }
-        return messageUIDValidity == baselineUIDValidity
-    }
-
-    private static func isMessage(_ message: MailMessage, onOrAfterBaselineStart startDate: Date?) -> Bool {
-        guard let startDate else { return true }
-        if let date = parsedMessageDate(message.date) {
-            return date >= startDate
-        }
-        return true
-    }
-
-    private static func isMessage(_ message: MailMessage, onOrAfterInitialBaselineStart startDate: Date) -> Bool {
-        guard let date = parsedMessageDate(message.date) else { return false }
-        return date >= startDate
-    }
-
-    private static func isMessage(_ message: MailMessage, beforeBaselineStart startDate: Date) -> Bool {
-        guard let date = parsedMessageDate(message.date) else { return false }
-        return date < startDate
-    }
-
-    static func parsedMessageDate(_ value: String) -> Date? {
-        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return nil }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-
-        for candidate in rfc5322DateCandidates(value) {
-            for format in [
-                "EEE, d MMM yyyy HH:mm:ss Z",
-                "d MMM yyyy HH:mm:ss Z",
-                "EEE, d MMM yyyy HH:mm Z",
-                "d MMM yyyy HH:mm Z"
-            ] {
-                formatter.dateFormat = format
-                if let date = formatter.date(from: candidate) {
-                    return date
-                }
-            }
-        }
-        return nil
-    }
-
-    private static func rfc5322DateCandidates(_ value: String) -> [String] {
-        let withoutComments = strippedRFC5322Comments(from: value)
-        guard withoutComments != value else { return [value] }
-        return [value, withoutComments]
-    }
-
-    private static func strippedRFC5322Comments(from value: String) -> String {
-        var output = ""
-        var commentDepth = 0
-        var isEscapingCommentCharacter = false
-
-        for character in value {
-            if commentDepth > 0 {
-                if isEscapingCommentCharacter {
-                    isEscapingCommentCharacter = false
-                } else if character == "\\" {
-                    isEscapingCommentCharacter = true
-                } else if character == "(" {
-                    commentDepth += 1
-                } else if character == ")" {
-                    commentDepth -= 1
-                }
-                continue
-            }
-
-            if character == "(" {
-                commentDepth = 1
-            } else {
-                output.append(character)
-            }
-        }
-
-        return output
-            .split(whereSeparator: { $0.isWhitespace })
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
 }

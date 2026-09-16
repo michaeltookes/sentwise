@@ -95,12 +95,13 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
     private func makeAppState(
         persistence: AppStateMemoryPersistence,
         secrets: SecretStore = InMemorySecretStore(seed: [.mailAppPassword(email: "me@gmail.com"): "app-pw"]),
+        mailProvider: MailProvider = FakeAppMailProvider(result: .success(())),
         llm: LLMProviding = DeletableLLM()
     ) -> (AppState, SecretStore) {
         let app = AppState(
             persistence: persistence,
             secrets: secrets,
-            mailProvider: FakeAppMailProvider(result: .success(())),
+            mailProvider: mailProvider,
             llm: llm,
             notifier: FakeDraftNotifier()
         )
@@ -208,6 +209,46 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
         assertAccountArtifactsCleared(persistence)
     }
 
+    func testManagedDeletePurgeRestartInvalidatesInFlightWatcherDraft() async {
+        let persistence = seededPersistence()
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: account): "app-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-live",
+            .managedClientToken: "client",
+            .managedSessionID: "sess"
+        ])
+        let incoming = message(id: 55)
+        let mailProvider = FakeAppMailProvider(
+            result: .success(()),
+            fetchResult: .success([incoming]),
+            bodyResult: .success(Data("Can you confirm?".utf8))
+        )
+        let llm = DeletableSuspendedLLM()
+        let (app, _) = makeAppState(
+            persistence: persistence,
+            secrets: secrets,
+            mailProvider: mailProvider,
+            llm: llm
+        )
+        app.watchStatus = .watching
+
+        let stalePoll = Task {
+            await app.pollInboxOnce()
+        }
+        await fulfillment(of: [llm.didStartCompletion], timeout: 1)
+
+        let ok = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
+        llm.completeDraft(with: .success(LLMResponse(text: "Confirmed.")))
+        await stalePoll.value
+
+        XCTAssertTrue(ok)
+        XCTAssertEqual(app.watchStatus, .watching)
+        XCTAssertTrue(app.pendingDrafts.isEmpty)
+        XCTAssertTrue(persistence.loadPendingDrafts().isEmpty)
+        XCTAssertFalse(persistence.loadProcessedMessages().contains(incoming, account: account, mailbox: .inbox))
+        XCTAssertTrue(persistence.loadActivityEvents().isEmpty)
+    }
+
     func testManagedDeleteWithoutPurgeKeepsLocalMailData() async {
         let persistence = seededPersistence()
         let secrets = InMemorySecretStore(seed: [
@@ -260,5 +301,40 @@ private final class DeletableLLM: LLMProviding, @unchecked Sendable {
     }
     func deleteManagedAccount() async throws {
         deleteCount += 1
+    }
+}
+
+private final class DeletableSuspendedLLM: LLMProviding, @unchecked Sendable {
+    let didStartCompletion = XCTestExpectation(description: "LLM completion started")
+    private let lock = NSLock()
+    private var completionContinuation: CheckedContinuation<LLMResponse, Error>?
+    private(set) var deleteCount = 0
+
+    func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
+
+    func complete(
+        _ request: LLMRequest,
+        provider: LLMProviderKind,
+        apiKey: String,
+        baseURL: String?
+    ) async throws -> LLMResponse {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            completionContinuation = continuation
+            lock.unlock()
+            didStartCompletion.fulfill()
+        }
+    }
+
+    func deleteManagedAccount() async throws {
+        deleteCount += 1
+    }
+
+    func completeDraft(with result: Result<LLMResponse, Error>) {
+        lock.lock()
+        let continuation = completionContinuation
+        completionContinuation = nil
+        lock.unlock()
+        continuation?.resume(with: result)
     }
 }
