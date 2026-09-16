@@ -78,6 +78,8 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
                 mailHost: "imap.gmail.com",
                 mailPort: 993,
                 savedAccounts: [SavedMailAccount(email: account, host: "imap.gmail.com", port: 993)],
+                llmProvider: "anthropic",
+                llmVerifiedModel: "claude-sonnet-4-6",
                 onboardingCompleted: true
             ),
             voiceProfile: voiceProfile(),
