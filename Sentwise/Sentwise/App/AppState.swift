@@ -176,7 +176,7 @@ final class AppState: ObservableObject {
     // MARK: - Preferences
 
     /// Whether the app launches at login (mirrors `SMAppService` state).
-    @Published private(set) var launchAtLogin = LoginItemManager.shared.isEnabled
+    @Published var launchAtLogin = LoginItemManager.shared.isEnabled
     var setLaunchAtLoginHandler: (Bool) -> Bool = { LoginItemManager.shared.setEnabled($0) }
     var launchAtLoginStatusProvider: () -> Bool = { LoginItemManager.shared.isEnabled }
 
