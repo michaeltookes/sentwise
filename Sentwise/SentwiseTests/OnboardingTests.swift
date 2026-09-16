@@ -165,17 +165,66 @@ final class OnboardingTests: XCTestCase {
     // MARK: - Reconcile (already-configured install)
 
     func testReconcileMarksLegacyConfiguredInstallCompleteAndSkipsFlow() {
-        let (appState, persistence) = makeFullyConnected(
-            schemaVersion: Settings.onboardingCompletionSchemaVersion - 1,
-            onboardingCompleted: false
+        // Parked 2026-09-16 (item 100): managed inference is the only shipped path, so
+        // a legacy pre-onboarding-flag install counts as "configured" when the account
+        // and the managed account are connected. (A legacy BYO selection would fall
+        // back to managed on this launch and correctly need sign-in — see
+        // testReconcileSendsLegacyBYOInstallThroughOnboarding.)
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword: "app-pw",
+            .managedClientToken: "client-token",
+            .managedSessionID: "session-id"
+        ])
+        let persistence = AppStateMemoryPersistence(
+            settings: Settings(
+                schemaVersion: Settings.onboardingCompletionSchemaVersion - 1,
+                pollIntervalSeconds: 300,
+                mailEmail: "me@gmail.com",
+                llmProvider: "managed",
+                managedAccountEmail: "me@gmail.com",
+                onboardingCompleted: false
+            )
+        )
+        let appState = AppState(
+            persistence: persistence,
+            secrets: secrets,
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: FakeLLMProvider(result: .success(()))
         )
 
         let needsOnboarding = appState.reconcileOnboardingState()
 
+        XCTAssertTrue(appState.isLLMConnected)
         XCTAssertFalse(needsOnboarding)
         XCTAssertTrue(appState.onboardingCompleted)
         XCTAssertTrue(persistence.loadSettings().onboardingCompleted,
                       "reconcile must persist the completion so it survives relaunch")
+    }
+
+    func testReconcileSendsLegacyBYOInstallThroughOnboarding() {
+        // Parked 2026-09-16 (item 100): a legacy install that had selected a BYO
+        // provider falls back to managed on launch and, being unsigned, must run the
+        // sign-in onboarding rather than being auto-completed.
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword: "app-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-live"
+        ])
+        let persistence = AppStateMemoryPersistence(
+            settings: connectedSettings(
+                schemaVersion: Settings.onboardingCompletionSchemaVersion - 1,
+                onboardingCompleted: false
+            )
+        )
+        let appState = AppState(
+            persistence: persistence,
+            secrets: secrets,
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: FakeLLMProvider(result: .success(()))
+        )
+
+        XCTAssertEqual(appState.llmProviderKind, .managed)
+        XCTAssertFalse(appState.isLLMConnected)
+        XCTAssertTrue(appState.reconcileOnboardingState())
     }
 
     func testReconcilePreservesPartiallyCompletedCurrentOnboarding() {

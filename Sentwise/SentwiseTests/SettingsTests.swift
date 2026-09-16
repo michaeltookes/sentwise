@@ -149,15 +149,21 @@ final class SettingsTests: XCTestCase {
 
     func testLegacyFileWithoutLLMKeysDecodesToDefaults() throws {
         // A pre-v3 settings file has no llm keys; they must decode to defaults.
+        // Parked 2026-09-16 (item 100): managed is the only shipped provider, so a
+        // file with no llm keys now decodes to managed rather than the old BYO default.
         let legacy = #"{"schemaVersion":2,"pollIntervalSeconds":300,"mailEmail":"me@x.com"}"#
         let decoded = try JSONDecoder().decode(Settings.self, from: Data(legacy.utf8))
-        XCTAssertEqual(decoded.llmProvider, "anthropic")
+        XCTAssertEqual(decoded.llmProvider, "managed")
         XCTAssertEqual(decoded.llmModel, "")
         XCTAssertEqual(decoded.llmVerifiedModel, "")
     }
 
-    func testCurrentSchemaVersionIsNineteen() {
-        XCTAssertEqual(Settings.currentSchemaVersion, 19)
+    func testCurrentSchemaVersionIsTwenty() {
+        XCTAssertEqual(Settings.currentSchemaVersion, 20)
+    }
+
+    func testBYOKParkedSchemaVersionIsTwenty() {
+        XCTAssertEqual(Settings.byokParkedSchemaVersion, 20)
     }
 
     func testPreGateDraftSweepSchemaVersionIsEighteen() {

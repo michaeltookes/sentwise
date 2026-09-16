@@ -19,7 +19,7 @@ enum SendBehavior: String, CaseIterable, Equatable {
 struct Settings: Codable, Equatable {
 
     /// The current settings schema version.
-    static let currentSchemaVersion = 19
+    static let currentSchemaVersion = 20
 
     /// Schema version that introduced the persisted onboarding completion flag.
     static let onboardingCompletionSchemaVersion = 6
@@ -80,6 +80,14 @@ struct Settings: Codable, Equatable {
     /// quota/usage-alert scoping. Purely additive: older files decode it as empty
     /// and fall back to the stored Clerk session id until the next sign-in writes it.
     static let managedAccountIDSchemaVersion = 19
+
+    /// Schema version that parks the BYO-key / local-model providers (item 100).
+    /// Parked 2026-09-16: BYOK/local providers were removed from the UI and the
+    /// product story; managed inference is the only shipped path. On first launch
+    /// at this version, any install that persisted a non-managed provider silently
+    /// falls back to managed (no released builds existed, so there is no migration
+    /// UI). The parked provider code is kept for possible future revival.
+    static let byokParkedSchemaVersion = 20
 
     /// The default auto-send undo window, in seconds (item 23). Zero disables it.
     static let defaultSendDelaySeconds = 10
@@ -281,7 +289,9 @@ struct Settings: Codable, Equatable {
             try container.decodeIfPresent(Bool.self, forKey: .mailHostGuidancePendingEmail) ?? false
         mailPort = try container.decodeIfPresent(Int.self, forKey: .mailPort) ?? 993
         savedAccounts = try container.decodeIfPresent([SavedMailAccount].self, forKey: .savedAccounts) ?? []
-        llmProvider = try container.decodeIfPresent(String.self, forKey: .llmProvider) ?? "anthropic"
+        // Parked 2026-09-16 (item 100): managed is the only shipped provider, so a
+        // file missing the key decodes to managed rather than the old BYO default.
+        llmProvider = try container.decodeIfPresent(String.self, forKey: .llmProvider) ?? "managed"
         llmModel = try container.decodeIfPresent(String.self, forKey: .llmModel) ?? ""
         llmBaseURL = try container.decodeIfPresent(String.self, forKey: .llmBaseURL) ?? ""
         llmVerifiedModel = try container.decodeIfPresent(String.self, forKey: .llmVerifiedModel) ?? ""
