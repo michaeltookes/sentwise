@@ -272,7 +272,7 @@ extension AppState {
         if let localDataGeneration, !isCurrentLocalDataGeneration(localDataGeneration) {
             return false
         }
-        (!requireWatching || watchStatus == .watching)
+        return (!requireWatching || watchStatus == .watching)
             && mailCredentials == credentials
             && currentDraftLLMConfiguration == llmConfiguration
     }
