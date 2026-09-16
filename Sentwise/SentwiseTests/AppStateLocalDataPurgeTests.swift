@@ -379,6 +379,8 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         let (app, _, _) = makeAppState(persistence: persistence, secrets: secrets)
         app.lastUsedDenyReason = DenyReason(code: .other, otherText: "old private reason")
         app.denyReasonPromptSuppressedThisSession = true
+        app.isOpenRouterProvisioning = true
+        app.pendingOpenRouterProvisioningMessageSurface = .settings
 
         let result = await app.eraseAllLocalData()
 
@@ -399,6 +401,8 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertTrue(app.activityEvents.isEmpty)
         XCTAssertNil(app.lastUsedDenyReason)
         XCTAssertFalse(app.denyReasonPromptSuppressedThisSession)
+        XCTAssertFalse(app.isOpenRouterProvisioning)
+        XCTAssertEqual(app.pendingOpenRouterProvisioningMessageSurface, .shared)
     }
 
     func testEraseAllReturnsFalseWhenKeychainWipeFails() async {

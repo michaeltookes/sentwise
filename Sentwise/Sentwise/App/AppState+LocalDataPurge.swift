@@ -52,6 +52,14 @@ extension AppState {
         try purgeLocalMailArtifacts(for: account, includeUnscopedArtifacts: true)
     }
 
+    /// Purges every local mail artifact when there is no selected mailbox to scope
+    /// the erase, while preserving non-mail account settings and credentials.
+    func purgeAllLocalMailArtifacts() throws {
+        try persistence.purgeAllMailArtifacts()
+        resetInMemoryAccountArtifacts()
+        logger.info("Purged all local mail artifacts")
+    }
+
     /// Purges one account's local mail artifacts from disk and memory. Throws when
     /// persistence cannot durably write the filtered stores so callers can surface
     /// that the privacy erase did not complete.
@@ -244,6 +252,8 @@ extension AppState {
         llmAPIKey = ""
         verifiedLLMModel = Settings.default.llmVerifiedModel
         isLLMConnected = false
+        isOpenRouterProvisioning = false
+        pendingOpenRouterProvisioningMessageSurface = .shared
     }
 
     /// Resets user preferences to their shipped defaults, including the onboarding

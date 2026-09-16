@@ -160,6 +160,30 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
         XCTAssertFalse(persistence.loadPendingDrafts().isEmpty)
         XCTAssertFalse(persistence.loadActivityEvents().isEmpty)
     }
+
+    func testManagedDeleteWithPurgeErasesRetainedMailDataWhenNoMailboxSelected() async {
+        let persistence = seededPersistence()
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: account): "app-pw",
+            .managedClientToken: "client",
+            .managedSessionID: "sess"
+        ])
+        let (app, _) = makeAppState(persistence: persistence, secrets: secrets)
+        let saved = try? XCTUnwrap(app.savedAccounts.first)
+
+        if let saved {
+            app.removeSavedAccount(saved, purgeLocalData: false)
+        }
+
+        XCTAssertFalse(app.isAccountConnected)
+        XCTAssertTrue(app.mailEmail.isEmpty)
+        XCTAssertFalse(persistence.loadPendingDrafts().isEmpty)
+
+        let ok = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
+
+        XCTAssertTrue(ok)
+        assertAccountArtifactsCleared(persistence)
+    }
 }
 
 /// An `LLMProviding` whose `deleteManagedAccount()` succeeds, so the managed-delete

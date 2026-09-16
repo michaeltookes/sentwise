@@ -278,10 +278,14 @@ extension AppState {
         generation: UInt64,
         messageSurface: TransientMessageSurface
     ) -> Bool {
-        guard purgeLocalData, let account = normalizedConnectedAccountEmail else { return true }
+        guard purgeLocalData else { return true }
         stopWatching()
         do {
-            try purgeLocalMailArtifacts(for: account, includeUnscopedArtifacts: true)
+            if let account = normalizedConnectedAccountEmail {
+                try purgeLocalMailArtifacts(for: account, includeUnscopedArtifacts: true)
+            } else {
+                try purgeAllLocalMailArtifacts()
+            }
             resetMessagePreviewForAccountChange(clearSkippedMessages: false)
             return true
         } catch {

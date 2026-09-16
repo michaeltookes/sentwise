@@ -2,6 +2,19 @@ import Foundation
 
 extension PersistenceProvider {
 
+    /// Purges every mail-content-bearing artifact while leaving account settings
+    /// and credentials alone. This is used when the app no longer has a selected
+    /// mailbox but retained mail records can still exist locally.
+    func purgeAllMailArtifacts() throws {
+        try removeVoiceProfile()
+        try removeProcessedMessages()
+        try removePendingDrafts()
+        try removeSkippedMessages()
+        try removeApprovedDraftIdentities()
+        try removeActivityEvents()
+        try removeDraftFeedback()
+    }
+
     /// Purges mail artifacts that belong to one mailbox account while leaving
     /// other saved accounts' records intact. Legacy records that predate account
     /// tagging are removed only when `includeUnscopedArtifacts` is true, which the
