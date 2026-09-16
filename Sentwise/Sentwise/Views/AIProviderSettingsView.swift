@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The "AI Provider" tab of Settings: the managed-inference (Sentwise AI) account,
-/// the guided bring-your-own-provider path (item 59), and voice learning (which
-/// depends on both a connected account and a connected provider).
+/// The "AI Provider" tab of Settings: the managed-inference (Sentwise AI) account
+/// and voice learning (which depends on both a connected account and a connected
+/// provider). The bring-your-own-provider path was parked 2026-09-16 (item 100) —
+/// managed inference is the only shipped provider.
 struct AIProviderSettingsView: View {
     @EnvironmentObject var appState: AppState
 
@@ -44,10 +45,6 @@ struct AIProviderSettingsView: View {
                     ManagedSignInControls(messageSurface: .settings)
                 }
                 ManagedAccountErrorMessage(messageSurface: .settings, settingsDisplayTab: .ai)
-            }
-
-            Section("Use your own AI") {
-                BYOProviderControls(messageSurface: .settings, settingsDisplayTab: .ai)
             }
 
             Section("Voice") {
