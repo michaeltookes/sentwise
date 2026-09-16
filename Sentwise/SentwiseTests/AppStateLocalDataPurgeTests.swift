@@ -81,6 +81,10 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         )
     }
 
+    private func approvedIdentity(account: String, id: UInt32 = 99) -> String {
+        "\(account)|INBOX|10|\(id)"
+    }
+
     /// A persistence store seeded with every account-scoped artifact populated,
     /// plus a watcher baseline in the dedup set.
     private func seededPersistence(mailEmail: String = "me@gmail.com") -> AppStateMemoryPersistence {
@@ -100,7 +104,7 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
             processedMessages: processed,
             pendingDrafts: [pendingDraft()],
             skippedMessages: [skippedMessage()],
-            approvedDraftIdentities: ["\(mailEmail)|INBOX|10|1"],
+            approvedDraftIdentities: [approvedIdentity(account: mailEmail)],
             activityEvents: [activityEvent(account: mailEmail)],
             draftFeedback: [feedbackRecord()]
         )
@@ -127,7 +131,10 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
             processedMessages: processed,
             pendingDrafts: [pendingDraft(id: 1, account: account), pendingDraft(id: 2, account: otherAccount)],
             skippedMessages: [skippedMessage(account: account), skippedMessage(account: otherAccount)],
-            approvedDraftIdentities: ["\(account)|INBOX|10|1", "\(otherAccount)|INBOX|10|2"],
+            approvedDraftIdentities: [
+                approvedIdentity(account: account, id: 91),
+                approvedIdentity(account: otherAccount, id: 92)
+            ],
             activityEvents: [activityEvent(account: account), activityEvent(account: otherAccount)],
             draftFeedback: [feedbackRecord(account: account), feedbackRecord(account: otherAccount)]
         )
@@ -174,7 +181,7 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertEqual(persistence.loadPendingDrafts().compactMap(\.sourceAccountEmail), [otherAccount],
                        file: file, line: line)
         XCTAssertEqual(persistence.loadSkippedMessages().map(\.account), [otherAccount], file: file, line: line)
-        XCTAssertEqual(persistence.loadApprovedDraftIdentities(), ["\(otherAccount)|INBOX|10|2"],
+        XCTAssertEqual(persistence.loadApprovedDraftIdentities(), [approvedIdentity(account: otherAccount, id: 92)],
                        file: file, line: line)
         XCTAssertEqual(persistence.loadActivityEvents().compactMap(\.account), [otherAccount], file: file, line: line)
         XCTAssertEqual(persistence.loadDraftFeedback().compactMap(\.sourceAccountEmail), [otherAccount],
@@ -252,7 +259,7 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertFalse(persistence.loadProcessedMessages().hasBaseline(account: otherAccount, mailbox: .inbox))
         XCTAssertEqual(persistence.loadPendingDrafts().compactMap(\.sourceAccountEmail), [account])
         XCTAssertEqual(persistence.loadSkippedMessages().map(\.account), [account])
-        XCTAssertEqual(persistence.loadApprovedDraftIdentities(), ["\(account)|INBOX|10|1"])
+        XCTAssertEqual(persistence.loadApprovedDraftIdentities(), [approvedIdentity(account: account, id: 91)])
         XCTAssertEqual(persistence.loadActivityEvents().compactMap(\.account), [account])
         XCTAssertEqual(persistence.loadDraftFeedback().compactMap(\.sourceAccountEmail), [account])
         XCTAssertEqual(try? secrets.value(for: .mailAppPassword(email: account)), "active-pw")
