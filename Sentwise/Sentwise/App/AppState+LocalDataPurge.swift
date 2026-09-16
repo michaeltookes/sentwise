@@ -78,6 +78,12 @@ extension AppState {
         logger.info("Purged local mail artifacts for account")
     }
 
+    func ensureLocalDataNotErased(since generation: UInt64) throws {
+        guard localDataEraseGeneration == generation else {
+            throw DraftDispatchError.accountChanged
+        }
+    }
+
     /// Clears the published/in-memory mirrors of the account-scoped stores so the UI
     /// reflects the purge immediately, without waiting for a relaunch to reload from
     /// the (now-empty) files.
@@ -179,6 +185,7 @@ extension AppState {
     /// partial erase.
     @discardableResult
     func eraseAllLocalData() async -> LocalDataEraseResult {
+        localDataEraseGeneration &+= 1
         for draft in pendingDrafts {
             notifier.removeNotification(identity: draft.identity)
         }

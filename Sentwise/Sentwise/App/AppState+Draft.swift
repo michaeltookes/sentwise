@@ -409,6 +409,7 @@ extension AppState {
             messageID: Self.generateMessageID(forEmail: credentials.email)
         )
         let rfc822 = outgoing.rfc822()
+        let eraseGeneration = localDataEraseGeneration
         do {
             guard !outgoing.to.isEmpty else { throw DraftDispatchError.noRecipient }
             try await withResilientRetry {
@@ -420,9 +421,12 @@ extension AppState {
                 )
             }
         } catch {
+            try ensureLocalDataNotErased(since: eraseGeneration)
             recordDispatchFailureActivity(error, for: draft, failureKind: .sendFailed)
             throw error
         }
+        try ensureLocalDataNotErased(since: eraseGeneration)
+        _ = try draftDispatchCredentialsStillCurrent(credentials, for: draft)
         recordDraftActivity(.approvedSent, for: draft, detail: Self.editedBeforeSendDetail(for: draft))
     }
 
@@ -436,6 +440,7 @@ extension AppState {
             messageID: Self.generateMessageID(forEmail: credentials.email)
         )
         let rfc822 = outgoing.rfc822()
+        let eraseGeneration = localDataEraseGeneration
         do {
             let currentCredentials = try draftDispatchCredentialsStillCurrent(credentials, for: draft)
             try await mailProvider.appendMessage(
@@ -445,11 +450,14 @@ extension AppState {
                 flags: [.draft]
             )
         } catch {
+            try ensureLocalDataNotErased(since: eraseGeneration)
             let kind: ActivityEventKind =
                 ResilienceClassifier.classify(error) == .authentication ? .authFailed : .saveFailed
             recordDraftActivity(kind, for: draft, detail: Self.draftMessage(for: error))
             throw error
         }
+        try ensureLocalDataNotErased(since: eraseGeneration)
+        _ = try draftDispatchCredentialsStillCurrent(credentials, for: draft)
         recordDraftActivity(.approvedSaved, for: draft, detail: Self.editedBeforeSendDetail(for: draft))
     }
 
@@ -486,11 +494,4 @@ extension AppState {
     static func truncatedIncomingBody(_ text: String, maxChars: Int = 4000) -> String {
         text.count > maxChars ? String(text.prefix(maxChars)) + "…" : text
     }
-}
-
-struct DraftLLMConfiguration: Equatable {
-    let provider: LLMProviderKind
-    let model: String
-    let apiKey: String
-    let baseURL: String?
 }

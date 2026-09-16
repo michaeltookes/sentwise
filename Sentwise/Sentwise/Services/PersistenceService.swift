@@ -76,6 +76,11 @@ protocol PersistenceProvider {
     /// Removes the stored approval-signal feedback records.
     func removeDraftFeedback() throws
 
+    /// Removes account-scoped mail artifacts while preserving other accounts.
+    func purgeAccountScopedArtifacts(for accountEmail: String, includeUnscopedArtifacts: Bool) throws
+    /// Removes every mail-content-bearing artifact while preserving account settings.
+    func purgeAllMailArtifacts() throws
+
     /// Erases every locally persisted store this provider owns, returning it to a
     /// pristine first-run state — the app-global Settings file included. For the
     /// file-backed provider this clears everything under the app's Application

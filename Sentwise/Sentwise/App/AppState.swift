@@ -409,6 +409,7 @@ final class AppState: ObservableObject {
     var draftGeneration = 0
     var browserGeneration = 0
     var bulkGeneration = 0
+    var localDataEraseGeneration: UInt64 = 0
 
     var bulkSweepPacingNanoseconds: UInt64 = 1_200_000_000
 

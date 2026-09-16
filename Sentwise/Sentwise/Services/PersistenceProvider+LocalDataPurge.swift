@@ -2,6 +2,40 @@ import Foundation
 
 extension PersistenceProvider {
 
+    private struct AccountArtifactSnapshot {
+        let voiceProfile: VoiceProfile?
+        let processedMessages: ProcessedMessages
+        let pendingDrafts: [Draft]
+        let skippedMessages: [SkippedMessage]
+        let approvedDraftIdentities: Set<String>
+        let activityEvents: [ActivityEvent]
+        let draftFeedback: [DraftFeedbackRecord]
+
+        init(_ persistence: PersistenceProvider) {
+            voiceProfile = persistence.loadVoiceProfile()
+            processedMessages = persistence.loadProcessedMessages()
+            pendingDrafts = persistence.loadPendingDrafts()
+            skippedMessages = persistence.loadSkippedMessages()
+            approvedDraftIdentities = persistence.loadApprovedDraftIdentities()
+            activityEvents = persistence.loadActivityEvents()
+            draftFeedback = persistence.loadDraftFeedback()
+        }
+
+        func restore(to persistence: PersistenceProvider) {
+            if let voiceProfile {
+                persistence.saveVoiceProfile(voiceProfile)
+            } else {
+                try? persistence.removeVoiceProfile()
+            }
+            try? persistence.updateProcessedMessagesSync { $0 = processedMessages }
+            try? persistence.savePendingDraftsSync(pendingDrafts)
+            try? persistence.saveSkippedMessagesSync(skippedMessages)
+            try? persistence.saveApprovedDraftIdentitiesSync(approvedDraftIdentities)
+            try? persistence.updateActivityEventsSync { $0 = activityEvents }
+            try? persistence.updateDraftFeedbackSync { $0 = draftFeedback }
+        }
+    }
+
     /// Purges every mail-content-bearing artifact while leaving account settings
     /// and credentials alone. This is used when the app no longer has a selected
     /// mailbox but retained mail records can still exist locally.
@@ -25,40 +59,46 @@ extension PersistenceProvider {
     ) throws {
         let account = SavedMailAccount.normalizedEmail(accountEmail)
         guard !account.isEmpty else { return }
+        let snapshot = AccountArtifactSnapshot(self)
 
-        if includeUnscopedArtifacts {
-            try removeVoiceProfile()
-        }
-
-        try updateProcessedMessagesSync { processed in
-            processed.removeAccount(account)
-        }
-
-        let pendingDrafts = loadPendingDrafts().filter {
-            !Self.draft($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
-        }
-        try savePendingDraftsSync(pendingDrafts)
-
-        let skippedMessages = loadSkippedMessages().filter {
-            SavedMailAccount.normalizedEmail($0.account) != account
-        }
-        try saveSkippedMessagesSync(skippedMessages)
-
-        let approved = loadApprovedDraftIdentities().filter {
-            !Self.draftIdentity($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
-        }
-        try saveApprovedDraftIdentitiesSync(approved)
-
-        try updateActivityEventsSync { events in
-            events.removeAll {
-                Self.activity($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
+        do {
+            if includeUnscopedArtifacts {
+                try removeVoiceProfile()
             }
-        }
 
-        try updateDraftFeedbackSync { records in
-            records.removeAll {
-                Self.feedback($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
+            try updateProcessedMessagesSync { processed in
+                processed.removeAccount(account)
             }
+
+            let pendingDrafts = loadPendingDrafts().filter {
+                !Self.draft($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
+            }
+            try savePendingDraftsSync(pendingDrafts)
+
+            let skippedMessages = loadSkippedMessages().filter {
+                SavedMailAccount.normalizedEmail($0.account) != account
+            }
+            try saveSkippedMessagesSync(skippedMessages)
+
+            let approved = loadApprovedDraftIdentities().filter {
+                !Self.draftIdentity($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
+            }
+            try saveApprovedDraftIdentitiesSync(approved)
+
+            try updateActivityEventsSync { events in
+                events.removeAll {
+                    Self.activity($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
+                }
+            }
+
+            try updateDraftFeedbackSync { records in
+                records.removeAll {
+                    Self.feedback($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)
+                }
+            }
+        } catch {
+            snapshot.restore(to: self)
+            throw error
         }
     }
 

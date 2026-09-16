@@ -225,6 +225,14 @@ extension AppState {
 
         managedBusyAction = .deleteAccount
         defer { managedBusyAction = nil }
+        if didDeleteManagedAccount && !isManagedSignedIn {
+            return retryManagedLocalMailPurgeAfterDeleted(
+                purgeLocalData,
+                generation: settingsMessageGeneration,
+                messageSurface: messageSurface
+            )
+        }
+
         do {
             try await llm.deleteManagedAccount()
         } catch {
@@ -273,7 +281,7 @@ extension AppState {
         return true
     }
 
-    private func purgeLocalMailDataAfterManagedDeleteIfNeeded(
+    func purgeLocalMailDataAfterManagedDeleteIfNeeded(
         _ purgeLocalData: Bool,
         generation: UInt64,
         messageSurface: TransientMessageSurface
@@ -293,6 +301,7 @@ extension AppState {
             }
             return true
         } catch {
+            if wasWatching { startWatchingIfReady() }
             reportManagedErrorIfCurrent(
                 "Your account was deleted, but Sentwise couldn't erase local mail data. "
                     + Self.managedMessage(for: error),
@@ -470,11 +479,7 @@ extension AppState {
         return migrated
     }
 
-    /// Terminal launch migration (item 24). The signature fields are purely
-    /// additive — older files decode them to defaults — so this step carries no
-    /// field logic; it only advances the schema version to the current one and
-    /// persists the fully-migrated settings exactly once. Runs last so a single
-    /// write records the final version regardless of which earlier steps changed.
+    /// Terminal launch migration: advances the schema after additive settings migrations.
     static func migratedSignatureSettings(
         _ settings: Settings,
         originalSchemaVersion: Int,
@@ -492,5 +497,4 @@ extension AppState {
         }
         return migrated
     }
-
 }

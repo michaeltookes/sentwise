@@ -294,6 +294,19 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertTrue(persistence.loadProcessedMessages().hasBaseline(account: otherAccount, mailbox: .inbox))
     }
 
+    func testAccountScopedPurgeRestoresEarlierStoresWhenLaterWriteFails() {
+        let persistence = seededPersistence()
+        persistence.pendingDraftSaveError = AppStatePersistenceError.writeDenied
+        let (app, _, _) = makeAppState(persistence: persistence)
+
+        XCTAssertThrowsError(try app.purgeLocalMailArtifacts())
+
+        XCTAssertNotNil(persistence.loadVoiceProfile())
+        XCTAssertTrue(persistence.loadProcessedMessages().hasBaseline(account: account, mailbox: .inbox))
+        XCTAssertFalse(persistence.loadPendingDrafts().isEmpty)
+        XCTAssertFalse(app.pendingDrafts.isEmpty)
+    }
+
     // MARK: - Disconnect
 
     func testDisconnectWithPurgeErasesData() {
@@ -477,17 +490,4 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         try? provider.eraseAllLocalData()
         XCTAssertEqual(provider.loadSettings(), Settings.default.validated())
     }
-}
-
-/// A `SecretStore` whose `removeAll()` always throws, to drive the erase-all
-/// Keychain-failure path.
-private final class ThrowingRemoveAllSecretStore: SecretStore {
-    private var storage: [String: String] = [
-        SecretKey.mailAppPassword(email: "me@gmail.com").rawValue: "app-pw"
-    ]
-
-    func set(_ value: String, for key: SecretKey) throws { storage[key.rawValue] = value }
-    func value(for key: SecretKey) throws -> String? { storage[key.rawValue] }
-    func remove(_ key: SecretKey) throws { storage[key.rawValue] = nil }
-    func removeAll() throws { throw KeychainError.unexpectedStatus(errSecInternalError) }
 }

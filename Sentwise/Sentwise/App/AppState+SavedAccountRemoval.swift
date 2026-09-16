@@ -18,7 +18,7 @@ extension AppState {
     /// secret and drops it from the list. If it was the active account, the app
     /// goes offline and the account inputs are cleared. Other accounts' secrets are
     /// never touched. When `purgeLocalData` is set the account-scoped mail artifacts
-    /// are purged after a successful removal (item 96), never if it rolls back.
+    /// are purged before the irreversible removal so a failed erase stays retryable.
     func removeSavedAccount(
         _ account: SavedMailAccount,
         purgeLocalData: Bool = false,
@@ -38,15 +38,21 @@ extension AppState {
             return
         }
 
+        let shouldRestoreWatching = purgeLocalData && context.shouldClearCurrentAccount && watchStatus == .watching
         guard purgeRemovedSavedAccountDataIfNeeded(
             account,
             context: context,
             purgeLocalData: purgeLocalData,
             messageSurface: messageSurface
-        ),
-            removeSavedAccountSecrets(account, context: context, messageSurface: messageSurface),
-              persistRemovedSavedAccountSettings(account, context: context, messageSurface: messageSurface)
-        else { return }
+        ) else { return }
+        guard removeSavedAccountSecrets(account, context: context, messageSurface: messageSurface) else {
+            restoreWatchingAfterPreservedSavedAccountRemovalIfNeeded(shouldRestoreWatching)
+            return
+        }
+        guard persistRemovedSavedAccountSettings(account, context: context, messageSurface: messageSurface) else {
+            restoreWatchingAfterPreservedSavedAccountRemovalIfNeeded(shouldRestoreWatching)
+            return
+        }
 
         applyRemovedSavedAccountState(context, messageSurface: messageSurface)
         logger.info("Saved account removed")
@@ -156,6 +162,11 @@ extension AppState {
             setConnectionError("Couldn't erase local mail data. \(Self.message(for: error))", for: messageSurface)
             return false
         }
+    }
+
+    private func restoreWatchingAfterPreservedSavedAccountRemovalIfNeeded(_ shouldRestore: Bool) {
+        guard shouldRestore else { return }
+        startWatchingIfReady()
     }
 
     private func reportRemovedAccountRollbackError(

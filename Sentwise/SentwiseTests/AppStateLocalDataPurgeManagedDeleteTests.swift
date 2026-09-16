@@ -94,13 +94,14 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
 
     private func makeAppState(
         persistence: AppStateMemoryPersistence,
-        secrets: SecretStore = InMemorySecretStore(seed: [.mailAppPassword(email: "me@gmail.com"): "app-pw"])
+        secrets: SecretStore = InMemorySecretStore(seed: [.mailAppPassword(email: "me@gmail.com"): "app-pw"]),
+        llm: LLMProviding = DeletableLLM()
     ) -> (AppState, SecretStore) {
         let app = AppState(
             persistence: persistence,
             secrets: secrets,
             mailProvider: FakeAppMailProvider(result: .success(())),
-            llm: DeletableLLM(),
+            llm: llm,
             notifier: FakeDraftNotifier()
         )
         return (app, secrets)
@@ -165,6 +166,48 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
         XCTAssertEqual(app.watchStatus, .watching)
     }
 
+    func testManagedDeleteWithPurgeFailureRestartsWatcherWhenMailboxCanStillWatch() async {
+        let persistence = seededPersistence()
+        persistence.purgeError = AppStatePersistenceError.writeDenied
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: account): "app-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-live",
+            .managedClientToken: "client",
+            .managedSessionID: "sess"
+        ])
+        let (app, _) = makeAppState(persistence: persistence, secrets: secrets)
+        app.watchStatus = .watching
+
+        let ok = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
+
+        XCTAssertFalse(ok)
+        XCTAssertTrue(app.didDeleteManagedAccount)
+        XCTAssertFalse(app.isManagedSignedIn)
+        XCTAssertEqual(app.watchStatus, .watching)
+        XCTAssertFalse(persistence.loadPendingDrafts().isEmpty)
+    }
+
+    func testManagedDeleteRetriesOnlyLocalPurgeAfterRemoteDeleteSucceeded() async {
+        let persistence = seededPersistence()
+        persistence.purgeError = AppStatePersistenceError.writeDenied
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: account): "app-pw",
+            .managedClientToken: "client",
+            .managedSessionID: "sess"
+        ])
+        let llm = DeletableLLM()
+        let (app, _) = makeAppState(persistence: persistence, secrets: secrets, llm: llm)
+
+        let first = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
+        persistence.purgeError = nil
+        let second = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
+
+        XCTAssertFalse(first)
+        XCTAssertTrue(second)
+        XCTAssertEqual(llm.deleteCount, 1)
+        assertAccountArtifactsCleared(persistence)
+    }
+
     func testManagedDeleteWithoutPurgeKeepsLocalMailData() async {
         let persistence = seededPersistence()
         let secrets = InMemorySecretStore(seed: [
@@ -209,9 +252,13 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
 /// An `LLMProviding` whose `deleteManagedAccount()` succeeds, so the managed-delete
 /// purge path can be exercised end to end.
 private final class DeletableLLM: LLMProviding, @unchecked Sendable {
+    private(set) var deleteCount = 0
+
     func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
     func complete(_ request: LLMRequest, provider: LLMProviderKind, apiKey: String, baseURL: String?) async throws -> LLMResponse {
         LLMResponse(text: "")
     }
-    func deleteManagedAccount() async throws {}
+    func deleteManagedAccount() async throws {
+        deleteCount += 1
+    }
 }
