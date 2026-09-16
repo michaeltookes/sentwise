@@ -408,11 +408,19 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
             .managedSessionID: "sess"
         ])
         let (app, _, _) = makeAppState(persistence: persistence, secrets: secrets, llm: DeletableLLM())
+        app.watchStatus = .watching
+        app.recentMessages = [message(id: 99)]
+        app.openedBody = MailBodyPreview(id: 99, subject: "Subject 99", text: "cached body")
+        app.generatedDraft = pendingDraft(id: 99)
 
         let ok = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
 
         XCTAssertTrue(ok)
         assertAccountArtifactsCleared(persistence)
+        XCTAssertEqual(app.watchStatus, .idle)
+        XCTAssertTrue(app.recentMessages.isEmpty)
+        XCTAssertNil(app.openedBody)
+        XCTAssertNil(app.generatedDraft)
         // The mailbox secret survives — deletion targets the Sentwise account, and
         // the purge is scoped to mail *content*, not credentials.
         XCTAssertEqual(try? secrets.value(for: .mailAppPassword(email: account)), "app-pw")

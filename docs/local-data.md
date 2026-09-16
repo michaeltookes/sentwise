@@ -82,8 +82,9 @@ confirmation (mirroring the delete-account sheet). `AppState.eraseAllLocalData()
 2. clears **every** Keychain item via `SecretStore.removeAll()`, and
 3. clears UserDefaults-backed local caches (subscription snapshot, usage-alert
    history, and the local "already offered Google OAuth" flag), and
-4. resets in-memory state to a coherent first-run state (disconnected, signed out,
-   default preferences, `onboardingCompleted = false`) without a relaunch.
+4. disables launch-at-login and resets in-memory state to a coherent first-run
+   state (disconnected, signed out, default preferences,
+   `onboardingCompleted = false`) without a relaunch.
 
 Before Keychain deletion, erase-all stops mail/transcript watchers, cancels
 pending managed sign-in handles, and runs the normal managed sign-out path so an

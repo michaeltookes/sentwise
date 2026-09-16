@@ -264,21 +264,35 @@ extension AppState {
         // cache is separate. If the user asked, purge the account-scoped mail
         // artifacts on this Mac too (item 96) — the confirmation states plainly
         // that this is what stays local otherwise.
-        if purgeLocalData, let account = normalizedConnectedAccountEmail {
-            do {
-                try purgeLocalMailArtifacts(for: account, includeUnscopedArtifacts: true)
-            } catch {
-                reportManagedErrorIfCurrent(
-                    "Your account was deleted, but Sentwise couldn't erase local mail data. "
-                        + Self.managedMessage(for: error),
-                    generation: settingsMessageGeneration,
-                    surface: messageSurface
-                )
-                return false
-            }
-        }
+        guard purgeLocalMailDataAfterManagedDeleteIfNeeded(
+            purgeLocalData,
+            generation: settingsMessageGeneration,
+            messageSurface: messageSurface
+        ) else { return false }
         saveSettings()
         return true
+    }
+
+    private func purgeLocalMailDataAfterManagedDeleteIfNeeded(
+        _ purgeLocalData: Bool,
+        generation: UInt64,
+        messageSurface: TransientMessageSurface
+    ) -> Bool {
+        guard purgeLocalData, let account = normalizedConnectedAccountEmail else { return true }
+        stopWatching()
+        do {
+            try purgeLocalMailArtifacts(for: account, includeUnscopedArtifacts: true)
+            resetMessagePreviewForAccountChange(clearSkippedMessages: false)
+            return true
+        } catch {
+            reportManagedErrorIfCurrent(
+                "Your account was deleted, but Sentwise couldn't erase local mail data. "
+                    + Self.managedMessage(for: error),
+                generation: generation,
+                surface: messageSurface
+            )
+            return false
+        }
     }
 
     var managedAccountDisplayEmail: String {

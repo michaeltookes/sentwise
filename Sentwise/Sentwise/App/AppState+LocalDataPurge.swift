@@ -255,6 +255,7 @@ extension AppState {
         senderAllowlist = Settings.default.senderAllowlist
         senderBlocklist = Settings.default.senderBlocklist
         verboseDiagnosticLogging = Settings.default.verboseDiagnosticLogging
+        setLaunchAtLogin(false)
         transcriptWatchedFolderEnabled = Settings.default.transcriptWatchedFolderEnabled
         transcriptWatchedFolderPath = Settings.default.transcriptWatchedFolderPath
         transcriptWatchedFolderSeenSnapshots = nil
