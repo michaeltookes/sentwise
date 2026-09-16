@@ -34,6 +34,10 @@ extension AppState {
     /// can change it; OpenRouter namespaces model ids by publisher.
     static let openRouterDefaultModel = "openai/gpt-4o-mini"
 
+    /// Parked 2026-09-16 (item 100): production callback routing must ignore
+    /// OpenRouter redirects while BYOK/local providers are not a shipped path.
+    static let areBYOKProvidersParked = true
+
     /// Begins OpenRouter provisioning: mints a PKCE pair, stores the verifier, and
     /// returns the authorization URL to open in the browser. Returns `nil` (and
     /// sets the surface-specific LLM error) in hunt mode or if the verifier can't
@@ -145,8 +149,13 @@ extension AppState {
     func handleOpenRouterCallback(
         code: String,
         flowID: String? = nil,
+        allowParkedProviderCallback: Bool = false,
         provisioner: OpenRouterKeyProvisioner = OpenRouterKeyProvisioner()
     ) async {
+        guard allowParkedProviderCallback || !Self.areBYOKProvidersParked else {
+            ignoreParkedOpenRouterCallback()
+            return
+        }
         guard shouldHandleOpenRouterCallback(flowID: flowID) else { return }
         let messageSurface = currentOpenRouterProvisioningMessageSurface()
         let settingsMessageGeneration = settingsTransientMessageGeneration
@@ -229,6 +238,14 @@ extension AppState {
         pendingOpenRouterProvisioningMessageSurface = .shared
 
         activateProvisionedOpenRouterKey(key)
+    }
+
+    private func ignoreParkedOpenRouterCallback() {
+        _ = Self.clearPendingOpenRouterProvisioningState(secrets: secrets)
+        clearCanceledOpenRouterCallbackSurfaceBestEffort()
+        isOpenRouterProvisioning = false
+        pendingOpenRouterProvisioningMessageSurface = .shared
+        logger.info("Ignoring OpenRouter callback because BYOK providers are parked")
     }
 
     private func shouldContinueOpenRouterCallback(

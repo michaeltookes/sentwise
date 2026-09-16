@@ -64,6 +64,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         await relaunched.handleOpenRouterCallback(
             code: "CODE",
             flowID: flowID,
+            allowParkedProviderCallback: true,
             provisioner: OpenRouterKeyProvisioner(transport: transport)
         )
 
@@ -82,6 +83,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
             await appState.handleOpenRouterCallback(
                 code: "CODE",
                 flowID: flowID,
+                allowParkedProviderCallback: true,
                 provisioner: OpenRouterKeyProvisioner(transport: transport)
             )
         }
@@ -109,6 +111,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
             await appState.handleOpenRouterCallback(
                 code: "CODE",
                 flowID: flowID,
+                allowParkedProviderCallback: true,
                 provisioner: OpenRouterKeyProvisioner(transport: transport)
             )
         }
@@ -132,7 +135,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         _ = try XCTUnwrap(appState.beginOpenRouterProvisioning(messageSurface: .settings))
 
         appState.cancelOpenRouterProvisioning(messageSurface: .settings)
-        await appState.handleOpenRouterCallback(code: "CODE")
+        await appState.handleOpenRouterCallback(code: "CODE", allowParkedProviderCallback: true)
 
         XCTAssertEqual(appState.llmError, "setup assistant error")
         XCTAssertNil(appState.llmError(for: .settings))
@@ -157,6 +160,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         await appState.handleOpenRouterCallback(
             code: "CODE_A",
             flowID: flowA,
+            allowParkedProviderCallback: true,
             provisioner: OpenRouterKeyProvisioner(transport: transport)
         )
 
@@ -184,6 +188,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
 
         await appState.handleOpenRouterCallback(
             code: "CODE_A",
+            allowParkedProviderCallback: true,
             provisioner: OpenRouterKeyProvisioner(transport: transport)
         )
 
@@ -210,6 +215,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         await appState.handleOpenRouterCallback(
             code: "CODE",
             flowID: "FLOW",
+            allowParkedProviderCallback: true,
             provisioner: OpenRouterKeyProvisioner(transport: transport)
         )
 

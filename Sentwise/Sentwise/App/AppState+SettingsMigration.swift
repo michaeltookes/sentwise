@@ -156,7 +156,7 @@ extension AppState {
         return migrated
     }
 
-    private static func clearPendingOpenRouterProvisioningState(secrets: SecretStore) -> Bool {
+    static func clearPendingOpenRouterProvisioningState(secrets: SecretStore) -> Bool {
         var didClear = true
         for key in [
             SecretKey.openRouterPKCEVerifier,

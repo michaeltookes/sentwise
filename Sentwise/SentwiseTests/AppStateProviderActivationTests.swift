@@ -5,9 +5,11 @@ import AppKit
 /// A fake `LLMHTTPTransport` returning a fixed response (OpenRouter exchange).
 private final class ActivationFakeJSONTransport: LLMHTTPTransport, @unchecked Sendable {
     private let response: HTTPResponse
+    private(set) var callCount = 0
     init(_ response: HTTPResponse) { self.response = response }
     func postJSON(_ url: URL, headers: [String: String], body: Data) async throws -> HTTPResponse {
-        response
+        callCount += 1
+        return response
     }
 }
 
@@ -123,6 +125,7 @@ final class AppStateProviderActivationTests: XCTestCase {
 
         await appState.handleOpenRouterCallback(
             code: "CODE",
+            allowParkedProviderCallback: true,
             provisioner: OpenRouterKeyProvisioner(transport: transport)
         )
 
@@ -137,6 +140,33 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertEqual(appState.currentDraftLLMConfiguration?.apiKey, "sk-or-xyz")
         XCTAssertNil((try secrets.value(for: .openRouterPKCEVerifier)) ?? nil, "verifier is consumed")
         XCTAssertNil(appState.llmError)
+    }
+
+    func testOpenRouterCallbackIsIgnoredWhileBYOKProvidersAreParked() async throws {
+        let secrets = InMemorySecretStore(seed: [
+            .openRouterPKCEVerifier: "VER",
+            .openRouterPKCEFlowID: "FLOW",
+            .openRouterPKCEMessageSurface: "settings"
+        ])
+        let appState = makeAppState(provider: "managed", secrets: secrets)
+        let transport = ActivationFakeJSONTransport(
+            HTTPResponse(statusCode: 200, body: Data(#"{"key":"sk-or-xyz"}"#.utf8))
+        )
+
+        await appState.handleOpenRouterCallback(
+            code: "CODE",
+            flowID: "FLOW",
+            provisioner: OpenRouterKeyProvisioner(transport: transport)
+        )
+
+        XCTAssertEqual(transport.callCount, 0)
+        XCTAssertEqual(appState.llmProviderKind, .managed)
+        XCTAssertFalse(appState.isOpenRouterProvisioning)
+        XCTAssertFalse(appState.isBYOProviderActive)
+        XCTAssertNil((try secrets.value(for: .openRouterAPIKey)) ?? nil)
+        XCTAssertNil((try secrets.value(for: .openRouterPKCEVerifier)) ?? nil)
+        XCTAssertNil((try secrets.value(for: .openRouterPKCEFlowID)) ?? nil)
+        XCTAssertNil((try secrets.value(for: .openRouterPKCEMessageSurface)) ?? nil)
     }
 
     func testStoredOpenRouterCredentialCanBeReactivatedWithoutOverwritingGenericKey() throws {
@@ -178,6 +208,7 @@ final class AppStateProviderActivationTests: XCTestCase {
 
         await appState.handleOpenRouterCallback(
             code: "CODE",
+            allowParkedProviderCallback: true,
             provisioner: OpenRouterKeyProvisioner(transport: transport)
         )
 
@@ -193,7 +224,7 @@ final class AppStateProviderActivationTests: XCTestCase {
     func testHandleOpenRouterCallbackWithoutVerifierSetsError() async {
         let appState = makeAppState(provider: "managed")
 
-        await appState.handleOpenRouterCallback(code: "CODE")
+        await appState.handleOpenRouterCallback(code: "CODE", allowParkedProviderCallback: true)
 
         XCTAssertNotNil(appState.llmError)
         XCTAssertFalse(appState.isOpenRouterProvisioning)
@@ -212,6 +243,7 @@ final class AppStateProviderActivationTests: XCTestCase {
         await appState.handleOpenRouterCallback(
             code: "CODE",
             flowID: flowID,
+            allowParkedProviderCallback: true,
             provisioner: OpenRouterKeyProvisioner(transport: transport)
         )
 
@@ -229,6 +261,7 @@ final class AppStateProviderActivationTests: XCTestCase {
         let callback = Task {
             await appState.handleOpenRouterCallback(
                 code: "CODE",
+                allowParkedProviderCallback: true,
                 provisioner: OpenRouterKeyProvisioner(transport: transport)
             )
         }
