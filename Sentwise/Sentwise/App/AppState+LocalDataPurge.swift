@@ -7,9 +7,10 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "LocalDa
 struct LocalDataEraseResult: Equatable {
     let persistenceError: String?
     let keychainError: String?
+    let preferenceError: String?
 
     var succeeded: Bool {
-        persistenceError == nil && keychainError == nil
+        persistenceError == nil && keychainError == nil && preferenceError == nil
     }
 }
 
@@ -212,11 +213,15 @@ extension AppState {
         clearUserDefaultsBackedStores()
         resetInMemoryAccountArtifacts()
         resetInMemoryAccountIdentity()
-        resetInMemoryPreferences()
+        let preferenceError = resetInMemoryPreferences()
         resetMessagePreviewForAccountChange(clearSkippedMessages: false)
         clearTransientErrorState()
 
-        let result = LocalDataEraseResult(persistenceError: persistenceError, keychainError: keychainError)
+        let result = LocalDataEraseResult(
+            persistenceError: persistenceError,
+            keychainError: keychainError,
+            preferenceError: preferenceError
+        )
         logger.info("Erased all local data (succeeded=\(result.succeeded, privacy: .public))")
         return result
     }
@@ -258,7 +263,7 @@ extension AppState {
 
     /// Resets user preferences to their shipped defaults, including the onboarding
     /// flag so the app presents its first-run experience again.
-    private func resetInMemoryPreferences() {
+    private func resetInMemoryPreferences() -> String? {
         pollIntervalSeconds = Settings.default.pollIntervalSeconds
         sendBehavior = SendBehavior(rawValue: Settings.default.sendBehavior) ?? .default
         sendDelaySeconds = Settings.default.sendDelaySeconds
@@ -267,12 +272,13 @@ extension AppState {
         senderAllowlist = Settings.default.senderAllowlist
         senderBlocklist = Settings.default.senderBlocklist
         verboseDiagnosticLogging = Settings.default.verboseDiagnosticLogging
-        setLaunchAtLogin(false)
+        let disabledLaunchAtLogin = setLaunchAtLogin(false)
         transcriptWatchedFolderEnabled = Settings.default.transcriptWatchedFolderEnabled
         transcriptWatchedFolderPath = Settings.default.transcriptWatchedFolderPath
         transcriptWatchedFolderSeenSnapshots = nil
         hasRunPreGateDraftSweep = false
         onboardingCompleted = false
+        return disabledLaunchAtLogin ? nil : "Launch at login could not be disabled."
     }
 
     /// Clears surfaced errors/preview state so no stale message survives the wipe.

@@ -279,6 +279,7 @@ extension AppState {
         messageSurface: TransientMessageSurface
     ) -> Bool {
         guard purgeLocalData else { return true }
+        let wasWatching = watchStatus == .watching
         stopWatching()
         do {
             if let account = normalizedConnectedAccountEmail {
@@ -287,6 +288,9 @@ extension AppState {
                 try purgeAllLocalMailArtifacts()
             }
             resetMessagePreviewForAccountChange(clearSkippedMessages: false)
+            if wasWatching {
+                startWatchingIfReady()
+            }
             return true
         } catch {
             reportManagedErrorIfCurrent(

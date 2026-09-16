@@ -145,6 +145,24 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
         XCTAssertEqual(try? secrets.value(for: .mailAppPassword(email: account)), "app-pw")
     }
 
+    func testManagedDeleteWithPurgeRestartsWatcherWhenMailboxCanStillWatch() async {
+        let persistence = seededPersistence()
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: account): "app-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-live",
+            .managedClientToken: "client",
+            .managedSessionID: "sess"
+        ])
+        let (app, _) = makeAppState(persistence: persistence, secrets: secrets)
+        app.watchStatus = .watching
+
+        let ok = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
+
+        XCTAssertTrue(ok)
+        assertAccountArtifactsCleared(persistence)
+        XCTAssertEqual(app.watchStatus, .watching)
+    }
+
     func testManagedDeleteWithoutPurgeKeepsLocalMailData() async {
         let persistence = seededPersistence()
         let secrets = InMemorySecretStore(seed: [

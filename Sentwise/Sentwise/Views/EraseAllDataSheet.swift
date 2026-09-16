@@ -85,17 +85,12 @@ struct EraseAllDataSheet: View {
     }
 
     private static func eraseErrorMessage(_ result: LocalDataEraseResult) -> String {
-        switch (result.persistenceError, result.keychainError) {
-        case let (fileError?, keychainError?):
-            return "Some local files and Keychain items could not be removed. "
-                + "\(fileError) \(keychainError)"
-        case let (fileError?, nil):
-            return "Some local files could not be removed. \(fileError)"
-        case let (nil, keychainError?):
-            return "Your local files were erased, but some Keychain items could not be removed. "
-                + "\(keychainError)"
-        case (nil, nil):
-            return ""
-        }
+        [
+            result.persistenceError.map { "Some local files could not be removed. \($0)" },
+            result.keychainError.map { "Some Keychain items could not be removed. \($0)" },
+            result.preferenceError.map { "Some preferences could not be reset. \($0)" }
+        ]
+        .compactMap { $0 }
+        .joined(separator: " ")
     }
 }

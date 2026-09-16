@@ -139,6 +139,7 @@ extension AppState {
         messageSurface: TransientMessageSurface
     ) -> Bool {
         guard purgeLocalData else { return true }
+        let wasWatching = context.shouldClearCurrentAccount && watchStatus == .watching
         if context.shouldClearCurrentAccount {
             stopWatching()
         }
@@ -149,6 +150,9 @@ extension AppState {
             )
             return true
         } catch {
+            if wasWatching {
+                startWatchingIfReady()
+            }
             setConnectionError("Couldn't erase local mail data. \(Self.message(for: error))", for: messageSurface)
             return false
         }

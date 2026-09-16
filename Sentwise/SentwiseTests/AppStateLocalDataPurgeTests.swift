@@ -420,6 +420,19 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertFalse(app.onboardingCompleted)
     }
 
+    func testEraseAllReturnsFalseWhenLaunchAtLoginDisableFails() async {
+        let persistence = seededPersistence()
+        let (app, _, _) = makeAppState(persistence: persistence)
+        app.setLaunchAtLoginHandler = { _ in false }
+        app.launchAtLoginStatusProvider = { true }
+
+        let result = await app.eraseAllLocalData()
+
+        XCTAssertFalse(result.succeeded)
+        XCTAssertEqual(result.preferenceError, "Launch at login could not be disabled.")
+        XCTAssertTrue(app.launchAtLogin)
+    }
+
     func testEraseAllStopsTranscriptFolderWatcher() async throws {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("SentwiseEraseAll-\(UUID().uuidString)", isDirectory: true)
