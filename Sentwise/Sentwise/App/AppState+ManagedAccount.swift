@@ -202,7 +202,9 @@ extension AppState {
     /// Deletes the Sentwise account server-side (`DELETE /v1/me`, item 73), then
     /// clears or durably invalidates the managed credentials locally. Returns
     /// `true` when the account was deleted and local credentials cannot restore it.
-    /// Local mail, voice profile, drafts, and settings on this Mac are untouched.
+    /// Local mail, voice profile, drafts, and settings on this Mac are untouched
+    /// unless `purgeLocalData` is set, in which case the account-scoped mail
+    /// artifacts are also purged after a successful deletion (item 96).
     /// On failure the account is kept and `managedError` carries the mapped message.
     /// In Prowl hunt mode this is a
     /// deterministic, zero-network no-op that reports success without tearing down
@@ -210,6 +212,7 @@ extension AppState {
     /// injectable for unit tests.
     @discardableResult
     func deleteManagedAccount(
+        purgeLocalData: Bool = false,
         isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
         messageSurface: TransientMessageSurface = .shared
     ) async -> Bool {
@@ -222,6 +225,14 @@ extension AppState {
 
         managedBusyAction = .deleteAccount
         defer { managedBusyAction = nil }
+        if didDeleteManagedAccount && !isManagedSignedIn {
+            return retryManagedLocalMailPurgeAfterDeleted(
+                purgeLocalData,
+                generation: settingsMessageGeneration,
+                messageSurface: messageSurface
+            )
+        }
+
         do {
             try await llm.deleteManagedAccount()
         } catch {
@@ -257,8 +268,48 @@ extension AppState {
         }
         applyManagedSignedOutState(clearEmailInput: true, messageSurface: messageSurface)
         didDeleteManagedAccount = true
+        // Server-side deletion removes the Sentwise account; the local mailbox
+        // cache is separate. If the user asked, purge the account-scoped mail
+        // artifacts on this Mac too (item 96) — the confirmation states plainly
+        // that this is what stays local otherwise.
+        guard purgeLocalMailDataAfterManagedDeleteIfNeeded(
+            purgeLocalData,
+            generation: settingsMessageGeneration,
+            messageSurface: messageSurface
+        ) else { return false }
         saveSettings()
         return true
+    }
+
+    func purgeLocalMailDataAfterManagedDeleteIfNeeded(
+        _ purgeLocalData: Bool,
+        generation: UInt64,
+        messageSurface: TransientMessageSurface
+    ) -> Bool {
+        guard purgeLocalData else { return true }
+        let wasWatching = watchStatus == .watching
+        stopWatching()
+        do {
+            if let account = normalizedConnectedAccountEmail {
+                try purgeLocalMailArtifacts(for: account, includeUnscopedArtifacts: true)
+            } else {
+                try purgeAllLocalMailArtifacts()
+            }
+            resetMessagePreviewForAccountChange(clearSkippedMessages: false)
+            if wasWatching {
+                startWatchingIfReady()
+            }
+            return true
+        } catch {
+            if wasWatching { startWatchingIfReady() }
+            reportManagedErrorIfCurrent(
+                "Your account was deleted, but Sentwise couldn't erase local mail data. "
+                    + Self.managedMessage(for: error),
+                generation: generation,
+                surface: messageSurface
+            )
+            return false
+        }
     }
 
     var managedAccountDisplayEmail: String {
@@ -428,11 +479,7 @@ extension AppState {
         return migrated
     }
 
-    /// Terminal launch migration (item 24). The signature fields are purely
-    /// additive — older files decode them to defaults — so this step carries no
-    /// field logic; it only advances the schema version to the current one and
-    /// persists the fully-migrated settings exactly once. Runs last so a single
-    /// write records the final version regardless of which earlier steps changed.
+    /// Terminal launch migration: advances the schema after additive settings migrations.
     static func migratedSignatureSettings(
         _ settings: Settings,
         originalSchemaVersion: Int,
@@ -449,33 +496,5 @@ extension AppState {
             }
         }
         return migrated
-    }
-
-    /// If the managed account actor invalidated stored credentials while minting a
-    /// session token, mirror that state back into the published AppState flags.
-    /// Returns `true` when this call changed auth or licensing state, so callers
-    /// whose staleness guards would otherwise swallow the error can still surface
-    /// it — the configuration changed *because of* this failure, not under the user.
-    @discardableResult
-    func reconcileManagedAccountState(
-        after error: Error,
-        provider: LLMProviderKind,
-        messageSurface: TransientMessageSurface = .shared
-    ) async -> Bool {
-        guard provider == .managed else { return false }
-        if case LLMError.managedTrialExpired = error {
-            supersedeInFlightManagedAccountStatusRefreshes()
-            recordManagedEntitlementBlockedSnapshot()
-            managedAccountStatus = nil
-            managedAccountStatusIsFresh = false
-            scheduleManagedAccountStatusRefreshRetryAfterFailure()
-            return true
-        }
-        guard case LLMError.managedNotSignedIn = error else { return false }
-        guard !(await managedAccount.isSignedIn) else { return false }
-
-        applyManagedSignedOutState(clearEmailInput: false, messageSurface: messageSurface)
-        saveSettings()
-        return true
     }
 }

@@ -11,16 +11,14 @@ struct ActiveMailPasswordRemoval {
 }
 
 /// Saved-accounts management (item 48): remembering multiple accounts, switching
-/// between them without re-entry, and per-account Keychain secrets. Kept in its
-/// own file so `AppState` stays within the file/type length limits.
+/// between them without re-entry, and per-account Keychain secrets.
 extension AppState {
 
     // MARK: - Per-account secret access
 
     /// Reads the stored app password for `email`, preferring the per-account
-    /// Keychain key and falling back to the legacy shared slot for installs that
-    /// predate the migration (or test fixtures seeded on the legacy key). Never
-    /// logs or returns the value anywhere user-visible.
+    /// Keychain key and falling back to the legacy shared slot for pre-migration
+    /// installs (or test fixtures on the legacy key). Never surfaced anywhere.
     static func storedMailPassword(
         forEmail email: String,
         savedAccounts: [SavedMailAccount],
@@ -28,18 +26,16 @@ extension AppState {
         secrets: SecretStore
     ) -> String? {
         let normalized = SavedMailAccount.normalizedEmail(email)
-        // No active account means no password to read — never surface a stray
-        // legacy secret when there is no email to attribute it to.
+        // No email means no password to read — never surface a stray legacy secret.
         guard !normalized.isEmpty else { return nil }
 
         if let perAccount = (try? secrets.value(for: .mailAppPassword(email: normalized))) ?? nil,
            !perAccount.isEmpty {
             return perAccount
         }
-        // Legacy fallback: a pre-v11 install whose secret has not yet moved, or a
-        // test fixture that seeded the old shared slot. The shared slot can only
-        // belong to the migrated original saved account, so do not hand it to
-        // another account that happens to be missing its per-account key.
+        // Legacy fallback: a pre-v11 install whose secret has not yet moved (or a
+        // test fixture on the old shared slot). The shared slot can only belong to
+        // the migrated original account, so never hand it to another account.
         guard (try? legacyMailPasswordOwnerID(
             savedAccounts: savedAccounts,
             activeEmail: activeEmail,
@@ -90,7 +86,7 @@ extension AppState {
         )
     }
 
-    private func legacyMailPasswordForOwnedAccount(_ email: String) throws -> String? {
+    func legacyMailPasswordForOwnedAccount(_ email: String) throws -> String? {
         guard try legacyMailPasswordOwnerID() == SavedMailAccount.normalizedEmail(email),
               let legacy = try secrets.value(for: .mailAppPassword),
               !legacy.isEmpty else {
@@ -109,9 +105,9 @@ extension AppState {
         )
     }
 
-    /// Removes the active account's password for disconnect. The legacy shared
-    /// slot is removed only when it belongs to the active account, because it may
-    /// still back an older inactive account after a failed migration.
+    /// Removes the active account's password for disconnect. The legacy shared slot
+    /// is removed only when it belongs to the active account (it may still back an
+    /// older inactive account after a failed migration).
     func removeActiveMailPasswordForDisconnect(messageSurface: TransientMessageSurface = .shared) -> ActiveMailPasswordRemoval? {
         let activeEmail = mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let activeKey = activeEmail.isEmpty ? nil : SecretKey.mailAppPassword(email: activeEmail)
@@ -151,21 +147,12 @@ extension AppState {
         }
     }
 
-    func restoreActiveMailPasswordRemoval(_ removal: ActiveMailPasswordRemoval) -> Error? {
-        restoreRemovedAccountSecrets(
-            accountEmail: removal.accountEmail,
-            accountPassword: removal.accountPassword,
-            legacyPassword: removal.legacyPassword
-        )
-    }
-
     // MARK: - v10 → v11 migration
 
     /// Migrates a pre-v11 settings file to the saved-accounts model: the existing
     /// single account becomes the first saved account, and its app password moves
-    /// from the legacy shared Keychain slot to a per-account key (the legacy slot
-    /// is then removed so no orphaned secret remains). Idempotent and safe to run
-    /// on every launch — it no-ops once `schemaVersion` has reached v11.
+    /// from the legacy shared Keychain slot to a per-account key (the legacy slot is
+    /// then removed so no orphaned secret remains). Idempotent; no-ops once at v11.
     static func migratedSavedAccountsSettings(
         _ settings: Settings,
         secrets: SecretStore,
@@ -240,9 +227,7 @@ extension AppState {
         let account = SavedMailAccount(email: email, host: host, port: port)
         guard !account.id.isEmpty else { return }
         if let index = savedAccounts.firstIndex(where: { $0.id == account.id }) {
-            if savedAccounts[index] != account {
-                savedAccounts[index] = account
-            }
+            if savedAccounts[index] != account { savedAccounts[index] = account }
         } else {
             savedAccounts.append(account)
         }
@@ -256,13 +241,12 @@ extension AppState {
 
     // MARK: - Switching
 
-    /// Switches to a previously saved account using its stored credentials, with
-    /// no re-entry (item 48). Tears down the active account cleanly (stops
-    /// watching, cancels outstanding send countdowns, clears account-scoped
-    /// preview/browser/cleanup state) and connects the target through the normal
-    /// verify path so the connection status stays honest. Both accounts' secrets
-    /// are retained — only the *active* pointer moves. Pending drafts are left
-    /// untouched; they stay scoped to their originating account by identity.
+    /// Switches to a previously saved account using its stored credentials, with no
+    /// re-entry (item 48). Tears down the active account cleanly (stops watching,
+    /// cancels send countdowns, clears account-scoped preview/browser/cleanup state)
+    /// and connects the target through the normal verify path. Both accounts' secrets
+    /// are retained — only the *active* pointer moves; pending drafts stay scoped to
+    /// their originating account by identity.
     func switchToSavedAccount(_ account: SavedMailAccount, messageSurface: TransientMessageSurface = .shared) async {
         clearWorkspaceAuthGuidance(for: messageSurface)
         guard !isActiveAccount(account) else { return }
@@ -284,7 +268,12 @@ extension AppState {
             host: account.host,
             port: account.port
         )
-        let didConnect = await testConnection(with: credentials, messageSurface: messageSurface)
+        let localDataGeneration = localDataEraseGeneration
+        let didConnect = await testConnection(with: credentials, messageSurface: messageSurface) { _ in
+            self.isCurrentLocalDataGeneration(localDataGeneration)
+        }
+
+        guard isCurrentLocalDataGeneration(localDataGeneration) else { return }
 
         guard didConnect, isAccountConnected, isActiveAccount(account) else {
             restoreConnectionSnapshot(settings: outgoingSettings)
@@ -299,154 +288,10 @@ extension AppState {
         }
     }
 
-    // MARK: - Removal
-
-    /// Removes a saved account (item 48): deletes exactly that account's Keychain
-    /// secret and drops it from the list. If it was the active account, the app
-    /// goes offline and the account inputs are cleared. Other accounts' secrets
-    /// are never touched.
-    func removeSavedAccount(_ account: SavedMailAccount, messageSurface: TransientMessageSurface = .shared) {
-        setConnectionError(nil, for: messageSurface)
-        guard !isConnecting else {
-            setConnectionError("Wait for the current connection test to finish before removing an account.", for: messageSurface)
-            return
-        }
-        let wasCurrentAccount = SavedMailAccount.normalizedEmail(mailEmail) == account.id
-        let shouldClearCurrentAccount = isActiveAccount(account) || wasCurrentAccount
-        let ownsWorkspaceGuidance = workspaceAuthGuidanceAccountID(for: messageSurface) == account.id
-        let accountKey = SecretKey.mailAppPassword(email: account.email)
-        let previousAccountPassword: String?, previousLegacyPassword: String?
-        let shouldRemoveLegacyPassword: Bool
-
-        do {
-            previousAccountPassword = try secrets.value(for: accountKey)
-            previousLegacyPassword = try legacyMailPasswordForOwnedAccount(account.email)
-            shouldRemoveLegacyPassword = previousLegacyPassword != nil
-        } catch {
-            setConnectionError(Self.keychainMessage(action: "read", error: error), for: messageSurface)
-            return
-        }
-
-        let nextSettings = settingsAfterRemovingSavedAccount(account, clearCurrentAccount: shouldClearCurrentAccount)
-
-        do {
-            try secrets.remove(accountKey)
-            if shouldRemoveLegacyPassword {
-                // Also clear any legacy shared slot so nothing is orphaned.
-                try secrets.remove(.mailAppPassword)
-            }
-        } catch {
-            setConnectionError(
-                removedAccountRollbackMessage(
-                    baseMessage: Self.keychainMessage(action: "remove", error: error),
-                    accountEmail: account.email,
-                    accountPassword: previousAccountPassword,
-                    legacyPassword: shouldRemoveLegacyPassword ? previousLegacyPassword : nil
-                ),
-                for: messageSurface
-            )
-            return
-        }
-
-        do {
-            try persistSettingsSync(nextSettings)
-        } catch {
-            setConnectionError(
-                removedAccountRollbackMessage(
-                    baseMessage: Self.settingsMessage(action: "save", error: error),
-                    accountEmail: account.email,
-                    accountPassword: previousAccountPassword,
-                    legacyPassword: shouldRemoveLegacyPassword ? previousLegacyPassword : nil
-                ),
-                for: messageSurface
-            )
-            return
-        }
-
-        savedAccounts = nextSettings.savedAccounts
-
-        if shouldClearCurrentAccount || ownsWorkspaceGuidance { clearWorkspaceAuthGuidance(for: messageSurface) }
-        if shouldClearCurrentAccount {
-            goOfflineAfterRemovingActiveAccount()
-        }
-        logger.info("Saved account removed")
-    }
-
-    private func settingsAfterRemovingSavedAccount(
-        _ account: SavedMailAccount,
-        clearCurrentAccount: Bool
-    ) -> Settings {
-        var settings = buildSettings(
-            mailEmail: clearCurrentAccount ? "" : nil,
-            signaturePolicyOverride: clearCurrentAccount ? SignaturePolicy.default.rawValue : nil,
-            signatureTextOverride: clearCurrentAccount ? "" : nil
-        )
-        if clearCurrentAccount {
-            settings.mailHost = Settings.default.mailHost
-            settings.mailPort = Settings.default.mailPort
-            settings.mailHostGuidanceEmail = nil
-            settings.mailHostGuidancePendingEmail = false
-        }
-        settings.savedAccounts.removeAll { $0.id == account.id }
-        return settings
-    }
-
-    private func removedAccountRollbackMessage(
-        baseMessage: String,
-        accountEmail: String,
-        accountPassword: String?,
-        legacyPassword: String?
-    ) -> String {
-        var message = baseMessage
-        let rollbackError = restoreRemovedAccountSecrets(
-            accountEmail: accountEmail,
-            accountPassword: accountPassword,
-            legacyPassword: legacyPassword
-        )
-        if let rollbackError {
-            message += " " + Self.keychainMessage(action: "restore", error: rollbackError)
-        }
-        return message
-    }
-
-    private func restoreRemovedAccountSecrets(
-        accountEmail: String,
-        accountPassword: String?,
-        legacyPassword: String?
-    ) -> Error? {
-        do {
-            if let accountPassword {
-                try secrets.set(accountPassword, for: .mailAppPassword(email: accountEmail))
-            }
-            if let legacyPassword {
-                try secrets.set(legacyPassword, for: .mailAppPassword)
-            }
-            return nil
-        } catch {
-            logger.error("Failed to roll back removed mail secret: \(error.localizedDescription)")
-            return error
-        }
-    }
-
-    /// Tears down the active account after it has been removed from the list.
-    private func goOfflineAfterRemovingActiveAccount() {
-        mailEmail = ""
-        mailHost = Settings.default.mailHost
-        mailPort = Settings.default.mailPort
-        mailHostExplicitlyEditedEmail = nil
-        mailHostExplicitlyEditedBeforeEmail = false
-        mailAppPassword = ""
-        isAccountConnected = false
-        clearSignatureForAccountRemoval()
-        cancelAllSendCountdowns()
-        stopWatching()
-        resetMessagePreviewForAccountChange()
-    }
-
     // MARK: - Verified-connection persistence
 
-    /// Adopts verified credentials as the active account, remembers it, and
-    /// persists the settings snapshot. Called from `testConnection`.
+    /// Adopts verified credentials as the active account, remembers it, and persists
+    /// the settings snapshot. Called from `testConnection`.
     func persistVerifiedConnection(_ credentials: MailAccountCredentials, clearSignature: Bool) throws {
         mailEmail = credentials.email
         mailHost = credentials.host
@@ -482,8 +327,8 @@ extension AppState {
     }
 
     /// Restores UI/account state to a previous settings snapshot after a failed
-    /// connect. Per-account keys are isolated, so the previously-active account's
-    /// secret was never touched by the failed attempt — it is re-read honestly.
+    /// connect. Per-account keys are isolated, so the previously-active secret is
+    /// re-read honestly.
     func restoreConnectionSnapshot(settings: Settings) {
         mailEmail = settings.mailEmail
         mailHost = settings.mailHost

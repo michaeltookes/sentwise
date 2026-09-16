@@ -188,6 +188,26 @@ final class AppStateApprovalTests: XCTestCase {
         XCTAssertEqual(notifier.removedIdentities, [draft.identity])
     }
 
+    func testEraseAllInvalidatesApprovalCompletionAlreadyAwaitingMailProvider() async {
+        let draft = pendingDraft()
+        let (appState, provider, _, persistence) = makeAppStateWithSuspendedSend(seed: [draft])
+
+        let approval = Task {
+            await appState.approveDraft(draft)
+        }
+        await fulfillment(of: [provider.didStartSend], timeout: 1)
+
+        let result = await appState.eraseAllLocalData()
+        provider.completeSend(with: .success(()))
+        await approval.value
+
+        XCTAssertTrue(result.succeeded)
+        XCTAssertTrue(persistence.loadPendingDrafts().isEmpty)
+        XCTAssertTrue(persistence.loadApprovedDraftIdentities().isEmpty)
+        XCTAssertTrue(persistence.loadActivityEvents().isEmpty)
+        XCTAssertTrue(persistence.loadDraftFeedback().isEmpty)
+    }
+
     func testLaunchFiltersApprovedDraftTombstones() {
         let draft = pendingDraft()
         let secrets = InMemorySecretStore(seed: [

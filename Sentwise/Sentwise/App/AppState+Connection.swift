@@ -155,8 +155,15 @@ extension AppState {
             && lhs.port == rhs.port
     }
 
-    /// Disconnects the mailbox by clearing the stored app password.
-    func disconnectMail(messageSurface: TransientMessageSurface = .shared) {
+    /// Disconnects the mailbox by clearing the stored app password. When
+    /// `purgeLocalData` is set (the user chose "Disconnect & erase local data" in
+    /// the confirmation), the account-scoped mail artifacts are purged before the
+    /// irreversible credential/state removal so a failed erase leaves the account
+    /// connected and retryable (item 96).
+    func disconnectMail(
+        purgeLocalData: Bool = false,
+        messageSurface: TransientMessageSurface = .shared
+    ) {
         setConnectionError(nil, for: messageSurface)
         clearWorkspaceAuthGuidance(for: messageSurface)
         guard !isConnecting else {
@@ -170,12 +177,28 @@ extension AppState {
             return
         }
 
-        guard let removedPassword = removeActiveMailPasswordForDisconnect(messageSurface: messageSurface) else { return }
+        let disconnectedAccountEmail = mailEmail
+        let wasWatching = watchStatus == .watching
+        if purgeLocalData {
+            stopWatching()
+            do {
+                try purgeLocalMailArtifacts(for: disconnectedAccountEmail, includeUnscopedArtifacts: true)
+            } catch {
+                setConnectionError("Couldn't erase local mail data. \(Self.message(for: error))", for: messageSurface)
+                restoreWatchingAfterPreservedDisconnectIfNeeded(wasWatching)
+                return
+            }
+        }
+        guard let removedPassword = removeActiveMailPasswordForDisconnect(messageSurface: messageSurface) else {
+            restoreWatchingAfterPreservedDisconnectIfNeeded(purgeLocalData && wasWatching)
+            return
+        }
         guard clearQueuedDispatchesBeforeAccountTransition("disconnecting", messageSurface: messageSurface) else {
             appendConnectionRollbackMessage(
                 restoreActiveMailPasswordRemovalMessage(removedPassword),
                 messageSurface: messageSurface
             )
+            restoreWatchingAfterPreservedDisconnectIfNeeded(purgeLocalData && wasWatching)
             return
         }
         mailAppPassword = ""
@@ -186,6 +209,11 @@ extension AppState {
         resetMessagePreviewForAccountChange(clearSkippedMessages: false)
         skippedMessages = []
         logger.info("Mailbox disconnected")
+    }
+
+    private func restoreWatchingAfterPreservedDisconnectIfNeeded(_ shouldRestore: Bool) {
+        guard shouldRestore else { return }
+        startWatchingIfReady()
     }
 
     private func clearQueuedDispatchesBeforeAccountTransition(

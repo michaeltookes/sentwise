@@ -18,12 +18,14 @@ protocol PersistenceProvider {
     /// Persists the voice profile (replaces any existing one).
     func saveVoiceProfile(_ profile: VoiceProfile)
     /// Removes the stored voice profile.
-    func removeVoiceProfile()
+    func removeVoiceProfile() throws
 
     /// The set of inbox messages the watcher has already processed.
     func loadProcessedMessages() -> ProcessedMessages
     /// Persists the processed-message set (replaces the previous one).
     func saveProcessedMessages(_ processed: ProcessedMessages)
+    /// Mutates processed messages inside one serialized read/write operation.
+    func updateProcessedMessagesSync(_ update: (inout ProcessedMessages) -> Void) throws
 
     /// Watcher-created drafts awaiting approval.
     func loadPendingDrafts() -> [Draft]
@@ -44,6 +46,8 @@ protocol PersistenceProvider {
     func loadActivityEvents() -> [ActivityEvent]
     /// Persists the activity history (replaces the previous one).
     func saveActivityEvents(_ events: [ActivityEvent])
+    /// Mutates activity history inside one serialized read/write operation.
+    func updateActivityEventsSync(_ update: (inout [ActivityEvent]) -> Void) throws
 
     /// The on-device approval-signal feedback store (item 83, Phase 1), newest
     /// first. Holds codes/numbers/hashes only (plus local deny "Other" free text).
@@ -54,6 +58,36 @@ protocol PersistenceProvider {
     /// Persists the feedback store synchronously, used during graceful termination
     /// so recent terminal draft signals are durable before process exit.
     func saveDraftFeedbackSync(_ records: [DraftFeedbackRecord]) throws
+    /// Mutates feedback records inside one serialized read/write operation.
+    func updateDraftFeedbackSync(_ update: (inout [DraftFeedbackRecord]) -> Void) throws
+
+    // MARK: - Local-data purge (item 96)
+
+    /// Removes the stored processed-message dedup set.
+    func removeProcessedMessages() throws
+    /// Removes the stored pending drafts (full incoming bodies + generated drafts).
+    func removePendingDrafts() throws
+    /// Removes the stored recoverable-skip log (sender + subject per entry).
+    func removeSkippedMessages() throws
+    /// Removes the stored approved-draft tombstone identities.
+    func removeApprovedDraftIdentities() throws
+    /// Removes the stored activity history (sender + subject per event).
+    func removeActivityEvents() throws
+    /// Removes the stored approval-signal feedback records.
+    func removeDraftFeedback() throws
+
+    /// Removes account-scoped mail artifacts while preserving other accounts.
+    func makeAccountArtifactSnapshot() -> AccountArtifactSnapshot
+    func purgeAccountScopedArtifacts(for accountEmail: String, includeUnscopedArtifacts: Bool) throws
+    /// Removes every mail-content-bearing artifact while preserving account settings.
+    func purgeAllMailArtifacts() throws
+
+    /// Erases every locally persisted store this provider owns, returning it to a
+    /// pristine first-run state — the app-global Settings file included. For the
+    /// file-backed provider this clears everything under the app's Application
+    /// Support directory; for the in-memory provider it resets every store to its
+    /// default. Backs the Settings "Erase all local data" action (item 96).
+    func eraseAllLocalData() throws
 }
 
 /// File-based persistence for non-secret application settings.
@@ -68,6 +102,7 @@ final class PersistenceService: PersistenceProvider {
 
     // MARK: - Properties
 
+    private let directory: URL
     private let settingsURL: URL
     private let voiceProfileURL: URL
     private let processedMessagesURL: URL
@@ -99,6 +134,7 @@ final class PersistenceService: PersistenceProvider {
             .first!
         let directory = appSupport.appendingPathComponent("Sentwise", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        self.directory = directory
         settingsURL = directory.appendingPathComponent("Settings.json")
         voiceProfileURL = directory.appendingPathComponent("VoiceProfile.json")
         processedMessagesURL = directory.appendingPathComponent("ProcessedMessages.json")
@@ -175,20 +211,22 @@ final class PersistenceService: PersistenceProvider {
         }
     }
 
-    func removeVoiceProfile() {
-        ioQueue.async { [voiceProfileURL] in
-            try? FileManager.default.removeItem(at: voiceProfileURL)
-        }
+    func removeVoiceProfile() throws {
+        try removeFile(at: voiceProfileURL)
     }
 
     // MARK: - Processed Messages
 
     func loadProcessedMessages() -> ProcessedMessages {
-        guard FileManager.default.fileExists(atPath: processedMessagesURL.path) else {
+        loadProcessedMessages(from: processedMessagesURL)
+    }
+
+    private func loadProcessedMessages(from url: URL) -> ProcessedMessages {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             return ProcessedMessages()
         }
         do {
-            let data = try Data(contentsOf: processedMessagesURL)
+            let data = try Data(contentsOf: url)
             return try decoder.decode(ProcessedMessages.self, from: data)
         } catch {
             logger.error("Failed to load processed messages: \(error.localizedDescription)")
@@ -204,6 +242,20 @@ final class PersistenceService: PersistenceProvider {
             } catch {
                 logger.error("Failed to save processed messages: \(error.localizedDescription)")
             }
+        }
+    }
+
+    func updateProcessedMessagesSync(_ update: (inout ProcessedMessages) -> Void) throws {
+        do {
+            try ioQueue.sync { [encoder, processedMessagesURL] in
+                var processed = self.loadProcessedMessages(from: processedMessagesURL)
+                update(&processed)
+                let data = try encoder.encode(processed)
+                try data.write(to: processedMessagesURL, options: .atomic)
+            }
+        } catch {
+            logger.error("Failed to update processed messages (sync): \(error.localizedDescription)")
+            throw error
         }
     }
 
@@ -291,11 +343,15 @@ final class PersistenceService: PersistenceProvider {
     // MARK: - Activity History
 
     func loadActivityEvents() -> [ActivityEvent] {
-        guard FileManager.default.fileExists(atPath: activityEventsURL.path) else {
+        loadActivityEvents(from: activityEventsURL)
+    }
+
+    private func loadActivityEvents(from url: URL) -> [ActivityEvent] {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             return []
         }
         do {
-            let data = try Data(contentsOf: activityEventsURL)
+            let data = try Data(contentsOf: url)
             return try decoder.decode([ActivityEvent].self, from: data)
         } catch {
             logger.error("Failed to load activity events: \(error.localizedDescription)")
@@ -314,14 +370,32 @@ final class PersistenceService: PersistenceProvider {
         }
     }
 
+    func updateActivityEventsSync(_ update: (inout [ActivityEvent]) -> Void) throws {
+        do {
+            try ioQueue.sync { [encoder, activityEventsURL] in
+                var events = self.loadActivityEvents(from: activityEventsURL)
+                update(&events)
+                let data = try encoder.encode(events)
+                try data.write(to: activityEventsURL, options: .atomic)
+            }
+        } catch {
+            logger.error("Failed to update activity events (sync): \(error.localizedDescription)")
+            throw error
+        }
+    }
+
     // MARK: - Draft Feedback (item 83)
 
     func loadDraftFeedback() -> [DraftFeedbackRecord] {
-        guard FileManager.default.fileExists(atPath: draftFeedbackURL.path) else {
+        loadDraftFeedback(from: draftFeedbackURL)
+    }
+
+    private func loadDraftFeedback(from url: URL) -> [DraftFeedbackRecord] {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             return []
         }
         do {
-            let data = try Data(contentsOf: draftFeedbackURL)
+            let data = try Data(contentsOf: url)
             return try decoder.decode([DraftFeedbackRecord].self, from: data)
         } catch {
             logger.error("Failed to load draft feedback: \(error.localizedDescription)")
@@ -349,6 +423,75 @@ final class PersistenceService: PersistenceProvider {
         } catch {
             logger.error("Failed to save draft feedback (sync): \(error.localizedDescription)")
             throw error
+        }
+    }
+
+    func updateDraftFeedbackSync(_ update: (inout [DraftFeedbackRecord]) -> Void) throws {
+        do {
+            try ioQueue.sync { [encoder, draftFeedbackURL] in
+                var records = self.loadDraftFeedback(from: draftFeedbackURL)
+                update(&records)
+                let data = try encoder.encode(records)
+                try data.write(to: draftFeedbackURL, options: .atomic)
+            }
+        } catch {
+            logger.error("Failed to update draft feedback (sync): \(error.localizedDescription)")
+            throw error
+        }
+    }
+
+    // MARK: - Local-data purge (item 96)
+
+    func makeAccountArtifactSnapshot() -> AccountArtifactSnapshot {
+        ioQueue.sync {
+            AccountArtifactSnapshot(self)
+        }
+    }
+
+    func removeProcessedMessages() throws {
+        try removeFile(at: processedMessagesURL)
+    }
+
+    func removePendingDrafts() throws {
+        try removeFile(at: pendingDraftsURL)
+    }
+
+    func removeSkippedMessages() throws {
+        try removeFile(at: skippedMessagesURL)
+    }
+
+    func removeApprovedDraftIdentities() throws {
+        try removeFile(at: approvedDraftsURL)
+    }
+
+    func removeActivityEvents() throws {
+        try removeFile(at: activityEventsURL)
+    }
+
+    func removeDraftFeedback() throws {
+        try removeFile(at: draftFeedbackURL)
+    }
+
+    private func removeFile(at url: URL) throws {
+        try ioQueue.sync {
+            let fileManager = FileManager.default
+            guard fileManager.fileExists(atPath: url.path) else { return }
+            try fileManager.removeItem(at: url)
+        }
+    }
+
+    func eraseAllLocalData() throws {
+        // Remove the whole Application Support subtree — not just the known JSON
+        // files — so "erase all local data" leaves nothing behind (any stray or
+        // future file included), then recreate the empty directory so subsequent
+        // saves have somewhere to land. Synchronous so callers observe a clean
+        // slate before they reset in-memory state.
+        try ioQueue.sync { [directory] in
+            let fileManager = FileManager.default
+            if fileManager.fileExists(atPath: directory.path) {
+                try fileManager.removeItem(at: directory)
+            }
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
     }
 }

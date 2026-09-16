@@ -57,7 +57,7 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         }
     }
 
-    func removeVoiceProfile() {
+    func removeVoiceProfile() throws {
         withLock {
             voiceProfile = nil
         }
@@ -70,6 +70,12 @@ final class MemoryPersistenceProvider: PersistenceProvider {
     func saveProcessedMessages(_ processed: ProcessedMessages) {
         withLock {
             processedMessages = processed
+        }
+    }
+
+    func updateProcessedMessagesSync(_ update: (inout ProcessedMessages) -> Void) throws {
+        withLock {
+            update(&processedMessages)
         }
     }
 
@@ -113,6 +119,12 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         }
     }
 
+    func updateActivityEventsSync(_ update: (inout [ActivityEvent]) -> Void) throws {
+        withLock {
+            update(&activityEvents)
+        }
+    }
+
     func loadDraftFeedback() -> [DraftFeedbackRecord] {
         withLock { draftFeedback }
     }
@@ -125,6 +137,51 @@ final class MemoryPersistenceProvider: PersistenceProvider {
 
     func saveDraftFeedbackSync(_ records: [DraftFeedbackRecord]) throws {
         saveDraftFeedback(records)
+    }
+
+    func updateDraftFeedbackSync(_ update: (inout [DraftFeedbackRecord]) -> Void) throws {
+        withLock {
+            update(&draftFeedback)
+        }
+    }
+
+    // MARK: - Local-data purge (item 96)
+
+    func removeProcessedMessages() throws {
+        withLock { processedMessages = ProcessedMessages() }
+    }
+
+    func removePendingDrafts() throws {
+        withLock { pendingDrafts = [] }
+    }
+
+    func removeSkippedMessages() throws {
+        withLock { skippedMessages = [] }
+    }
+
+    func removeApprovedDraftIdentities() throws {
+        withLock { approvedDraftIdentities = [] }
+    }
+
+    func removeActivityEvents() throws {
+        withLock { activityEvents = [] }
+    }
+
+    func removeDraftFeedback() throws {
+        withLock { draftFeedback = [] }
+    }
+
+    func eraseAllLocalData() throws {
+        withLock {
+            settings = Settings.default.validated()
+            voiceProfile = nil
+            processedMessages = ProcessedMessages()
+            pendingDrafts = []
+            skippedMessages = []
+            approvedDraftIdentities = []
+            activityEvents = []
+            draftFeedback = []
+        }
     }
 
     private func withLock<Value>(_ body: () throws -> Value) rethrows -> Value {

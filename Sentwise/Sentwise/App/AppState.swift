@@ -176,7 +176,9 @@ final class AppState: ObservableObject {
     // MARK: - Preferences
 
     /// Whether the app launches at login (mirrors `SMAppService` state).
-    @Published private(set) var launchAtLogin = LoginItemManager.shared.isEnabled
+    @Published var launchAtLogin = LoginItemManager.shared.isEnabled
+    var setLaunchAtLoginHandler: (Bool) -> Bool = { LoginItemManager.shared.setEnabled($0) }
+    var launchAtLoginStatusProvider: () -> Bool = { LoginItemManager.shared.isEnabled }
 
     /// How often (in seconds) the inbox is polled while the Mac is awake.
     @Published var pollIntervalSeconds: Int
@@ -407,6 +409,7 @@ final class AppState: ObservableObject {
     var draftGeneration = 0
     var browserGeneration = 0
     var bulkGeneration = 0
+    var localDataEraseGeneration: UInt64 = 0
 
     var bulkSweepPacingNanoseconds: UInt64 = 1_200_000_000
 
@@ -493,8 +496,4 @@ final class AppState: ObservableObject {
         installExternalActionHandlers()
     }
 
-    func setLaunchAtLogin(_ enabled: Bool) {
-        LoginItemManager.shared.setEnabled(enabled)
-        launchAtLogin = LoginItemManager.shared.isEnabled
-    }
 }

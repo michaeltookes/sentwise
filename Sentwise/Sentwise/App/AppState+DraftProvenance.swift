@@ -15,11 +15,13 @@ extension AppState {
         credentials capturedCredentials: MailAccountCredentials? = nil,
         replyWorthinessOverride: Bool = false
     ) async throws -> Bool {
+        let localDataGeneration = localDataEraseGeneration
         guard var draft = try await makePendingDraft(
             for: message,
             mailbox: mailbox,
             requireWatching: requireWatching,
-            credentials: capturedCredentials
+            credentials: capturedCredentials,
+            localDataGeneration: localDataGeneration
         ) else { return false }
         draft.replyWorthinessOverride = replyWorthinessOverride
         if replyWorthinessOverride {
@@ -29,6 +31,7 @@ extension AppState {
                 message: message
             )
         }
+        try ensureLocalDataNotErased(since: localDataGeneration)
         try enqueuePendingDraft(draft)
         return true
     }

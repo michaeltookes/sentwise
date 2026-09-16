@@ -11,6 +11,7 @@ struct EmailAccountSettingsView: View {
     @State private var openedBody: MailBodyPreview?
     @State private var generatedDraft: Draft?
     @State private var accountPendingRemoval: SavedMailAccount?
+    @State private var showDisconnectConfirmation = false
     @State private var newAccountForm = MailAccountFormState()
     @State private var isAddingAccount = false
     @FocusState private var isMailEmailFocused: Bool
@@ -46,14 +47,44 @@ struct EmailAccountSettingsView: View {
             ),
             presenting: accountPendingRemoval
         ) { account in
-            Button("Remove", role: .destructive) {
-                appState.removeSavedAccount(account, messageSurface: .settings)
+            Button("Remove & Erase Local Data", role: .destructive) {
+                appState.removeSavedAccount(account, purgeLocalData: true, messageSurface: .settings)
                 accountPendingRemoval = nil
             }
+            .accessibilityIdentifier("removeAccountAndErase")
+            Button("Remove Only") {
+                appState.removeSavedAccount(account, purgeLocalData: false, messageSurface: .settings)
+                accountPendingRemoval = nil
+            }
+            .accessibilityIdentifier("removeAccountOnly")
             Button("Cancel", role: .cancel) { accountPendingRemoval = nil }
         } message: { account in
             Text("This forgets \(account.email) and deletes its saved password from your Keychain. "
-                 + "Your mail is not affected.")
+                 + "Your mailbox on the server is never touched.\n\n"
+                 + "\"Remove & erase local data\" also deletes this Mac's cached mail for the "
+                 + "account — pending drafts, activity history, and the skipped-message log. "
+                 + "If it is the active account, the learned voice profile is cleared too. "
+                 + "\"Remove only\" keeps that local data.")
+        }
+        .confirmationDialog(
+            "Disconnect \(appState.mailEmail)?",
+            isPresented: $showDisconnectConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Disconnect & Erase Local Data", role: .destructive) {
+                appState.disconnectMail(purgeLocalData: true, messageSurface: .settings)
+            }
+            .accessibilityIdentifier("disconnectAndErase")
+            Button("Disconnect Only") {
+                appState.disconnectMail(purgeLocalData: false, messageSurface: .settings)
+            }
+            .accessibilityIdentifier("disconnectOnly")
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Erasing local data deletes this Mac's cached mail for this account — pending "
+                 + "drafts, activity history, learned voice profile, and the skipped-message log. "
+                 + "Your mailbox on the server is never touched. \"Disconnect only\" keeps that "
+                 + "local data so you can reconnect without re-learning your voice.")
         }
         .onDisappear {
             abandonAddingAccountIfNeeded()
@@ -126,9 +157,10 @@ struct EmailAccountSettingsView: View {
                     Text(appState.mailEmail).foregroundStyle(.secondary)
                 }
                 Button("Disconnect", role: .destructive) {
-                    appState.disconnectMail(messageSurface: .settings)
+                    showDisconnectConfirmation = true
                 }
                 .disabled(appState.isConnecting)
+                .accessibilityIdentifier("disconnectAccount")
                 .accessibilityLabel("Disconnect \(appState.mailEmail)")
 
                 Button {

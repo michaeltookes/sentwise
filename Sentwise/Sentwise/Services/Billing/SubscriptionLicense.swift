@@ -157,6 +157,11 @@ protocol SubscriptionCacheStoring: AnyObject, Sendable {
     func snapshot(accountKey: String) -> SubscriptionSnapshot?
     func save(_ snapshot: SubscriptionSnapshot, accountKey: String)
     func clear(accountKey: String)
+    func clearAll()
+}
+
+extension SubscriptionCacheStoring {
+    func clearAll() {}
 }
 
 /// A `UserDefaults`-backed subscription cache. Stores a small JSON blob per
@@ -186,6 +191,12 @@ final class UserDefaultsSubscriptionCacheStore: SubscriptionCacheStoring, @unche
 
     func clear(accountKey: String) {
         defaults.removeObject(forKey: key(accountKey))
+    }
+
+    func clearAll() {
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
+            defaults.removeObject(forKey: key)
+        }
     }
 
     private func key(_ accountKey: String) -> String { prefix + accountKey }

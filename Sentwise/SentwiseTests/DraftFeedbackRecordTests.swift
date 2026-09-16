@@ -82,7 +82,8 @@ final class DraftFeedbackRecordTests: XCTestCase {
             denyReason: nil,
             provenance: .watcher,
             answeredNeedsInfo: true,
-            draftIdentityHash: DraftFeedbackRecord.hashedIdentity("me@gmail.com|INBOX|10|42")
+            draftIdentityHash: DraftFeedbackRecord.hashedIdentity("me@gmail.com|INBOX|10|42"),
+            sourceAccountHash: DraftFeedbackRecord.hashedAccount("me@gmail.com")
         )
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -93,6 +94,8 @@ final class DraftFeedbackRecordTests: XCTestCase {
         }
         XCTAssertTrue(json.contains("approvedAfterEdit"))
         XCTAssertTrue(json.contains("\"sent\""))
+        XCTAssertTrue(json.contains("sourceAccountHash"))
+        XCTAssertFalse(json.contains("sourceAccountEmail"))
     }
 
     func testOnlyOtherFreeTextIsUserAuthored() throws {
@@ -109,5 +112,29 @@ final class DraftFeedbackRecordTests: XCTestCase {
         // The single permitted free text is present; nothing else user-derived is.
         XCTAssertTrue(json.contains("auto-notification from CI"))
         XCTAssertFalse(json.contains("me@gmail.com"))
+    }
+
+    func testLegacySourceAccountEmailDecodesToHashAndReencodesWithoutEmail() throws {
+        let identityHash = DraftFeedbackRecord.hashedIdentity("me@gmail.com|INBOX|10|42")
+        let legacyJSON = """
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "timestamp": 0,
+          "outcome": "denied",
+          "provenance": "watcher",
+          "answeredNeedsInfo": false,
+          "draftIdentityHash": "\(identityHash)",
+          "sourceAccountEmail": "Me@Gmail.com"
+        }
+        """
+
+        let record = try JSONDecoder().decode(DraftFeedbackRecord.self, from: Data(legacyJSON.utf8))
+
+        XCTAssertEqual(record.sourceAccountHash, DraftFeedbackRecord.hashedAccount("me@gmail.com"))
+        let encoded = String(data: try JSONEncoder().encode(record), encoding: .utf8) ?? ""
+        XCTAssertTrue(encoded.contains("sourceAccountHash"))
+        XCTAssertFalse(encoded.contains("sourceAccountEmail"))
+        XCTAssertFalse(encoded.contains("Me@Gmail.com"))
+        XCTAssertFalse(encoded.contains("me@gmail.com"))
     }
 }

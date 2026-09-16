@@ -79,4 +79,42 @@ final class AppStateWorkspaceAuthSessionTests: XCTestCase {
         XCTAssertTrue(store.isRegistered(accountKey: stableKey))
         XCTAssertFalse(appState.googleOAuthInterestRegistered)
     }
+
+    func testEraseAllInvalidatesPendingGoogleOAuthInterestRegistration() async throws {
+        let client = SuspendingGoogleOAuthInterestClient()
+        let store = InMemoryGoogleOAuthInterestStore()
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client-a",
+            .managedSessionID: "sess-a"
+        ])
+        let appState = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: secrets,
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: FakeLLMProvider(result: .success(())),
+            googleOAuthInterestClient: client
+        )
+        appState.googleOAuthInterestStore = store
+        appState.isManagedSignedIn = true
+        appState.managedAccountEmail = "marcus@example.com"
+        appState.managedAccountID = "acct-a"
+        appState.refreshGoogleOAuthInterestState()
+        let capturedStableKey = appState.currentManagedUsageAccountKey
+        let capturedSessionKey = ManagedUsageAccountKey.make(from: "clerk-session:sess-a")
+
+        let registration = Task {
+            await appState.registerGoogleOAuthInterest(isHuntMode: false)
+        }
+        await fulfillment(of: [client.didStart], timeout: 1)
+
+        let result = await appState.eraseAllLocalData()
+        client.succeed(accountKey: capturedSessionKey)
+        await registration.value
+
+        XCTAssertTrue(result.succeeded)
+        XCTAssertFalse(store.isRegistered(accountKey: capturedSessionKey))
+        XCTAssertFalse(store.isRegistered(accountKey: capturedStableKey))
+        XCTAssertFalse(appState.googleOAuthInterestRegistered)
+        XCTAssertFalse(appState.isRegisteringGoogleOAuthInterest)
+    }
 }

@@ -157,6 +157,7 @@ extension AppState {
         let sessionAccountKey = currentGoogleOAuthInterestSessionAccountKey
         if isHuntMode { return }
         let settingsMessageGeneration = settingsTransientMessageGeneration
+        let localDataGeneration = localDataEraseGeneration
 
         setGoogleOAuthInterestError(nil, for: messageSurface)
         isRegisteringGoogleOAuthInterest = true
@@ -164,12 +165,14 @@ extension AppState {
 
         do {
             let registration = try await googleOAuthInterestClient.registerInterest(topic: Self.googleOAuthInterestTopic)
+            guard isCurrentLocalDataGeneration(localDataGeneration) else { return }
             markGoogleOAuthInterestRegisteredLocally(
                 accountKey: registration.accountKey ?? accountKey,
                 capturedAccountKey: accountKey,
                 capturedSessionAccountKey: sessionAccountKey
             )
         } catch {
+            guard isCurrentLocalDataGeneration(localDataGeneration) else { return }
             let failure = googleOAuthInterestFailure(from: error, fallbackAccountKey: accountKey)
             let wasCurrentAccount = isCurrentGoogleOAuthInterestAccount(failure.accountKey)
             let signedOut = await reconcileManagedAccountState(
