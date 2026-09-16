@@ -277,7 +277,9 @@ extension AppState {
         managedQuota = nil
         didDeleteManagedAccount = false
 
-        let defaultProvider = LLMProviderKind(rawValue: Settings.default.llmProvider) ?? .anthropic
+        // Parked 2026-09-16 (item 100): managed is the only shipped provider, so an
+        // erase resets to it (Settings.default.llmProvider is already "managed").
+        let defaultProvider = LLMProviderKind(rawValue: Settings.default.llmProvider) ?? .managed
         llmProviderKind = defaultProvider
         llmModel = Settings.default.llmModel
         llmBaseURL = Settings.default.llmBaseURL

@@ -1,14 +1,13 @@
-# Reachability guard for the item-59 "Choose your AI" controls on the Settings
-# AI tab. In hunt mode the seeded fixture has managed inference active but no
-# signed-in account, so the managed sign-in controls and the guided BYO controls
-# are all rendered. Asserts each one is present. Read-only — it never activates
-# any of them (the deterministic flows are exercised by the managed-signin-* and
-# openrouter-connect hunts).
+# Reachability guard for the managed inference controls on the Settings AI tab.
+# In hunt mode the seeded fixture has managed inference active but no signed-in
+# account, so the managed sign-in controls render immediately. Read-only — it
+# never activates them (the deterministic flows are exercised by the
+# managed-signin-* hunts).
 #
 # Run it (on the Lucius runner):  prowl run ai-provider-controls
 
 name: ai-provider-controls
-description: Every item-59 AI-provider control renders on the Settings AI tab
+description: Managed AI sign-in controls render on the Settings AI tab
 
 steps:
   - click:
@@ -32,14 +31,3 @@ steps:
       visible: id=managedEmailField
   - assert:
       visible: id=managedSendCodeButton
-
-  # Guided bring-your-own controls.
-  - assert:
-      visible: id=openRouterConnectButton
-  - assert:
-      visible: id=byoProviderPicker
-  # The staged provider is not the active one, so "Use this provider" is offered.
-  # (getAPIKeyButton is intentionally NOT asserted/clicked — it opens a real
-  # browser and stays guardrail-forbidden.)
-  - assert:
-      visible: id=useThisProviderButton

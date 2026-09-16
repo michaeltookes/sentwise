@@ -15,9 +15,9 @@ enum ManagedSignInStage: Equatable {
 }
 
 /// Managed-inference account actions on `AppState` (backlog item 56a): the
-/// email-code sign-in flow, sign-out, and the one-time settings migration onto
-/// the managed provider. Kept in its own file so `AppState` stays within length
-/// limits, mirroring `AppState+LLM`.
+/// email-code sign-in flow, sign-out, and the launch-state restore. Kept in its own
+/// file so `AppState` stays within length limits, mirroring `AppState+LLM`. The
+/// launch-time settings migrations live in `AppState+SettingsMigration`.
 extension AppState {
 
     // MARK: - Busy state
@@ -332,7 +332,10 @@ extension AppState {
     }
 
     static func managedLaunchState(settings: Settings, secrets: SecretStore) -> ManagedLaunchState {
-        let provider = LLMProviderKind(rawValue: settings.llmProvider) ?? .anthropic
+        // Parked 2026-09-16 (item 100): an unrecognized persisted provider resolves
+        // to managed, the only shipped path. Genuine pre-release non-managed values
+        // are reset to managed by `migratedBYOKParkedSettings` before launch reads them.
+        let provider = LLMProviderKind(rawValue: settings.llmProvider) ?? .managed
         let hasInvalidatedCredentials = secrets.hasValue(for: .managedCredentialsInvalidated)
         let hasCredentials = !hasInvalidatedCredentials
             && secrets.hasValue(for: .managedClientToken)
@@ -398,103 +401,4 @@ extension AppState {
         }
     }
 
-    // MARK: - Migration (item 56a)
-
-    /// Runs all launch-time settings migrations in order: the saved-accounts move
-    /// (item 48), the managed-inference default (item 56a), then the additive
-    /// signature schema (item 24). Only the terminal step persists, so a launch
-    /// that migrates writes the fully-migrated settings exactly once, at the
-    /// current schema version. Keeps `AppState.init` short by chaining here.
-    static func fullyMigratedSettings(
-        loaded: Settings,
-        secrets: SecretStore,
-        persistence: PersistenceProvider
-    ) -> Settings {
-        let accountsMigrated = migratedSavedAccountsSettings(
-            loaded,
-            secrets: secrets,
-            persistence: persistence,
-            targetSchemaVersion: Settings.managedInferenceSchemaVersion - 1,
-            shouldPersist: false
-        )
-        let managedMigrated = migratedManagedInferenceSettings(
-            accountsMigrated,
-            originalSchemaVersion: loaded.schemaVersion,
-            secrets: secrets,
-            persistence: persistence,
-            targetSchemaVersion: Settings.signatureSchemaVersion - 1,
-            shouldPersist: false
-        )
-        return migratedSignatureSettings(
-            managedMigrated,
-            originalSchemaVersion: loaded.schemaVersion,
-            persistence: persistence
-        )
-    }
-
-    /// Moves an existing install with no configured BYO provider onto managed
-    /// inference. A configured BYO user (a stored key or a verified model) keeps
-    /// their provider. Runs once, gated on the original schema version.
-    ///
-    /// `targetSchemaVersion` defaults to the managed-inference version this step
-    /// introduces (15); the full launch chain passes the version just below the
-    /// next step so only the terminal migration advances to the current version.
-    /// `shouldPersist` lets the chain defer the single write to that terminal step.
-    static func migratedManagedInferenceSettings(
-        _ settings: Settings,
-        originalSchemaVersion: Int,
-        secrets: SecretStore,
-        persistence: PersistenceProvider,
-        targetSchemaVersion: Int = Settings.managedInferenceSchemaVersion,
-        shouldPersist: Bool = true
-    ) -> Settings {
-        guard originalSchemaVersion < Settings.managedInferenceSchemaVersion else { return settings }
-        var migrated = settings
-
-        let provider = LLMProviderKind(rawValue: settings.llmProvider) ?? .anthropic
-        if provider != .managed {
-            let apiKeySecret = Self.llmAPIKeySecret(
-                provider: provider,
-                baseURL: provider.supportsCustomBaseURL ? settings.llmBaseURL : nil
-            )
-            let hasKey = secrets.hasValue(for: apiKeySecret)
-                || (apiKeySecret != provider.apiKeySecret && secrets.hasValue(for: provider.apiKeySecret))
-            let hasVerifiedModel = !settings.llmVerifiedModel
-                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let isConfigured = hasKey || hasVerifiedModel
-            if !isConfigured {
-                migrated.llmProvider = "managed"
-                migrated.llmModel = ""
-            }
-        }
-
-        migrated.schemaVersion = targetSchemaVersion
-        if shouldPersist, migrated != settings {
-            do {
-                try persistence.saveSettingsSync(migrated)
-            } catch {
-                logger.error("Failed to persist managed-inference migration: \(error.localizedDescription)")
-            }
-        }
-        return migrated
-    }
-
-    /// Terminal launch migration: advances the schema after additive settings migrations.
-    static func migratedSignatureSettings(
-        _ settings: Settings,
-        originalSchemaVersion: Int,
-        persistence: PersistenceProvider
-    ) -> Settings {
-        guard originalSchemaVersion < Settings.currentSchemaVersion else { return settings }
-        var migrated = settings
-        migrated.schemaVersion = Settings.currentSchemaVersion
-        if migrated != settings {
-            do {
-                try persistence.saveSettingsSync(migrated)
-            } catch {
-                logger.error("Failed to persist signature migration: \(error.localizedDescription)")
-            }
-        }
-        return migrated
-    }
 }

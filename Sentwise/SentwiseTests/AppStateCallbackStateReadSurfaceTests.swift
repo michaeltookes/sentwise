@@ -52,6 +52,7 @@ final class AppStateCallbackStateReadSurfaceTests: XCTestCase {
         await appState.handleOpenRouterCallback(
             code: "CODE",
             flowID: "flow_1",
+            allowParkedProviderCallback: true,
             provisioner: OpenRouterKeyProvisioner(transport: transport)
         )
 

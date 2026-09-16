@@ -43,10 +43,9 @@ prowl run setup-assistant       # onboarding window opens (item 64 surface)
 prowl run settings-window       # Settings window opens (item 65 surface)
 prowl run settings-window-tabs  # switching Settings tabs keeps the window put (item 65 regression)
 prowl run activity-history      # Activity History window opens
-prowl run ai-provider-controls  # item-59 sign-in/provider controls all render
+prowl run ai-provider-controls  # managed sign-in controls render
 prowl run managed-signin-email  # email-code managed sign-in via the offline fake (item 70)
 prowl run managed-signin-google # Google managed sign-in via the offline fake (item 70)
-prowl run openrouter-connect    # OpenRouter provisioning via the offline fake (item 70)
 ```
 
 Each run launches the Sentwise app at
@@ -77,11 +76,11 @@ account-gated menu surfaces exist and hunts can open every product window:
 - **No LLM key and no verified model**, so watching stays unavailable and no
   provider can be called.
 
-### Sign-in / provisioning are a deterministic offline fake in hunt mode (item 70)
+### Managed sign-in is a deterministic offline fake in hunt mode (item 70)
 
-The item-59 sign-in surfaces are **functional but fully offline** in hunt mode, so
-hunts can drive them end-to-end without ever reaching the network. This is the
-same intent as the `StubManagedInferenceClient` that answers drafts offline:
+The managed sign-in surfaces are **functional but fully offline** in hunt mode,
+so hunts can drive them end-to-end without ever reaching the network. This is
+the same intent as the `StubManagedInferenceClient` that answers drafts offline:
 
 - **Managed email-code sign-in** — `startManagedSignIn` advances to the code stage
   and `verifyManagedCode` completes to the signed-in fixture account, both without
@@ -91,9 +90,6 @@ same intent as the `StubManagedInferenceClient` that answers drafts offline:
   hand-off is skipped in hunt mode), and a hunt-only **"Simulate browser sign-in"**
   control (`managedSimulateGoogleCallback`, compiled into the UI only in hunt mode)
   completes it via `completeManagedGoogleSignInForHunt`.
-- **OpenRouter provisioning** — "Connect OpenRouter" completes to a fake
-  OpenAI-compatible provider via `completeOpenRouterProvisioningForHunt` — no
-  browser, no PKCE exchange, no real key.
 
 Everything stays in memory against `.invalid`/fake fixtures; the production sign-in
 paths are unchanged (every fake is strictly guarded on
@@ -118,21 +114,17 @@ Login, Check for Updates, or Quit. The `forbiddenSelectors` guardrails in
 `config.yml` enforce this by substring — keep them in sync with any new
 interactive surfaces.
 
-### Exception: item-59 sign-in / provider controls (relaxed 2026-08-21, item 70)
+### Exception: managed sign-in controls (relaxed 2026-08-21, item 70)
 
-Because managed sign-in (email + Google) and OpenRouter provisioning run through a
-**deterministic, fully-offline fake in hunt mode** (see the fixture section above),
-activating those specific controls cannot reach a real service or send anything.
-The `forbiddenSelectors` were therefore relaxed so the sign-in/provider hunts can
+Because managed sign-in (email + Google) runs through a **deterministic,
+fully-offline fake in hunt mode** (see the fixture section above), activating
+those specific controls cannot reach a real service or send anything. The
+`forbiddenSelectors` were therefore relaxed so the managed sign-in hunts can
 click them, while every dangerous action stays forbidden. The relaxations (each
 documented inline in `config.yml`):
 
-- Removed the explicit `managed*` / `openRouter*` / `useThis*` id forbids and the
-  sign-in *label* forbids ("Sign in", "Verify", "Send sign-in code", "Use Sentwise
-  AI", "Continue with Google", "Connect OpenRouter", "Use this provider").
-- Removed the standalone `Provider` substring (it also blocked the safe
-  `byoProviderPicker` / `useThisProviderButton` / `activeProviderBadge`; staging a
-  provider triggers no network).
+- Removed the explicit `managed*` id forbids and the sign-in *label* forbids
+  ("Sign in", "Verify", "Send sign-in code", "Continue with Google").
 - Removed the `Connect`/`connect`, `Verify`, and `Cancel` substrings — no dangerous
   control is named by them (mail uses "Test Connection", still blocked by `Test`).
 - Replaced bare `Send`/`send` with **quote-anchored** forbids (`"Send"`,
@@ -143,7 +135,9 @@ documented inline in `config.yml`):
 
 Still forbidden so a hunt can never sign out, open a real browser, or send/draft:
 `managedSignOutButton`, `getAPIKeyButton` / "Get an API key" (NOT hunt-gated —
-opens a real browser), and `useManagedInference`.
+opens a real browser), `useManagedInference`, and the parked BYOK/OpenRouter
+controls (`useOwnProviderDisclosure`, `byoProviderPicker`,
+`useThisProviderButton`, `openRouterConnectButton`, "OpenRouter").
 
 Because the macOS substring selectors can resolve short values like `Q` or
 `Fo` to unsafe menu items, this config forbids `menu=` and `text=` selectors.
@@ -256,14 +250,16 @@ Settings → General tab. Both are **assert-only**; neither activates anything.
 | `id=reportAProblem` | "Report a Problem…" menu item | no (assert-only; label forbid blocks activation) |
 | `id=diagnosticsSectionInfo` | Diagnostics section descriptive text (General tab) | n/a (non-interactive, assert-only) |
 
-### Managed-inference sign-in / provider controls (items 56a, 59, 70)
+### Managed-inference sign-in controls (items 56a, 70, 100)
 
 The onboarding "Choose your AI" step and Settings → AI tab carry the
-managed-inference sign-in surface. These SwiftUI controls set `accessibilityIdentifier`
-values (resolved by `id=` selectors). In hunt mode sign-in and provisioning run
-through a **deterministic offline fake** (see the fixture section above), so the
-sign-in/provider hunts drive these controls end-to-end. The **Clickable in hunts**
-column marks which are allowed by `forbiddenSelectors`:
+managed-inference sign-in surface. BYOK/local provider controls were parked
+2026-09-16 (item 100), so the live UI only exposes managed inference. These
+SwiftUI controls set `accessibilityIdentifier` values (resolved by `id=`
+selectors). In hunt mode sign-in runs through a **deterministic offline fake**
+(see the fixture section above), so the managed sign-in hunts drive these
+controls end-to-end. The **Clickable in hunts** column marks which are allowed by
+`forbiddenSelectors`:
 
 | Identifier | Control | Clickable in hunts |
 |---|---|---|
@@ -277,18 +273,13 @@ column marks which are allowed by `forbiddenSelectors`:
 | `id=managedSimulateGoogleCallback` | "Simulate browser sign-in" — **hunt-mode-only** control that completes the faked Google flow | yes |
 | `id=aiSubscriptionLink` | Signed-in-only link from AI to Subscription | yes |
 | `id=managedSignOutButton` | "Sign out" of the managed account | no (forbidden) |
-| `id=useOwnProviderDisclosure` | "Use your own AI provider instead" disclosure | (onboarding only) |
-| `id=byoProviderPicker` | Bring-your-own provider picker | assert / stage |
-| `id=useThisProviderButton` | "Use this provider" (activates the staged BYO provider) | assert |
-| `id=openRouterConnectButton` | "Connect OpenRouter" (offline fake in hunt mode) | yes |
-| `id=openRouterConnectedBadge` | "Connected" badge shown once OpenRouter is the active provider | assert-only |
 | `id=getAPIKeyButton` | "Get an API key" (opens a REAL browser — not hunt-gated) | no (forbidden) |
 | `id=activeProviderBadge` | "Active" badge on the provider currently drafting (non-interactive) | assert-only |
 
-The sign-in/provider hunts target the **Settings → AI tab** (open Settings, click
+The sign-in hunts target the **Settings → AI tab** (open Settings, click
 the `label="AI"` toolbar tab). In the fixture, managed inference is the active
-provider but not signed in, so all the sign-in controls render immediately; after a
-faked sign-in the AI tab's Status row shows `activeProviderBadge`.
+provider but not signed in, so all the sign-in controls render immediately; after
+a faked sign-in the AI tab's Status row shows `activeProviderBadge`.
 
 ### Subscription pane controls (item 73)
 

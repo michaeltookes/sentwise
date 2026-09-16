@@ -3,9 +3,10 @@ import Foundation
 /// Pure, testable presentation logic for the Account & subscription pane
 /// (backlog item 73). Maps a `ManagedAccountStatus` (its `trial` + `subscription`
 /// blocks) into the plan line, an optional detail/explanation line, and whether
-/// the account is in a problem state (past-due / canceled / lapsed) that should
-/// surface the "use your own key" fallback. No SwiftUI, no `Date()` capture —
-/// `now` is injected so the day math is deterministic under test.
+/// the account is in a problem state (past-due / canceled / lapsed) that drives the
+/// red styling. No SwiftUI, no `Date()` capture — `now` is injected so the day math
+/// is deterministic under test. (The "use your own key" fallback this once surfaced
+/// was parked 2026-09-16 — item 100 — since managed inference is the only path.)
 struct SubscriptionPaneModel: Equatable {
     /// The value shown next to "Plan" (e.g. "Trial — 5 days left", "Individual",
     /// "Trial ended").
@@ -14,12 +15,8 @@ struct SubscriptionPaneModel: Equatable {
     /// explanatory copy for a problem state. `nil` when there is nothing to add.
     var secondaryText: String?
     /// Whether managed drafting is paused (past-due / canceled / lapsed). Drives
-    /// the red styling and the own-key fallback link.
+    /// the red styling.
     var isProblemState: Bool
-
-    /// Whether to show the "use your own AI key" fallback link. Identical to
-    /// `isProblemState` today; named separately so the view reads clearly.
-    var showsOwnKeyFallback: Bool { isProblemState }
 
     static func make(
         from status: ManagedAccountStatus?,
@@ -58,15 +55,15 @@ struct SubscriptionPaneModel: Equatable {
         case .pastDue:
             return SubscriptionPaneModel(
                 planText: effective.plan.displayName,
-                secondaryText: "Your last payment didn't go through, so managed drafting is paused. "
-                    + "Drafting with your own AI key still works while you fix billing.",
+                secondaryText: "Your last payment didn't go through, so drafting is paused "
+                    + "until you fix billing.",
                 isProblemState: true
             )
         case .canceled:
             return SubscriptionPaneModel(
                 planText: "Canceled",
-                secondaryText: "Your subscription is canceled, so managed drafting is paused. "
-                    + "Drafting with your own AI key still works.",
+                secondaryText: "Your subscription is canceled, so drafting is paused "
+                    + "until you resubscribe.",
                 isProblemState: true
             )
         case .lapsed:
@@ -78,8 +75,8 @@ struct SubscriptionPaneModel: Equatable {
             }
             return SubscriptionPaneModel(
                 planText: "\(effective.plan.displayName) — lapsed",
-                secondaryText: "Your \(effective.plan.displayName) plan has lapsed, so managed drafting is paused "
-                    + "until you renew. Drafting with your own AI key still works.",
+                secondaryText: "Your \(effective.plan.displayName) plan has lapsed, so drafting is paused "
+                    + "until you renew.",
                 isProblemState: true
             )
         case .unknown:
@@ -161,8 +158,8 @@ struct SubscriptionPaneModel: Equatable {
     private static func unconfirmedSubscriptionModel() -> SubscriptionPaneModel {
         SubscriptionPaneModel(
             planText: "Subscription unavailable",
-            secondaryText: "We couldn't confirm your subscription, so managed drafting is paused. "
-                + "Drafting with your own AI key still works while you reconnect.",
+            secondaryText: "We couldn't confirm your subscription, so drafting is paused "
+                + "until you reconnect.",
             isProblemState: true
         )
     }
@@ -171,8 +168,7 @@ struct SubscriptionPaneModel: Equatable {
         guard let days, days > 0 else {
             return SubscriptionPaneModel(
                 planText: "Trial ended",
-                secondaryText: "Your free trial has ended, so managed drafting is paused until you choose a plan. "
-                    + "Drafting with your own AI key still works.",
+                secondaryText: "Your free trial has ended, so drafting is paused until you choose a plan.",
                 isProblemState: true
             )
         }

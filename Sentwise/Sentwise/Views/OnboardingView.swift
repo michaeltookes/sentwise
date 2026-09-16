@@ -271,19 +271,13 @@ private struct OnboardingProviderStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             StepHeading(
-                title: "Choose your AI",
-                subtitle: "Sentwise includes the AI — just sign in. Power users can bring their own."
+                title: "Sign in to Sentwise AI",
+                subtitle: "The AI is included with your subscription — just sign in to start drafting."
             )
 
+            // Managed inference is the only shipped provider (item 100, 2026-09-16);
+            // the bring-your-own-provider escape hatch was removed here.
             ManagedInferenceCard()
-
-            // Subdued escape hatch: the full BYO provider controls, tucked away so
-            // Marcus never has to read it but Sam can find it (item 59).
-            DisclosureGroup("Use your own AI provider instead") {
-                BYOProviderControls()
-                    .padding(.top, 6)
-            }
-            .accessibilityIdentifier("useOwnProviderDisclosure")
         }
     }
 }

@@ -8,6 +8,11 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "OpenRou
 /// sends the user to OpenRouter's authorization page, and on the
 /// `sentwise://openrouter-callback` redirect exchanges the code for a real key,
 /// storing it as the OpenAI-compatible provider pointed at OpenRouter's base URL.
+///
+/// Parked 2026-09-16 (item 100): BYOK providers were removed from the UI, so no
+/// reachable control begins this flow. The methods stay compiling and unit-tested
+/// (and the callback handler stays registered) but are unreachable in the shipped
+/// UI — kept for possible future revival.
 extension AppState {
 
     /// The custom-scheme URL OpenRouter redirects back to. Registered in
@@ -28,6 +33,10 @@ extension AppState {
     /// A sensible default model for a freshly provisioned OpenRouter key. The user
     /// can change it; OpenRouter namespaces model ids by publisher.
     static let openRouterDefaultModel = "openai/gpt-4o-mini"
+
+    /// Parked 2026-09-16 (item 100): production callback routing must ignore
+    /// OpenRouter redirects while BYOK/local providers are not a shipped path.
+    static let areBYOKProvidersParked = true
 
     /// Begins OpenRouter provisioning: mints a PKCE pair, stores the verifier, and
     /// returns the authorization URL to open in the browser. Returns `nil` (and
@@ -140,8 +149,13 @@ extension AppState {
     func handleOpenRouterCallback(
         code: String,
         flowID: String? = nil,
+        allowParkedProviderCallback: Bool = false,
         provisioner: OpenRouterKeyProvisioner = OpenRouterKeyProvisioner()
     ) async {
+        guard allowParkedProviderCallback || !Self.areBYOKProvidersParked else {
+            ignoreParkedOpenRouterCallback()
+            return
+        }
         guard shouldHandleOpenRouterCallback(flowID: flowID) else { return }
         let messageSurface = currentOpenRouterProvisioningMessageSurface()
         let settingsMessageGeneration = settingsTransientMessageGeneration
@@ -224,6 +238,14 @@ extension AppState {
         pendingOpenRouterProvisioningMessageSurface = .shared
 
         activateProvisionedOpenRouterKey(key)
+    }
+
+    private func ignoreParkedOpenRouterCallback() {
+        _ = Self.clearPendingOpenRouterProvisioningState(secrets: secrets)
+        clearCanceledOpenRouterCallbackSurfaceBestEffort()
+        isOpenRouterProvisioning = false
+        pendingOpenRouterProvisioningMessageSurface = .shared
+        logger.info("Ignoring OpenRouter callback because BYOK providers are parked")
     }
 
     private func shouldContinueOpenRouterCallback(

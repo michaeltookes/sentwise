@@ -1,10 +1,21 @@
 # Managed inference (item 56a)
 
+> **Parked 2026-09-16 (item 100): managed inference is the only shipped path.** The
+> bring-your-own-provider and local-model (Ollama) options are removed from the UI,
+> onboarding, and pricing. The provider architecture, the non-managed
+> `LLMProviderKind` cases, `AnthropicClient`/`OpenAICompatibleClient`, and the
+> OpenRouter one-click flow described below are **parked in the open-core source** —
+> compiling and unit-tested but unreachable from the UI, kept for possible future
+> revival. Any persisted non-managed provider selection falls back to managed at
+> launch (settings schema 20). The BYO/OpenRouter sections below are retained as a
+> record of the parked mechanics, not shipped behavior.
+
 Managed inference lets a signed-in Sentwise user draft email **without touching
 an API key**. Drafting requests go through a stateless, zero-retention proxy
 (`sentwise-service`) that authenticates the user's account and forwards to the
-model provider under zero-data-retention terms. This is the default for new
-installs; bring-your-own-provider remains the power/privacy path (item 59).
+model provider under zero-data-retention terms. This is the **only shipped**
+drafting path (item 100, 2026-09-16); it was the default from 56a alongside a
+parked bring-your-own-provider option (item 59).
 
 This document covers the app side. The proxy lives in its own public repo,
 [`sentwise-service`](https://github.com/michaeltookes/sentwise-service), whose
@@ -18,8 +29,8 @@ README explains the no-storage/no-logging design.
 | Client | `Services/LLM/ManagedInferenceClient.swift` | `LLMClient` calling `POST /v1/draft` with a Clerk session token |
 | Session provider | `Services/Clerk/ManagedAccountService.swift` | Mints short-lived session tokens on demand; the `ManagedSessionProviding` behind `LLMService` |
 | Sign-in | `Services/Clerk/ClerkClient.swift` | Native Clerk Frontend-API email-code flow |
-| App state | `App/AppState+ManagedAccount.swift` | Sign-in/out actions + the 14→15 settings migration |
-| UI | `Views/AIProviderControls.swift`, `Views/AIProviderSettingsView.swift` | Managed-first card + BYO behind a disclosure |
+| App state | `App/AppState+ManagedAccount.swift` | Sign-in/out actions; the settings migrations live in `App/AppState+SettingsMigration.swift` (14→15 managed default, and 19→20 BYOK-parked fallback, item 100) |
+| UI | `Views/AIProviderControls.swift`, `Views/AIProviderSettingsView.swift` | Managed sign-in card only (the BYO controls were parked 2026-09-16 — item 100 — in `Views/BYOProviderGuidance.swift`, unreferenced) |
 
 ## Where the endpoint comes from
 
@@ -196,13 +207,21 @@ completed by a hijacked callback.
   the fresh authenticated Paddle customer-portal-session URL only and never opens
   the billing portal.
 
-## Settings migration (14 → 15)
+## Settings migration (14 → 15, then 19 → 20)
 
 On first launch at schema 15, an install with **no configured BYO provider** (no
-stored API key and no verified model) moves to `.managed`. A configured BYO user
-keeps their provider. Fresh installs default to `.managed` directly. The
-migration is gated on the original schema version so it runs once
-(`AppState.migratedManagedInferenceSettings`).
+stored API key and no verified model) moves to `.managed`. Fresh installs default
+to `.managed` directly.
+
+**Parked 2026-09-16 (item 100):** a later terminal step,
+`AppState.migratedBYOKParkedSettings`, advances the file to schema 20 and resets
+**any** persisted non-managed provider (including a previously-configured BYO user)
+to `.managed`, clearing the stale model/base-URL/verified-model and any pending
+OpenRouter authorization state — no released builds existed, so there is no
+migration UI. Both steps are gated on the original schema version so each runs
+once; the full launch chain lives in
+`App/AppState+SettingsMigration.swift` and persists exactly once at the terminal
+step.
 
 ## Metering (56b) — app side
 
@@ -251,17 +270,17 @@ resets \<weekday, time\>"** with a `ProgressView`, a subdued "Extra usage
 purchased: X" line only when `extraPurchased > 0`, an **"Upgrade for more
 drafts"** button shown when at/over limit that opens the Paddle checkout plan
 picker (`AppState.presentBillingCheckout()`; 56c — the sheet is hosted by the
-enclosing Subscription pane), and the **own-key valve** pointing at the BYO
-section below (item 59). Hidden gracefully when `managedQuota == nil`. AX ids:
-`managedUsageSection`, `managedUsageSummary`, `managedUsageProgress`,
-`managedExtraPurchased`, `buyMoreUsage`, `managedOwnKeyValve`.
+enclosing Subscription pane). The **own-key valve** that once pointed at the BYO
+section was parked 2026-09-16 (item 100). Hidden gracefully when
+`managedQuota == nil`. AX ids: `managedUsageSection`, `managedUsageSummary`,
+`managedUsageProgress`, `managedExtraPurchased`, `buyMoreUsage`.
 
 ### Error mapping (`LLMError` + `AppState.llmMessage`)
 
 | Worker response | `LLMError` case | User copy |
 | --- | --- | --- |
 | `429` `rate_limited` (+`retryAfterSeconds`, `Retry-After` header) | `.managedRateLimited(retryAfter:)` | "You're drafting faster than Sentwise allows — try again in N seconds." |
-| `429` `quota_exceeded` (+`resetsAt`, hard mode only) | `.managedQuotaExceeded(resetsAt:)` | Explains the weekly reset, "Buy more usage in Settings → Subscription, or use your own key for unlimited drafting." |
+| `429` `quota_exceeded` (+`resetsAt`, hard mode only) | `.managedQuotaExceeded(resetsAt:)` | Explains the weekly reset, "Buy more usage in Settings → Subscription." (The "use your own key" clause was parked 2026-09-16 — item 100.) |
 | `413` `request_too_large` | `.managedRequestTooLarge` | Suggests trimming the transcript/thread. |
 
 Body `retryAfterSeconds` takes precedence over the `Retry-After` header.
@@ -621,24 +640,22 @@ demand signal for reviving the parked bundled-OAuth + CASA path (item 3).
 response, zero network) whenever `ProwlHuntRuntime.current.isEnabled`, so drafting
 stays offline-safe.
 
-**Sign-in and provisioning are functional but fully offline in hunt mode
-(item 70).** Rather than being disabled, the item-59 flows run through a
-deterministic in-memory fake so accessibility hunts can drive them end-to-end
-without ever reaching Clerk/OpenRouter/Anthropic or opening a browser:
+**Managed sign-in is functional but fully offline in hunt mode (item 70).**
+Rather than being disabled, the managed sign-in flows run through a deterministic
+in-memory fake so accessibility hunts can drive them end-to-end without ever
+reaching Clerk/Anthropic or opening a browser:
 
 - `startManagedSignIn` / `verifyManagedCode` (`AppState+ManagedAccount.swift`)
   advance to the code stage and complete to the signed-in fixture account.
 - `startManagedGoogleSignIn` (`AppState+ManagedOAuth.swift`) shows the
   "finish in your browser" panel without opening a browser;
   `completeManagedGoogleSignInForHunt` (`AppState+ProwlHuntAuth.swift`) finishes it.
-- `completeOpenRouterProvisioningForHunt` (`AppState+ProwlHuntAuth.swift`)
-  activates a fake OpenAI-compatible/OpenRouter provider with no key exchange.
 
 Every fake is strictly guarded on `ProwlHuntRuntime.current.isEnabled` (injectable
 for unit tests — `AppStateProwlHuntAuthTests`), so the production paths are
 unchanged. The controls carry `accessibilityIdentifier`s documented in
 `.prowl/README.md`; `forbiddenSelectors` in `.prowl/config.yml` was relaxed so the
-sign-in/provider hunts can activate exactly those controls while mail dispatch,
+managed sign-in hunts can activate exactly those controls while mail dispatch,
 draft mutation, LLM generation, mailbox search, and system toggles stay forbidden.
 
 ## Live end-to-end sign-in test (env-gated)

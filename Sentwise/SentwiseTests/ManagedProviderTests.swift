@@ -184,6 +184,114 @@ final class ManagedProviderTests: XCTestCase {
         XCTAssertEqual(persistence.settingsSaveCount, 0)
     }
 
+    // MARK: - Settings migration (BYOK parked, item 100)
+
+    func testFullLaunchMigrationFallsBackConfiguredBYOInstallToManaged() {
+        // Parked 2026-09-16 (item 100): a pre-release install that had a configured
+        // BYO provider (verified anthropic key + model) falls back to managed on the
+        // launch that crosses into the byok-parked schema — no released builds, so no
+        // migration UI — and the schema advances with a single terminal write.
+        let secrets = InMemorySecretStore(seed: [.llmAPIKey(provider: "anthropic"): "sk-live"])
+        let settings = Settings(
+            schemaVersion: Settings.byokParkedSchemaVersion - 1,
+            pollIntervalSeconds: 300,
+            llmProvider: "anthropic",
+            llmModel: "claude-opus-custom",
+            llmBaseURL: "https://example.test/v1",
+            llmVerifiedModel: "claude-opus-custom"
+        )
+        let persistence = AppStateMemoryPersistence(settings: settings)
+
+        let migrated = AppState.fullyMigratedSettings(
+            loaded: settings,
+            secrets: secrets,
+            persistence: persistence
+        )
+
+        XCTAssertEqual(migrated.llmProvider, "managed")
+        XCTAssertEqual(migrated.llmModel, "")
+        XCTAssertEqual(migrated.llmBaseURL, "")
+        XCTAssertEqual(migrated.llmVerifiedModel, "")
+        XCTAssertEqual(migrated.schemaVersion, Settings.currentSchemaVersion)
+        XCTAssertEqual(persistence.settingsSaveCount, 1)
+        XCTAssertEqual(persistence.savedSettingsHistory.map(\.schemaVersion), [Settings.currentSchemaVersion])
+    }
+
+    func testBYOKParkedMigrationClearsPendingOpenRouterProvisioningState() throws {
+        let secrets = InMemorySecretStore(seed: [
+            .openRouterPKCEVerifier: "VER",
+            .openRouterPKCEMessageSurface: "settings",
+            .openRouterPKCEFlowID: "FLOW",
+            .openRouterCanceledCallbackSurface: "settings"
+        ])
+        let settings = Settings(
+            schemaVersion: Settings.byokParkedSchemaVersion - 1,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed"
+        )
+        let persistence = AppStateMemoryPersistence(settings: settings)
+
+        let migrated = AppState.fullyMigratedSettings(
+            loaded: settings,
+            secrets: secrets,
+            persistence: persistence
+        )
+
+        XCTAssertEqual(migrated.llmProvider, "managed")
+        XCTAssertEqual(migrated.schemaVersion, Settings.currentSchemaVersion)
+        XCTAssertNil(try secrets.value(for: .openRouterPKCEVerifier))
+        XCTAssertNil(try secrets.value(for: .openRouterPKCEMessageSurface))
+        XCTAssertNil(try secrets.value(for: .openRouterPKCEFlowID))
+        XCTAssertNil(try secrets.value(for: .openRouterCanceledCallbackSurface))
+        XCTAssertEqual(persistence.settingsSaveCount, 1)
+    }
+
+    func testBYOKParkedMigrationRetriesIfOpenRouterStateCannotBeCleared() throws {
+        let secrets = ManagedProviderFailingRemoveSecretStore(seed: [
+            .openRouterPKCEVerifier: "VER",
+            .openRouterPKCEFlowID: "FLOW"
+        ])
+        secrets.failOnRemoveKeys = [.openRouterPKCEVerifier]
+        let settings = Settings(
+            schemaVersion: Settings.byokParkedSchemaVersion - 1,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed"
+        )
+        let persistence = AppStateMemoryPersistence(settings: settings)
+
+        let migrated = AppState.migratedBYOKParkedSettings(
+            settings,
+            originalSchemaVersion: settings.schemaVersion,
+            secrets: secrets,
+            persistence: persistence
+        )
+
+        XCTAssertEqual(migrated.schemaVersion, Settings.byokParkedSchemaVersion - 1)
+        XCTAssertEqual(secrets.storedValueIgnoringFailures(for: .openRouterPKCEVerifier), "VER")
+        XCTAssertEqual(persistence.settingsSaveCount, 0)
+    }
+
+    func testBYOKParkedMigrationIsNoOpForManagedInstallAtCurrentSchema() {
+        // A managed install already at the current schema is untouched by the parked
+        // fallback step (no provider change, no extra write).
+        let settings = Settings(
+            schemaVersion: Settings.byokParkedSchemaVersion,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed"
+        )
+        let persistence = AppStateMemoryPersistence(settings: settings)
+
+        let migrated = AppState.migratedBYOKParkedSettings(
+            settings,
+            originalSchemaVersion: settings.schemaVersion,
+            secrets: InMemorySecretStore(),
+            persistence: persistence
+        )
+
+        XCTAssertEqual(migrated.llmProvider, "managed")
+        XCTAssertEqual(persistence.settingsSaveCount, 0)
+    }
+
     // MARK: - LLMService routing + hunt-mode stub
 
     func testHuntModeReturnsCannedResponseWithoutNetwork() async throws {

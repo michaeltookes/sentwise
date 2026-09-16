@@ -3,23 +3,32 @@ import Foundation
 /// A cloud LLM provider the user can select. Adding a provider is a matter of
 /// adding a case here plus an `LLMClient` adapter — nothing else in the app
 /// changes, which is what makes the layer pluggable.
+///
+/// Parked 2026-09-16 (item 100): BYOK/local providers (`anthropic`,
+/// `openAICompatible`, `ollama`) were removed from the UI and the product story;
+/// managed is the only shipped path. The cases and their per-provider metadata
+/// below stay compiling and unit-tested — nothing reachable from the UI selects
+/// them — kept for possible future revival.
 enum LLMProviderKind: String, CaseIterable, Codable, Identifiable, Sendable {
     /// Sentwise's bundled managed-inference service (backlog item 56a). Drafting
     /// runs through the stateless `sentwise-service` proxy authenticated by the
-    /// user's account session — no API key, no endpoint to configure. This is the
-    /// default for new installs; BYO providers below remain the power/privacy path.
+    /// user's account session — no API key, no endpoint to configure. Since item
+    /// 100 (2026-09-16) this is the only provider reachable from the UI.
     case managed
+    /// Parked 2026-09-16 (item 100): BYO Anthropic direct — unreachable from the UI.
     case anthropic
-    /// Any provider speaking the OpenAI `/v1/chat/completions` wire format. A
-    /// single adapter covers OpenAI itself plus every compatible gateway
-    /// (OpenRouter, Groq, Mistral, DeepSeek, Together, LM Studio, Ollama's
-    /// OpenAI-compat endpoint, …) by pointing the base URL at each host.
+    /// Parked 2026-09-16 (item 100): unreachable from the UI. Any provider speaking
+    /// the OpenAI `/v1/chat/completions` wire format. A single adapter covers OpenAI
+    /// itself plus every compatible gateway (OpenRouter, Groq, Mistral, DeepSeek,
+    /// Together, LM Studio, Ollama's OpenAI-compat endpoint, …) by pointing the base
+    /// URL at each host.
     case openAICompatible
-    /// A local model runtime (Ollama by default) exposing the same OpenAI
-    /// `/v1/chat/completions` wire format on the loopback interface. Shares the
-    /// OpenAI-compatible adapter, but treats API keys as optional and defaults
-    /// its endpoint to Ollama's local server. Pointing the base URL elsewhere
-    /// targets LM Studio (`http://localhost:1234/v1`) or a keyed LAN proxy.
+    /// Parked 2026-09-16 (item 100): unreachable from the UI. A local model runtime
+    /// (Ollama by default) exposing the same OpenAI `/v1/chat/completions` wire format
+    /// on the loopback interface. Shares the OpenAI-compatible adapter, but treats API
+    /// keys as optional and defaults its endpoint to Ollama's local server. Pointing
+    /// the base URL elsewhere targets LM Studio (`http://localhost:1234/v1`) or a
+    /// keyed LAN proxy.
     case ollama
 
     var id: String { rawValue }

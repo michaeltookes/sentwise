@@ -3,6 +3,11 @@ import Foundation
 /// `LLMClient` adapter for any provider speaking the OpenAI
 /// `/v1/chat/completions` wire format.
 ///
+/// Parked 2026-09-16 (item 100): the BYO OpenAI-compatible provider and the local
+/// (Ollama) path were removed from the UI; managed inference is the only shipped
+/// path. This adapter stays compiling and unit-tested but is unreachable from the
+/// UI — kept for possible future revival.
+///
 /// See https://platform.openai.com/docs/api-reference/chat. Auth is a
 /// `Authorization: Bearer <key>` header. Because the endpoint is configurable,
 /// one adapter covers OpenAI itself plus compatible gateways — OpenRouter, Groq,

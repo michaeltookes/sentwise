@@ -2,6 +2,10 @@ import Foundation
 
 /// `LLMClient` adapter for Anthropic's Messages API.
 ///
+/// Parked 2026-09-16 (item 100): the BYO Anthropic-direct provider was removed from
+/// the UI; managed inference is the only shipped path. This adapter stays compiling
+/// and unit-tested but is unreachable from the UI — kept for possible future revival.
+///
 /// See https://docs.anthropic.com/en/api/messages. Auth is the `x-api-key`
 /// header plus a pinned `anthropic-version`.
 struct AnthropicClient: LLMClient {

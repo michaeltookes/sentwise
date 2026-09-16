@@ -3,11 +3,11 @@ import SwiftUI
 /// The managed-inference weekly-usage display for the Settings → Subscription
 /// pane (backlog items 56b, 73): "N of M drafts used this week · resets
 /// <weekday, time>" with a progress bar, a subdued extra-usage line when the user
-/// has bought more, a "buy more usage" placeholder (56c wires the purchase), and
-/// the own-key valve linking to the AI tab's BYO section (item 59). Hidden
-/// gracefully when the quota is unknown. The `/v1/me` refresh is owned by the
-/// enclosing Subscription pane's `.task`, so this view does not fetch itself
-/// (avoids a double fetch on tab open).
+/// has bought more, and a "buy more usage" / upgrade path (56c wires the purchase).
+/// The own-key valve was parked 2026-09-16 (item 100) — managed inference is the
+/// only shipped path. Hidden gracefully when the quota is unknown. The `/v1/me`
+/// refresh is owned by the enclosing Subscription pane's `.task`, so this view does
+/// not fetch itself (avoids a double fetch on tab open).
 struct ManagedUsageView: View {
     @EnvironmentObject var appState: AppState
 
@@ -62,14 +62,8 @@ struct ManagedUsageView: View {
                         .accessibilityLabel("Upgrade for more drafts")
                     }
                 }
-
-                Button("Need more? Use your own key for unlimited drafting.") {
-                    appState.openSettingsHandler?(.ai)
-                }
-                .buttonStyle(.link)
-                .font(.caption2)
-                .accessibilityIdentifier("managedOwnKeyValve")
-                .accessibilityLabel("Use your own AI key for unlimited drafting")
+                // The own-key "valve" was parked 2026-09-16 (item 100): managed
+                // inference is the only shipped path, so there is nowhere to point it.
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("managedUsageSection")
