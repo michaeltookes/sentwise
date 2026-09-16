@@ -104,9 +104,7 @@ extension AppState {
             expectedUIDValidity: message.uidValidity
         )
         guard isCurrentDraftContext(
-            credentials: credentials,
-            llmConfiguration: llmConfiguration,
-            requireWatching: requireWatching,
+            credentials: credentials, llmConfiguration: llmConfiguration, requireWatching: requireWatching,
             localDataGeneration: localDataGeneration
         ) else { return nil }
         let incomingText = MailBodyText.plainText(from: data)
@@ -125,9 +123,7 @@ extension AppState {
             throw error
         }
         guard isCurrentDraftContext(
-            credentials: credentials,
-            llmConfiguration: llmConfiguration,
-            requireWatching: requireWatching,
+            credentials: credentials, llmConfiguration: llmConfiguration, requireWatching: requireWatching,
             localDataGeneration: localDataGeneration
         ) else { return nil }
         let draft = Draft(
