@@ -77,17 +77,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Out of scope: multiple accounts inside one provider sign-in (aliases), Outlook/M365 (item 33), team/shared inboxes.
 
 
-100. **Park the BYO-key and local-model providers — managed inference becomes the only path**
-    Owner decision (2026-09-16): the BYO-key providers (Anthropic direct, OpenAI-compatible) and the local-model option (Ollama) are removed from the UI and the pricing story, and the code is **parked, not deleted** — the same treatment as the OAuth engine (item 3). Rationale: the paying ICP will never paste an API key; BYOK breaks the credit math every tier is priced on; managed-only makes server-side metering airtight; and it shrinks the solo-maintainer support surface (key validation, per-provider errors, local-model quality complaints). The privacy story stands on the managed proxy itself — stateless, zero-retention, no training — and open core means self-hosters can still build the parked path from source, unsupported.
-    *As the maintainer, I want exactly one inference path in the shipped product, so that pricing, metering, onboarding, and support all reason about a single provider.*
-    - Provider selection is removed from Settings and onboarding: no provider picker, no API-key fields, no base-URL/model fields, no BYO guidance UI. `.managed` is the only reachable provider; any persisted non-managed selection from a pre-release build silently falls back to managed (no migration UI — no released builds exist).
-    - Parked code stays compiling and unit-tested but unreachable from the UI (`LLMProviderKind` non-managed cases, `AnthropicClient`, `OpenAICompatibleClient`, the Ollama path, `AIProviderSettingsView`/`AIProviderControls`/`BYOProviderGuidance` as applicable) — a dated "parked" doc comment at each entry point mirrors the item-3 convention.
-    - Keychain entries for BYO API keys are no longer written; existing ones are covered by the item-96 erase-all wipe (verify, don't build anything new).
-    - Docs updated: `CLAUDE.md` monetization/LLM-access notes superseded (BYOK/local parked 2026-09-16), `docs/managed-inference.md` reflects managed-only, landing-page/pricing copy checked for BYO mentions (separate repo — report, don't edit here).
-    - Backlog hygiene: item 22 (BYO cost guardrails) parked with a pointer here; item 58's harness scope note trimmed to the managed path.
-    - Out of scope: deleting the provider architecture (it stays as the seam for any future revival), server-side changes (the Worker is already managed-only).
-
-
 ## Medium Priority
 
 83. **Approval-signal learning loop (accept-as-is / edit / deny → better drafts + smarter filtering)** — *ongoing/strategic; phase 1 is a cheap early slice*
@@ -142,8 +131,9 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Optional scheduled refresh interval in Settings.
     - Previous profile replaced atomically; a summary of changes shown.
 
-22. **Cost & rate guardrails for cloud LLMs**
-    Prevent surprise bills. *(Scope note 2026-08-12: with managed inference as the default, this item now serves the BYO-key escape hatch; the managed tier's metering and fair-use enforcement are server-side under item 56.)*
+22. **Cost & rate guardrails for cloud LLMs** — *PARKED (2026-09-16, item 100): only relevant if BYO-key/local drafting is revived*
+    > **Parked 2026-09-16:** BYO-key and local-model providers were removed from the UI and pricing (item 100), so there is no user-supplied cloud key to guard. The managed tier's metering and fair-use enforcement are server-side (items 56/56b). This item — per-run/per-day cost caps for a user's own cloud key — is only relevant if the parked BYO path is revived.
+    Prevent surprise bills.
     *As Priya, I want usage limits and cost visibility for cloud providers, so that BYO-key drafting never surprises me.*
     - Token/usage tracked per run and per day.
     - Configurable caps pause drafting when exceeded, with a clear notification.
@@ -189,13 +179,13 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Note: a pre-review prototype of exactly this exists in `stash@{0}` (2026-08-06, includes `AppStateOfflineQueueReviewFeedbackTests`), but it predates the merged review-feedback rework — re-implement against current `main` rather than popping the stash.
 
 58. **Model-consistency harness + eval suite for the follow-up pipeline**
-    Engineering consistency across model paths. The managed-inference default (2026-08-12 decision) narrows the primary surface to one or two curated models we choose — but the harness still governs the BYO-key/local escape hatch, honest quality signaling on weaker local models, and safe swaps of the managed default as providers evolve. **Sequenced after item 51's first working version** — build 51 against the managed default, then grow the harness from the variance actually observed, not speculation.
-    *As Marcus, I want the follow-up to be reliably good on the default; as Sam, I want it reliably good on whichever model I brought — so that approval is a tap, not a rewrite session.*
+    Engineering consistency for the managed drafting path. *(Scope trimmed 2026-09-16 — item 100: BYO-key/local providers are parked, so this harness now covers only the managed models we curate — one or two chosen models plus safe swaps of the managed default as providers evolve. It no longer needs to govern a BYO/local escape hatch or signal quality on weaker user-brought models.)* **Sequenced after item 51's first working version** — build 51 against the managed default, then grow the harness from the variance actually observed, not speculation.
+    *As Marcus, I want the follow-up to be reliably good on the managed default, so that approval is a tap, not a rewrite session.*
     - **Staged pipeline, not one big prompt:** extract action items/decisions into a structured intermediate (JSON) → build recap → render the email in the user's voice; defined input/output contracts per stage so model variance is contained, not compounded.
     - **Deterministic post-generation validation** (code, not the model): structure valid, action items present, length in bounds, no invented recipients, signature policy respected. Failure → retry with feedback, or a visible low-confidence signal in the approval UI.
-    - **Per-model capability adaptation:** context-window size, structured-output/tool-calling support, instruction-following tier detected and adapted to (chunking for small-context local models, simplified prompts for weaker ones); honest UI messaging when a chosen model is below the quality bar.
-    - **Golden-transcript eval suite:** fixed test transcripts (discovery call, demo, negotiation, messy multi-speaker) with assertions on what a good follow-up contains, runnable against every supported provider and the local-model path. This encodes what "good" looks like for a sales follow-up — domain specialization as software.
-    - **Voice profile stays model-independent:** the learned style guide is injected identically regardless of provider, so switching models changes fluency, not identity.
+    - **Per-managed-model capability adaptation:** context-window size and structured-output/tool-calling support detected per curated managed model, so a safe swap of the managed default doesn't silently regress quality.
+    - **Golden-transcript eval suite:** fixed test transcripts (discovery call, demo, negotiation, messy multi-speaker) with assertions on what a good follow-up contains, runnable against each curated managed model. This encodes what "good" looks like for a sales follow-up — domain specialization as software.
+    - **Voice profile stays model-independent:** the learned style guide is injected identically across managed models, so a model swap changes fluency, not identity.
     - The approval step remains the backstop: the bar is "consistently good enough that approval is a tap," not perfection.
 
 52. **Calendar awareness: auto-fill follow-up recipients and context**
