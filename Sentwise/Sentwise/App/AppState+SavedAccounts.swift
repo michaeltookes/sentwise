@@ -86,7 +86,7 @@ extension AppState {
         )
     }
 
-    private func legacyMailPasswordForOwnedAccount(_ email: String) throws -> String? {
+    func legacyMailPasswordForOwnedAccount(_ email: String) throws -> String? {
         guard try legacyMailPasswordOwnerID() == SavedMailAccount.normalizedEmail(email),
               let legacy = try secrets.value(for: .mailAppPassword),
               !legacy.isEmpty else {
@@ -145,14 +145,6 @@ extension AppState {
             setConnectionError(Self.keychainMessage(action: "remove", error: error), for: messageSurface)
             return nil
         }
-    }
-
-    func restoreActiveMailPasswordRemoval(_ removal: ActiveMailPasswordRemoval) -> Error? {
-        restoreRemovedAccountSecrets(
-            accountEmail: removal.accountEmail,
-            accountPassword: removal.accountPassword,
-            legacyPassword: removal.legacyPassword
-        )
     }
 
     // MARK: - v10 → v11 migration
@@ -289,157 +281,6 @@ extension AppState {
         if wasWatching {
             startWatchingIfReady()
         }
-    }
-
-    // MARK: - Removal
-
-    /// Removes a saved account (item 48): deletes exactly that account's Keychain
-    /// secret and drops it from the list. If it was the active account, the app
-    /// goes offline and the account inputs are cleared. Other accounts' secrets are
-    /// never touched. When `purgeLocalData` is set the account-scoped mail artifacts
-    /// are purged after a successful removal (item 96), never if it rolls back.
-    func removeSavedAccount(
-        _ account: SavedMailAccount, purgeLocalData: Bool = false,
-        messageSurface: TransientMessageSurface = .shared
-    ) {
-        setConnectionError(nil, for: messageSurface)
-        guard !isConnecting else {
-            setConnectionError("Wait for the current connection test to finish before removing an account.", for: messageSurface)
-            return
-        }
-        let wasCurrentAccount = SavedMailAccount.normalizedEmail(mailEmail) == account.id
-        let shouldClearCurrentAccount = isActiveAccount(account) || wasCurrentAccount
-        let ownsWorkspaceGuidance = workspaceAuthGuidanceAccountID(for: messageSurface) == account.id
-        let accountKey = SecretKey.mailAppPassword(email: account.email)
-        let previousAccountPassword: String?, previousLegacyPassword: String?
-        let shouldRemoveLegacyPassword: Bool
-
-        do {
-            previousAccountPassword = try secrets.value(for: accountKey)
-            previousLegacyPassword = try legacyMailPasswordForOwnedAccount(account.email)
-            shouldRemoveLegacyPassword = previousLegacyPassword != nil
-        } catch {
-            setConnectionError(Self.keychainMessage(action: "read", error: error), for: messageSurface)
-            return
-        }
-
-        let nextSettings = settingsAfterRemovingSavedAccount(account, clearCurrentAccount: shouldClearCurrentAccount)
-
-        do {
-            try secrets.remove(accountKey)
-            if shouldRemoveLegacyPassword {
-                // Also clear any legacy shared slot so nothing is orphaned.
-                try secrets.remove(.mailAppPassword)
-            }
-        } catch {
-            setConnectionError(
-                removedAccountRollbackMessage(
-                    baseMessage: Self.keychainMessage(action: "remove", error: error),
-                    accountEmail: account.email,
-                    accountPassword: previousAccountPassword,
-                    legacyPassword: shouldRemoveLegacyPassword ? previousLegacyPassword : nil
-                ),
-                for: messageSurface
-            )
-            return
-        }
-
-        do {
-            try persistSettingsSync(nextSettings)
-        } catch {
-            setConnectionError(
-                removedAccountRollbackMessage(
-                    baseMessage: Self.settingsMessage(action: "save", error: error),
-                    accountEmail: account.email,
-                    accountPassword: previousAccountPassword,
-                    legacyPassword: shouldRemoveLegacyPassword ? previousLegacyPassword : nil
-                ),
-                for: messageSurface
-            )
-            return
-        }
-
-        savedAccounts = nextSettings.savedAccounts
-
-        if shouldClearCurrentAccount || ownsWorkspaceGuidance { clearWorkspaceAuthGuidance(for: messageSurface) }
-        if shouldClearCurrentAccount {
-            goOfflineAfterRemovingActiveAccount()
-        }
-        if purgeLocalData {
-            purgeLocalMailArtifacts()
-        }
-        logger.info("Saved account removed")
-    }
-
-    private func settingsAfterRemovingSavedAccount(
-        _ account: SavedMailAccount,
-        clearCurrentAccount: Bool
-    ) -> Settings {
-        var settings = buildSettings(
-            mailEmail: clearCurrentAccount ? "" : nil,
-            signaturePolicyOverride: clearCurrentAccount ? SignaturePolicy.default.rawValue : nil,
-            signatureTextOverride: clearCurrentAccount ? "" : nil
-        )
-        if clearCurrentAccount {
-            settings.mailHost = Settings.default.mailHost
-            settings.mailPort = Settings.default.mailPort
-            settings.mailHostGuidanceEmail = nil
-            settings.mailHostGuidancePendingEmail = false
-        }
-        settings.savedAccounts.removeAll { $0.id == account.id }
-        return settings
-    }
-
-    private func removedAccountRollbackMessage(
-        baseMessage: String,
-        accountEmail: String,
-        accountPassword: String?,
-        legacyPassword: String?
-    ) -> String {
-        var message = baseMessage
-        let rollbackError = restoreRemovedAccountSecrets(
-            accountEmail: accountEmail,
-            accountPassword: accountPassword,
-            legacyPassword: legacyPassword
-        )
-        if let rollbackError {
-            message += " " + Self.keychainMessage(action: "restore", error: rollbackError)
-        }
-        return message
-    }
-
-    private func restoreRemovedAccountSecrets(
-        accountEmail: String,
-        accountPassword: String?,
-        legacyPassword: String?
-    ) -> Error? {
-        do {
-            if let accountPassword {
-                try secrets.set(accountPassword, for: .mailAppPassword(email: accountEmail))
-            }
-            if let legacyPassword {
-                try secrets.set(legacyPassword, for: .mailAppPassword)
-            }
-            return nil
-        } catch {
-            logger.error("Failed to roll back removed mail secret: \(error.localizedDescription)")
-            return error
-        }
-    }
-
-    /// Tears down the active account after it has been removed from the list.
-    private func goOfflineAfterRemovingActiveAccount() {
-        mailEmail = ""
-        mailHost = Settings.default.mailHost
-        mailPort = Settings.default.mailPort
-        mailHostExplicitlyEditedEmail = nil
-        mailHostExplicitlyEditedBeforeEmail = false
-        mailAppPassword = ""
-        isAccountConnected = false
-        clearSignatureForAccountRemoval()
-        cancelAllSendCountdowns()
-        stopWatching()
-        resetMessagePreviewForAccountChange()
     }
 
     // MARK: - Verified-connection persistence

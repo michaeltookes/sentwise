@@ -163,6 +163,7 @@ enum UsageAlertEvaluator {
 protocol UsageAlertStateStoring: AnyObject, Sendable {
     func loadState(for accountKey: String) -> UsageAlertState?
     func save(_ state: UsageAlertState)
+    func clearAll()
 }
 
 extension UsageAlertStateStoring {
@@ -187,6 +188,8 @@ extension UsageAlertStateStoring {
             save(oldState)
         }
     }
+
+    func clearAll() {}
 }
 
 private struct UsageAlertStateCollection: Codable, Equatable, Sendable {
@@ -219,6 +222,10 @@ final class UserDefaultsUsageAlertStore: UsageAlertStateStoring, @unchecked Send
         let collection = UsageAlertStateCollection(statesByAccount: states)
         guard let data = try? JSONEncoder().encode(collection) else { return }
         defaults.set(data, forKey: key)
+    }
+
+    func clearAll() {
+        defaults.removeObject(forKey: key)
     }
 
     private func loadStates() -> [String: UsageAlertState] {

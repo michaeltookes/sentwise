@@ -16,7 +16,7 @@ live in the macOS Keychain via `KeychainStore`, never in the JSON files.
 | File | Contents | Scope |
 |------|----------|-------|
 | `Settings.json` | App preferences, account identity, saved-account list, provider/managed config, signature, sender rules | **App-global config** (holds account identity, but not mail content) |
-| `VoiceProfile.json` | Voice learned from the user's Sent mail | **Account-scoped** (mail-derived) |
+| `VoiceProfile.json` | Voice learned from the user's Sent mail | **Active-account / legacy unscoped** (mail-derived) |
 | `ProcessedMessages.json` | Watcher dedup + per-mailbox baseline | **Account-scoped** |
 | `PendingDrafts.json` | Full incoming message bodies + generated drafts awaiting review | **Account-scoped** |
 | `SkippedMessages.json` | Sender + subject of messages the watcher passed over | **Account-scoped** |
@@ -24,19 +24,24 @@ live in the macOS Keychain via `KeychainStore`, never in the JSON files.
 | `ActivityEvents.json` | Sender + subject per activity event | **Account-scoped** |
 | `DraftFeedback.json` | Approval-signal codes/numbers/hashes (+ local deny "Other" free text) | **Account-scoped** (mail-derived) |
 
-With the single-account architecture, every store other than `Settings.json` is
-effectively account-scoped: each is keyed to, or derived from, the connected
-mailbox's mail. The two stores beyond the original A-L2 audit list —
-`ApprovedDrafts.json` and `DraftFeedback.json` — are treated as account-scoped for
-the same reason and are purged alongside the rest.
+Most stores are keyed by account and are filtered on purge so removing one saved
+account does not wipe another account's drafts, history, or watcher baseline.
+`VoiceProfile.json` is the one legacy single-profile artifact: it is cleared when
+the active account is disconnected/removed/purged, but an inactive saved-account
+removal leaves the current profile intact. Older untagged draft/activity/feedback
+records are treated the same way — cleared only during an active-account purge.
+The two stores beyond the original A-L2 audit list, `ApprovedDrafts.json` and
+`DraftFeedback.json`, are still purged with the matching account.
 
 ## Account-scoped purge
 
-`AppState.purgeLocalMailArtifacts()` (in `AppState+LocalDataPurge`) deletes every
-account-scoped artifact above through `PersistenceProvider.purgeAccountScopedArtifacts()`
-and clears the in-memory mirrors, leaving `Settings.json` and the Keychain intact
-so the app's preferences — and any other saved account's ability to reconnect —
-survive.
+`AppState.purgeLocalMailArtifacts(for:includeUnscopedArtifacts:)` (in
+`AppState+LocalDataPurge`) filters the target account's records through
+`PersistenceProvider.purgeAccountScopedArtifacts(for:includeUnscopedArtifacts:)`
+and clears the matching in-memory mirrors, leaving `Settings.json`, the Keychain,
+and other saved accounts' records intact. The persistence operation is synchronous
+and throwing on this path so a filesystem/write failure is surfaced instead of
+logged as a successful privacy erase.
 
 It is **offered**, not forced, so a routine reconnect does not destroy a user's
 voice profile and drafts. Each teardown path presents a confirmation naming exactly
@@ -75,11 +80,16 @@ confirmation (mirroring the delete-account sheet). `AppState.eraseAllLocalData()
 1. removes **everything** under the Application Support directory (not just the
    known JSON files — the whole subtree, then recreates it empty),
 2. clears **every** Keychain item via `SecretStore.removeAll()`, and
-3. resets in-memory state to a coherent first-run state (disconnected, signed out,
+3. clears UserDefaults-backed local caches (subscription snapshot, usage-alert
+   history, and the local "already offered Google OAuth" flag), and
+4. resets in-memory state to a coherent first-run state (disconnected, signed out,
    default preferences, `onboardingCompleted = false`) without a relaunch.
 
-It returns `false` if the Keychain wipe failed so the UI can say so; the on-disk
-and in-memory wipe still happened.
+Before Keychain deletion, erase-all cancels pending managed sign-in handles and
+runs the normal managed sign-out path so an existing Clerk session-revocation
+request is scheduled while the token still exists. It returns a result containing
+any Application Support or Keychain failure so the UI can keep the sheet open and
+describe the partial erase precisely.
 
 ## Hunt / test safety
 

@@ -69,7 +69,8 @@ extension AppState {
             denyReason: nil,
             provenance: draft.feedbackProvenance,
             answeredNeedsInfo: draft.wasAnswered,
-            draftIdentityHash: DraftFeedbackRecord.hashedIdentity(draft.identity)
+            draftIdentityHash: DraftFeedbackRecord.hashedIdentity(draft.identity),
+            sourceAccountEmail: draft.sourceAccountEmail
         ))
     }
 
@@ -83,7 +84,8 @@ extension AppState {
             denyReason: reason,
             provenance: draft.feedbackProvenance,
             answeredNeedsInfo: draft.wasAnswered,
-            draftIdentityHash: DraftFeedbackRecord.hashedIdentity(draft.identity)
+            draftIdentityHash: DraftFeedbackRecord.hashedIdentity(draft.identity),
+            sourceAccountEmail: draft.sourceAccountEmail
         ))
     }
 
@@ -98,7 +100,8 @@ extension AppState {
             denyReason: nil,
             provenance: draft.feedbackProvenance,
             answeredNeedsInfo: draft.wasAnswered,
-            draftIdentityHash: DraftFeedbackRecord.hashedIdentity(draft.identity)
+            draftIdentityHash: DraftFeedbackRecord.hashedIdentity(draft.identity),
+            sourceAccountEmail: draft.sourceAccountEmail
         ))
     }
 }

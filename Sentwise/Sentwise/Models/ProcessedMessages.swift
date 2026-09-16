@@ -117,6 +117,18 @@ struct ProcessedMessages: Codable, Equatable {
         baselineUIDs[Self.baselineKey(account: account, mailbox: mailbox)]
     }
 
+    /// Removes all processed-message and watcher-baseline records for `account`,
+    /// preserving other saved accounts' dedup state.
+    mutating func removeAccount(_ account: String) {
+        let account = account.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !account.isEmpty else { return }
+        let scopeNeedle = "acct=\(account)|"
+        keys.removeAll { $0.contains(scopeNeedle) }
+        baselines.removeAll { $0.contains(scopeNeedle) }
+        baselineStarts = baselineStarts.filter { !$0.key.contains(scopeNeedle) }
+        baselineUIDs = baselineUIDs.filter { !$0.key.contains(scopeNeedle) }
+    }
+
     /// A stable identity for a message: its Message-ID when present, else a
     /// scoped `UIDVALIDITY:UID` composite (stable within one account/mailbox).
     static func key(for message: MailMessage, account: String, mailbox: Mailbox) -> String {

@@ -13,6 +13,7 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
     // MARK: - Fixtures
 
     private let account = "me@gmail.com"
+    private let otherAccount = "other@gmail.com"
 
     private func message(id: UInt32, from: String = "alice@x.com") -> MailMessage {
         MailMessage(
@@ -25,7 +26,8 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         )
     }
 
-    private func pendingDraft(id: UInt32 = 1) -> Draft {
+    private func pendingDraft(id: UInt32 = 1, account: String? = nil) -> Draft {
+        let account = account ?? self.account
         Draft(
             id: id,
             sourceUIDValidity: 10,
@@ -52,6 +54,10 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
     }
 
     private func skippedMessage() -> SkippedMessage {
+        skippedMessage(account: account)
+    }
+
+    private func skippedMessage(account: String) -> SkippedMessage {
         SkippedMessage(
             message: message(id: 2, from: "no-reply@x.com"),
             mailbox: .inbox,
@@ -60,16 +66,18 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         )
     }
 
-    private func activityEvent() -> ActivityEvent {
-        ActivityEvent(kind: .draftCreated, sender: "Alice", subject: "Lunch?")
+    private func activityEvent(account: String? = nil) -> ActivityEvent {
+        ActivityEvent(kind: .draftCreated, account: account ?? self.account, sender: "Alice", subject: "Lunch?")
     }
 
-    private func feedbackRecord() -> DraftFeedbackRecord {
+    private func feedbackRecord(account: String? = nil) -> DraftFeedbackRecord {
+        let account = account ?? self.account
         DraftFeedbackRecord(
             outcome: .approvedAsIs,
             provenance: .watcher,
             answeredNeedsInfo: false,
-            draftIdentityHash: DraftFeedbackRecord.hashedIdentity("\(account)|INBOX|10|1")
+            draftIdentityHash: DraftFeedbackRecord.hashedIdentity("\(account)|INBOX|10|1"),
+            sourceAccountEmail: account
         )
     }
 
@@ -92,9 +100,36 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
             processedMessages: processed,
             pendingDrafts: [pendingDraft()],
             skippedMessages: [skippedMessage()],
-            approvedDraftIdentities: ["approved-1"],
-            activityEvents: [activityEvent()],
+            approvedDraftIdentities: ["\(mailEmail)|INBOX|10|1"],
+            activityEvents: [activityEvent(account: mailEmail)],
             draftFeedback: [feedbackRecord()]
+        )
+    }
+
+    private func seededMultiAccountPersistence() -> AppStateMemoryPersistence {
+        var processed = ProcessedMessages()
+        processed.insertBaseline(account: account, mailbox: .inbox)
+        processed.insertBaseline(account: otherAccount, mailbox: .inbox)
+        return AppStateMemoryPersistence(
+            settings: Settings(
+                schemaVersion: Settings.currentSchemaVersion,
+                pollIntervalSeconds: 300,
+                mailEmail: account,
+                mailHost: "imap.gmail.com",
+                mailPort: 993,
+                savedAccounts: [
+                    SavedMailAccount(email: account, host: "imap.gmail.com", port: 993),
+                    SavedMailAccount(email: otherAccount, host: "imap.gmail.com", port: 993)
+                ],
+                onboardingCompleted: true
+            ),
+            voiceProfile: voiceProfile(),
+            processedMessages: processed,
+            pendingDrafts: [pendingDraft(id: 1, account: account), pendingDraft(id: 2, account: otherAccount)],
+            skippedMessages: [skippedMessage(account: account), skippedMessage(account: otherAccount)],
+            approvedDraftIdentities: ["\(account)|INBOX|10|1", "\(otherAccount)|INBOX|10|2"],
+            activityEvents: [activityEvent(account: account), activityEvent(account: otherAccount)],
+            draftFeedback: [feedbackRecord(account: account), feedbackRecord(account: otherAccount)]
         )
     }
 
@@ -129,30 +164,43 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertTrue(persistence.loadDraftFeedback().isEmpty, file: file, line: line)
     }
 
+    private func assertOtherAccountArtifactsPreserved(
+        _ persistence: AppStateMemoryPersistence,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(persistence.loadProcessedMessages().hasBaseline(account: otherAccount, mailbox: .inbox),
+                      file: file, line: line)
+        XCTAssertEqual(persistence.loadPendingDrafts().compactMap(\.sourceAccountEmail), [otherAccount],
+                       file: file, line: line)
+        XCTAssertEqual(persistence.loadSkippedMessages().map(\.account), [otherAccount], file: file, line: line)
+        XCTAssertEqual(persistence.loadApprovedDraftIdentities(), ["\(otherAccount)|INBOX|10|2"],
+                       file: file, line: line)
+        XCTAssertEqual(persistence.loadActivityEvents().compactMap(\.account), [otherAccount], file: file, line: line)
+        XCTAssertEqual(persistence.loadDraftFeedback().compactMap(\.sourceAccountEmail), [otherAccount],
+                       file: file, line: line)
+    }
+
     // MARK: - Per-artifact purge
 
-    func testPurgeRemovesEveryAccountScopedArtifactFromDisk() {
+    func testPurgeRemovesEveryAccountScopedArtifactFromDisk() throws {
         let persistence = seededPersistence()
         let (app, _, _) = makeAppState(persistence: persistence)
 
-        app.purgeLocalMailArtifacts()
+        try app.purgeLocalMailArtifacts()
 
         assertAccountArtifactsCleared(persistence)
-        // Every artifact went through the seam's remove path, not a hardcoded wipe.
-        XCTAssertEqual(
-            Set(persistence.removedArtifacts),
-            ["voice", "processed", "pending", "skipped", "approved", "activity", "feedback"]
-        )
+        XCTAssertEqual(persistence.removedArtifacts, ["voice"])
     }
 
-    func testPurgeClearsInMemoryState() {
+    func testPurgeClearsInMemoryState() throws {
         let persistence = seededPersistence()
         let (app, _, _) = makeAppState(persistence: persistence)
         // Confirm the launch actually loaded the seeded state into memory first.
         XCTAssertFalse(app.pendingDrafts.isEmpty)
         XCTAssertFalse(app.activityEvents.isEmpty)
 
-        app.purgeLocalMailArtifacts()
+        try app.purgeLocalMailArtifacts()
 
         XCTAssertNil(app.voiceProfile)
         XCTAssertTrue(app.pendingDrafts.isEmpty)
@@ -163,29 +211,52 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertFalse(app.processedMessages.hasBaseline(account: account, mailbox: .inbox))
     }
 
-    func testPurgeRemovesPendingDraftNotifications() {
+    func testPurgeRemovesPendingDraftNotifications() throws {
         let persistence = seededPersistence()
         let notifier = FakeDraftNotifier()
         let (app, _, _) = makeAppState(persistence: persistence, notifier: notifier)
         let expected = app.pendingDrafts.first?.identity
 
-        app.purgeLocalMailArtifacts()
+        try app.purgeLocalMailArtifacts()
 
         XCTAssertEqual(notifier.removedIdentities, [expected].compactMap { $0 })
     }
 
-    func testPurgeLeavesSettingsAndKeychainIntact() {
+    func testPurgeLeavesSettingsAndKeychainIntact() throws {
         let persistence = seededPersistence()
         let secrets = InMemorySecretStore(seed: [.mailAppPassword(email: account): "app-pw"])
         let (app, _, _) = makeAppState(persistence: persistence, secrets: secrets)
 
-        app.purgeLocalMailArtifacts()
+        try app.purgeLocalMailArtifacts()
 
         // Settings file untouched (never sent through eraseAll) and the Keychain
         // secret survives, so a same-account reconnect still works.
         XCTAssertEqual(persistence.eraseAllCount, 0)
         XCTAssertEqual(persistence.loadSettings().mailEmail, account)
         XCTAssertEqual(try? secrets.value(for: .mailAppPassword(email: account)), "app-pw")
+    }
+
+    func testRemovingInactiveSavedAccountPurgesOnlyThatAccountArtifacts() {
+        let persistence = seededMultiAccountPersistence()
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: account): "active-pw",
+            .mailAppPassword(email: otherAccount): "other-pw"
+        ])
+        let (app, _, _) = makeAppState(persistence: persistence, secrets: secrets)
+        let saved = app.savedAccounts.first { $0.id == SavedMailAccount.normalizedEmail(otherAccount) }
+
+        if let saved { app.removeSavedAccount(saved, purgeLocalData: true) }
+
+        XCTAssertNotNil(persistence.loadVoiceProfile())
+        XCTAssertTrue(persistence.loadProcessedMessages().hasBaseline(account: account, mailbox: .inbox))
+        XCTAssertFalse(persistence.loadProcessedMessages().hasBaseline(account: otherAccount, mailbox: .inbox))
+        XCTAssertEqual(persistence.loadPendingDrafts().compactMap(\.sourceAccountEmail), [account])
+        XCTAssertEqual(persistence.loadSkippedMessages().map(\.account), [account])
+        XCTAssertEqual(persistence.loadApprovedDraftIdentities(), ["\(account)|INBOX|10|1"])
+        XCTAssertEqual(persistence.loadActivityEvents().compactMap(\.account), [account])
+        XCTAssertEqual(persistence.loadDraftFeedback().compactMap(\.sourceAccountEmail), [account])
+        XCTAssertEqual(try? secrets.value(for: .mailAppPassword(email: account)), "active-pw")
+        XCTAssertNil((try? secrets.value(for: .mailAppPassword(email: otherAccount))) ?? nil)
     }
 
     // MARK: - Disconnect
@@ -247,12 +318,12 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
     /// The recommended decision: purge the dedup with the account. After a purge the
     /// watcher baseline is gone, so the watcher re-seeds a fresh baseline on the next
     /// connect (existing inbox mail becomes historical) rather than re-drafting it.
-    func testPurgeClearsWatcherBaselineSoReconnectReseeds() {
+    func testPurgeClearsWatcherBaselineSoReconnectReseeds() throws {
         let persistence = seededPersistence()
         let (app, _, _) = makeAppState(persistence: persistence)
         XCTAssertTrue(persistence.loadProcessedMessages().hasBaseline(account: account, mailbox: .inbox))
 
-        app.purgeLocalMailArtifacts()
+        try app.purgeLocalMailArtifacts()
 
         // No baseline and no dedup means the next poll seeds a new baseline; the
         // watcher's baseline filter treats current inbox mail as historical.
@@ -263,7 +334,7 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
 
     // MARK: - Erase all local data
 
-    func testEraseAllWipesEverythingClearsKeychainAndResetsToFirstRun() {
+    func testEraseAllWipesEverythingClearsKeychainAndResetsToFirstRun() async {
         let persistence = seededPersistence()
         let secrets = InMemorySecretStore(seed: [
             .mailAppPassword(email: account): "app-pw",
@@ -272,9 +343,9 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         ])
         let (app, _, _) = makeAppState(persistence: persistence, secrets: secrets)
 
-        let keychainCleared = app.eraseAllLocalData()
+        let result = await app.eraseAllLocalData()
 
-        XCTAssertTrue(keychainCleared)
+        XCTAssertTrue(result.succeeded)
         XCTAssertEqual(persistence.eraseAllCount, 1)
         // Every Keychain item is gone.
         XCTAssertNil((try? secrets.value(for: .mailAppPassword(email: account))) ?? nil)
@@ -291,14 +362,15 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertTrue(app.activityEvents.isEmpty)
     }
 
-    func testEraseAllReturnsFalseWhenKeychainWipeFails() {
+    func testEraseAllReturnsFalseWhenKeychainWipeFails() async {
         let persistence = seededPersistence()
         let secrets = ThrowingRemoveAllSecretStore()
         let (app, _, _) = makeAppState(persistence: persistence, secrets: secrets)
 
-        let keychainCleared = app.eraseAllLocalData()
+        let result = await app.eraseAllLocalData()
 
-        XCTAssertFalse(keychainCleared)
+        XCTAssertFalse(result.succeeded)
+        XCTAssertNotNil(result.keychainError)
         // On-disk + in-memory wipe still happened despite the Keychain failure.
         XCTAssertEqual(persistence.eraseAllCount, 1)
         XCTAssertTrue(app.pendingDrafts.isEmpty)
@@ -355,13 +427,13 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
             draftFeedback: [feedbackRecord()]
         )
 
-        provider.purgeAccountScopedArtifacts()
+        try? provider.purgeAccountScopedArtifacts(for: account, includeUnscopedArtifacts: true)
         XCTAssertNil(provider.loadVoiceProfile())
         XCTAssertTrue(provider.loadPendingDrafts().isEmpty)
         XCTAssertTrue(provider.loadActivityEvents().isEmpty)
         XCTAssertTrue(provider.loadDraftFeedback().isEmpty)
 
-        provider.eraseAllLocalData()
+        try? provider.eraseAllLocalData()
         XCTAssertEqual(provider.loadSettings(), Settings.default.validated())
     }
 }

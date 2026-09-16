@@ -18,12 +18,14 @@ protocol PersistenceProvider {
     /// Persists the voice profile (replaces any existing one).
     func saveVoiceProfile(_ profile: VoiceProfile)
     /// Removes the stored voice profile.
-    func removeVoiceProfile()
+    func removeVoiceProfile() throws
 
     /// The set of inbox messages the watcher has already processed.
     func loadProcessedMessages() -> ProcessedMessages
     /// Persists the processed-message set (replaces the previous one).
     func saveProcessedMessages(_ processed: ProcessedMessages)
+    /// Persists the processed-message set synchronously for privacy-sensitive purge paths.
+    func saveProcessedMessagesSync(_ processed: ProcessedMessages) throws
 
     /// Watcher-created drafts awaiting approval.
     func loadPendingDrafts() -> [Draft]
@@ -44,6 +46,8 @@ protocol PersistenceProvider {
     func loadActivityEvents() -> [ActivityEvent]
     /// Persists the activity history (replaces the previous one).
     func saveActivityEvents(_ events: [ActivityEvent])
+    /// Persists the activity history synchronously for privacy-sensitive purge paths.
+    func saveActivityEventsSync(_ events: [ActivityEvent]) throws
 
     /// The on-device approval-signal feedback store (item 83, Phase 1), newest
     /// first. Holds codes/numbers/hashes only (plus local deny "Other" free text).
@@ -58,46 +62,24 @@ protocol PersistenceProvider {
     // MARK: - Local-data purge (item 96)
 
     /// Removes the stored processed-message dedup set.
-    func removeProcessedMessages()
+    func removeProcessedMessages() throws
     /// Removes the stored pending drafts (full incoming bodies + generated drafts).
-    func removePendingDrafts()
+    func removePendingDrafts() throws
     /// Removes the stored recoverable-skip log (sender + subject per entry).
-    func removeSkippedMessages()
+    func removeSkippedMessages() throws
     /// Removes the stored approved-draft tombstone identities.
-    func removeApprovedDraftIdentities()
+    func removeApprovedDraftIdentities() throws
     /// Removes the stored activity history (sender + subject per event).
-    func removeActivityEvents()
+    func removeActivityEvents() throws
     /// Removes the stored approval-signal feedback records.
-    func removeDraftFeedback()
+    func removeDraftFeedback() throws
 
     /// Erases every locally persisted store this provider owns, returning it to a
     /// pristine first-run state — the app-global Settings file included. For the
     /// file-backed provider this clears everything under the app's Application
     /// Support directory; for the in-memory provider it resets every store to its
     /// default. Backs the Settings "Erase all local data" action (item 96).
-    func eraseAllLocalData()
-}
-
-extension PersistenceProvider {
-
-    /// Purges every account-scoped, mail-content-bearing artifact — the voice
-    /// profile, processed-message dedup, pending drafts, recoverable skips,
-    /// approved-draft tombstones, activity history, and approval-signal feedback —
-    /// while leaving the app-global Settings file intact. With the single-account
-    /// architecture every one of these is effectively account-scoped: each is keyed
-    /// to (or derived from) the connected mailbox's mail, so "disconnected" can mean
-    /// the cached mail content is actually gone (item 96 / security finding A-L2).
-    /// Runs through the persistence seam, so it is disk-free under the in-memory
-    /// provider used by Prowl hunts and tests.
-    func purgeAccountScopedArtifacts() {
-        removeVoiceProfile()
-        removeProcessedMessages()
-        removePendingDrafts()
-        removeSkippedMessages()
-        removeApprovedDraftIdentities()
-        removeActivityEvents()
-        removeDraftFeedback()
-    }
+    func eraseAllLocalData() throws
 }
 
 /// File-based persistence for non-secret application settings.
@@ -221,10 +203,8 @@ final class PersistenceService: PersistenceProvider {
         }
     }
 
-    func removeVoiceProfile() {
-        ioQueue.async { [voiceProfileURL] in
-            try? FileManager.default.removeItem(at: voiceProfileURL)
-        }
+    func removeVoiceProfile() throws {
+        try removeFile(at: voiceProfileURL)
     }
 
     // MARK: - Processed Messages
@@ -250,6 +230,18 @@ final class PersistenceService: PersistenceProvider {
             } catch {
                 logger.error("Failed to save processed messages: \(error.localizedDescription)")
             }
+        }
+    }
+
+    func saveProcessedMessagesSync(_ processed: ProcessedMessages) throws {
+        do {
+            try ioQueue.sync { [encoder, processedMessagesURL] in
+                let data = try encoder.encode(processed)
+                try data.write(to: processedMessagesURL, options: .atomic)
+            }
+        } catch {
+            logger.error("Failed to save processed messages (sync): \(error.localizedDescription)")
+            throw error
         }
     }
 
@@ -360,6 +352,18 @@ final class PersistenceService: PersistenceProvider {
         }
     }
 
+    func saveActivityEventsSync(_ events: [ActivityEvent]) throws {
+        do {
+            try ioQueue.sync { [encoder, activityEventsURL] in
+                let data = try encoder.encode(events)
+                try data.write(to: activityEventsURL, options: .atomic)
+            }
+        } catch {
+            logger.error("Failed to save activity events (sync): \(error.localizedDescription)")
+            throw error
+        }
+    }
+
     // MARK: - Draft Feedback (item 83)
 
     func loadDraftFeedback() -> [DraftFeedbackRecord] {
@@ -400,52 +404,50 @@ final class PersistenceService: PersistenceProvider {
 
     // MARK: - Local-data purge (item 96)
 
-    func removeProcessedMessages() {
-        removeFile(at: processedMessagesURL)
+    func removeProcessedMessages() throws {
+        try removeFile(at: processedMessagesURL)
     }
 
-    func removePendingDrafts() {
-        removeFile(at: pendingDraftsURL)
+    func removePendingDrafts() throws {
+        try removeFile(at: pendingDraftsURL)
     }
 
-    func removeSkippedMessages() {
-        removeFile(at: skippedMessagesURL)
+    func removeSkippedMessages() throws {
+        try removeFile(at: skippedMessagesURL)
     }
 
-    func removeApprovedDraftIdentities() {
-        removeFile(at: approvedDraftsURL)
+    func removeApprovedDraftIdentities() throws {
+        try removeFile(at: approvedDraftsURL)
     }
 
-    func removeActivityEvents() {
-        removeFile(at: activityEventsURL)
+    func removeActivityEvents() throws {
+        try removeFile(at: activityEventsURL)
     }
 
-    func removeDraftFeedback() {
-        removeFile(at: draftFeedbackURL)
+    func removeDraftFeedback() throws {
+        try removeFile(at: draftFeedbackURL)
     }
 
-    private func removeFile(at url: URL) {
-        ioQueue.async {
-            try? FileManager.default.removeItem(at: url)
+    private func removeFile(at url: URL) throws {
+        try ioQueue.sync {
+            let fileManager = FileManager.default
+            guard fileManager.fileExists(atPath: url.path) else { return }
+            try fileManager.removeItem(at: url)
         }
     }
 
-    func eraseAllLocalData() {
+    func eraseAllLocalData() throws {
         // Remove the whole Application Support subtree — not just the known JSON
         // files — so "erase all local data" leaves nothing behind (any stray or
         // future file included), then recreate the empty directory so subsequent
         // saves have somewhere to land. Synchronous so callers observe a clean
         // slate before they reset in-memory state.
-        ioQueue.sync { [directory] in
+        try ioQueue.sync { [directory] in
             let fileManager = FileManager.default
-            do {
-                if fileManager.fileExists(atPath: directory.path) {
-                    try fileManager.removeItem(at: directory)
-                }
-            } catch {
-                logger.error("Failed to erase local data directory: \(error.localizedDescription)")
+            if fileManager.fileExists(atPath: directory.path) {
+                try fileManager.removeItem(at: directory)
             }
-            try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
     }
 }

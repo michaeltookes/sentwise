@@ -51,6 +51,34 @@ extension AppState {
         )
     }
 
+    /// If the managed account actor invalidated stored credentials while minting a
+    /// session token, mirror that state back into the published AppState flags.
+    /// Returns `true` when this call changed auth or licensing state, so callers
+    /// whose staleness guards would otherwise swallow the error can still surface
+    /// it — the configuration changed *because of* this failure, not under the user.
+    @discardableResult
+    func reconcileManagedAccountState(
+        after error: Error,
+        provider: LLMProviderKind,
+        messageSurface: TransientMessageSurface = .shared
+    ) async -> Bool {
+        guard provider == .managed else { return false }
+        if case LLMError.managedTrialExpired = error {
+            supersedeInFlightManagedAccountStatusRefreshes()
+            recordManagedEntitlementBlockedSnapshot()
+            managedAccountStatus = nil
+            managedAccountStatusIsFresh = false
+            scheduleManagedAccountStatusRefreshRetryAfterFailure()
+            return true
+        }
+        guard case LLMError.managedNotSignedIn = error else { return false }
+        guard !(await managedAccount.isSignedIn) else { return false }
+
+        applyManagedSignedOutState(clearEmailInput: false, messageSurface: messageSurface)
+        saveSettings()
+        return true
+    }
+
     func applyManagedSignedOutState(
         clearEmailInput: Bool,
         messageSurface: TransientMessageSurface = .shared

@@ -57,7 +57,7 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         }
     }
 
-    func removeVoiceProfile() {
+    func removeVoiceProfile() throws {
         withLock {
             voiceProfile = nil
         }
@@ -71,6 +71,10 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         withLock {
             processedMessages = processed
         }
+    }
+
+    func saveProcessedMessagesSync(_ processed: ProcessedMessages) throws {
+        saveProcessedMessages(processed)
     }
 
     func loadPendingDrafts() -> [Draft] {
@@ -113,6 +117,10 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         }
     }
 
+    func saveActivityEventsSync(_ events: [ActivityEvent]) throws {
+        saveActivityEvents(events)
+    }
+
     func loadDraftFeedback() -> [DraftFeedbackRecord] {
         withLock { draftFeedback }
     }
@@ -129,31 +137,31 @@ final class MemoryPersistenceProvider: PersistenceProvider {
 
     // MARK: - Local-data purge (item 96)
 
-    func removeProcessedMessages() {
+    func removeProcessedMessages() throws {
         withLock { processedMessages = ProcessedMessages() }
     }
 
-    func removePendingDrafts() {
+    func removePendingDrafts() throws {
         withLock { pendingDrafts = [] }
     }
 
-    func removeSkippedMessages() {
+    func removeSkippedMessages() throws {
         withLock { skippedMessages = [] }
     }
 
-    func removeApprovedDraftIdentities() {
+    func removeApprovedDraftIdentities() throws {
         withLock { approvedDraftIdentities = [] }
     }
 
-    func removeActivityEvents() {
+    func removeActivityEvents() throws {
         withLock { activityEvents = [] }
     }
 
-    func removeDraftFeedback() {
+    func removeDraftFeedback() throws {
         withLock { draftFeedback = [] }
     }
 
-    func eraseAllLocalData() {
+    func eraseAllLocalData() throws {
         withLock {
             settings = Settings.default.validated()
             voiceProfile = nil

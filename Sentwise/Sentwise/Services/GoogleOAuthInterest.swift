@@ -101,6 +101,7 @@ struct GoogleOAuthInterestClient: GoogleOAuthInterestRegistering {
 protocol GoogleOAuthInterestStoring: AnyObject, Sendable {
     func isRegistered(accountKey: String) -> Bool
     func markRegistered(accountKey: String)
+    func clearAll()
 }
 
 extension GoogleOAuthInterestStoring {
@@ -112,6 +113,8 @@ extension GoogleOAuthInterestStoring {
         }
         markRegistered(accountKey: newAccountKey)
     }
+
+    func clearAll() {}
 }
 
 /// A `UserDefaults`-backed interest store. Persistence is intentionally light —
@@ -138,6 +141,10 @@ final class UserDefaultsGoogleOAuthInterestStore: GoogleOAuthInterestStoring, @u
         guard !keys.contains(accountKey) else { return }
         keys.insert(accountKey)
         defaults.set(Array(keys), forKey: key)
+    }
+
+    func clearAll() {
+        defaults.removeObject(forKey: key)
     }
 
     private func registeredKeys() -> Set<String> {

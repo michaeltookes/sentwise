@@ -65,7 +65,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
 
     func loadVoiceProfile() -> VoiceProfile? { voiceProfile }
     func saveVoiceProfile(_ profile: VoiceProfile) { voiceProfile = profile }
-    func removeVoiceProfile() {
+    func removeVoiceProfile() throws {
         voiceProfile = nil
         removedArtifacts.append("voice")
     }
@@ -76,9 +76,14 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         processedSaveCount += 1
         saveEvents.append("processed")
     }
+    func saveProcessedMessagesSync(_ processed: ProcessedMessages) throws {
+        if let purgeError { throw purgeError }
+        saveProcessedMessages(processed)
+    }
 
     func loadPendingDrafts() -> [Draft] { pendingDrafts }
     func savePendingDraftsSync(_ drafts: [Draft]) throws {
+        if let purgeError { throw purgeError }
         if let pendingDraftSaveError {
             throw pendingDraftSaveError
         }
@@ -89,6 +94,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
 
     func loadSkippedMessages() -> [SkippedMessage] { skippedMessages }
     func saveSkippedMessagesSync(_ messages: [SkippedMessage]) throws {
+        if let purgeError { throw purgeError }
         if let skippedMessageSaveError {
             throw skippedMessageSaveError
         }
@@ -98,6 +104,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
 
     func loadApprovedDraftIdentities() -> Set<String> { approvedDraftIdentities }
     func saveApprovedDraftIdentitiesSync(_ identities: Set<String>) throws {
+        if let purgeError { throw purgeError }
         if let approvedDraftSaveError {
             throw approvedDraftSaveError
         }
@@ -114,6 +121,10 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         activityEvents = events
         activityEventSaveCount += 1
     }
+    func saveActivityEventsSync(_ events: [ActivityEvent]) throws {
+        if let purgeError { throw purgeError }
+        saveActivityEvents(events)
+    }
 
     func loadDraftFeedback() -> [DraftFeedbackRecord] { draftFeedback }
     // Like the activity log, the feedback store is an additive side effect and is
@@ -124,6 +135,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     }
 
     func saveDraftFeedbackSync(_ records: [DraftFeedbackRecord]) throws {
+        if let purgeError { throw purgeError }
         if let draftFeedbackSyncSaveError {
             throw draftFeedbackSyncSaveError
         }
@@ -135,38 +147,47 @@ final class AppStateMemoryPersistence: PersistenceProvider {
 
     private(set) var removedArtifacts: [String] = []
     private(set) var eraseAllCount = 0
+    var purgeError: Error?
+    var eraseAllError: Error?
 
-    func removeProcessedMessages() {
+    func removeProcessedMessages() throws {
+        if let purgeError { throw purgeError }
         processedMessages = ProcessedMessages()
         removedArtifacts.append("processed")
     }
 
-    func removePendingDrafts() {
+    func removePendingDrafts() throws {
+        if let purgeError { throw purgeError }
         pendingDrafts = []
         removedArtifacts.append("pending")
     }
 
-    func removeSkippedMessages() {
+    func removeSkippedMessages() throws {
+        if let purgeError { throw purgeError }
         skippedMessages = []
         removedArtifacts.append("skipped")
     }
 
-    func removeApprovedDraftIdentities() {
+    func removeApprovedDraftIdentities() throws {
+        if let purgeError { throw purgeError }
         approvedDraftIdentities = []
         removedArtifacts.append("approved")
     }
 
-    func removeActivityEvents() {
+    func removeActivityEvents() throws {
+        if let purgeError { throw purgeError }
         activityEvents = []
         removedArtifacts.append("activity")
     }
 
-    func removeDraftFeedback() {
+    func removeDraftFeedback() throws {
+        if let purgeError { throw purgeError }
         draftFeedback = []
         removedArtifacts.append("feedback")
     }
 
-    func eraseAllLocalData() {
+    func eraseAllLocalData() throws {
+        if let eraseAllError { throw eraseAllError }
         settings = .default
         voiceProfile = nil
         processedMessages = ProcessedMessages()

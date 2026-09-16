@@ -62,8 +62,9 @@ struct EmailAccountSettingsView: View {
             Text("This forgets \(account.email) and deletes its saved password from your Keychain. "
                  + "Your mailbox on the server is never touched.\n\n"
                  + "\"Remove & erase local data\" also deletes this Mac's cached mail for the "
-                 + "account — pending drafts, activity history, learned voice profile, and the "
-                 + "skipped-message log. \"Remove only\" keeps that local data.")
+                 + "account — pending drafts, activity history, and the skipped-message log. "
+                 + "If it is the active account, the learned voice profile is cleared too. "
+                 + "\"Remove only\" keeps that local data.")
         }
         .confirmationDialog(
             "Disconnect \(appState.mailEmail)?",

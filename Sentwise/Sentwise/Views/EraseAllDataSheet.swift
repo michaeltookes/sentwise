@@ -11,8 +11,9 @@ struct EraseAllDataSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmText = ""
     @State private var errorMessage: String?
+    @State private var isErasing = false
 
-    private var canConfirm: Bool { confirmText == "DELETE" }
+    private var canConfirm: Bool { confirmText == "DELETE" && !isErasing }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -53,9 +54,13 @@ struct EraseAllDataSheet: View {
                     .accessibilityIdentifier("eraseAllDataCancel")
                 Spacer()
                 Button(role: .destructive) {
-                    performErase()
+                    Task { await performErase() }
                 } label: {
-                    Text("Erase everything")
+                    if isErasing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("Erase everything")
+                    }
                 }
                 .disabled(!canConfirm)
                 .accessibilityIdentifier("eraseAllDataConfirm")
@@ -64,18 +69,33 @@ struct EraseAllDataSheet: View {
         }
         .padding(20)
         .frame(width: 460)
+        .interactiveDismissDisabled(isErasing)
     }
 
-    private func performErase() {
+    private func performErase() async {
         errorMessage = nil
-        let keychainCleared = appState.eraseAllLocalData()
-        if keychainCleared {
+        isErasing = true
+        let result = await appState.eraseAllLocalData()
+        isErasing = false
+        if result.succeeded {
             dismiss()
         } else {
-            // Files and in-memory state were still wiped; only the Keychain purge
-            // failed, so surface that precisely rather than implying nothing happened.
-            errorMessage = "Your local files were erased, but some Keychain items could not be "
-                + "removed. Try again, or remove them from Keychain Access."
+            errorMessage = Self.eraseErrorMessage(result)
+        }
+    }
+
+    private static func eraseErrorMessage(_ result: LocalDataEraseResult) -> String {
+        switch (result.persistenceError, result.keychainError) {
+        case let (fileError?, keychainError?):
+            return "Some local files and Keychain items could not be removed. "
+                + "\(fileError) \(keychainError)"
+        case let (fileError?, nil):
+            return "Some local files could not be removed. \(fileError)"
+        case let (nil, keychainError?):
+            return "Your local files were erased, but some Keychain items could not be removed. "
+                + "\(keychainError)"
+        case (nil, nil):
+            return ""
         }
     }
 }

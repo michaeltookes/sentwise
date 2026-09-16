@@ -131,6 +131,10 @@ struct DraftFeedbackRecord: Codable, Equatable, Identifiable {
     /// SHA-256 hex of the draft's `identity`. Never the raw identity (which
     /// contains the account email), and never any other message content.
     var draftIdentityHash: String
+    /// Normalized source account for account-scoped local-data purges. Added
+    /// after the original feedback-store schema; old records decode as `nil` and
+    /// are treated as legacy/unscoped by purge code.
+    var sourceAccountEmail: String?
 
     init(
         id: UUID = UUID(),
@@ -141,7 +145,8 @@ struct DraftFeedbackRecord: Codable, Equatable, Identifiable {
         denyReason: DenyReason? = nil,
         provenance: DraftFeedbackProvenance,
         answeredNeedsInfo: Bool,
-        draftIdentityHash: String
+        draftIdentityHash: String,
+        sourceAccountEmail: String? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -152,6 +157,7 @@ struct DraftFeedbackRecord: Codable, Equatable, Identifiable {
         self.provenance = provenance
         self.answeredNeedsInfo = answeredNeedsInfo
         self.draftIdentityHash = draftIdentityHash
+        self.sourceAccountEmail = sourceAccountEmail
     }
 
     /// Hashes a draft `identity` (`account|mailbox|uidvalidity|uid`) into a stable

@@ -186,6 +186,7 @@ extension AppState {
             )
             return
         }
+        let disconnectedAccountEmail = mailEmail
         mailAppPassword = ""
         markMailHostVerifiedForGuidance()
         isAccountConnected = false
@@ -194,7 +195,12 @@ extension AppState {
         resetMessagePreviewForAccountChange(clearSkippedMessages: false)
         skippedMessages = []
         if purgeLocalData {
-            purgeLocalMailArtifacts()
+            do {
+                try purgeLocalMailArtifacts(for: disconnectedAccountEmail, includeUnscopedArtifacts: true)
+            } catch {
+                setConnectionError("Couldn't erase local mail data. \(Self.message(for: error))", for: messageSurface)
+                return
+            }
         }
         logger.info("Mailbox disconnected")
     }
