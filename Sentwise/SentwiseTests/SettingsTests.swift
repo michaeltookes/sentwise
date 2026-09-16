@@ -158,12 +158,16 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(decoded.llmVerifiedModel, "")
     }
 
-    func testCurrentSchemaVersionIsTwenty() {
-        XCTAssertEqual(Settings.currentSchemaVersion, 20)
+    func testCurrentSchemaVersionIsTwentyOne() {
+        XCTAssertEqual(Settings.currentSchemaVersion, 21)
     }
 
     func testBYOKParkedSchemaVersionIsTwenty() {
         XCTAssertEqual(Settings.byokParkedSchemaVersion, 20)
+    }
+
+    func testVoicePerAccountSchemaVersionIsTwentyOne() {
+        XCTAssertEqual(Settings.voicePerAccountSchemaVersion, 21)
     }
 
     func testPreGateDraftSweepSchemaVersionIsEighteen() {

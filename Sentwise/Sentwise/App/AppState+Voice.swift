@@ -8,6 +8,23 @@ extension AppState {
     /// How many recent Sent messages to sample when learning.
     static let voiceSampleLimit = 12
 
+    // MARK: - Per-account voice resolution (item 99)
+
+    /// Normalized account key for the focused/active mailbox's voice profile.
+    var activeAccountVoiceKey: String {
+        SavedMailAccount.normalizedEmail(mailEmail)
+    }
+
+    /// The voice profile to draft with for `accountEmail`. Returns the focused
+    /// account's in-memory profile when it matches (kept fresh by learn/forget),
+    /// otherwise loads that account's per-account profile from persistence. Drafts
+    /// for account A therefore never borrow account B's voice (item 99).
+    func voiceProfile(forAccountEmail accountEmail: String) -> VoiceProfile? {
+        let key = SavedMailAccount.normalizedEmail(accountEmail)
+        if key == activeAccountVoiceKey { return voiceProfile }
+        return persistence.loadVoiceProfile(accountKey: key)
+    }
+
     /// Whether the prerequisites for learning are met (mail + a usable AI provider).
     var canLearnVoice: Bool {
         isLLMConnected
@@ -59,8 +76,13 @@ extension AppState {
                 reportStaleVoiceLearningError(messageSurface: messageSurface, generation: settingsMessageGeneration)
                 return
             }
-            persistence.saveVoiceProfile(profile)
-            voiceProfile = profile
+            // Voice is learned per account (item 99): store it under the account it
+            // was sampled from, and mirror it into the published profile only when
+            // that account is the focused one.
+            persistence.saveVoiceProfile(profile, accountKey: SavedMailAccount.normalizedEmail(credentials.email))
+            if SavedMailAccount.normalizedEmail(credentials.email) == activeAccountVoiceKey {
+                voiceProfile = profile
+            }
         } catch {
             await reportVoiceLearningFailure(
                 error,
@@ -74,7 +96,7 @@ extension AppState {
     /// Clears the learned profile.
     func forgetVoiceProfile(messageSurface: TransientMessageSurface = .shared) {
         do {
-            try persistence.removeVoiceProfile()
+            try persistence.removeVoiceProfile(accountKey: activeAccountVoiceKey)
         } catch {
             setVoiceError(Self.voiceMessage(for: error), for: messageSurface)
             return

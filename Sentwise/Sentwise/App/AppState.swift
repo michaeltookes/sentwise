@@ -478,7 +478,8 @@ final class AppState: ObservableObject {
         self.verifiedLLMModel = managedLaunch.verifiedLLMModel
         self.llmAPIKey = managedLaunch.apiKey
         restoreOpenRouterProvisioningLaunchState()
-        self.voiceProfile = persistence.loadVoiceProfile()
+        // Per-account voice (item 99): the focused account's profile is published.
+        self.voiceProfile = persistence.loadVoiceProfile(accountKey: SavedMailAccount.normalizedEmail(settings.mailEmail))
         restoreManagedAccountLaunchIdentity(managedLaunch, settings: settings)
         restoreReviewPersistenceState()
         cleanupLegacyOAuthCredentials()

@@ -5,7 +5,9 @@ import Foundation
 final class MemoryPersistenceProvider: PersistenceProvider {
     private let lock = NSLock()
     private var settings: Settings
-    private var voiceProfile: VoiceProfile?
+    /// Voice profiles keyed by normalized account email; the empty key is the
+    /// legacy unscoped profile (item 99, per-account voice).
+    private var voiceProfiles: [String: VoiceProfile]
     private var processedMessages: ProcessedMessages
     private var pendingDrafts: [Draft]
     private var skippedMessages: [SkippedMessage]
@@ -24,7 +26,7 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         draftFeedback: [DraftFeedbackRecord] = []
     ) {
         self.settings = settings.validated()
-        self.voiceProfile = voiceProfile
+        self.voiceProfiles = voiceProfile.map { ["": $0] } ?? [:]
         self.processedMessages = processedMessages
         self.pendingDrafts = pendingDrafts
         self.skippedMessages = skippedMessages
@@ -47,19 +49,25 @@ final class MemoryPersistenceProvider: PersistenceProvider {
         saveSettings(settings)
     }
 
-    func loadVoiceProfile() -> VoiceProfile? {
-        withLock { voiceProfile }
+    func loadVoiceProfile(accountKey: String) -> VoiceProfile? {
+        withLock { voiceProfiles[SavedMailAccount.normalizedEmail(accountKey)] }
     }
 
-    func saveVoiceProfile(_ profile: VoiceProfile) {
+    func saveVoiceProfile(_ profile: VoiceProfile, accountKey: String) {
         withLock {
-            voiceProfile = profile
+            voiceProfiles[SavedMailAccount.normalizedEmail(accountKey)] = profile
         }
     }
 
-    func removeVoiceProfile() throws {
+    func removeVoiceProfile(accountKey: String) throws {
         withLock {
-            voiceProfile = nil
+            voiceProfiles[SavedMailAccount.normalizedEmail(accountKey)] = nil
+        }
+    }
+
+    func removeAllVoiceProfiles() throws {
+        withLock {
+            voiceProfiles = [:]
         }
     }
 
@@ -174,7 +182,7 @@ final class MemoryPersistenceProvider: PersistenceProvider {
     func eraseAllLocalData() throws {
         withLock {
             settings = Settings.default.validated()
-            voiceProfile = nil
+            voiceProfiles = [:]
             processedMessages = ProcessedMessages()
             pendingDrafts = []
             skippedMessages = []

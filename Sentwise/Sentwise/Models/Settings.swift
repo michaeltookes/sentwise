@@ -19,7 +19,7 @@ enum SendBehavior: String, CaseIterable, Equatable {
 struct Settings: Codable, Equatable {
 
     /// The current settings schema version.
-    static let currentSchemaVersion = 20
+    static let currentSchemaVersion = 21
 
     /// Schema version that introduced the persisted onboarding completion flag.
     static let onboardingCompletionSchemaVersion = 6
@@ -88,6 +88,13 @@ struct Settings: Codable, Equatable {
     /// falls back to managed (no released builds existed, so there is no migration
     /// UI). The parked provider code is kept for possible future revival.
     static let byokParkedSchemaVersion = 20
+
+    /// Schema version that introduced per-account voice profiles (item 99). On
+    /// first launch at this version, the legacy single `VoiceProfile.json` is
+    /// attributed to the currently-connected account so an existing install keeps
+    /// its learned voice under the new per-account keying. Purely a data move; no
+    /// settings fields change. No released builds existed, so there is no UI.
+    static let voicePerAccountSchemaVersion = 21
 
     /// The default auto-send undo window, in seconds (item 23). Zero disables it.
     static let defaultSendDelaySeconds = 10

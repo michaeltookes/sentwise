@@ -279,9 +279,11 @@ final class AppStateDraftTests: XCTestCase {
                 mailEmail: "me@gmail.com",
                 llmProvider: "anthropic",
                 llmVerifiedModel: "claude-sonnet-4-6"
-            ),
-            voiceProfile: profile
+            )
         )
+        // Per-account voice (item 99): the connected account's profile is keyed by
+        // its normalized email, so the draft picks it up for that account.
+        persistence.saveVoiceProfile(profile, accountKey: "me@gmail.com")
         let provider = FakeAppMailProvider(result: .success(()), bodyResult: .success(Data("Hi".utf8)))
         let llm = FakeLLMProvider(result: .success(()), completion: .success(LLMResponse(text: "Reply")))
         let appState = AppState(persistence: persistence, secrets: secrets, mailProvider: provider, llm: llm)

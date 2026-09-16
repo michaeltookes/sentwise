@@ -205,7 +205,11 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         try app.purgeLocalMailArtifacts()
 
         assertAccountArtifactsCleared(persistence)
-        XCTAssertEqual(persistence.removedArtifacts, ["voice"])
+        // Per-account voice (item 99): an active-account purge removes both the
+        // account's own voice profile and the legacy unscoped slot, so voice is the
+        // only artifact removed via the remove-path (the rest are filter-rewrites).
+        XCTAssertEqual(Set(persistence.removedArtifacts), ["voice"])
+        XCTAssertEqual(persistence.removedArtifacts, ["voice", "voice"])
     }
 
     func testPurgeClearsInMemoryState() throws {

@@ -5,7 +5,11 @@ import XCTest
 
 final class AppStateMemoryPersistence: PersistenceProvider {
     private var settings: Settings
-    private(set) var voiceProfile: VoiceProfile?
+    /// Per-account voice profiles keyed by normalized email; the empty key is the
+    /// legacy unscoped profile (item 99). `voiceProfile` exposes the empty-key slot
+    /// for the many existing tests that assert on the single/legacy profile.
+    private(set) var voiceProfilesByAccount: [String: VoiceProfile]
+    var voiceProfile: VoiceProfile? { voiceProfilesByAccount[""] }
     private(set) var processedMessages: ProcessedMessages
     private(set) var pendingDrafts: [Draft]
     private(set) var skippedMessages: [SkippedMessage]
@@ -39,7 +43,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         draftFeedback: [DraftFeedbackRecord] = []
     ) {
         self.settings = settings
-        self.voiceProfile = voiceProfile
+        self.voiceProfilesByAccount = voiceProfile.map { ["": $0] } ?? [:]
         self.processedMessages = processedMessages
         self.pendingDrafts = pendingDrafts
         self.skippedMessages = skippedMessages
@@ -63,10 +67,18 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         savedSettingsHistory.append(settings)
     }
 
-    func loadVoiceProfile() -> VoiceProfile? { voiceProfile }
-    func saveVoiceProfile(_ profile: VoiceProfile) { voiceProfile = profile }
-    func removeVoiceProfile() throws {
-        voiceProfile = nil
+    func loadVoiceProfile(accountKey: String) -> VoiceProfile? {
+        voiceProfilesByAccount[SavedMailAccount.normalizedEmail(accountKey)]
+    }
+    func saveVoiceProfile(_ profile: VoiceProfile, accountKey: String) {
+        voiceProfilesByAccount[SavedMailAccount.normalizedEmail(accountKey)] = profile
+    }
+    func removeVoiceProfile(accountKey: String) throws {
+        voiceProfilesByAccount[SavedMailAccount.normalizedEmail(accountKey)] = nil
+        removedArtifacts.append("voice")
+    }
+    func removeAllVoiceProfiles() throws {
+        voiceProfilesByAccount = [:]
         removedArtifacts.append("voice")
     }
 
@@ -200,7 +212,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     func eraseAllLocalData() throws {
         if let eraseAllError { throw eraseAllError }
         settings = .default
-        voiceProfile = nil
+        voiceProfilesByAccount = [:]
         processedMessages = ProcessedMessages()
         pendingDrafts = []
         skippedMessages = []
