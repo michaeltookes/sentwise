@@ -216,9 +216,10 @@ to `.managed` directly.
 **Parked 2026-09-16 (item 100):** a later terminal step,
 `AppState.migratedBYOKParkedSettings`, advances the file to schema 20 and resets
 **any** persisted non-managed provider (including a previously-configured BYO user)
-to `.managed`, clearing the stale model/base-URL/verified-model — no released builds
-existed, so there is no migration UI. Both steps are gated on the original schema
-version so each runs once; the full launch chain lives in
+to `.managed`, clearing the stale model/base-URL/verified-model and any pending
+OpenRouter authorization state — no released builds existed, so there is no
+migration UI. Both steps are gated on the original schema version so each runs
+once; the full launch chain lives in
 `App/AppState+SettingsMigration.swift` and persists exactly once at the terminal
 step.
 
@@ -639,24 +640,22 @@ demand signal for reviving the parked bundled-OAuth + CASA path (item 3).
 response, zero network) whenever `ProwlHuntRuntime.current.isEnabled`, so drafting
 stays offline-safe.
 
-**Sign-in and provisioning are functional but fully offline in hunt mode
-(item 70).** Rather than being disabled, the item-59 flows run through a
-deterministic in-memory fake so accessibility hunts can drive them end-to-end
-without ever reaching Clerk/OpenRouter/Anthropic or opening a browser:
+**Managed sign-in is functional but fully offline in hunt mode (item 70).**
+Rather than being disabled, the managed sign-in flows run through a deterministic
+in-memory fake so accessibility hunts can drive them end-to-end without ever
+reaching Clerk/Anthropic or opening a browser:
 
 - `startManagedSignIn` / `verifyManagedCode` (`AppState+ManagedAccount.swift`)
   advance to the code stage and complete to the signed-in fixture account.
 - `startManagedGoogleSignIn` (`AppState+ManagedOAuth.swift`) shows the
   "finish in your browser" panel without opening a browser;
   `completeManagedGoogleSignInForHunt` (`AppState+ProwlHuntAuth.swift`) finishes it.
-- `completeOpenRouterProvisioningForHunt` (`AppState+ProwlHuntAuth.swift`)
-  activates a fake OpenAI-compatible/OpenRouter provider with no key exchange.
 
 Every fake is strictly guarded on `ProwlHuntRuntime.current.isEnabled` (injectable
 for unit tests — `AppStateProwlHuntAuthTests`), so the production paths are
 unchanged. The controls carry `accessibilityIdentifier`s documented in
 `.prowl/README.md`; `forbiddenSelectors` in `.prowl/config.yml` was relaxed so the
-sign-in/provider hunts can activate exactly those controls while mail dispatch,
+managed sign-in hunts can activate exactly those controls while mail dispatch,
 draft mutation, LLM generation, mailbox search, and system toggles stay forbidden.
 
 ## Live end-to-end sign-in test (env-gated)

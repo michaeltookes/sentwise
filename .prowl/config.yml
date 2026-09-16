@@ -27,26 +27,21 @@ artifacts:
 # (`id=openSettings`, `id=openActivityMenu`, `id=openSetupAssistant`,
 # `id=openFollowUpComposer`, `id=openReviewWindow`, `id=openBrowseMailbox`).
 #
-# EXCEPTION — item-59 sign-in / provider surfaces (relaxed 2026-08-21, item 70).
-# In hunt mode ALL of managed sign-in (email code + Google) and OpenRouter
-# provisioning run through a deterministic, fully-offline fake (see
-# `AppState+ProwlHuntAuth.swift`, `startManagedSignIn`, `verifyManagedCode`,
-# `startManagedGoogleSignIn`, `completeOpenRouterProvisioningForHunt`): no
-# network, no browser, no Clerk/OpenRouter/Anthropic call, all against `.invalid`
-# fixtures. Because activating those specific controls in hunt mode cannot reach
-# a real service or send anything, the sign-in/provider hunts are allowed to
-# click them. The relaxations and why each is safe:
-#   * Removed the explicit `managed*` / `openRouter*` / `useThis*` id forbids and
-#     the sign-in *label* forbids ("Sign in", "Verify", "Send sign-in code",
-#     "Use Sentwise AI", "Continue with Google", "Connect OpenRouter",
-#     "Use this provider") — these only drive the offline fake.
-#   * Removed the standalone "Provider" substring — it also blocked the safe
-#     `byoProviderPicker`, `useThisProviderButton`, and (non-interactive)
-#     `activeProviderBadge`. Picking/staging a provider triggers no network.
+# EXCEPTION — managed sign-in surfaces (relaxed 2026-08-21, item 70; trimmed
+# 2026-09-16 when item 100 parked BYOK/local providers). In hunt mode managed
+# sign-in (email code + Google) runs through a deterministic, fully-offline fake
+# (see `startManagedSignIn`, `verifyManagedCode`, and
+# `startManagedGoogleSignIn`): no network, no browser, no Clerk/Anthropic call,
+# all against `.invalid` fixtures. Because activating those specific controls in
+# hunt mode cannot reach a real service or send anything, the managed sign-in
+# hunts are allowed to click them. The relaxations and why each is safe:
+#   * Removed the explicit `managed*` id forbids and the sign-in *label* forbids
+#     ("Sign in", "Verify", "Send sign-in code", "Continue with Google") — these
+#     only drive the offline fake.
 #   * Removed the "Connect"/"connect", "Verify", and "Cancel" substrings — no
 #     DANGEROUS control is named by them (mail uses "Test Connection", still
 #     blocked by "Test"; canceling is harmless), and they collided with
-#     `openRouterConnectButton` / `managedVerifyButton` / `managedCancelBrowserSignIn`.
+#     `managedVerifyButton` / `managedCancelBrowserSignIn`.
 #   * Replaced the bare "Send"/"send" substrings (which also matched
 #     `managedSendCodeButton`) with QUOTE-ANCHORED forbids ('"Send"',
 #     '"Send now"', '"Send anyway"') that match `label="Send"` /
@@ -56,7 +51,9 @@ artifacts:
 # STILL FORBIDDEN so hunts can never send mail, call a real LLM, mutate a draft,
 # search a mailbox, or change system settings: everything below. `getAPIKeyButton`
 # and `useManagedInference` stay forbidden — the former opens a real browser (it
-# is NOT hunt-gated) and the latter is not needed by any hunt.
+# is NOT hunt-gated) and the latter is not needed by any hunt. Parked BYOK /
+# OpenRouter controls are also forbidden so stale hunts fail loudly if that UI
+# is accidentally reintroduced without a fresh safety review.
 #
 # NOTE (item 69) — the Review Drafts window's Drafts/Skipped tab switch
 # (`id=reviewDraftsTab`, `id=reviewSkippedTab`) is a READ-ONLY view toggle and is
@@ -251,6 +248,11 @@ guardrails:
     - "useManagedInference"
     - "getAPIKeyButton"
     - "Get an API key"
+    - "useOwnProviderDisclosure"
+    - "byoProviderPicker"
+    - "useThisProviderButton"
+    - "openRouterConnectButton"
+    - "OpenRouter"
     # In-app plan management (item 90). The stub account status is Pro/active, so
     # the three plan cards render in hunt mode. The cards themselves and the
     # current-plan markers are read-only (asserted via planCard_*, the nested

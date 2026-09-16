@@ -46,6 +46,7 @@ extension AppState {
         return migratedBYOKParkedSettings(
             signatureMigrated,
             originalSchemaVersion: loaded.schemaVersion,
+            secrets: secrets,
             persistence: persistence
         )
     }
@@ -129,10 +130,12 @@ extension AppState {
     static func migratedBYOKParkedSettings(
         _ settings: Settings,
         originalSchemaVersion: Int,
+        secrets: SecretStore,
         persistence: PersistenceProvider
     ) -> Settings {
         guard originalSchemaVersion < Settings.byokParkedSchemaVersion else { return settings }
         var migrated = settings
+        let clearedPendingOpenRouterState = clearPendingOpenRouterProvisioningState(secrets: secrets)
         let provider = LLMProviderKind(rawValue: settings.llmProvider) ?? .managed
         if provider != .managed {
             migrated.llmProvider = "managed"
@@ -140,7 +143,9 @@ extension AppState {
             migrated.llmBaseURL = ""
             migrated.llmVerifiedModel = ""
         }
-        migrated.schemaVersion = Settings.byokParkedSchemaVersion
+        if clearedPendingOpenRouterState {
+            migrated.schemaVersion = Settings.byokParkedSchemaVersion
+        }
         if migrated != settings {
             do {
                 try persistence.saveSettingsSync(migrated)
@@ -149,5 +154,23 @@ extension AppState {
             }
         }
         return migrated
+    }
+
+    private static func clearPendingOpenRouterProvisioningState(secrets: SecretStore) -> Bool {
+        var didClear = true
+        for key in [
+            SecretKey.openRouterPKCEVerifier,
+            .openRouterPKCEMessageSurface,
+            .openRouterPKCEFlowID,
+            .openRouterCanceledCallbackSurface
+        ] {
+            do {
+                try secrets.remove(key)
+            } catch {
+                didClear = false
+                logger.error("Failed to clear pending OpenRouter provisioning state: \(error.localizedDescription)")
+            }
+        }
+        return didClear
     }
 }
