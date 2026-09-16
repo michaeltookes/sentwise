@@ -59,6 +59,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     Owner direction (2026-09-16): tiers should differentiate on *features*, not just weekly draft allotments, so each plan has an identity ("Pro is the multi-account one") rather than reading as a meter. This is a decision item — it produces a written matrix that items 99 and the Paddle/landing-page pricing surfaces then implement. The BYO-key question it originally carried is settled: owner decision 2026-09-16 — BYOK and local models are dropped from UI and pricing entirely (parked in code; see item 100), so the matrix is managed-inference-only across all tiers.
     *As the maintainer, I want a committed feature-by-tier matrix before building any gated feature, so that pricing, the landing page, entitlement wiring, and the build order all follow one decision instead of drifting.*
     - A matrix in `docs/` mapping every tier (trial and each paid plan) to: weekly draft allotment, number of connected email accounts (item 99), and any other gated capabilities (candidates: activity-history depth, post-call follow-up workflow when it lands).
+    - **Integration gating (owner direction 2026-09-16):** calling-platform integrations — Zoom/Teams transcript sources (item 53) — land at **Pro and above**; **CRM integrations** (item 55, HubSpot/Salesforce et al.) are **Unlimited-only**. The Slack approval channel (item 30) is to be placed by this matrix (leaning Pro-family). None of these integrations are built yet, so the matrix records the gate now and the items implement it when they land.
     - Records the enforcement posture per gate: server-enforced (credits, anything the Worker meters) vs client-enforced (account count, UI gates) — with the accepted-risk note for client-side gates mirroring A-L5 in the security pass.
     - Tier names and price points confirmed against the live Paddle products/prices that item 74's cutover will mint; landing-page pricing section updated to match (separate repo, separate PR).
     - `/v1/me` entitlement payload reviewed: confirms the app receives enough (tier id) to drive every client-side gate in the matrix; any wire-contract change is specified here and built with item 99.
@@ -106,7 +107,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
       - **Surfaced in the Setup Assistant (owner decision 2026-08-28):** to get real adoption, the ask is presented prominently as a step in onboarding (items 2/59) — **not** buried in Settings — with copy explaining why we ask and how it improves the user's drafts over time. It is a **prominent opt-in, NOT pre-enabled / not opt-out**: an explicit choice (e.g. "Help improve Sentwise" **Enable / Not now**) with nothing pre-selected, then mirrored by the Settings → Diagnostics toggle so the user can change their mind. Rationale for not pre-checking: it targets the product's own privacy differentiator, pre-ticked consent is invalid under EU ePrivacy/GDPR (Planet49), and privacy-aware users reflexively opt out of pre-enabled telemetry — a surfaced explicit choice converts better without the trust/legal risk.
     - Ties to items 17/18/19/20/21/34/35/58/66/67/68.
 
-30. **Slack approval channel** — *spec expanded 2026-08-20; deferred to post-launch (Medium) by the 2026-08-20 launch decision*
+30. **Slack approval channel** — *spec expanded 2026-08-20; deferred to post-launch (Medium) by the 2026-08-20 launch decision; tier placement decided by the item 98 matrix (2026-09-16 direction: integrations are paid-tier differentiators)*
     Post each ready draft to Slack with Approve/Deny actions as a peer of the native macOS notification, so approval works from any device the user has Slack on.
     *As a Slack-native user, I want drafts posted to Slack with approve/deny actions, so that approval fits my existing workflow.*
     - **Transport: Slack Socket Mode.** A local-first app has no public URL for Slack's interactive-component callbacks, so the Mac holds a persistent WebSocket (`apps.connections.open` with an app-level `xapp-` token) and receives button payloads over it. Envelopes are acked within Slack's 3 s window; reconnect with backoff on drop; while disconnected the native notification path is unaffected.
@@ -317,7 +318,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Enable branch protection on `main` requiring the CI check to pass before merge.
     - Cache SwiftPM/Xcode build dependencies to speed up runs.
 
-53. **Platform transcript integrations (Zoom first, Teams later)**
+53. **Platform transcript integrations (Zoom first, Teams later)** — *tier-gated: Pro and above (owner direction 2026-09-16, item 98 matrix)*
     Pull call transcripts automatically from the user's own meeting-platform account — no bot joins the call, nothing transits an sentwise server.
     *As Marcus, whose org records to Zoom cloud, I want new call transcripts picked up automatically, so that I never export a file by hand.*
     - **Zoom first:** poll the cloud-recordings API with the user's own credentials for newly completed transcripts. **Polling, not webhooks** — a local-first app has no public URL; a "dumb relay" push function (Cloudflare Worker/Lambda that forwards only a "new recording exists" ping, never the transcript) is a natural later upgrade now that the managed-inference service (item 56) means a server exists anyway.
@@ -340,7 +341,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
       - **54d — Consent & disclosure (before any external release of 54c).** Just-in-time TCC explanations (Microphone; audio-capture/Screen Recording as the tap requires), a first-use consent sheet covering two-party-consent jurisdictions and recommending the user disclose recording, and a `docs/` page. Ships alongside 54a for dogfood, hardened before release.
     - **Gate (revised 2026-08-20):** the original "wait for paying users" gate is waived for **owner dogfooding**; build order across items 30, 54, and 70 is decided after planning. 54b → 54a is the first slice; 54c/54d precede any release.
 
-55. **CRM logging (HubSpot first, Salesforce later) — Team-tier differentiator**
+55. **CRM logging (HubSpot first, Salesforce later) — Unlimited-tier differentiator** — *tier-gated: Unlimited only (owner direction 2026-09-16, supersedes the earlier Team-tier framing; item 98 matrix)*
     After a follow-up is approved, log the call summary and sent email to the CRM against the right contact/deal.
     *As Marcus's sales manager, I want call activity landing in the CRM without nagging reps, so that pipeline data reflects reality.*
     - After approval, optionally log the call summary + follow-up email to **HubSpot** (first; friendlier API/auth for individuals) or Salesforce, matched to contact/deal by attendee email.
