@@ -55,6 +55,27 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - **Production Paddle cutover** (**unblocked 2026-09-12 — Paddle vendor account fully verified**; from item 56): point `PaddleConfig.active` / `PADDLE_API_BASE` at the live token + price ids, and mint the **live API key with the `customer_portal_session.write` permission** — discovered 2026-09-12 (item 91): without it the portal-session create fails silently and billing links regress to the email sign-in page. Also: production Clerk instance needs a real Google OAuth client + its own `/auth/callback` redirect-allowlist entry (item 89), and real per-tier allotment numbers set from 56b measurements.
     - Launch checklist recorded in `docs/` and ticked; this item closes when the public link goes out.
 
+98. **Tier feature matrix — decide what each plan gets beyond credits**
+    Owner direction (2026-09-16): tiers should differentiate on *features*, not just weekly draft allotments, so each plan has an identity ("Pro is the multi-account one") rather than reading as a meter. This is a decision item — it produces a written matrix that items 99 and the Paddle/landing-page pricing surfaces then implement. It also settles the open question of whether the BYO-key / local-model path survives into public pricing at all (owner is leaning toward dropping it to simplify the tier story — under discussion 2026-09-16).
+    *As the maintainer, I want a committed feature-by-tier matrix before building any gated feature, so that pricing, the landing page, entitlement wiring, and the build order all follow one decision instead of drifting.*
+    - A matrix in `docs/` mapping every tier (trial and each paid plan) to: weekly draft allotment, number of connected email accounts (item 99), provider access (managed only vs BYO-key/local — resolve the drop-BYOK question explicitly), and any other gated capabilities (candidates: activity-history depth, post-call follow-up workflow when it lands).
+    - Records the enforcement posture per gate: server-enforced (credits, anything the Worker meters) vs client-enforced (account count, UI gates) — with the accepted-risk note for client-side gates mirroring A-L5 in the security pass.
+    - Tier names and price points confirmed against the live Paddle products/prices that item 74's cutover will mint; landing-page pricing section updated to match (separate repo, separate PR).
+    - `/v1/me` entitlement payload reviewed: confirms the app receives enough (tier id) to drive every client-side gate in the matrix; any wire-contract change is specified here and built with item 99.
+    - Explicitly out of scope: building the gated features themselves (item 99 and successors).
+
+99. **Multi-account support — connect and manage multiple mailboxes (gated by tier)**
+    Today the app is single-active-account: connecting a second mailbox disconnects the first (observed live 2026-09-07 when att.net replaced Gmail). Power users — an AE with a work inbox plus a side-business inbox — need both watched at once. Per item 98, the number of concurrent accounts is a paid-tier differentiator (direction: >1 account reserved for the upper tiers).
+    *As Marcus, I want my work and consulting mailboxes both connected and drafting at the same time, so that every conversation gets a reply in my voice without me switching accounts.*
+    - Multiple saved accounts can be **connected concurrently**: one IMAP watcher per account, independent connect/disconnect/health per account in Settings.
+    - Every account-scoped artifact is keyed per account — voice profile, processed-messages dedup baseline, pending drafts, skipped messages, approved-draft tombstones, activity events, draft feedback (the item-96 purge enumeration is the authoritative artifact list; the purge seam must stay account-scoped so purging one account never touches another).
+    - Voice is learned **per account** from that account's Sent mail; drafts for account A never use account B's voice; replies are sent/saved from the account the original message arrived in.
+    - Review Drafts and Activity show account attribution (which mailbox a draft belongs to); notifications remain per-draft and open the right context.
+    - Tier gate per item 98's matrix: connecting an account beyond the tier's limit is blocked in the UI with an upgrade prompt; the gate is client-side (accepted A-L5-style posture) with optional server-side hardening noted (distinct-account cap on managed drafting) as a follow-up decision.
+    - Erase-all-local-data (item 96) and per-account purge both behave correctly with N accounts; live IMAP verification of two concurrent real accounts runs on Lucius via the item-97 pipeline.
+    - Out of scope: multiple accounts inside one provider sign-in (aliases), Outlook/M365 (item 33), team/shared inboxes.
+
+
 ## Medium Priority
 
 83. **Approval-signal learning loop (accept-as-is / edit / deny → better drafts + smarter filtering)** — *ongoing/strategic; phase 1 is a cheap early slice*
