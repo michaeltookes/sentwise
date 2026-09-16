@@ -39,10 +39,13 @@ final class AppState: ObservableObject {
     var mailHostExplicitlyEditedEmail: String?
     var mailHostExplicitlyEditedBeforeEmail = false
 
-    /// Accounts the user has connected and can switch between without re-entering
-    /// credentials (item 48). The active account matches `mailEmail`; each
-    /// account's app password lives in its own Keychain item.
+    /// Remembered accounts the user can switch between without re-entry (item 48);
+    /// the active account matches `mailEmail`, each password in its own Keychain item.
     @Published var savedAccounts: [SavedMailAccount] = []
+
+    /// Mailboxes connected concurrently alongside the focused account (item 99).
+    /// Each has its own watcher and health; the focused account is the fields above.
+    @Published var backgroundConnectedAccounts: [ConnectedMailAccount] = []
 
     // MARK: - Recent Messages (preview)
 
@@ -305,17 +308,15 @@ final class AppState: ObservableObject {
     @Published var isOnline: Bool = true
 
     /// Identities of approved drafts deferred because the network was offline at
-    /// dispatch time (item 27). They stay in `pendingDrafts` — that reuse *is* the
-    /// offline queue — and dispatch on reconnect, hydrated from each draft's
-    /// persisted `offlineQueuedDispatch` intent at launch.
+    /// dispatch time (item 27). They stay in `pendingDrafts` (that reuse *is* the
+    /// offline queue) and dispatch on reconnect, hydrated from `offlineQueuedDispatch`.
     @Published var draftsWaitingForNetwork: Set<String> = []
 
-    /// The intended dispatch for each offline-queued draft, so reconnect
-    /// re-dispatches send-vs-save and force overrides exactly as approved.
+    /// The intended dispatch for each offline-queued draft, so reconnect re-dispatches
+    /// send-vs-save and force overrides exactly as approved.
     var offlineQueuedDispatch: [String: OfflineQueuedDraftDispatch] = [:]
 
-    /// The shared exponential-backoff driver for resilient operations. Overridable
-    /// so tests drive backoff deterministically without real waits.
+    /// The shared exponential-backoff driver; overridable for deterministic tests.
     var retryRunner = RetryRunner()
     /// Set after the reachability monitor delivers its first concrete path.
     var hasConfirmedReachability = false
@@ -330,9 +331,8 @@ final class AppState: ObservableObject {
     /// Observes reachability so the app can pause while offline and resume on
     /// reconnect. Injected for deterministic offline→online tests.
     let reachability: NetworkReachabilityMonitoring
-    /// Messages the watcher passed over instead of drafting, newest first.
-    /// This is the visible slice for the active account; recoverable skip records
-    /// are persisted across account transitions.
+    /// Messages the watcher passed over instead of drafting, newest first (visible
+    /// slice for the active account; skip records persist across account transitions).
     @Published var skippedMessages: [SkippedMessage] = []
 
     var skippedMessageIDs: Set<String> = []
