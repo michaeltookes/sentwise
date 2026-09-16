@@ -38,17 +38,17 @@ extension AppState {
             return
         }
 
-        guard removeSavedAccountSecrets(account, context: context, messageSurface: messageSurface),
-              persistRemovedSavedAccountSettings(account, context: context, messageSurface: messageSurface)
-        else { return }
-
-        applyRemovedSavedAccountState(context, messageSurface: messageSurface)
         guard purgeRemovedSavedAccountDataIfNeeded(
             account,
             context: context,
             purgeLocalData: purgeLocalData,
             messageSurface: messageSurface
-        ) else { return }
+        ),
+            removeSavedAccountSecrets(account, context: context, messageSurface: messageSurface),
+              persistRemovedSavedAccountSettings(account, context: context, messageSurface: messageSurface)
+        else { return }
+
+        applyRemovedSavedAccountState(context, messageSurface: messageSurface)
         logger.info("Saved account removed")
     }
 
@@ -139,6 +139,9 @@ extension AppState {
         messageSurface: TransientMessageSurface
     ) -> Bool {
         guard purgeLocalData else { return true }
+        if context.shouldClearCurrentAccount {
+            stopWatching()
+        }
         do {
             try purgeLocalMailArtifacts(
                 for: account.email,

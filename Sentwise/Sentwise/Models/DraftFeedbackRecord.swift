@@ -131,10 +131,11 @@ struct DraftFeedbackRecord: Codable, Equatable, Identifiable {
     /// SHA-256 hex of the draft's `identity`. Never the raw identity (which
     /// contains the account email), and never any other message content.
     var draftIdentityHash: String
-    /// Normalized source account for account-scoped local-data purges. Added
-    /// after the original feedback-store schema; old records decode as `nil` and
-    /// are treated as legacy/unscoped by purge code.
-    var sourceAccountEmail: String?
+    /// SHA-256 hex of the normalized source account for account-scoped local-data
+    /// purges. Never the raw email address. Added after the original feedback-store
+    /// schema; legacy records with a raw account email are converted to this hash on
+    /// decode, while older records with no account remain legacy/unscoped.
+    var sourceAccountHash: String?
 
     init(
         id: UUID = UUID(),
@@ -146,7 +147,7 @@ struct DraftFeedbackRecord: Codable, Equatable, Identifiable {
         provenance: DraftFeedbackProvenance,
         answeredNeedsInfo: Bool,
         draftIdentityHash: String,
-        sourceAccountEmail: String? = nil
+        sourceAccountHash: String? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -157,7 +158,55 @@ struct DraftFeedbackRecord: Codable, Equatable, Identifiable {
         self.provenance = provenance
         self.answeredNeedsInfo = answeredNeedsInfo
         self.draftIdentityHash = draftIdentityHash
-        self.sourceAccountEmail = sourceAccountEmail
+        self.sourceAccountHash = sourceAccountHash
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case timestamp
+        case outcome
+        case dispatch
+        case editMagnitude
+        case denyReason
+        case provenance
+        case answeredNeedsInfo
+        case draftIdentityHash
+        case sourceAccountHash
+        case sourceAccountEmail
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+        outcome = try container.decode(DraftFeedbackOutcome.self, forKey: .outcome)
+        dispatch = try container.decodeIfPresent(DraftFeedbackDispatch.self, forKey: .dispatch)
+        editMagnitude = try container.decodeIfPresent(Double.self, forKey: .editMagnitude)
+        denyReason = try container.decodeIfPresent(DenyReason.self, forKey: .denyReason)
+        provenance = try container.decode(DraftFeedbackProvenance.self, forKey: .provenance)
+        answeredNeedsInfo = try container.decode(Bool.self, forKey: .answeredNeedsInfo)
+        draftIdentityHash = try container.decode(String.self, forKey: .draftIdentityHash)
+        if let sourceAccountHash = try container.decodeIfPresent(String.self, forKey: .sourceAccountHash),
+           !sourceAccountHash.isEmpty {
+            self.sourceAccountHash = sourceAccountHash
+        } else {
+            let legacyEmail = try container.decodeIfPresent(String.self, forKey: .sourceAccountEmail)
+            self.sourceAccountHash = Self.hashedAccount(legacyEmail)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(timestamp, forKey: .timestamp)
+        try container.encode(outcome, forKey: .outcome)
+        try container.encodeIfPresent(dispatch, forKey: .dispatch)
+        try container.encodeIfPresent(editMagnitude, forKey: .editMagnitude)
+        try container.encodeIfPresent(denyReason, forKey: .denyReason)
+        try container.encode(provenance, forKey: .provenance)
+        try container.encode(answeredNeedsInfo, forKey: .answeredNeedsInfo)
+        try container.encode(draftIdentityHash, forKey: .draftIdentityHash)
+        try container.encodeIfPresent(sourceAccountHash, forKey: .sourceAccountHash)
     }
 
     /// Hashes a draft `identity` (`account|mailbox|uidvalidity|uid`) into a stable
@@ -165,6 +214,15 @@ struct DraftFeedbackRecord: Codable, Equatable, Identifiable {
     /// draft without ever storing the identity — which embeds the account email.
     static func hashedIdentity(_ identity: String) -> String {
         let digest = SHA256.hash(data: Data(identity.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Hashes a normalized account email for local purge scoping without storing
+    /// the address itself in the feedback record.
+    static func hashedAccount(_ accountEmail: String?) -> String? {
+        let normalized = SavedMailAccount.normalizedEmail(accountEmail ?? "")
+        guard !normalized.isEmpty else { return nil }
+        let digest = SHA256.hash(data: Data(normalized.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 }

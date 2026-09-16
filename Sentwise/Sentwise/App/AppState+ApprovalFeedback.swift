@@ -70,7 +70,7 @@ extension AppState {
             provenance: draft.feedbackProvenance,
             answeredNeedsInfo: draft.wasAnswered,
             draftIdentityHash: DraftFeedbackRecord.hashedIdentity(draft.identity),
-            sourceAccountEmail: draft.sourceAccountEmail
+            sourceAccountHash: DraftFeedbackRecord.hashedAccount(draft.sourceAccountEmail)
         ))
     }
 
@@ -85,7 +85,7 @@ extension AppState {
             provenance: draft.feedbackProvenance,
             answeredNeedsInfo: draft.wasAnswered,
             draftIdentityHash: DraftFeedbackRecord.hashedIdentity(draft.identity),
-            sourceAccountEmail: draft.sourceAccountEmail
+            sourceAccountHash: DraftFeedbackRecord.hashedAccount(draft.sourceAccountEmail)
         ))
     }
 
@@ -101,7 +101,7 @@ extension AppState {
             provenance: draft.feedbackProvenance,
             answeredNeedsInfo: draft.wasAnswered,
             draftIdentityHash: DraftFeedbackRecord.hashedIdentity(draft.identity),
-            sourceAccountEmail: draft.sourceAccountEmail
+            sourceAccountHash: DraftFeedbackRecord.hashedAccount(draft.sourceAccountEmail)
         ))
     }
 }

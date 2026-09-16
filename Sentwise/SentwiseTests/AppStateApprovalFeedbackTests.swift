@@ -217,6 +217,7 @@ final class AppStateApprovalFeedbackTests: XCTestCase {
         XCTAssertEqual(record?.dispatch, .sent)
         XCTAssertNotNil(record?.editMagnitude)
         XCTAssertNil(record?.denyReason)
+        XCTAssertEqual(record?.sourceAccountHash, DraftFeedbackRecord.hashedAccount("me@gmail.com"))
         XCTAssertNil(appState.generatedDraft)
     }
 

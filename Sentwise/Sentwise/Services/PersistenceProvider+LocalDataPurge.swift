@@ -90,8 +90,11 @@ extension PersistenceProvider {
         belongsTo account: String,
         includeUnscopedArtifacts: Bool
     ) -> Bool {
-        let recordAccount = SavedMailAccount.normalizedEmail(record.sourceAccountEmail ?? "")
-        if recordAccount.isEmpty { return includeUnscopedArtifacts }
-        return recordAccount == account
+        guard let accountHash = DraftFeedbackRecord.hashedAccount(account),
+              let recordAccountHash = record.sourceAccountHash,
+              !recordAccountHash.isEmpty else {
+            return includeUnscopedArtifacts
+        }
+        return recordAccountHash == accountHash
     }
 }

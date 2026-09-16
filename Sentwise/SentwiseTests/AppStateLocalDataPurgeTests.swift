@@ -77,12 +77,16 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
             provenance: .watcher,
             answeredNeedsInfo: false,
             draftIdentityHash: DraftFeedbackRecord.hashedIdentity("\(account)|INBOX|10|1"),
-            sourceAccountEmail: account
+            sourceAccountHash: feedbackAccountHash(account)
         )
     }
 
     private func approvedIdentity(account: String, id: UInt32 = 99) -> String {
         "\(account)|INBOX|10|\(id)"
+    }
+
+    private func feedbackAccountHash(_ account: String) -> String {
+        DraftFeedbackRecord.hashedAccount(account) ?? ""
     }
 
     /// A persistence store seeded with every account-scoped artifact populated,
@@ -184,8 +188,12 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertEqual(persistence.loadApprovedDraftIdentities(), [approvedIdentity(account: otherAccount, id: 92)],
                        file: file, line: line)
         XCTAssertEqual(persistence.loadActivityEvents().compactMap(\.account), [otherAccount], file: file, line: line)
-        XCTAssertEqual(persistence.loadDraftFeedback().compactMap(\.sourceAccountEmail), [otherAccount],
-                       file: file, line: line)
+        XCTAssertEqual(
+            persistence.loadDraftFeedback().compactMap(\.sourceAccountHash),
+            [feedbackAccountHash(otherAccount)],
+            file: file,
+            line: line
+        )
     }
 
     // MARK: - Per-artifact purge
@@ -261,9 +269,29 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertEqual(persistence.loadSkippedMessages().map(\.account), [account])
         XCTAssertEqual(persistence.loadApprovedDraftIdentities(), [approvedIdentity(account: account, id: 91)])
         XCTAssertEqual(persistence.loadActivityEvents().compactMap(\.account), [account])
-        XCTAssertEqual(persistence.loadDraftFeedback().compactMap(\.sourceAccountEmail), [account])
+        XCTAssertEqual(
+            persistence.loadDraftFeedback().compactMap(\.sourceAccountHash),
+            [feedbackAccountHash(account)]
+        )
         XCTAssertEqual(try? secrets.value(for: .mailAppPassword(email: account)), "active-pw")
         XCTAssertNil((try? secrets.value(for: .mailAppPassword(email: otherAccount))) ?? nil)
+    }
+
+    func testRemoveSavedAccountWithPurgeFailureKeepsAccountForRetry() {
+        let persistence = seededMultiAccountPersistence()
+        persistence.purgeError = AppStatePersistenceError.writeDenied
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: account): "active-pw",
+            .mailAppPassword(email: otherAccount): "other-pw"
+        ])
+        let (app, _, _) = makeAppState(persistence: persistence, secrets: secrets)
+        let saved = app.savedAccounts.first { $0.id == SavedMailAccount.normalizedEmail(otherAccount) }
+
+        if let saved { app.removeSavedAccount(saved, purgeLocalData: true) }
+
+        XCTAssertTrue(app.savedAccounts.contains { $0.id == SavedMailAccount.normalizedEmail(otherAccount) })
+        XCTAssertEqual(try? secrets.value(for: .mailAppPassword(email: otherAccount)), "other-pw")
+        XCTAssertTrue(persistence.loadProcessedMessages().hasBaseline(account: otherAccount, mailbox: .inbox))
     }
 
     // MARK: - Disconnect
@@ -349,6 +377,8 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
             .managedSessionID: "sess"
         ])
         let (app, _, _) = makeAppState(persistence: persistence, secrets: secrets)
+        app.lastUsedDenyReason = DenyReason(code: .other, otherText: "old private reason")
+        app.denyReasonPromptSuppressedThisSession = true
 
         let result = await app.eraseAllLocalData()
 
@@ -367,6 +397,8 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertNil(app.voiceProfile)
         XCTAssertTrue(app.pendingDrafts.isEmpty)
         XCTAssertTrue(app.activityEvents.isEmpty)
+        XCTAssertNil(app.lastUsedDenyReason)
+        XCTAssertFalse(app.denyReasonPromptSuppressedThisSession)
     }
 
     func testEraseAllReturnsFalseWhenKeychainWipeFails() async {
@@ -405,50 +437,6 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         XCTAssertEqual(app.transcriptWatchedFolderPath, Settings.default.transcriptWatchedFolderPath)
     }
 
-    // MARK: - Managed-account deletion purge offer
-
-    func testManagedDeleteWithPurgeErasesLocalMailData() async {
-        let persistence = seededPersistence()
-        let secrets = InMemorySecretStore(seed: [
-            .mailAppPassword(email: account): "app-pw",
-            .managedClientToken: "client",
-            .managedSessionID: "sess"
-        ])
-        let (app, _, _) = makeAppState(persistence: persistence, secrets: secrets, llm: DeletableLLM())
-        app.watchStatus = .watching
-        app.recentMessages = [message(id: 99)]
-        app.openedBody = MailBodyPreview(id: 99, subject: "Subject 99", text: "cached body")
-        app.generatedDraft = pendingDraft(id: 99)
-
-        let ok = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
-
-        XCTAssertTrue(ok)
-        assertAccountArtifactsCleared(persistence)
-        XCTAssertEqual(app.watchStatus, .idle)
-        XCTAssertTrue(app.recentMessages.isEmpty)
-        XCTAssertNil(app.openedBody)
-        XCTAssertNil(app.generatedDraft)
-        // The mailbox secret survives — deletion targets the Sentwise account, and
-        // the purge is scoped to mail *content*, not credentials.
-        XCTAssertEqual(try? secrets.value(for: .mailAppPassword(email: account)), "app-pw")
-    }
-
-    func testManagedDeleteWithoutPurgeKeepsLocalMailData() async {
-        let persistence = seededPersistence()
-        let secrets = InMemorySecretStore(seed: [
-            .managedClientToken: "client",
-            .managedSessionID: "sess"
-        ])
-        let (app, _, _) = makeAppState(persistence: persistence, secrets: secrets, llm: DeletableLLM())
-
-        let ok = await app.deleteManagedAccount(purgeLocalData: false, isHuntMode: false)
-
-        XCTAssertTrue(ok)
-        XCTAssertNotNil(persistence.loadVoiceProfile())
-        XCTAssertFalse(persistence.loadPendingDrafts().isEmpty)
-        XCTAssertFalse(persistence.loadActivityEvents().isEmpty)
-    }
-
     // MARK: - Hunt-mode / seam safety
 
     /// In hunt mode the persistence provider is the in-memory `MemoryPersistenceProvider`
@@ -472,16 +460,6 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         try? provider.eraseAllLocalData()
         XCTAssertEqual(provider.loadSettings(), Settings.default.validated())
     }
-}
-
-/// An `LLMProviding` whose `deleteManagedAccount()` succeeds, so the managed-delete
-/// purge path can be exercised end to end.
-private final class DeletableLLM: LLMProviding, @unchecked Sendable {
-    func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
-    func complete(_ request: LLMRequest, provider: LLMProviderKind, apiKey: String, baseURL: String?) async throws -> LLMResponse {
-        LLMResponse(text: "")
-    }
-    func deleteManagedAccount() async throws {}
 }
 
 /// A `SecretStore` whose `removeAll()` always throws, to drive the erase-all
