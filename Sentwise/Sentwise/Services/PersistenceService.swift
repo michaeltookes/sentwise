@@ -77,6 +77,7 @@ protocol PersistenceProvider {
     func removeDraftFeedback() throws
 
     /// Removes account-scoped mail artifacts while preserving other accounts.
+    func makeAccountArtifactSnapshot() -> AccountArtifactSnapshot
     func purgeAccountScopedArtifacts(for accountEmail: String, includeUnscopedArtifacts: Bool) throws
     /// Removes every mail-content-bearing artifact while preserving account settings.
     func purgeAllMailArtifacts() throws
@@ -440,6 +441,12 @@ final class PersistenceService: PersistenceProvider {
     }
 
     // MARK: - Local-data purge (item 96)
+
+    func makeAccountArtifactSnapshot() -> AccountArtifactSnapshot {
+        ioQueue.sync {
+            AccountArtifactSnapshot(self)
+        }
+    }
 
     func removeProcessedMessages() throws {
         try removeFile(at: processedMessagesURL)

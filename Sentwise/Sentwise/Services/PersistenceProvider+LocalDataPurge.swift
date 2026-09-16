@@ -1,6 +1,6 @@
 import Foundation
 
-private struct AccountArtifactSnapshot {
+struct AccountArtifactSnapshot {
     let voiceProfile: VoiceProfile?
     let processedMessages: ProcessedMessages
     let pendingDrafts: [Draft]
@@ -35,6 +35,9 @@ private struct AccountArtifactSnapshot {
 }
 
 extension PersistenceProvider {
+    func makeAccountArtifactSnapshot() -> AccountArtifactSnapshot {
+        AccountArtifactSnapshot(self)
+    }
 
     /// Purges every mail-content-bearing artifact while leaving account settings
     /// and credentials alone. This is used when the app no longer has a selected
@@ -59,7 +62,7 @@ extension PersistenceProvider {
     ) throws {
         let account = SavedMailAccount.normalizedEmail(accountEmail)
         guard !account.isEmpty else { return }
-        let snapshot = AccountArtifactSnapshot(self)
+        let snapshot = makeAccountArtifactSnapshot()
 
         do {
             if includeUnscopedArtifacts {

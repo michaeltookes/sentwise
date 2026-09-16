@@ -249,6 +249,45 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
         XCTAssertTrue(persistence.loadActivityEvents().isEmpty)
     }
 
+    func testManagedDeletePurgeInvalidatesInFlightVoiceLearning() async {
+        let persistence = seededPersistence()
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: account): "app-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-live",
+            .managedClientToken: "client",
+            .managedSessionID: "sess"
+        ])
+        let mailProvider = FakeAppMailProvider(
+            result: .success(()),
+            fetchResult: .success([message(id: 70)]),
+            bodyResult: .success(Data("Thanks, sounds good.".utf8))
+        )
+        let llm = DeletableSuspendedLLM()
+        let (app, _) = makeAppState(
+            persistence: persistence,
+            secrets: secrets,
+            mailProvider: mailProvider,
+            llm: llm
+        )
+
+        let learning = Task {
+            await app.learnVoiceProfile()
+        }
+        await fulfillment(of: [llm.didStartCompletion], timeout: 1)
+
+        let ok = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
+        let profileJSON = #"""
+        {"greeting":"Hi,","signOff":"Best,","formality":"casual","tone":"warm",
+         "averageLength":"short","commonPhrases":["Sounds good"],"summary":"Warm and concise."}
+        """#
+        llm.completeDraft(with: .success(LLMResponse(text: profileJSON)))
+        await learning.value
+
+        XCTAssertTrue(ok)
+        XCTAssertNil(app.voiceProfile)
+        XCTAssertNil(persistence.loadVoiceProfile())
+    }
+
     func testManagedDeleteWithoutPurgeKeepsLocalMailData() async {
         let persistence = seededPersistence()
         let secrets = InMemorySecretStore(seed: [

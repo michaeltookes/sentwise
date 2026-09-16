@@ -19,21 +19,16 @@ extension AppState {
     func learnVoiceProfile(messageSurface: TransientMessageSurface = .shared) async {
         setVoiceError(nil, for: messageSurface)
         let settingsMessageGeneration = settingsTransientMessageGeneration
-        func reportVoiceError(_ message: String) {
-            guard isCurrentTransientMessageSurface(messageSurface, generation: settingsMessageGeneration) else { return }
-            setVoiceError(message, for: messageSurface)
-        }
+        let localDataGeneration = localDataEraseGeneration
 
         await refreshManagedQuotaIfLicenseStatusStale()
-        guard let llmConfiguration = currentVoiceLLMConfiguration else {
-            reportVoiceError("Connect an AI provider first (Test Connection above).")
-            return
-        }
-        let credentials = mailCredentials
-        guard credentials.isComplete else {
-            reportVoiceError("Connect an email account first.")
-            return
-        }
+        guard let context = makeVoiceLearningContext(
+            messageSurface: messageSurface,
+            settingsMessageGeneration: settingsMessageGeneration,
+            localDataGeneration: localDataGeneration
+        ) else { return }
+        let credentials = context.credentials
+        let llmConfiguration = context.llmConfiguration
 
         isLearningVoice = true
         voiceProgress = "Finding your sent mail…"
@@ -46,34 +41,33 @@ extension AppState {
             let bodies = try await fetchSentSampleBodies(credentials: credentials) { [weak self] progress in
                 self?.voiceProgress = progress
             }
-            guard isCurrentVoiceContext(credentials: credentials, llmConfiguration: llmConfiguration) else {
-                reportVoiceError(Self.staleVoiceLLMConfigurationMessage)
+            guard isCurrentVoiceContext(context) else {
+                reportStaleVoiceLearningError(messageSurface: messageSurface, generation: settingsMessageGeneration)
                 return
             }
             guard !bodies.isEmpty else {
-                reportVoiceError("No sent messages found to learn from.")
+                reportVoiceLearningError(
+                    "No sent messages found to learn from.",
+                    messageSurface: messageSurface,
+                    generation: settingsMessageGeneration
+                )
                 return
             }
             voiceProgress = "Learning your voice from \(bodies.count) message\(bodies.count == 1 ? "" : "s")…"
             let profile = try await makeProfile(fromSentBodies: bodies, llmConfiguration: llmConfiguration)
-            guard isCurrentVoiceContext(credentials: credentials, llmConfiguration: llmConfiguration) else {
-                reportVoiceError(Self.staleVoiceLLMConfigurationMessage)
+            guard isCurrentVoiceContext(context) else {
+                reportStaleVoiceLearningError(messageSurface: messageSurface, generation: settingsMessageGeneration)
                 return
             }
             persistence.saveVoiceProfile(profile)
             voiceProfile = profile
         } catch {
-            let wasCurrent = isCurrentVoiceContext(credentials: credentials, llmConfiguration: llmConfiguration)
-            let signedOut = await reconcileManagedAccountState(
-                after: error,
-                provider: llmConfiguration.provider,
-                messageSurface: messageSurface
+            await reportVoiceLearningFailure(
+                error,
+                context: context,
+                messageSurface: messageSurface,
+                settingsMessageGeneration: settingsMessageGeneration
             )
-            guard wasCurrent, signedOut || isCurrentVoiceContext(credentials: credentials, llmConfiguration: llmConfiguration) else {
-                reportVoiceError(Self.staleVoiceLLMConfigurationMessage)
-                return
-            }
-            reportVoiceError(Self.voiceMessage(for: error))
         }
     }
 
@@ -140,11 +134,80 @@ extension AppState {
         )
     }
 
-    private func isCurrentVoiceContext(
-        credentials: MailAccountCredentials,
-        llmConfiguration: VoiceLLMConfiguration
-    ) -> Bool {
-        mailCredentials == credentials && currentVoiceLLMConfiguration == llmConfiguration
+    private func makeVoiceLearningContext(
+        messageSurface: TransientMessageSurface,
+        settingsMessageGeneration: UInt64,
+        localDataGeneration: UInt64
+    ) -> VoiceLearningContext? {
+        guard let llmConfiguration = currentVoiceLLMConfiguration else {
+            reportVoiceLearningError(
+                "Connect an AI provider first (Test Connection above).",
+                messageSurface: messageSurface,
+                generation: settingsMessageGeneration
+            )
+            return nil
+        }
+        let credentials = mailCredentials
+        guard credentials.isComplete else {
+            reportVoiceLearningError(
+                "Connect an email account first.",
+                messageSurface: messageSurface,
+                generation: settingsMessageGeneration
+            )
+            return nil
+        }
+        return VoiceLearningContext(
+            credentials: credentials,
+            llmConfiguration: llmConfiguration,
+            localDataGeneration: localDataGeneration
+        )
+    }
+
+    private func reportVoiceLearningError(
+        _ message: String,
+        messageSurface: TransientMessageSurface,
+        generation: UInt64
+    ) {
+        guard isCurrentTransientMessageSurface(messageSurface, generation: generation) else { return }
+        setVoiceError(message, for: messageSurface)
+    }
+
+    private func reportStaleVoiceLearningError(messageSurface: TransientMessageSurface, generation: UInt64) {
+        reportVoiceLearningError(
+            Self.staleVoiceLLMConfigurationMessage,
+            messageSurface: messageSurface,
+            generation: generation
+        )
+    }
+
+    private func reportVoiceLearningFailure(
+        _ error: Error,
+        context: VoiceLearningContext,
+        messageSurface: TransientMessageSurface,
+        settingsMessageGeneration: UInt64
+    ) async {
+        let wasCurrent = isCurrentVoiceContext(context)
+        let signedOut = await reconcileManagedAccountState(
+            after: error,
+            provider: context.llmConfiguration.provider,
+            messageSurface: messageSurface
+        )
+        let remainsCurrentAfterReconcile = signedOut || isCurrentVoiceContext(context)
+        let message = wasCurrent && remainsCurrentAfterReconcile
+            ? Self.voiceMessage(for: error)
+            : Self.staleVoiceLLMConfigurationMessage
+        reportVoiceLearningError(
+            message,
+            messageSurface: messageSurface,
+            generation: settingsMessageGeneration
+        )
+    }
+
+    private func isCurrentVoiceContext(_ context: VoiceLearningContext) -> Bool {
+        if !isCurrentLocalDataGeneration(context.localDataGeneration) {
+            return false
+        }
+        return mailCredentials == context.credentials && currentVoiceLLMConfiguration == context.llmConfiguration
     }
 
     private func makeProfile(
@@ -186,4 +249,10 @@ private struct VoiceLLMConfiguration: Equatable, Sendable {
     let model: String
     let apiKey: String
     let baseURL: String?
+}
+
+private struct VoiceLearningContext {
+    let credentials: MailAccountCredentials
+    let llmConfiguration: VoiceLLMConfiguration
+    let localDataGeneration: UInt64
 }

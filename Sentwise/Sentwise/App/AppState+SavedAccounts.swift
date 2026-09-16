@@ -268,7 +268,12 @@ extension AppState {
             host: account.host,
             port: account.port
         )
-        let didConnect = await testConnection(with: credentials, messageSurface: messageSurface)
+        let localDataGeneration = localDataEraseGeneration
+        let didConnect = await testConnection(with: credentials, messageSurface: messageSurface) { _ in
+            self.isCurrentLocalDataGeneration(localDataGeneration)
+        }
+
+        guard isCurrentLocalDataGeneration(localDataGeneration) else { return }
 
         guard didConnect, isAccountConnected, isActiveAccount(account) else {
             restoreConnectionSnapshot(settings: outgoingSettings)
