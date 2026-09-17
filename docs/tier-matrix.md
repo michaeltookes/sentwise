@@ -11,6 +11,7 @@ The committed feature-by-tier decision record (backlog item 98; owner decisions 
 | Follow-up drafts | 56b trial default | **30 / month** | **120 / month** | **Unlimited (fair-use)** |
 | Connected email accounts | **2** (Pro-equivalent) | **1** | **2** | **up to 5** |
 | Calling-tool integrations (Zoom/Teams — item 53, not yet built) | per Pro | — | **✓** when shipped | **✓** when shipped |
+| Calendar awareness + unified agenda view (EventKit — item 52, not yet built) | per Pro | — | **✓** when shipped | **✓** when shipped |
 | CRM integrations (item 55, not yet built) | — | — | — | **✓** when shipped |
 | Slack approval channel (item 30, not yet built) | *placement TBD — leaning Pro-family* | | | |
 | Managed AI drafting, voice learning, notifications + in-app review | ✓ all tiers | ✓ | ✓ | ✓ |
