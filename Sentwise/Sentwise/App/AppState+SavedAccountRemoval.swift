@@ -250,6 +250,7 @@ extension AppState {
 
     /// Tears down the active account after it has been removed from the list.
     private func goOfflineAfterRemovingActiveAccount() {
+        let removedEmail = mailEmail
         mailEmail = ""
         mailHost = Settings.default.mailHost
         mailPort = Settings.default.mailPort
@@ -258,8 +259,8 @@ extension AppState {
         mailAppPassword = ""
         isAccountConnected = false
         clearSignatureForAccountRemoval()
-        cancelAllSendCountdowns()
-        stopWatching()
+        cancelSendCountdowns(forAccountEmail: removedEmail)
+        stopWatching(cancelCountdowns: false)
         resetMessagePreviewForAccountChange()
     }
 }

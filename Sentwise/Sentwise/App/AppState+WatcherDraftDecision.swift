@@ -162,6 +162,11 @@ extension AppState {
                 credentials: credentials,
                 localDataGeneration: localDataGeneration
             ) else {
+                try self.validateWatcherDraftContext(
+                    credentials,
+                    account: account,
+                    localDataGeneration: localDataGeneration
+                )
                 return .contextChanged
             }
             try self.validateWatcherDraftContext(

@@ -98,6 +98,7 @@ extension AppState {
         account.resumeWatchingAfterManagedReauth = false
         setAccountWatchStatus(account, .idle)
         account.watcher?.stop()
+        cancelSendCountdowns(forAccountEmail: account.email, includeUnscoped: false)
     }
 
     /// Starts every background account's watcher that is ready but idle (used at
@@ -130,6 +131,17 @@ extension AppState {
     func stopAllBackgroundWatchers() {
         for account in backgroundConnectedAccounts {
             stopWatching(account: account)
+        }
+    }
+
+    /// Applies a changed polling interval to every active watcher. Each
+    /// `InboxWatcher` reads the interval closure only when scheduling its timer, so
+    /// focused and background timers must all be rescheduled after the setting
+    /// changes.
+    func rescheduleAllInboxWatchers() {
+        inboxWatcher.reschedule()
+        for account in backgroundConnectedAccounts {
+            account.watcher?.reschedule()
         }
     }
 

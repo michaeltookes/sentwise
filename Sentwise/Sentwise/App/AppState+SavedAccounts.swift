@@ -259,8 +259,7 @@ extension AppState {
         let outgoingSettings = buildSettings()
         // Clean teardown of the outgoing account before adopting the new one.
         let wasWatching = watchStatus == .watching
-        stopWatching()
-        cancelAllSendCountdowns()
+        stopWatching(cancelCountdowns: false)
 
         let credentials = MailAccountCredentials(
             email: account.email,

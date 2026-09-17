@@ -104,21 +104,19 @@ extension AppState {
     }
 
     /// Post-verify cleanup when the connected account changed or was reconnected:
-    /// invalidates in-flight countdowns/offline queue, re-homes the previously
-    /// focused account into the background (item 99), and restarts the focused
-    /// watcher for the new account.
+    /// re-homes the previously focused account into the background (item 99), and
+    /// restarts the focused watcher for the new account. Countdown timers are
+    /// preserved because their drafts remain account-scoped when the source
+    /// mailbox stays connected.
     func applyConnectionTransitionCleanup(
         accountIdentityChanged: Bool,
         wasWatching: Bool,
         previousFocused: FocusedAccountSnapshot?,
         newFocusedEmail: String
     ) {
-        cancelAllSendCountdowns()
-        if accountIdentityChanged {
-            adoptFocusChange(previousFocused: previousFocused, newFocusedEmail: newFocusedEmail)
-        }
+        adoptFocusChange(previousFocused: previousFocused, newFocusedEmail: newFocusedEmail)
         if wasWatching {
-            stopWatching()
+            stopWatching(cancelCountdowns: false)
             startWatchingIfReady()
         }
     }

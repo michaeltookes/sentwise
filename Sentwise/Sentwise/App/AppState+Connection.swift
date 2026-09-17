@@ -211,7 +211,6 @@ extension AppState {
         mailAppPassword = ""
         markMailHostVerifiedForGuidance()
         isAccountConnected = false
-        cancelAllSendCountdowns()
         stopWatching()
         resetMessagePreviewForAccountChange(clearSkippedMessages: false)
         skippedMessages = []

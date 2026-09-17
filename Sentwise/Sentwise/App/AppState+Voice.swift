@@ -12,7 +12,7 @@ extension AppState {
 
     /// Normalized account key for the focused/active mailbox's voice profile.
     var activeAccountVoiceKey: String {
-        SavedMailAccount.normalizedEmail(mailEmail)
+        publishedVoiceProfileAccountKey ?? SavedMailAccount.normalizedEmail(mailEmail)
     }
 
     /// The voice profile to draft with for `accountEmail`. Returns the focused
@@ -28,7 +28,13 @@ extension AppState {
     /// Refreshes the published focused-account profile after a mailbox focus
     /// change. Background drafts still resolve directly from persistence.
     func reloadPublishedVoiceProfileForFocusedAccount() {
-        voiceProfile = persistence.loadVoiceProfile(accountKey: activeAccountVoiceKey)
+        restorePublishedVoiceProfile(accountKey: SavedMailAccount.normalizedEmail(mailEmail))
+    }
+
+    func restorePublishedVoiceProfile(accountKey: String) {
+        let key = SavedMailAccount.normalizedEmail(accountKey)
+        publishedVoiceProfileAccountKey = key.isEmpty ? nil : key
+        voiceProfile = key.isEmpty ? nil : persistence.loadVoiceProfile(accountKey: key)
     }
 
     /// Whether the prerequisites for learning are met (mail + a usable AI provider).
@@ -85,8 +91,10 @@ extension AppState {
             // Voice is learned per account (item 99): store it under the account it
             // was sampled from, and mirror it into the published profile only when
             // that account is the focused one.
-            persistence.saveVoiceProfile(profile, accountKey: SavedMailAccount.normalizedEmail(credentials.email))
-            if SavedMailAccount.normalizedEmail(credentials.email) == activeAccountVoiceKey {
+            let accountKey = SavedMailAccount.normalizedEmail(credentials.email)
+            persistence.saveVoiceProfile(profile, accountKey: accountKey)
+            if mailCredentials == credentials || accountKey == activeAccountVoiceKey {
+                publishedVoiceProfileAccountKey = accountKey
                 voiceProfile = profile
             }
         } catch {
@@ -101,8 +109,13 @@ extension AppState {
 
     /// Clears the learned profile.
     func forgetVoiceProfile(messageSurface: TransientMessageSurface = .shared) {
+        guard let accountKey = voiceProfileMutationAccountKey else {
+            voiceProfile = nil
+            setVoiceError(nil, for: messageSurface)
+            return
+        }
         do {
-            try persistence.removeVoiceProfile(accountKey: activeAccountVoiceKey)
+            try persistence.removeVoiceProfile(accountKey: accountKey)
         } catch {
             setVoiceError(Self.voiceMessage(for: error), for: messageSurface)
             return
@@ -112,6 +125,11 @@ extension AppState {
     }
 
     // MARK: - Helpers
+
+    private var voiceProfileMutationAccountKey: String? {
+        guard let key = publishedVoiceProfileAccountKey, !key.isEmpty else { return nil }
+        return key
+    }
 
     /// Fetches recent Sent messages and reduces each to readable body text.
     /// Shared by voice-profile learning and signature detection (item 24). The

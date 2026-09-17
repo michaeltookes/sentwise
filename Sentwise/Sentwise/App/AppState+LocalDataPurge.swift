@@ -109,6 +109,7 @@ extension AppState {
         cancelAllSendCountdowns()
 
         voiceProfile = nil
+        publishedVoiceProfileAccountKey = nil
         processedMessages = ProcessedMessages()
 
         pendingDrafts = []
@@ -154,6 +155,7 @@ extension AppState {
 
         if includeUnscopedArtifacts {
             voiceProfile = nil
+            publishedVoiceProfileAccountKey = nil
             denyReasonPrompt = nil
             lastUsedDenyReason = nil
             denyReasonPromptSuppressedThisSession = false
@@ -332,15 +334,6 @@ extension AppState {
         cachedSubscriptionSnapshot = nil
         googleOAuthInterestRegistered = false
         isRegisteringGoogleOAuthInterest = false
-    }
-
-    private func cancelSendCountdowns(for identities: Set<String>) {
-        guard !identities.isEmpty else { return }
-        for identity in identities {
-            sendCountdownTasks.removeValue(forKey: identity)?.cancel()
-            pendingSendCountdowns.removeValue(forKey: identity)
-            sendCountdownNotificationApprovalIDs.remove(identity)
-        }
     }
 
     private static func draft(

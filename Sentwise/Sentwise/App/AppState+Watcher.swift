@@ -62,14 +62,16 @@ extension AppState {
     }
 
     /// Stops watching entirely (e.g. on disconnect); returns to idle.
-    func stopWatching() {
+    func stopWatching(cancelCountdowns: Bool = true) {
         guard watchStatus != .idle else { return }
         resumeWatchingAfterManagedReauth = false
         watchStatus = .idle
         inboxWatcher.stop()
-        // Outstanding auto-send countdowns (item 23) simply never fire; their
-        // drafts stay pending in the queue.
-        cancelAllSendCountdowns()
+        // Outstanding auto-send countdowns for this mailbox (item 23) simply
+        // never fire; drafts for other connected mailboxes keep their windows.
+        if cancelCountdowns {
+            cancelSendCountdowns(forAccountEmail: mailEmail)
+        }
         logger.info("Inbox watching stopped")
     }
 
@@ -322,7 +324,17 @@ extension AppState {
                 localDataGeneration: localDataGeneration,
                 credentials: credentials,
                 account: account
-            ) else { return }
+            ) else {
+                if case DraftDispatchError.accountChanged = error {
+                    handleWatcherDraftError(
+                        error,
+                        credentials: credentials,
+                        draftProvider: draftProvider,
+                        account: account
+                    )
+                }
+                return
+            }
             handleWatcherDraftError(
                 error,
                 credentials: credentials,

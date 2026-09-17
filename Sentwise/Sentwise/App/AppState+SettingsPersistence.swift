@@ -117,7 +117,7 @@ extension AppState {
             guard let self else { return }
             saveSettings()
             if rescheduleInboxWatcher {
-                inboxWatcher.reschedule()
+                rescheduleAllInboxWatchers()
             }
         }
     }

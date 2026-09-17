@@ -114,6 +114,26 @@ final class AppStateConcurrentWatcherTests: XCTestCase {
         XCTAssertEqual(account.watchStatus, .idle)
     }
 
+    func testPollIntervalChangeReschedulesFocusedAndBackgroundWatchers() async {
+        let (app, account) = makeAppState(fetch: .success([]))
+
+        app.startWatching()
+        app.startWatching(account: account)
+        guard let backgroundWatcher = account.watcher else {
+            app.stopWatching()
+            return XCTFail("Expected a background watcher")
+        }
+
+        app.pollIntervalSeconds = 120
+        await waitUntil {
+            app.inboxWatcher.rescheduleCount == 1
+                && backgroundWatcher.rescheduleCount == 1
+        }
+
+        app.stopWatching()
+        app.stopWatching(account: account)
+    }
+
     func testGlobalTogglePausesBackgroundWatchers() {
         let (app, account) = makeAppState(fetch: .success([]))
         app.watchStatus = .watching
@@ -187,5 +207,22 @@ final class AppStateConcurrentWatcherTests: XCTestCase {
         let status = ManagedAccountStatus(subscription: ManagedSubscription(plan: .pro, status: .active))
         app.managedAccountStatus = status
         app.markManagedAccountStatusFresh(from: status)
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 3,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() > deadline {
+                XCTFail("Timed out waiting for condition", file: file, line: line)
+                return
+            }
+            try? await Task.sleep(nanoseconds: 500_000)
+            await Task.yield()
+        }
     }
 }

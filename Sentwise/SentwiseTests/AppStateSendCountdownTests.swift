@@ -13,12 +13,13 @@ final class AppStateSendCountdownTests: XCTestCase {
         id: UInt32 = 1,
         subject: String = "Lunch?",
         body: String = "Thursday works!",
+        sourceAccountEmail: String? = "me@gmail.com",
         notReplyWorthy: DraftNotReplyWorthy? = nil
     ) -> Draft {
         Draft(
             id: id,
             sourceUIDValidity: 10,
-            sourceAccountEmail: "me@gmail.com",
+            sourceAccountEmail: sourceAccountEmail,
             sourceMailbox: Mailbox.inbox.imapName,
             sourceSubject: subject,
             sourceFrom: MailAddress(name: "Alice", email: "alice@example.com"),
@@ -489,6 +490,41 @@ final class AppStateSendCountdownTests: XCTestCase {
         XCTAssertEqual(provider.sendCallCount, 0)
         XCTAssertEqual(appState.pendingDrafts.map(\.identity), [draft.identity])
         XCTAssertTrue(openedReview)
+
+        appState.cancelAllSendCountdowns()
+    }
+
+    func testConnectingNewAccountPreservesOtherAccountCountdown() async {
+        let backgroundEmail = "side@work.com"
+        let draft = pendingDraft(sourceAccountEmail: backgroundEmail)
+        let provider = FakeAppMailProvider(result: .success(()))
+        let appState = makeAppState(
+            provider: provider,
+            sendDelaySeconds: 5,
+            tickNanoseconds: 1_000_000_000,
+            seed: [draft]
+        )
+        let background = ConnectedMailAccount(
+            email: backgroundEmail,
+            host: "imap.work.com",
+            port: 993,
+            appPassword: "side-pw"
+        )
+        appState.backgroundConnectedAccounts = [background]
+        appState.managedAccountStatus = ManagedAccountStatus(
+            subscription: ManagedSubscription(plan: .unlimited, status: .active)
+        )
+
+        appState.startSendCountdown(for: draft, credentials: background.credentials)
+        await appState.testConnection(with: MailAccountCredentials(
+            email: "new@gmail.com",
+            appPassword: "new-pw",
+            host: "imap.gmail.com",
+            port: 993
+        ))
+
+        XCTAssertEqual(appState.pendingSendCountdowns[draft.identity], 5)
+        XCTAssertNotNil(appState.sendCountdownTasks[draft.identity])
 
         appState.cancelAllSendCountdowns()
     }

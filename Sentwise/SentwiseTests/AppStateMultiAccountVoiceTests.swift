@@ -70,6 +70,34 @@ final class AppStateMultiAccountVoiceTests: XCTestCase {
         XCTAssertEqual(appState.voiceProfile(forAccountEmail: accountB)?.summary, "Voice B")
     }
 
+    func testVoiceLookupUsesPublishedProfileOwnerNotLiveFormEmail() {
+        let store = AppStateMemoryPersistence(settings: settings(mailEmail: accountA))
+        store.saveVoiceProfile(profile(summary: "Voice A"), accountKey: accountA)
+        store.saveVoiceProfile(profile(summary: "Voice B"), accountKey: accountB)
+        let appState = makeAppState(persistence: store, mailEmail: accountA)
+
+        appState.disconnectMail()
+        appState.mailEmail = accountB
+
+        XCTAssertEqual(appState.voiceProfile?.summary, "Voice A")
+        XCTAssertEqual(appState.voiceProfile(forAccountEmail: accountB)?.summary, "Voice B")
+    }
+
+    func testForgetVoiceProfileRemovesPublishedProfileOwnerNotLiveFormEmail() {
+        let store = AppStateMemoryPersistence(settings: settings(mailEmail: accountA))
+        store.saveVoiceProfile(profile(summary: "Voice A"), accountKey: accountA)
+        store.saveVoiceProfile(profile(summary: "Voice B"), accountKey: accountB)
+        let appState = makeAppState(persistence: store, mailEmail: accountA)
+
+        appState.disconnectMail()
+        appState.mailEmail = accountB
+        appState.forgetVoiceProfile()
+
+        XCTAssertNil(appState.voiceProfile)
+        XCTAssertNil(store.loadVoiceProfile(accountKey: accountA))
+        XCTAssertEqual(store.loadVoiceProfile(accountKey: accountB)?.summary, "Voice B")
+    }
+
     func testPublishedVoiceReloadsWhenFocusedAccountChanges() throws {
         let store = AppStateMemoryPersistence(settings: settings(mailEmail: accountA))
         store.saveVoiceProfile(profile(summary: "Voice A"), accountKey: accountA)

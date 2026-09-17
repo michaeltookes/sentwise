@@ -153,6 +153,7 @@ final class AppState: ObservableObject {
     // MARK: - Voice Profile
 
     @Published var voiceProfile: VoiceProfile?
+    var publishedVoiceProfileAccountKey: String?
     @Published var isLearningVoice: Bool = false
     /// A short progress message shown while learning.
     @Published var voiceProgress: String?
@@ -478,7 +479,7 @@ final class AppState: ObservableObject {
         self.llmAPIKey = managedLaunch.apiKey
         restoreOpenRouterProvisioningLaunchState()
         // Per-account voice (item 99): the focused account's profile is published.
-        self.voiceProfile = persistence.loadVoiceProfile(accountKey: SavedMailAccount.normalizedEmail(settings.mailEmail))
+        restorePublishedVoiceProfile(accountKey: SavedMailAccount.normalizedEmail(settings.mailEmail))
         restoreManagedAccountLaunchIdentity(managedLaunch, settings: settings)
         restoreReviewPersistenceState()
         cleanupLegacyOAuthCredentials()

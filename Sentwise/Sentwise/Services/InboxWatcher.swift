@@ -24,6 +24,7 @@ final class InboxWatcher {
     private var wakeObserver: NSObjectProtocol?
 
     var isActive: Bool { isRunning }
+    private(set) var rescheduleCount = 0
 
     /// - Parameters:
     ///   - interval: Poll interval in seconds, read at each (re)schedule so a
@@ -58,6 +59,7 @@ final class InboxWatcher {
     /// actively running and awake.
     func reschedule() {
         guard isRunning, !isAsleep else { return }
+        rescheduleCount += 1
         schedule()
     }
 
