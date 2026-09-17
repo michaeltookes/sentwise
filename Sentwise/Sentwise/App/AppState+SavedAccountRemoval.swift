@@ -55,6 +55,12 @@ extension AppState {
         }
 
         applyRemovedSavedAccountState(context, messageSurface: messageSurface)
+        // Multi-account (item 99): if the removed account was connected in the
+        // background, stop its watcher and drop its runtime too.
+        if let background = backgroundConnectedAccount(email: account.id) {
+            stopWatching(account: background)
+            backgroundConnectedAccounts.removeAll { $0.id == account.id }
+        }
         logger.info("Saved account removed")
     }
 

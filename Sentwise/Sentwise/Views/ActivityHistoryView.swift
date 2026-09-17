@@ -48,6 +48,8 @@ struct ActivityHistoryView: View {
                                 event: event,
                                 canOpen: appState.canOpenActivityEvent(event),
                                 isOpening: openingEventID == event.id,
+                                accountLabel: appState.showsAccountAttribution
+                                    ? appState.accountAttributionLabel(forEmail: event.account) : nil,
                                 onOpen: { open(event) }
                             )
                         }
@@ -133,6 +135,9 @@ private struct ActivityEventRow: View {
     let event: ActivityEvent
     let canOpen: Bool
     let isOpening: Bool
+    /// The mailbox this event belongs to, when more than one account is connected
+    /// (item 99); nil hides the badge.
+    var accountLabel: String?
     let onOpen: () -> Void
 
     var body: some View {
@@ -162,6 +167,13 @@ private struct ActivityEventRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                if let accountLabel {
+                    Label(accountLabel, systemImage: "tray.full")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("activityAccountBadge")
+                }
                 if let detail = event.activityHistoryVisibleDetail, event.kind.showsFailureDetail {
                     Text(detail)
                         .font(.caption2)

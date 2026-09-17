@@ -48,6 +48,20 @@ extension AppState {
         return "Your plan connects up to \(limit) \(mailboxes). Upgrade to connect another."
     }
 
+    /// Whether Review Drafts and Activity should badge each item with the mailbox
+    /// it belongs to (item 99). Only meaningful once the user has more than one
+    /// mailbox, so single-account users see no extra noise.
+    var showsAccountAttribution: Bool {
+        savedAccounts.count > 1 || connectedAccountCount > 1
+    }
+
+    /// The short mailbox label for account attribution — the account's email.
+    /// Returns nil for an untagged (legacy) record.
+    func accountAttributionLabel(forEmail email: String?) -> String? {
+        guard let email, !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return email
+    }
+
     // MARK: - Registry queries
 
     /// Normalized emails of every connected mailbox (focused + background).
@@ -106,6 +120,15 @@ extension AppState {
             return watchStatus
         }
         return backgroundConnectedAccount(email: key)?.watchStatus ?? .idle
+    }
+
+    /// This account's last watcher health error (focused or background), if any.
+    func watchError(forAccountEmail email: String) -> String? {
+        let key = SavedMailAccount.normalizedEmail(email)
+        if isAccountConnected, SavedMailAccount.normalizedEmail(mailEmail) == key {
+            return watchError
+        }
+        return backgroundConnectedAccount(email: key)?.watchError
     }
 
     /// Whether the account identified by `credentials` (focused or background) is
