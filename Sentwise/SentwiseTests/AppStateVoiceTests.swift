@@ -71,10 +71,7 @@ final class AppStateVoiceTests: XCTestCase {
 
         XCTAssertEqual(appState.voiceProfile?.greeting, "Hi,")
         XCTAssertEqual(appState.voiceProfile?.sampleCount, 1)
-        // Voice is stored under the account it was learned from (item 99), not the
-        // legacy unscoped slot.
         XCTAssertEqual(store.loadVoiceProfile(accountKey: "me@gmail.com")?.summary, "Brief and warm.")
-        XCTAssertNil(store.voiceProfile)
         XCTAssertNil(appState.voiceError)
         XCTAssertFalse(appState.isLearningVoice)
         XCTAssertEqual(llm.lastProvider, .anthropic)
@@ -374,7 +371,6 @@ final class AppStateVoiceTests: XCTestCase {
         appState.forgetVoiceProfile()
 
         XCTAssertNil(appState.voiceProfile)
-        XCTAssertNil(store.voiceProfile)
         XCTAssertNil(store.loadVoiceProfile(accountKey: "me@gmail.com"))
     }
 

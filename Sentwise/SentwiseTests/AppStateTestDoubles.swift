@@ -5,9 +5,7 @@ import XCTest
 
 final class AppStateMemoryPersistence: PersistenceProvider {
     private var settings: Settings
-    /// Per-account voice profiles keyed by normalized email; the empty key is the
-    /// legacy unscoped profile (item 99). `voiceProfile` exposes the empty-key slot
-    /// for the many existing tests that assert on the single/legacy profile.
+    /// Per-account voice profiles (item 99); empty key = legacy, seen via `voiceProfile`.
     private(set) var voiceProfilesByAccount: [String: VoiceProfile]
     var voiceProfile: VoiceProfile? { voiceProfilesByAccount[""] }
     private(set) var processedMessages: ProcessedMessages
@@ -128,9 +126,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     }
 
     func loadActivityEvents() -> [ActivityEvent] { activityEvents }
-    // Deliberately does not append to `saveEvents`: the activity log is an
-    // additive side effect, so ordering assertions on the core save sequence
-    // (pending/processed/approved) stay stable.
+    // Not appended to `saveEvents` (additive side effect) so core save-order holds.
     func saveActivityEvents(_ events: [ActivityEvent]) {
         activityEvents = events
         activityEventSaveCount += 1
@@ -142,8 +138,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     }
 
     func loadDraftFeedback() -> [DraftFeedbackRecord] { draftFeedback }
-    // Like the activity log, the feedback store is an additive side effect and is
-    // deliberately left out of `saveEvents` so core save-order assertions hold.
+    // Additive side effect, left out of `saveEvents` so core save-order holds.
     func saveDraftFeedback(_ records: [DraftFeedbackRecord]) {
         draftFeedback = records
         draftFeedbackSaveCount += 1
