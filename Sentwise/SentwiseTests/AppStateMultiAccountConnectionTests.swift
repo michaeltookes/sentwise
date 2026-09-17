@@ -132,4 +132,29 @@ final class AppStateMultiAccountConnectionTests: XCTestCase {
         XCTAssertTrue(app.isConnectedAccount(email: gmail))
         XCTAssertFalse(app.isConnectedAccount(email: att))
     }
+
+    func testEraseAllLocalDataClearsEveryConnectedAccount() async {
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: gmail): "gmail-pw",
+            .mailAppPassword(email: att): "att-pw"
+        ])
+        let settings = Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            mailEmail: gmail,
+            savedAccounts: [
+                SavedMailAccount(email: gmail, host: "imap.gmail.com", port: 993),
+                SavedMailAccount(email: att, host: "imap.mail.att.net", port: 993)
+            ]
+        )
+        let app = makeAppState(settings: settings, secrets: secrets)
+        XCTAssertEqual(app.connectedAccountCount, 2)
+
+        _ = await app.eraseAllLocalData()
+
+        XCTAssertTrue(app.backgroundConnectedAccounts.isEmpty)
+        XCTAssertEqual(app.connectedAccountCount, 0)
+        XCTAssertTrue(app.savedAccounts.isEmpty)
+        XCTAssertFalse(app.isAccountConnected)
+    }
 }
