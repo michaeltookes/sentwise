@@ -75,7 +75,11 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         voiceProfilesByAccount[SavedMailAccount.normalizedEmail(accountKey)] = nil
         removedArtifacts.append("voice")
     }
+    /// Models a voice-profile enumeration/removal failure so the purge no-false-
+    /// success contract (item 96) can be exercised without touching disk.
+    var removeAllVoiceProfilesError: Error?
     func removeAllVoiceProfiles() throws {
+        if let removeAllVoiceProfilesError { throw removeAllVoiceProfilesError }
         voiceProfilesByAccount = [:]
         removedArtifacts.append("voice")
     }
@@ -215,17 +219,6 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         activityEvents = []
         draftFeedback = []
         eraseAllCount += 1
-    }
-}
-
-enum AppStatePersistenceError: LocalizedError {
-    case writeDenied
-
-    var errorDescription: String? {
-        switch self {
-        case .writeDenied:
-            return "settings write denied"
-        }
     }
 }
 

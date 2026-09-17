@@ -56,10 +56,16 @@ extension PersistenceService {
             if fileManager.fileExists(atPath: voiceProfileURL.path) {
                 try fileManager.removeItem(at: voiceProfileURL)
             }
-            let contents = (try? fileManager.contentsOfDirectory(
+            // The purge contract (item 96) requires this to fail loudly: a real
+            // filesystem error must propagate so a caller never reports success while
+            // voice data remains. Only a missing directory (a fresh install with
+            // nothing saved yet) is legitimately empty; every other enumeration error
+            // is thrown, not swallowed.
+            guard fileManager.fileExists(atPath: directory.path) else { return }
+            let contents = try fileManager.contentsOfDirectory(
                 at: directory,
                 includingPropertiesForKeys: nil
-            )) ?? []
+            )
             for url in contents where url.lastPathComponent.hasPrefix("VoiceProfile-")
                 && url.pathExtension == "json" {
                 try fileManager.removeItem(at: url)
