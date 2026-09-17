@@ -70,6 +70,29 @@ final class AppStateMultiAccountVoiceTests: XCTestCase {
         XCTAssertEqual(appState.voiceProfile(forAccountEmail: accountB)?.summary, "Voice B")
     }
 
+    func testPublishedVoiceReloadsWhenFocusedAccountChanges() throws {
+        let store = AppStateMemoryPersistence(settings: settings(mailEmail: accountA))
+        store.saveVoiceProfile(profile(summary: "Voice A"), accountKey: accountA)
+        store.saveVoiceProfile(profile(summary: "Voice B"), accountKey: accountB)
+        let appState = makeAppState(persistence: store, mailEmail: accountA)
+
+        XCTAssertEqual(appState.voiceProfile?.summary, "Voice A")
+
+        try appState.persistVerifiedConnection(
+            MailAccountCredentials(
+                email: accountB,
+                appPassword: "side-pw",
+                host: "imap.side.com",
+                port: 993
+            ),
+            clearSignature: true
+        )
+
+        XCTAssertEqual(appState.mailEmail, accountB)
+        XCTAssertEqual(appState.voiceProfile?.summary, "Voice B")
+        XCTAssertEqual(appState.voiceProfile(forAccountEmail: accountB)?.summary, "Voice B")
+    }
+
     func testLegacyVoiceMigratesToConnectedAccountOnLaunch() {
         // A pre-item-99 install: schema 20, one unscoped VoiceProfile.json, a
         // connected account.

@@ -14,7 +14,7 @@ extension AppState {
     /// value when known, else the cached snapshot (so an offline launch still gates
     /// correctly), else nil.
     var currentSubscriptionPlan: ManagedSubscription.Plan? {
-        managedAccountStatus?.subscription?.plan ?? cachedSubscriptionSnapshot?.plan
+        managedAccountStatus?.subscription?.plan ?? effectiveSubscriptionSnapshot?.plan
     }
 
     /// The maximum number of concurrently connected mailboxes for the current plan

@@ -99,6 +99,24 @@ extension AppState {
         }
     }
 
+    /// Restarts background watchers paused by managed auth/licensing once the
+    /// provider recovers, and starts restored idle accounts once drafting is ready.
+    func resumeBackgroundInboxWatchingAfterProviderRecoveryIfNeeded() {
+        for account in backgroundConnectedAccounts {
+            if account.resumeWatchingAfterManagedReauth {
+                if account.watchStatus == .watching {
+                    account.resumeWatchingAfterManagedReauth = false
+                    continue
+                }
+                guard account.watchStatus == .paused || account.watchStatus == .idle,
+                      canWatch(account: account) else { continue }
+                startWatching(account: account)
+            } else if account.watchStatus == .idle {
+                startWatchingIfReady(account: account)
+            }
+        }
+    }
+
     /// Stops every background account's watcher (used on erase/teardown).
     func stopAllBackgroundWatchers() {
         for account in backgroundConnectedAccounts {

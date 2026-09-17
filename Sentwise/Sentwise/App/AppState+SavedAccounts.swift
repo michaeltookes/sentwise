@@ -297,6 +297,7 @@ extension AppState {
         mailHost = credentials.host
         mailPort = credentials.port
         mailAppPassword = credentials.appPassword
+        reloadPublishedVoiceProfileForFocusedAccount()
         markMailHostVerifiedForGuidance()
         // Remember this account so it can be switched back to without re-entry.
         upsertSavedAccount(email: credentials.email, host: credentials.host, port: credentials.port)
@@ -336,6 +337,7 @@ extension AppState {
         savedAccounts = settings.savedAccounts
         mailHostExplicitlyEditedEmail = settings.mailHostGuidanceEmail
         mailHostExplicitlyEditedBeforeEmail = settings.mailHostGuidancePendingEmail
+        reloadPublishedVoiceProfileForFocusedAccount()
         let previousEmail = settings.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let previousPassword = storedMailPassword(forEmail: previousEmail) ?? ""
         mailAppPassword = previousPassword

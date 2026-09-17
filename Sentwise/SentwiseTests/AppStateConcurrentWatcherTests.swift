@@ -114,6 +114,32 @@ final class AppStateConcurrentWatcherTests: XCTestCase {
         XCTAssertEqual(account.watchStatus, .idle)
     }
 
+    func testProviderRecoveryResumesBackgroundWatcherPausedByManagedAuth() {
+        let (app, account) = makeAppState(fetch: .success([]))
+        configureManagedProviderReady(app)
+        account.watchStatus = .paused
+        account.resumeWatchingAfterManagedReauth = true
+
+        app.resumeInboxWatchingAfterProviderRecoveryIfNeeded()
+        defer { app.stopWatching(account: account) }
+
+        XCTAssertEqual(account.watchStatus, .watching)
+        XCTAssertFalse(account.resumeWatchingAfterManagedReauth)
+        XCTAssertNotNil(account.watcher)
+    }
+
+    func testProviderRecoveryStartsIdleBackgroundWatcherWhenReady() {
+        let (app, account) = makeAppState(fetch: .success([]))
+        configureManagedProviderReady(app)
+        account.watchStatus = .idle
+
+        app.resumeInboxWatchingAfterProviderRecoveryIfNeeded()
+        defer { app.stopWatching(account: account) }
+
+        XCTAssertEqual(account.watchStatus, .watching)
+        XCTAssertNotNil(account.watcher)
+    }
+
     func testAuthFailurePausesOnlyThatAccount() async {
         let (app, account) = makeAppState(fetch: .failure(.authenticationFailed("bad app password")))
         app.watchStatus = .watching
@@ -125,5 +151,15 @@ final class AppStateConcurrentWatcherTests: XCTestCase {
         XCTAssertNotNil(account.watchError)
         // The focused account keeps watching.
         XCTAssertEqual(app.watchStatus, .watching)
+    }
+
+    private func configureManagedProviderReady(_ app: AppState) {
+        app.llmProviderKind = .managed
+        app.verifiedLLMModel = LLMProviderKind.managed.defaultModel
+        app.isLLMConnected = true
+        app.isManagedSignedIn = true
+        let status = ManagedAccountStatus(subscription: ManagedSubscription(plan: .pro, status: .active))
+        app.managedAccountStatus = status
+        app.markManagedAccountStatusFresh(from: status)
     }
 }

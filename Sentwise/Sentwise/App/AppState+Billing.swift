@@ -232,6 +232,7 @@ extension AppState {
     /// Restarts a watcher that was paused by managed auth/licensing once any
     /// replacement provider is usable.
     func resumeInboxWatchingAfterProviderRecoveryIfNeeded() {
+        resumeBackgroundInboxWatchingAfterProviderRecoveryIfNeeded()
         guard resumeWatchingAfterManagedReauth,
               watchStatus == .paused || watchStatus == .idle,
               canWatch else {

@@ -25,6 +25,12 @@ extension AppState {
         return persistence.loadVoiceProfile(accountKey: key)
     }
 
+    /// Refreshes the published focused-account profile after a mailbox focus
+    /// change. Background drafts still resolve directly from persistence.
+    func reloadPublishedVoiceProfileForFocusedAccount() {
+        voiceProfile = persistence.loadVoiceProfile(accountKey: activeAccountVoiceKey)
+    }
+
     /// Whether the prerequisites for learning are met (mail + a usable AI provider).
     var canLearnVoice: Bool {
         isLLMConnected

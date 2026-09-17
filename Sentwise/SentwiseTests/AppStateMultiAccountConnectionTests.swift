@@ -108,6 +108,36 @@ final class AppStateMultiAccountConnectionTests: XCTestCase {
         XCTAssertEqual(app.connectedCredentials(forAccountEmail: att)?.appPassword, "att-pw")
     }
 
+    func testLaunchRestorationHonorsConnectedAccountLimit() {
+        let third = "third@work.com"
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: gmail): "gmail-pw",
+            .mailAppPassword(email: att): "att-pw",
+            .mailAppPassword(email: third): "third-pw"
+        ])
+        let settings = Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            mailEmail: gmail,
+            savedAccounts: [
+                SavedMailAccount(email: gmail, host: "imap.gmail.com", port: 993),
+                SavedMailAccount(email: att, host: "imap.mail.att.net", port: 993),
+                SavedMailAccount(email: third, host: "imap.work.com", port: 993)
+            ]
+        )
+        let app = makeAppState(settings: settings, secrets: secrets)
+
+        app.managedAccountStatus = status(plan: .starter)
+        app.restoreBackgroundConnectedAccounts()
+        XCTAssertTrue(app.backgroundConnectedAccounts.isEmpty)
+        XCTAssertEqual(app.connectedAccountCount, 1)
+
+        app.managedAccountStatus = status(plan: .pro)
+        app.restoreBackgroundConnectedAccounts()
+        XCTAssertEqual(app.backgroundConnectedAccounts.map(\.id), [att])
+        XCTAssertEqual(app.connectedAccountCount, 2)
+    }
+
     func testDisconnectBackgroundAccountRemovesOnlyThatAccount() {
         let secrets = InMemorySecretStore(seed: [
             .mailAppPassword(email: gmail): "gmail-pw",

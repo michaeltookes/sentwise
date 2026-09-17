@@ -124,12 +124,15 @@ extension AppState {
     }
 
     /// Restores every saved account (other than the focused one) as a concurrently
-    /// connected background account at launch (item 99). Watchers are started later
-    /// by the normal `startWatchingIfReady` flow once the LLM is ready.
+    /// connected background account at launch (item 99), up to the current tier's
+    /// account cap. Watchers are started later by the normal `startWatchingIfReady`
+    /// flow once the LLM is ready.
     func restoreBackgroundConnectedAccounts() {
         let focusedKey = SavedMailAccount.normalizedEmail(mailEmail)
+        let availableBackgroundSlots = max(connectedAccountLimit - (isAccountConnected ? 1 : 0), 0)
         var restored: [ConnectedMailAccount] = []
         for saved in savedAccounts where saved.id != focusedKey {
+            guard restored.count < availableBackgroundSlots else { break }
             guard let password = storedMailPassword(forEmail: saved.email), !password.isEmpty else { continue }
             restored.append(ConnectedMailAccount(
                 email: saved.email, host: saved.host, port: saved.port, appPassword: password

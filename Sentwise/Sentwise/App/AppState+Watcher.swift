@@ -306,8 +306,8 @@ extension AppState {
                 bypassModelSkip: senderRuleDecision(for: message) == .forceDraft
             )
             guard isCurrentLocalDataGeneration(localDataGeneration),
-                  watchStatus == .watching,
-                  mailCredentials == credentials else { return }
+                  isAccountWatching(credentials),
+                  isConnectedAccount(credentials) else { return }
             handleWatcherDraftResult(result, for: message, credentials: credentials, mailbox: mailbox)
         } catch {
             guard isCurrentLocalDataGeneration(localDataGeneration) else { return }
