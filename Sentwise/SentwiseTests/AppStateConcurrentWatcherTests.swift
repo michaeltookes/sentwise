@@ -54,7 +54,13 @@ final class AppStateConcurrentWatcherTests: XCTestCase {
             bodyResult: .success(Data("Please advise.".utf8))
         )
         let llm = FakeLLMProvider(result: .success(()), completion: .success(LLMResponse(text: "On it.")))
-        let app = AppState(persistence: persistence, secrets: secrets, mailProvider: provider, llm: llm)
+        let app = AppState(
+            persistence: persistence,
+            secrets: secrets,
+            mailProvider: provider,
+            llm: llm,
+            reachability: FakeReachabilityMonitor()
+        )
         app.mailAppPassword = "gmail-pw"
         app.retryRunner = .immediate
         let account = ConnectedMailAccount(

@@ -72,7 +72,7 @@ final class ReplyWorthinessLiveTests: XCTestCase {
 
     func testKnownTransactionalSendersProduceNoDraftsOverLiveInbox() async throws {
         let credentials = try liveCredentials()
-        let provider = IMAPMailProvider()
+        let provider = LiveMailProvider.imapProvider()
 
         let app = AppState(
             persistence: AppStateMemoryPersistence(),

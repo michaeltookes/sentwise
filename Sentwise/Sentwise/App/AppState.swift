@@ -418,7 +418,7 @@ final class AppState: ObservableObject {
     init(
         persistence: PersistenceProvider = PersistenceService.shared,
         secrets: SecretStore = KeychainStore.shared,
-        mailProvider: MailProvider = IMAPMailProvider(),
+        mailProvider: MailProvider? = nil,
         llm: LLMProviding? = nil,
         managedAccount: ManagedAccountService? = nil,
         googleOAuthInterestClient: GoogleOAuthInterestRegistering? = nil,
@@ -427,7 +427,7 @@ final class AppState: ObservableObject {
     ) {
         self.persistence = persistence
         self.secrets = secrets
-        self.mailProvider = mailProvider
+        self.mailProvider = mailProvider ?? LiveMailProvider.imap()
         // Managed account (item 56a) + wire it as the LLM session provider.
         let managedAccount = managedAccount ?? ManagedAccountService(secrets: secrets)
         self.managedAccount = managedAccount
