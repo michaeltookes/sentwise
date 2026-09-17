@@ -39,8 +39,13 @@ extension AppState {
 
     /// Whether connecting `newEmail` is permitted by the tier's account cap, given
     /// the currently connected focused account's email (from persisted settings, so
-    /// a mid-connect form value doesn't skew the count). An already-connected
-    /// account may always reconnect. Surfaces the upgrade prompt when blocked.
+    /// a mid-connect form value doesn't skew the count). An account that is *actually
+    /// connected* may always reconnect. The focused-email arm therefore requires
+    /// `isAccountConnected`: `disconnectMail` leaves `mailEmail` persisted while
+    /// clearing `isAccountConnected`, so a disconnected focused mailbox must go
+    /// through the cap check on reconnect rather than taking a free fast-path (item
+    /// 99). Background accounts are genuinely connected, so their arm is unconditional.
+    /// Surfaces the upgrade prompt when blocked.
     func passesConnectAccountGate(
         newEmail: String,
         connectedFocusedEmail: String,
@@ -48,7 +53,7 @@ extension AppState {
     ) -> Bool {
         let newKey = SavedMailAccount.normalizedEmail(newEmail)
         let focusedKey = SavedMailAccount.normalizedEmail(connectedFocusedEmail)
-        let isReconnect = (!newKey.isEmpty && newKey == focusedKey)
+        let isReconnect = (!newKey.isEmpty && newKey == focusedKey && isAccountConnected)
             || backgroundConnectedAccount(email: newKey) != nil
         if isReconnect { return true }
         // The focused slot only counts when the focused account is actually

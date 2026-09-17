@@ -211,6 +211,44 @@ final class AppStateMultiAccountConnectionTests: XCTestCase {
         XCTAssertEqual(app.connectedAccountCount, 2)
     }
 
+    func testReconnectingDisconnectedFocusedAtCapWithBackgroundIsBlocked() async {
+        // Regression (item 99): the reconnect fast-path must not bypass the tier cap
+        // for a *disconnected* focused mailbox. Repro: Pro user with att focused +
+        // gmail background → disconnect att (its email stays persisted) → plan drops
+        // to Starter (cap 1, gmail already fills it) → reconnect att. The persisted
+        // email matches the focused key, but since att is no longer connected the
+        // fast-path must not fire, so the cap check runs and blocks the reconnect.
+        let app = makeAppState()
+        app.managedAccountStatus = status(plan: .pro)   // cap of 2
+
+        await connect(app, email: gmail, host: "imap.gmail.com", password: "gmail-pw")
+        await connect(app, email: att, host: "imap.mail.att.net", password: "att-pw")
+        XCTAssertEqual(app.connectedAccountCount, 2)      // att focused + gmail background
+
+        app.disconnectMail(purgeLocalData: false)         // disconnect focused (att)
+        XCTAssertFalse(app.isAccountConnected)
+        XCTAssertEqual(app.connectedAccountCount, 1)       // only gmail background remains
+
+        // Downgrade to Starter: gmail's single background slot fills the cap.
+        app.managedAccountStatus = status(plan: .starter)
+
+        // The gate must count gmail and block the att reconnect — the disconnected
+        // focused email no longer earns a free reconnect fast-path.
+        XCTAssertFalse(app.passesConnectAccountGate(
+            newEmail: att, connectedFocusedEmail: att, messageSurface: .shared
+        ))
+        XCTAssertEqual(app.connectionError, app.accountLimitUpgradeMessage)
+
+        // End to end: attempting the reconnect leaves att disconnected and gmail the
+        // only connected account, with the upgrade prompt surfaced.
+        await connect(app, email: att, host: "imap.mail.att.net", password: "att-pw")
+
+        XCTAssertFalse(app.isAccountConnected)
+        XCTAssertEqual(app.connectedAccountCount, 1)
+        XCTAssertEqual(app.backgroundConnectedAccounts.map(\.id), [gmail])
+        XCTAssertEqual(app.connectionError, app.accountLimitUpgradeMessage)
+    }
+
     func testEraseAllLocalDataClearsEveryConnectedAccount() async {
         let secrets = InMemorySecretStore(seed: [
             .mailAppPassword(email: gmail): "gmail-pw",
