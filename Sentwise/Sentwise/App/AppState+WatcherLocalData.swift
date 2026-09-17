@@ -21,12 +21,17 @@ extension AppState {
 
     func isCurrentWatcherPoll(
         localDataGeneration: UInt64,
-        credentials: MailAccountCredentials
+        credentials: MailAccountCredentials,
+        account: ConnectedMailAccount?
     ) -> Bool {
-        // Multi-account (item 99): validate against the account whose poll is in
-        // flight — focused or background — not just the focused account.
-        isCurrentLocalDataGeneration(localDataGeneration)
-            && isAccountWatching(credentials)
+        guard isCurrentLocalDataGeneration(localDataGeneration) else { return false }
+        if let account {
+            return account.watchStatus == .watching
+                && account.credentials == credentials
+                && backgroundConnectedAccounts.contains { $0 === account }
+        }
+        return watchStatus == .watching
+            && mailCredentials == credentials
             && isConnectedAccount(credentials)
     }
 

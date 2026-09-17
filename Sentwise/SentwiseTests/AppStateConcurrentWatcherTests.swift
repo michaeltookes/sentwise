@@ -114,6 +114,17 @@ final class AppStateConcurrentWatcherTests: XCTestCase {
         XCTAssertEqual(account.watchStatus, .idle)
     }
 
+    func testGlobalTogglePausesBackgroundWatchers() {
+        let (app, account) = makeAppState(fetch: .success([]))
+        app.watchStatus = .watching
+        account.watchStatus = .watching
+
+        app.toggleWatching()
+
+        XCTAssertEqual(app.watchStatus, .paused)
+        XCTAssertEqual(account.watchStatus, .paused)
+    }
+
     func testProviderRecoveryResumesBackgroundWatcherPausedByManagedAuth() {
         let (app, account) = makeAppState(fetch: .success([]))
         configureManagedProviderReady(app)
@@ -151,6 +162,21 @@ final class AppStateConcurrentWatcherTests: XCTestCase {
         XCTAssertNotNil(account.watchError)
         // The focused account keeps watching.
         XCTAssertEqual(app.watchStatus, .watching)
+    }
+
+    func testRemovedBackgroundPollCannotFinishAfterAccountBecomesFocused() async {
+        let (app, account) = makeAppState(fetch: .success([message(id: 9)]))
+        account.watchStatus = .watching
+        app.mailEmail = background
+        app.mailHost = account.host
+        app.mailPort = account.port
+        app.mailAppPassword = account.appPassword
+        app.watchStatus = .watching
+        app.backgroundConnectedAccounts.removeAll()
+
+        await app.pollInbox(account: account)
+
+        XCTAssertTrue(app.pendingDrafts.isEmpty)
     }
 
     private func configureManagedProviderReady(_ app: AppState) {

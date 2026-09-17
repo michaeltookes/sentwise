@@ -83,6 +83,15 @@ extension AppState {
         account.watcher?.stop()
     }
 
+    func pauseAllBackgroundWatchers(resumeAfterManagedReauthentication: Bool = false) {
+        for account in backgroundConnectedAccounts {
+            pauseWatching(
+                account: account,
+                resumeAfterManagedReauthentication: resumeAfterManagedReauthentication
+            )
+        }
+    }
+
     func stopWatching(account: ConnectedMailAccount?) {
         guard let account else { stopWatching(); return }
         guard account.watchStatus != .idle else { return }

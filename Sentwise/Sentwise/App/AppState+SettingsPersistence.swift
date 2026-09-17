@@ -166,14 +166,18 @@ extension AppState {
     /// Restores skipped-message state at launch, including the lookup maps used
     /// to suppress duplicate skip work within the current session.
     func restoreSkippedMessagesFromPersistence() {
-        skippedMessages = Self.restoredSkippedMessages(
+        let trackedMessages = Self.restoredTrackedSkippedMessages(
             persistence: persistence,
             processedMessages: processedMessages,
+            limit: skippedMessageLogLimit
+        )
+        skippedMessages = Self.visibleSkippedMessages(
+            from: trackedMessages,
             accountEmail: mailEmail,
             limit: skippedMessageLogLimit
         )
-        skippedMessageIDs = Set(skippedMessages.map(\.id))
-        skippedMessageReasonsByID = skippedMessages.reduce(into: [:]) { reasons, entry in
+        skippedMessageIDs = Set(trackedMessages.map(\.id))
+        skippedMessageReasonsByID = trackedMessages.reduce(into: [:]) { reasons, entry in
             reasons[entry.id] = entry.reason
         }
     }
@@ -212,6 +216,19 @@ extension AppState {
         accountEmail: String?,
         limit: Int
     ) -> [SkippedMessage] {
+        let trackedMessages = restoredTrackedSkippedMessages(
+            persistence: persistence,
+            processedMessages: processedMessages,
+            limit: limit
+        )
+        return Self.visibleSkippedMessages(from: trackedMessages, accountEmail: accountEmail, limit: limit)
+    }
+
+    static func restoredTrackedSkippedMessages(
+        persistence: PersistenceProvider,
+        processedMessages: ProcessedMessages,
+        limit: Int
+    ) -> [SkippedMessage] {
         let loadedMessages = persistence.loadSkippedMessages()
         let activeMessages = loadedMessages.filter { entry in
             entry.preservesRecoveryWhenProcessed
@@ -228,6 +245,6 @@ extension AppState {
                 logger.error("Failed to clean skipped messages on launch: \(error.localizedDescription)")
             }
         }
-        return Self.visibleSkippedMessages(from: boundedMessages, accountEmail: accountEmail, limit: limit)
+        return boundedMessages
     }
 }

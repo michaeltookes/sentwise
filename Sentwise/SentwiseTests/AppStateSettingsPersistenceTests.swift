@@ -122,11 +122,13 @@ final class AppStateSettingsPersistenceTests: XCTestCase {
         )
         let appState = makeAppState(persistence: persistence)
         XCTAssertEqual(appState.skippedMessages, [primary])
+        XCTAssertTrue(appState.hasSkippedMessage(secondary.message, account: secondary.account, mailbox: secondary.mailbox))
 
         appState.mailEmail = "other@gmail.com"
         appState.resetMessagePreviewForAccountChange()
 
         XCTAssertEqual(appState.skippedMessages, [secondary])
+        XCTAssertTrue(appState.hasSkippedMessage(primary.message, account: primary.account, mailbox: primary.mailbox))
         XCTAssertEqual(persistence.skippedMessages, [primary, secondary])
 
         appState.mailEmail = ""

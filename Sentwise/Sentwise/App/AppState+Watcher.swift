@@ -77,9 +77,10 @@ extension AppState {
     func toggleWatching() {
         switch watchStatus {
         case .watching:
+            pauseAllBackgroundWatchers()
             pauseWatching()
         case .idle, .paused:
-            startWatching()
+            startWatchingIfReady()
         }
     }
 
@@ -124,16 +125,13 @@ extension AppState {
         let mailbox = Mailbox.inbox
         let messages: [MailMessage]
         do {
-            messages = try await fetchWatcherMessages(
-                credentials,
-                mailbox: mailbox
-            )
+            messages = try await fetchWatcherMessages(credentials, mailbox: mailbox)
         } catch {
             handlePollFetchFailure(error, account: account, localDataGeneration: localDataGeneration)
             return
         }
         DiagnosticLog.verbose("Inbox poll fetched \(messages.count) recent messages")
-        guard isCurrentWatcherPoll(localDataGeneration: localDataGeneration, credentials: credentials) else {
+        guard isCurrentWatcherPoll(localDataGeneration: localDataGeneration, credentials: credentials, account: account) else {
             DiagnosticLog.verbose("Inbox poll discarded; account or watcher changed after fetch")
             return
         }
@@ -152,9 +150,12 @@ extension AppState {
 
         // Oldest first so enqueued drafts read in chronological order.
         for message in messagesToProcess.reversed() {
-            guard isCurrentWatcherPoll(localDataGeneration: localDataGeneration, credentials: credentials) else { break }
+            guard isCurrentWatcherPoll(localDataGeneration: localDataGeneration, credentials: credentials, account: account) else {
+                break
+            }
             await draftMessageIfNeeded(
                 message,
+                account: account,
                 credentials: credentials,
                 mailbox: mailbox,
                 localDataGeneration: localDataGeneration
@@ -272,6 +273,7 @@ extension AppState {
 
     private func draftMessageIfNeeded(
         _ message: MailMessage,
+        account: ConnectedMailAccount?,
         credentials: MailAccountCredentials,
         mailbox: Mailbox,
         localDataGeneration: UInt64
@@ -283,15 +285,18 @@ extension AppState {
         }
         guard await canDraftAfterSenderRulesAndWorthiness(
             message,
+            account: account,
             credentials: credentials,
             mailbox: mailbox,
             localDataGeneration: localDataGeneration
         ) else {
             return
         }
-        guard isCurrentLocalDataGeneration(localDataGeneration),
-              isAccountWatching(credentials),
-              isConnectedAccount(credentials) else { return }
+        guard isCurrentWatcherPoll(
+            localDataGeneration: localDataGeneration,
+            credentials: credentials,
+            account: account
+        ) else { return }
         let draftProvider = currentDraftLLMConfiguration?.provider
 
         do {
@@ -300,18 +305,30 @@ extension AppState {
             // it — the existing skip/pending-draft guards prevent re-notification.
             let result = try await gatedWatcherDraftResult(
                 message,
+                account: account,
                 credentials: credentials,
                 mailbox: mailbox,
                 localDataGeneration: localDataGeneration,
                 bypassModelSkip: senderRuleDecision(for: message) == .forceDraft
             )
-            guard isCurrentLocalDataGeneration(localDataGeneration),
-                  isAccountWatching(credentials),
-                  isConnectedAccount(credentials) else { return }
+            guard isCurrentWatcherPoll(
+                localDataGeneration: localDataGeneration,
+                credentials: credentials,
+                account: account
+            ) else { return }
             handleWatcherDraftResult(result, for: message, credentials: credentials, mailbox: mailbox)
         } catch {
-            guard isCurrentLocalDataGeneration(localDataGeneration) else { return }
-            handleWatcherDraftError(error, credentials: credentials, draftProvider: draftProvider)
+            guard isCurrentWatcherPoll(
+                localDataGeneration: localDataGeneration,
+                credentials: credentials,
+                account: account
+            ) else { return }
+            handleWatcherDraftError(
+                error,
+                credentials: credentials,
+                draftProvider: draftProvider,
+                account: account
+            )
         }
     }
 
