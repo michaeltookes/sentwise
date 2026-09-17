@@ -45,7 +45,13 @@ extension AppState {
         let isReconnect = (!newKey.isEmpty && newKey == focusedKey)
             || backgroundConnectedAccount(email: newKey) != nil
         if isReconnect { return true }
-        let currentCount = (focusedKey.isEmpty ? 0 : 1) + backgroundConnectedAccounts.count
+        // The focused slot only counts when the focused account is actually
+        // connected: `disconnectMail` clears `isAccountConnected` but leaves the
+        // persisted `mailEmail`, so a disconnected mailbox must not keep occupying a
+        // tier slot (item 99). `isAccountConnected` is not a form field, so it is
+        // safe to combine with the persisted email used for identity.
+        let focusedSlot = (focusedKey.isEmpty || !isAccountConnected) ? 0 : 1
+        let currentCount = focusedSlot + backgroundConnectedAccounts.count
         guard currentCount < connectedAccountLimit else {
             setConnectionError(accountLimitUpgradeMessage, for: messageSurface)
             return false

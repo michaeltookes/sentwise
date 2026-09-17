@@ -133,6 +133,54 @@ final class AppStateMultiAccountConnectionTests: XCTestCase {
         XCTAssertFalse(app.isConnectedAccount(email: att))
     }
 
+    func testDisconnectedFocusedAccountFreesTierSlotForNewConnect() async {
+        let app = makeAppState()
+        app.managedAccountStatus = status(plan: .starter)   // cap of 1
+
+        await connect(app, email: gmail, host: "imap.gmail.com", password: "gmail-pw")
+        XCTAssertTrue(app.isAccountConnected)
+
+        // Disconnecting (keeping local data) leaves the persisted mailEmail but
+        // flips isAccountConnected off, so the slot must free up.
+        app.disconnectMail(purgeLocalData: false)
+        XCTAssertFalse(app.isAccountConnected)
+
+        // The real connect-time gate no longer counts the disconnected focused slot.
+        XCTAssertTrue(app.passesConnectAccountGate(
+            newEmail: att, connectedFocusedEmail: gmail, messageSurface: .shared
+        ))
+
+        await connect(app, email: att, host: "imap.mail.att.net", password: "att-pw")
+
+        XCTAssertTrue(app.isAccountConnected)
+        XCTAssertEqual(app.mailEmail, att)
+        XCTAssertNil(app.connectionError)
+        XCTAssertEqual(app.connectedAccountCount, 1)
+    }
+
+    func testDisconnectingFocusedWithBackgroundFreesSlotAtCap() async {
+        let app = makeAppState()
+        app.managedAccountStatus = status(plan: .pro)   // cap of 2
+
+        await connect(app, email: gmail, host: "imap.gmail.com", password: "gmail-pw")
+        await connect(app, email: att, host: "imap.mail.att.net", password: "att-pw")
+        XCTAssertEqual(app.connectedAccountCount, 2)     // att focused + gmail background
+
+        app.disconnectMail(purgeLocalData: false)        // disconnect the focused (att)
+        XCTAssertFalse(app.isAccountConnected)
+        XCTAssertEqual(app.connectedAccountCount, 1)     // only the background account remains
+
+        // With one slot free, a new mailbox may connect.
+        XCTAssertTrue(app.passesConnectAccountGate(
+            newEmail: "third@work.com", connectedFocusedEmail: att, messageSurface: .shared
+        ))
+        await connect(app, email: "third@work.com", host: "imap.work.com", password: "third-pw")
+
+        XCTAssertTrue(app.isAccountConnected)
+        XCTAssertNil(app.connectionError)
+        XCTAssertEqual(app.connectedAccountCount, 2)
+    }
+
     func testEraseAllLocalDataClearsEveryConnectedAccount() async {
         let secrets = InMemorySecretStore(seed: [
             .mailAppPassword(email: gmail): "gmail-pw",
