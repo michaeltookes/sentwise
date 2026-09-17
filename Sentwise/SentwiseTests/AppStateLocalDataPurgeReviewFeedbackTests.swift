@@ -3,7 +3,7 @@ import XCTest
 @testable import Sentwise
 
 @MainActor
-final class AppStateLocalDataPurgeReviewFeedbackTests: XCTestCase {
+final class LocalDataPurgeFeedbackTests: XCTestCase {
 
     private func message(id: UInt32) -> MailMessage {
         MailMessage(
@@ -16,7 +16,7 @@ final class AppStateLocalDataPurgeReviewFeedbackTests: XCTestCase {
         )
     }
 
-    private func skipped(_ id: UInt32, account: String, reason: SkippedMessageReason) -> SkippedMessage {
+    private func skipped(_ id: UInt32, account: String, reason: ReplyWorthinessReason) -> SkippedMessage {
         SkippedMessage(message: message(id: id), mailbox: .inbox, account: account, reason: reason)
     }
 

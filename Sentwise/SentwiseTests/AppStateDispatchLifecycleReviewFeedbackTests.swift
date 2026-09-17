@@ -103,7 +103,7 @@ final class AppStateDispatchLifecycleTests: XCTestCase {
         XCTAssertTrue(appState.approvalError?.contains("email account changed") ?? false)
     }
 
-    func testAccountSwitchAbortsWhenQueuedIntentCleanupFails() async {
+    func testAccountSwitchPreservesQueuedIntentForRetainedAccount() async {
         let intent = OfflineQueuedDraftDispatch(sendBehavior: .autoSend)
         var queuedDraft = pendingDraft()
         queuedDraft.offlineQueuedDispatch = intent
@@ -117,14 +117,15 @@ final class AppStateDispatchLifecycleTests: XCTestCase {
             port: 993
         ))
 
-        XCTAssertEqual(appState.mailEmail, "me@gmail.com")
+        XCTAssertEqual(appState.mailEmail, "other@gmail.com")
         XCTAssertTrue(appState.isAccountConnected)
+        XCTAssertNotNil(appState.backgroundConnectedAccount(email: "me@gmail.com"))
         XCTAssertEqual(appState.pendingDrafts.first?.offlineQueuedDispatch, intent)
         XCTAssertEqual(appState.offlineQueuedDispatch[queuedDraft.identity], intent)
         XCTAssertTrue(appState.isWaitingForNetwork(queuedDraft.identity))
         XCTAssertEqual(persistence.loadPendingDrafts().first?.offlineQueuedDispatch, intent)
-        XCTAssertEqual(persistence.loadSettings().mailEmail, "me@gmail.com")
-        XCTAssertTrue(appState.connectionError?.contains("Couldn't clear queued drafts before changing accounts") ?? false)
+        XCTAssertEqual(persistence.loadSettings().mailEmail, "other@gmail.com")
+        XCTAssertNil(appState.connectionError)
     }
 
     func testAccountSwitchSecretFailurePreservesQueuedIntent() async {
