@@ -179,14 +179,15 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - **Voice profile stays model-independent:** the learned style guide is injected identically across managed models, so a model swap changes fluency, not identity.
     - The approval step remains the backstop: the bar is "consistently good enough that approval is a tap," not perfection.
 
-52. **Calendar awareness: auto-fill follow-up recipients and context**
+52. **Calendar awareness: auto-fill follow-up recipients and context** — *tier-gated: Pro and above (owner direction 2026-09-17, `docs/tier-matrix.md`)*
     Match an ingested transcript (item 51) to the call's calendar event so the follow-up is pre-addressed and context-enriched.
     *As Marcus, I want the follow-up pre-addressed to everyone on the meeting invite, so that I never copy email addresses by hand.*
     - Read-only access to the macOS Calendar via **EventKit** (local, no OAuth — any account the user's Calendar app syncs, including Google/M365, comes for free).
     - A transcript is matched to an event by time proximity (file timestamp / ingestion time vs. the event window); ambiguous matches are resolved by asking the user, never guessed silently.
     - Attendee emails pre-fill To/Cc (external attendees To, same-domain colleagues Cc — configurable), fully editable before approval.
     - Event title, attendee names/companies, and description enrich the drafting prompt.
-    - Degrades gracefully: no matching event → the item 51 flow proceeds with empty recipients.
+    - **Unified agenda view (owner direction 2026-09-17):** a lightweight read-only "today/upcoming calls" surface showing events **merged across every account the user's macOS Calendar syncs** (Google + Outlook + iCloud in one list — EventKit's unified store provides the merge for free; no cloud calendar APIs, no aggregator services like Nylas/Cronofy, no write-back/sync). This is the user-facing "one calendar" — scoped to awareness, never consolidation/sync between providers.
+    - Degrades gracefully: no calendar permission or no matching event → the item 51 flow proceeds with empty recipients.
 
 62. **Cross-call deal memory (local) — continuity across follow-ups**
     Inspired by the momentum.io teardown (their "Deep Research" analyzes deal data across conversations — cloud-side, org-facing); ours is the local-first, rep-facing translation. Past transcripts and sent follow-ups already live on the user's machine — use them, so the third call with a prospect drafts like a third call, not a first.
