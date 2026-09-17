@@ -56,18 +56,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Launch checklist recorded in `docs/` and ticked; this item closes when the public link goes out.
 
 
-99. **Multi-account support — connect and manage multiple mailboxes (gated by tier)**
-    Today the app is single-active-account: connecting a second mailbox disconnects the first (observed live 2026-09-07 when att.net replaced Gmail). Power users — an AE with a work inbox plus a side-business inbox — need both watched at once. The number of concurrent accounts per tier is committed in **`docs/tier-matrix.md`** (item 98, resolved 2026-09-16): Starter 1, Pro 2, Unlimited up to 5, Trial 2 (Pro-equivalent).
-    *As Marcus, I want my work and consulting mailboxes both connected and drafting at the same time, so that every conversation gets a reply in my voice without me switching accounts.*
-    - Multiple saved accounts can be **connected concurrently**: one IMAP watcher per account, independent connect/disconnect/health per account in Settings.
-    - Every account-scoped artifact is keyed per account — voice profile, processed-messages dedup baseline, pending drafts, skipped messages, approved-draft tombstones, activity events, draft feedback (the item-96 purge enumeration is the authoritative artifact list; the purge seam must stay account-scoped so purging one account never touches another).
-    - Voice is learned **per account** from that account's Sent mail; drafts for account A never use account B's voice; replies are sent/saved from the account the original message arrived in.
-    - Review Drafts and Activity show account attribution (which mailbox a draft belongs to); notifications remain per-draft and open the right context.
-    - Tier gate per `docs/tier-matrix.md` (1/2/5; trial 2): connecting an account beyond the tier's limit is blocked in the UI with an upgrade prompt keyed off `subscription.plan` from `/v1/me` (verified: already carried); the gate is client-side (accepted A-L5-style posture) with optional server-side hardening noted (distinct-account cap on managed drafting) as a follow-up decision.
-    - Erase-all-local-data (item 96) and per-account purge both behave correctly with N accounts; live IMAP verification of two concurrent real accounts runs on Lucius via the item-97 pipeline.
-    - Out of scope: multiple accounts inside one provider sign-in (aliases), Outlook/M365 (item 33), team/shared inboxes.
-
-
 ## Medium Priority
 
 83. **Approval-signal learning loop (accept-as-is / edit / deny → better drafts + smarter filtering)** — *ongoing/strategic; phase 1 is a cheap early slice*

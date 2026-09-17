@@ -69,13 +69,8 @@ extension AppState {
         guard !draft.isAuthored || draft.hasAuthoredRecipients else {
             throw DraftDispatchError.noRecipient
         }
-        let credentials = mailCredentials
-        guard credentials.isComplete else {
-            throw DraftDispatchError.missingCredentials
-        }
-        guard draftMatchesCurrentAccount(draft, credentials: credentials) else {
-            throw DraftDispatchError.accountMismatch
-        }
+        // Multi-account (item 99): dispatch from the account the message arrived in.
+        let credentials = try dispatchCredentials(forDraft: draft)
         guard draftSourceAllowsReplyDispatch(draft) else {
             throw DraftError.unsupportedSourceMailbox
         }
@@ -153,13 +148,12 @@ extension AppState {
             approvalError = Self.draftMessage(for: DraftError.unsupportedSourceMailbox)
             return
         }
-        let credentials = mailCredentials
-        guard credentials.isComplete else {
-            approvalError = "Connect an email account first."
-            return
-        }
-        guard draftMatchesCurrentAccount(draft, credentials: credentials) else {
-            approvalError = "This draft was generated for a different email account."
+        let credentials: MailAccountCredentials
+        do {
+            // Multi-account (item 99): regenerate against the draft's own account.
+            credentials = try dispatchCredentials(forDraft: draft)
+        } catch {
+            approvalError = Self.draftMessage(for: error)
             return
         }
 
@@ -198,15 +192,15 @@ extension AppState {
         guard let mailbox = Self.sourceMailbox(for: draft), mailbox.supportsReplyDrafting else {
             throw DraftError.unsupportedSourceMailbox
         }
-        let credentials = mailCredentials
-        guard credentials.isComplete else {
-            throw DraftDispatchError.missingCredentials
-        }
-        guard draftMatchesCurrentAccount(draft, credentials: credentials) else {
-            if generatedDraft?.identity == draft.identity {
+        let credentials: MailAccountCredentials
+        do {
+            // Multi-account (item 99): regenerate against the draft's own account.
+            credentials = try dispatchCredentials(forDraft: draft)
+        } catch {
+            if case DraftDispatchError.accountMismatch = error, generatedDraft?.identity == draft.identity {
                 generatedDraft = nil
             }
-            throw DraftDispatchError.accountMismatch
+            throw error
         }
 
         let source = try await regenerationSource(for: draft, mailbox: mailbox, credentials: credentials)
@@ -476,15 +470,20 @@ extension AppState {
         _ expectedCredentials: MailAccountCredentials,
         for draft: Draft
     ) throws -> MailAccountCredentials {
-        let credentials = mailCredentials
-        guard credentials.isComplete else {
-            throw DraftDispatchError.missingCredentials
+        // Multi-account (item 99): re-resolve the draft's own source account, so a
+        // reply dispatches from the mailbox it arrived in even when another account
+        // is focused. This is the "is the account I started with still current?"
+        // check, so any change since `expectedCredentials` — the source account no
+        // longer connected, or its credentials changed — is reported as
+        // `.accountChanged` rather than the from-the-start `.accountMismatch`.
+        let credentials: MailAccountCredentials
+        do {
+            credentials = try dispatchCredentials(forDraft: draft)
+        } catch {
+            throw DraftDispatchError.accountChanged
         }
         guard credentials == expectedCredentials else {
             throw DraftDispatchError.accountChanged
-        }
-        guard draftMatchesCurrentAccount(draft, credentials: credentials) else {
-            throw DraftDispatchError.accountMismatch
         }
         guard draftSourceAllowsReplyDispatch(draft) else {
             throw DraftError.unsupportedSourceMailbox

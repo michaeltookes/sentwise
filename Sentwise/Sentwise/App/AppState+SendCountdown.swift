@@ -226,4 +226,28 @@ extension AppState {
         sendCountdownNotificationApprovalIDs.removeAll()
         pendingSendCountdowns.removeAll()
     }
+
+    func cancelSendCountdowns(forAccountEmail email: String, includeUnscoped: Bool = true) {
+        cancelSendCountdowns(for: countdownIdentities(forAccountEmail: email, includeUnscoped: includeUnscoped))
+    }
+
+    func cancelSendCountdowns(for identities: Set<String>) {
+        guard !identities.isEmpty else { return }
+        for identity in identities {
+            sendCountdownTasks.removeValue(forKey: identity)?.cancel()
+            pendingSendCountdowns.removeValue(forKey: identity)
+            sendCountdownNotificationApprovalIDs.remove(identity)
+        }
+    }
+
+    private func countdownIdentities(forAccountEmail email: String, includeUnscoped: Bool) -> Set<String> {
+        let account = SavedMailAccount.normalizedEmail(email)
+        return Set(pendingDrafts.compactMap { draft in
+            let draftAccount = SavedMailAccount.normalizedEmail(draft.sourceAccountEmail ?? "")
+            if draftAccount.isEmpty {
+                return includeUnscoped ? draft.identity : nil
+            }
+            return draftAccount == account ? draft.identity : nil
+        })
+    }
 }

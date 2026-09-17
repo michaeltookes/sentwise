@@ -1,0 +1,283 @@
+import SentwiseMail
+import XCTest
+@testable import Sentwise
+
+/// Concurrent per-account watchers (item 99): a background connected account polls
+/// with its own credentials, drafts in its own account attribution, and has its
+/// own watch status independent of the focused account.
+@MainActor
+final class AppStateConcurrentWatcherTests: XCTestCase {
+
+    private let focused = "me@gmail.com"
+    private let background = "bob@side.com"
+
+    private func message(id: UInt32, from: String = "alice@x.com") -> MailMessage {
+        MailMessage(
+            id: id,
+            from: MailAddress(name: "Alice", email: from),
+            subject: "Subject \(id)",
+            date: "",
+            messageID: "<\(id)@x.com>"
+        )
+    }
+
+    /// A processed store with a seeded baseline for both accounts, so a poll drafts
+    /// the fetched message immediately instead of seeding a fresh baseline.
+    private func baselinedProcessed() -> ProcessedMessages {
+        var processed = ProcessedMessages()
+        processed.insertBaseline(account: focused, mailbox: .inbox)
+        processed.insertBaseline(account: background, mailbox: .inbox)
+        return processed
+    }
+
+    private func makeAppState(
+        fetch: Result<[MailMessage], MailError>
+    ) -> (AppState, ConnectedMailAccount) {
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: focused): "gmail-pw",
+            .mailAppPassword(email: background): "side-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-live"
+        ])
+        let persistence = AppStateMemoryPersistence(
+            settings: Settings(
+                schemaVersion: Settings.currentSchemaVersion,
+                pollIntervalSeconds: 300,
+                mailEmail: focused,
+                llmProvider: "anthropic",
+                llmVerifiedModel: "claude-sonnet-4-6"
+            ),
+            processedMessages: baselinedProcessed()
+        )
+        let provider = FakeAppMailProvider(
+            result: .success(()),
+            fetchResult: fetch,
+            bodyResult: .success(Data("Please advise.".utf8))
+        )
+        let llm = FakeLLMProvider(result: .success(()), completion: .success(LLMResponse(text: "On it.")))
+        let app = AppState(
+            persistence: persistence,
+            secrets: secrets,
+            mailProvider: provider,
+            llm: llm,
+            reachability: FakeReachabilityMonitor()
+        )
+        app.mailAppPassword = "gmail-pw"
+        app.retryRunner = .immediate
+        let account = ConnectedMailAccount(
+            email: background, host: "imap.side.com", port: 993, appPassword: "side-pw"
+        )
+        app.backgroundConnectedAccounts = [account]
+        return (app, account)
+    }
+
+    func testBackgroundAccountPollDraftsUnderItsOwnAttribution() async {
+        let (app, account) = makeAppState(fetch: .success([message(id: 7)]))
+        account.watchStatus = .watching
+
+        await app.pollInbox(account: account)
+
+        XCTAssertEqual(app.pendingDrafts.count, 1)
+        XCTAssertEqual(app.pendingDrafts.first?.sourceAccountEmail, background)
+    }
+
+    func testBackgroundPollSkipsWhenAccountNotWatching() async {
+        let (app, account) = makeAppState(fetch: .success([message(id: 7)]))
+        account.watchStatus = .idle
+
+        await app.pollInbox(account: account)
+
+        XCTAssertTrue(app.pendingDrafts.isEmpty)
+    }
+
+    func testFocusedAndBackgroundAccountsDraftIndependently() async {
+        // Both watchers fetch the same message id from their own mailboxes; each
+        // enqueues a draft attributed to its own account.
+        let (app, account) = makeAppState(fetch: .success([message(id: 7)]))
+        app.watchStatus = .watching
+        account.watchStatus = .watching
+
+        await app.pollInbox(account: nil)          // focused account
+        await app.pollInbox(account: account)      // background account
+
+        let attributions = Set(app.pendingDrafts.compactMap(\.sourceAccountEmail))
+        XCTAssertEqual(app.pendingDrafts.count, 2)
+        XCTAssertEqual(attributions, [focused, background])
+    }
+
+    func testBackgroundWatcherLifecycleTracksPerAccountStatus() {
+        let (app, account) = makeAppState(fetch: .success([]))
+
+        app.startWatching(account: account)
+        XCTAssertEqual(account.watchStatus, .watching)
+        XCTAssertNotNil(account.watcher)
+        // The focused account's watch status is untouched.
+        XCTAssertEqual(app.watchStatus, .idle)
+
+        app.pauseWatching(account: account)
+        XCTAssertEqual(account.watchStatus, .paused)
+
+        app.stopWatching(account: account)
+        XCTAssertEqual(account.watchStatus, .idle)
+    }
+
+    func testPollIntervalChangeReschedulesFocusedAndBackgroundWatchers() async {
+        let (app, account) = makeAppState(fetch: .success([]))
+
+        app.startWatching()
+        app.startWatching(account: account)
+        guard let backgroundWatcher = account.watcher else {
+            app.stopWatching()
+            return XCTFail("Expected a background watcher")
+        }
+
+        app.pollIntervalSeconds = 120
+        await waitUntil {
+            app.inboxWatcher.rescheduleCount == 1
+                && backgroundWatcher.rescheduleCount == 1
+        }
+
+        app.stopWatching()
+        app.stopWatching(account: account)
+    }
+
+    func testGlobalTogglePausesBackgroundWatchers() {
+        let (app, account) = makeAppState(fetch: .success([]))
+        app.watchStatus = .watching
+        account.watchStatus = .watching
+
+        app.toggleWatching()
+
+        XCTAssertEqual(app.watchStatus, .paused)
+        XCTAssertEqual(account.watchStatus, .paused)
+    }
+
+    func testProviderRecoveryResumesBackgroundWatcherPausedByManagedAuth() {
+        let (app, account) = makeAppState(fetch: .success([]))
+        configureManagedProviderReady(app)
+        account.watchStatus = .paused
+        account.resumeWatchingAfterManagedReauth = true
+
+        app.resumeInboxWatchingAfterProviderRecoveryIfNeeded()
+        defer { app.stopWatching(account: account) }
+
+        XCTAssertEqual(account.watchStatus, .watching)
+        XCTAssertFalse(account.resumeWatchingAfterManagedReauth)
+        XCTAssertNotNil(account.watcher)
+    }
+
+    func testProviderRecoveryStartsIdleBackgroundWatcherWhenReady() {
+        let (app, account) = makeAppState(fetch: .success([]))
+        configureManagedProviderReady(app)
+        account.watchStatus = .idle
+
+        app.resumeInboxWatchingAfterProviderRecoveryIfNeeded()
+        defer { app.stopWatching(account: account) }
+
+        XCTAssertEqual(account.watchStatus, .watching)
+        XCTAssertNotNil(account.watcher)
+    }
+
+    func testReachabilityConfirmationPollsActiveBackgroundWatcher() async {
+        let reachability = FakeReachabilityMonitor(isOnline: true, hasCurrentPath: false)
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: focused): "gmail-pw",
+            .mailAppPassword(email: background): "side-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-live"
+        ])
+        let persistence = AppStateMemoryPersistence(
+            settings: Settings(
+                schemaVersion: Settings.currentSchemaVersion,
+                pollIntervalSeconds: 300,
+                mailEmail: focused,
+                llmProvider: "anthropic",
+                llmVerifiedModel: "claude-sonnet-4-6"
+            ),
+            processedMessages: baselinedProcessed()
+        )
+        let provider = FakeAppMailProvider(
+            result: .success(()),
+            fetchResult: .success([message(id: 7)]),
+            bodyResult: .success(Data("Please advise.".utf8))
+        )
+        let app = AppState(
+            persistence: persistence,
+            secrets: secrets,
+            mailProvider: provider,
+            llm: FakeLLMProvider(result: .success(()), completion: .success(LLMResponse(text: "On it."))),
+            reachability: reachability
+        )
+        app.mailAppPassword = "gmail-pw"
+        app.retryRunner = .immediate
+        let account = ConnectedMailAccount(
+            email: background,
+            host: "imap.side.com",
+            port: 993,
+            appPassword: "side-pw"
+        )
+        app.backgroundConnectedAccounts = [account]
+
+        app.startReachabilityMonitoring()
+        app.startWatching(account: account)
+        await Task.yield()
+        XCTAssertTrue(app.pendingDrafts.isEmpty)
+
+        reachability.setOnline(true)
+        await waitUntil { app.pendingDrafts.map(\.sourceAccountEmail) == [self.background] }
+        app.stopWatching(account: account)
+    }
+
+    func testAuthFailurePausesOnlyThatAccount() async {
+        let (app, account) = makeAppState(fetch: .failure(.authenticationFailed("bad app password")))
+        app.watchStatus = .watching
+        account.watchStatus = .watching
+
+        await app.pollInbox(account: account)
+
+        XCTAssertEqual(account.watchStatus, .paused)
+        XCTAssertNotNil(account.watchError)
+        // The focused account keeps watching.
+        XCTAssertEqual(app.watchStatus, .watching)
+    }
+
+    func testRemovedBackgroundPollCannotFinishAfterAccountBecomesFocused() async {
+        let (app, account) = makeAppState(fetch: .success([message(id: 9)]))
+        account.watchStatus = .watching
+        app.mailEmail = background
+        app.mailHost = account.host
+        app.mailPort = account.port
+        app.mailAppPassword = account.appPassword
+        app.watchStatus = .watching
+        app.backgroundConnectedAccounts.removeAll()
+
+        await app.pollInbox(account: account)
+
+        XCTAssertTrue(app.pendingDrafts.isEmpty)
+    }
+
+    private func configureManagedProviderReady(_ app: AppState) {
+        app.llmProviderKind = .managed
+        app.verifiedLLMModel = LLMProviderKind.managed.defaultModel
+        app.isLLMConnected = true
+        app.isManagedSignedIn = true
+        let status = ManagedAccountStatus(subscription: ManagedSubscription(plan: .pro, status: .active))
+        app.managedAccountStatus = status
+        app.markManagedAccountStatusFresh(from: status)
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 3,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() > deadline {
+                XCTFail("Timed out waiting for condition", file: file, line: line)
+                return
+            }
+            try? await Task.sleep(nanoseconds: 500_000)
+            await Task.yield()
+        }
+    }
+}

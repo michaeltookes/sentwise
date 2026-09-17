@@ -39,10 +39,13 @@ final class AppState: ObservableObject {
     var mailHostExplicitlyEditedEmail: String?
     var mailHostExplicitlyEditedBeforeEmail = false
 
-    /// Accounts the user has connected and can switch between without re-entering
-    /// credentials (item 48). The active account matches `mailEmail`; each
-    /// account's app password lives in its own Keychain item.
+    /// Remembered accounts the user can switch between without re-entry (item 48);
+    /// the active account matches `mailEmail`, each password in its own Keychain item.
     @Published var savedAccounts: [SavedMailAccount] = []
+
+    /// Mailboxes connected concurrently alongside the focused account (item 99).
+    /// Each has its own watcher and health; the focused account is the fields above.
+    @Published var backgroundConnectedAccounts: [ConnectedMailAccount] = []
 
     // MARK: - Recent Messages (preview)
 
@@ -150,6 +153,7 @@ final class AppState: ObservableObject {
     // MARK: - Voice Profile
 
     @Published var voiceProfile: VoiceProfile?
+    var publishedVoiceProfileAccountKey: String?
     @Published var isLearningVoice: Bool = false
     /// A short progress message shown while learning.
     @Published var voiceProgress: String?
@@ -305,34 +309,30 @@ final class AppState: ObservableObject {
     @Published var isOnline: Bool = true
 
     /// Identities of approved drafts deferred because the network was offline at
-    /// dispatch time (item 27). They stay in `pendingDrafts` — that reuse *is* the
-    /// offline queue — and dispatch on reconnect, hydrated from each draft's
-    /// persisted `offlineQueuedDispatch` intent at launch.
+    /// dispatch time (item 27). They stay in `pendingDrafts` (that reuse *is* the
+    /// offline queue) and dispatch on reconnect, hydrated from `offlineQueuedDispatch`.
     @Published var draftsWaitingForNetwork: Set<String> = []
 
-    /// The intended dispatch for each offline-queued draft, so reconnect
-    /// re-dispatches send-vs-save and force overrides exactly as approved.
+    /// The intended dispatch for each offline-queued draft, so reconnect re-dispatches
+    /// send-vs-save and force overrides exactly as approved.
     var offlineQueuedDispatch: [String: OfflineQueuedDraftDispatch] = [:]
 
-    /// The shared exponential-backoff driver for resilient operations. Overridable
-    /// so tests drive backoff deterministically without real waits.
+    /// The shared exponential-backoff driver; overridable for deterministic tests.
     var retryRunner = RetryRunner()
     /// Set after the reachability monitor delivers its first concrete path.
     var hasConfirmedReachability = false
     /// Prevents overlapping reconnect drains from racing each other.
     var isResumingQueuedDrafts = false
-    /// Records a reconnect callback that arrived while the current queue drain
-    /// was already running, so the drain can replay missed queued work once.
+    /// Records a reconnect callback that arrived while a queue drain was running,
+    /// so the drain can replay missed queued work once.
     var needsQueuedDraftDrainAfterCurrent = false
     /// Set when managed auth/license refresh should restart a previously intended watcher.
     var resumeWatchingAfterManagedReauth = false
 
-    /// Observes reachability so the app can pause while offline and resume on
-    /// reconnect. Injected for deterministic offline→online tests.
+    /// Observes reachability to pause offline / resume on reconnect (injected for tests).
     let reachability: NetworkReachabilityMonitoring
-    /// Messages the watcher passed over instead of drafting, newest first.
-    /// This is the visible slice for the active account; recoverable skip records
-    /// are persisted across account transitions.
+    /// Messages the watcher passed over instead of drafting, newest first (visible
+    /// slice for the active account; skip records persist across account transitions).
     @Published var skippedMessages: [SkippedMessage] = []
 
     var skippedMessageIDs: Set<String> = []
@@ -418,7 +418,7 @@ final class AppState: ObservableObject {
     init(
         persistence: PersistenceProvider = PersistenceService.shared,
         secrets: SecretStore = KeychainStore.shared,
-        mailProvider: MailProvider = IMAPMailProvider(),
+        mailProvider: MailProvider? = nil,
         llm: LLMProviding? = nil,
         managedAccount: ManagedAccountService? = nil,
         googleOAuthInterestClient: GoogleOAuthInterestRegistering? = nil,
@@ -427,7 +427,7 @@ final class AppState: ObservableObject {
     ) {
         self.persistence = persistence
         self.secrets = secrets
-        self.mailProvider = mailProvider
+        self.mailProvider = mailProvider ?? LiveMailProvider.imap()
         // Managed account (item 56a) + wire it as the LLM session provider.
         let managedAccount = managedAccount ?? ManagedAccountService(secrets: secrets)
         self.managedAccount = managedAccount
@@ -478,7 +478,8 @@ final class AppState: ObservableObject {
         self.verifiedLLMModel = managedLaunch.verifiedLLMModel
         self.llmAPIKey = managedLaunch.apiKey
         restoreOpenRouterProvisioningLaunchState()
-        self.voiceProfile = persistence.loadVoiceProfile()
+        // Per-account voice (item 99): the focused account's profile is published.
+        restorePublishedVoiceProfile(accountKey: SavedMailAccount.normalizedEmail(settings.mailEmail))
         restoreManagedAccountLaunchIdentity(managedLaunch, settings: settings)
         restoreReviewPersistenceState()
         cleanupLegacyOAuthCredentials()

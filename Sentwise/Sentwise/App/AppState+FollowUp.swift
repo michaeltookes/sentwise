@@ -167,9 +167,10 @@ extension AppState {
     func makeFollowUpOutcome(
         context: FollowUpDraftContext,
         llmConfiguration: DraftLLMConfiguration,
-        userSuppliedFacts: UserSuppliedFacts? = nil
+        userSuppliedFacts: UserSuppliedFacts? = nil,
+        accountEmail: String? = nil
     ) async throws -> DraftOutcome {
-        let profile = voiceProfile
+        let profile = accountEmail.map { voiceProfile(forAccountEmail: $0) } ?? voiceProfile
         let runner = retryRunner
         return try await FollowUpGenerator().makeFollowUp(
             from: context,

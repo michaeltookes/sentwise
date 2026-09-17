@@ -385,9 +385,6 @@ extension AppState {
 
     /// After a successful managed refresh, restart a watcher that auth/licensing paused.
     func resumeInboxWatchingAfterManagedReauthenticationIfNeeded() {
-        guard resumeWatchingAfterManagedReauth else { return }
-        guard watchStatus == .paused || watchStatus == .idle else { return }
-        guard canWatch else { return }
         resumeInboxWatchingAfterProviderRecoveryIfNeeded()
     }
 

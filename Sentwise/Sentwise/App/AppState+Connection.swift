@@ -53,10 +53,18 @@ extension AppState {
             setConnectionError("Enter your email address and app password first.", for: messageSurface)
             return false
         }
+        // Load the persisted (actually-connected) account and apply the tier gate
+        // in one step; the form's `mailEmail` may already show the account being
+        // typed, so the count keys off persisted settings, not the form (item 99).
+        guard let previousSettings = connectionGatePassed(
+            newEmail: credentials.email, messageSurface: messageSurface
+        ) else { return false }
 
         isConnecting = true
         defer { isConnecting = false }
-        let wasWatching = watchStatus == .watching
+        // The previously focused account, so a switch keeps it connected in the
+        // background rather than disconnecting it (item 99).
+        let previousFocused = previousFocusedSnapshot(from: previousSettings)
 
         do {
             try await mailProvider.verifyConnection(credentials)
@@ -78,7 +86,6 @@ extension AppState {
             shouldApplyResult: shouldApplyResult
         ) else { return false }
 
-        let previousSettings = persistence.loadSettings()
         let previousEmail = previousSettings.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let accountIdentityChanged = hasAccountIdentityChanged(from: previousEmail, to: credentials.email)
         let requiresTransitionCleanup = !isAccountConnected || accountIdentityChanged
@@ -94,13 +101,10 @@ extension AppState {
         }
         isAccountConnected = true
         if requiresTransitionCleanup {
-            // A different or newly reconnected account invalidates any in-flight
-            // auto-send countdowns (item 23) and offline-queued dispatches (item 27).
-            cancelAllSendCountdowns()
-            if wasWatching {
-                stopWatching()
-                startWatchingIfReady()
-            }
+            applyConnectionTransitionCleanup(
+                previousFocused: previousFocused,
+                newFocusedEmail: credentials.email
+            )
         }
         resetMessagePreviewForAccountChange(clearSkippedMessages: requiresTransitionCleanup)
         // Now that mail is connected, catch up any transcript that arrived while
@@ -193,7 +197,13 @@ extension AppState {
             restoreWatchingAfterPreservedDisconnectIfNeeded(purgeLocalData && wasWatching)
             return
         }
-        guard clearQueuedDispatchesBeforeAccountTransition("disconnecting", messageSurface: messageSurface) else {
+        let disconnectedAccount = SavedMailAccount.normalizedEmail(disconnectedAccountEmail)
+        guard clearQueuedDispatchesBeforeAccountTransition(
+            "disconnecting",
+            disconnectedAccounts: [disconnectedAccount],
+            includeUnscoped: true,
+            messageSurface: messageSurface
+        ) else {
             appendConnectionRollbackMessage(
                 restoreActiveMailPasswordRemovalMessage(removedPassword),
                 messageSurface: messageSurface
@@ -204,7 +214,6 @@ extension AppState {
         mailAppPassword = ""
         markMailHostVerifiedForGuidance()
         isAccountConnected = false
-        cancelAllSendCountdowns()
         stopWatching()
         resetMessagePreviewForAccountChange(clearSkippedMessages: false)
         skippedMessages = []
@@ -218,10 +227,19 @@ extension AppState {
 
     private func clearQueuedDispatchesBeforeAccountTransition(
         _ action: String,
+        disconnectedAccounts: Set<String>? = nil,
+        includeUnscoped: Bool = true,
         messageSurface: TransientMessageSurface = .shared
     ) -> Bool {
         do {
-            try clearAllOfflineQueueEntriesDurably()
+            if let disconnectedAccounts {
+                try clearOfflineQueueEntriesDurably(
+                    disconnectedAccounts: disconnectedAccounts,
+                    includeUnscoped: includeUnscoped
+                )
+            } else {
+                try clearAllOfflineQueueEntriesDurably()
+            }
             return true
         } catch {
             setConnectionError(
@@ -275,6 +293,7 @@ extension AppState {
 
         let cleanupAction = accountIdentityChanged ? "changing accounts" : "reconnecting"
         guard !requiresTransitionCleanup
+            || accountIdentityChanged
             || clearQueuedDispatchesBeforeAccountTransition(cleanupAction, messageSurface: messageSurface) else {
             appendConnectionRollbackMessage(
                 rollbackVerifiedConnectionTransition(

@@ -16,7 +16,8 @@ live in the macOS Keychain via `KeychainStore`, never in the JSON files.
 | File | Contents | Scope |
 |------|----------|-------|
 | `Settings.json` | App preferences, account identity, saved-account list, provider/managed config, signature, sender rules | **App-global config** (holds account identity, but not mail content) |
-| `VoiceProfile.json` | Voice learned from the user's Sent mail | **Active-account / legacy unscoped** (mail-derived) |
+| `VoiceProfile-<sha256>.json` | Voice learned from one account's Sent mail (one file per account, email hashed into the filename) | **Account-scoped** (mail-derived; item 99) |
+| `VoiceProfile.json` | Legacy single unscoped voice profile (pre-item-99) | **Legacy unscoped** (migrated to the connected account at launch) |
 | `ProcessedMessages.json` | Watcher dedup + per-mailbox baseline | **Account-scoped** |
 | `PendingDrafts.json` | Full incoming message bodies + generated drafts awaiting review | **Account-scoped** |
 | `SkippedMessages.json` | Sender + subject of messages the watcher passed over | **Account-scoped** |
@@ -24,14 +25,25 @@ live in the macOS Keychain via `KeychainStore`, never in the JSON files.
 | `ActivityEvents.json` | Sender + subject per activity event | **Account-scoped** |
 | `DraftFeedback.json` | Approval-signal codes/numbers/hashes (+ local deny "Other" free text) | **Account-scoped** (mail-derived) |
 
-Most stores are keyed by account and are filtered on purge so removing one saved
-account does not wipe another account's drafts, history, or watcher baseline.
-`VoiceProfile.json` is the one legacy single-profile artifact: it is cleared when
-the active account is disconnected/removed/purged, but an inactive saved-account
-removal leaves the current profile intact. Older untagged draft/activity/feedback
-records are treated the same way — cleared only during an active-account purge.
-The two stores beyond the original A-L2 audit list, `ApprovedDrafts.json` and
-`DraftFeedback.json`, are still purged with the matching account.
+Every store is keyed by account and is filtered on purge so removing one saved
+account does not wipe another account's drafts, history, voice, or watcher
+baseline. Voice profiles are per-account (item 99): each account's profile lives
+in its own `VoiceProfile-<sha256(email)>.json`, and drafting resolves the voice
+of the account a message arrived in — a draft for account A never uses account
+B's voice. A per-account purge removes that account's own voice file (and, for
+the active account, the legacy unscoped `VoiceProfile.json`), leaving other
+accounts' voice intact. Older untagged draft/activity/feedback records are
+cleared only during an active-account purge. The two stores beyond the original
+A-L2 audit list, `ApprovedDrafts.json` and `DraftFeedback.json`, are still purged
+with the matching account.
+
+**Multi-account migration (item 99).** No released builds existed, so a clean
+schema-bump migration (`Settings.voicePerAccountSchemaVersion`, schema 21)
+attributes the legacy single `VoiceProfile.json` to the currently-connected
+account at launch, then removes the legacy file. Multiple saved accounts are
+connected concurrently — one IMAP watcher each — so "Erase all local data" and
+per-account purge both operate across every connected account, and erase-all
+tears down every account's watcher.
 
 ## Account-scoped purge
 

@@ -271,7 +271,7 @@ final class AppStateManagedTrialRetryTests: XCTestCase {
         let error = LLMError.managedTrialExpired("Payment required.")
 
         let stateChanged = await appState.reconcileManagedAccountState(after: error, provider: .managed)
-        appState.handleWatcherDraftError(error, draftProvider: .managed)
+        appState.handleWatcherDraftError(error, credentials: appState.mailCredentials, draftProvider: .managed)
 
         XCTAssertTrue(stateChanged)
         XCTAssertNil(appState.managedAccountStatus)

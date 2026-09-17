@@ -16,13 +16,13 @@ extension AppState {
             approvalError = Self.draftMessage(for: DraftError.llmUnavailable)
             return
         }
-        let credentials = mailCredentials
-        guard credentials.isComplete else {
-            approvalError = "Connect an email account first."
-            return
-        }
-        guard draftMatchesCurrentAccount(draft, credentials: credentials) else {
-            approvalError = "This draft was generated for a different email account."
+        let credentials: MailAccountCredentials
+        do {
+            // Multi-account (item 99): authored follow-ups regenerate from the
+            // draft's source account, just like approval and reply regeneration.
+            credentials = try dispatchCredentials(forDraft: draft)
+        } catch {
+            approvalError = Self.draftMessage(for: error)
             return
         }
 
@@ -34,10 +34,10 @@ extension AppState {
             let outcome = try await makeFollowUpOutcome(
                 context: context,
                 llmConfiguration: llmConfiguration,
-                userSuppliedFacts: draft.userSuppliedFacts
+                userSuppliedFacts: draft.userSuppliedFacts,
+                accountEmail: credentials.email
             )
-            guard mailCredentials == credentials,
-                  currentDraftLLMConfiguration == llmConfiguration else {
+            guard currentDraftLLMConfiguration == llmConfiguration else {
                 approvalError = "The draft could not be regenerated because account settings changed."
                 return
             }

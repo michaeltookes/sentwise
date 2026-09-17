@@ -55,6 +55,12 @@ extension AppState {
         }
 
         applyRemovedSavedAccountState(context, messageSurface: messageSurface)
+        // Multi-account (item 99): if the removed account was connected in the
+        // background, stop its watcher and drop its runtime too.
+        if let background = backgroundConnectedAccount(email: account.id) {
+            stopWatching(account: background)
+            backgroundConnectedAccounts.removeAll { $0.id == account.id }
+        }
         logger.info("Saved account removed")
     }
 
@@ -244,6 +250,7 @@ extension AppState {
 
     /// Tears down the active account after it has been removed from the list.
     private func goOfflineAfterRemovingActiveAccount() {
+        let removedEmail = mailEmail
         mailEmail = ""
         mailHost = Settings.default.mailHost
         mailPort = Settings.default.mailPort
@@ -252,8 +259,8 @@ extension AppState {
         mailAppPassword = ""
         isAccountConnected = false
         clearSignatureForAccountRemoval()
-        cancelAllSendCountdowns()
-        stopWatching()
+        cancelSendCountdowns(forAccountEmail: removedEmail)
+        stopWatching(cancelCountdowns: false)
         resetMessagePreviewForAccountChange()
     }
 }

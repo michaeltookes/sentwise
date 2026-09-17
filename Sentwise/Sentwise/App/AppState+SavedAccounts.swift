@@ -259,8 +259,7 @@ extension AppState {
         let outgoingSettings = buildSettings()
         // Clean teardown of the outgoing account before adopting the new one.
         let wasWatching = watchStatus == .watching
-        stopWatching()
-        cancelAllSendCountdowns()
+        stopWatching(cancelCountdowns: false)
 
         let credentials = MailAccountCredentials(
             email: account.email,
@@ -297,6 +296,7 @@ extension AppState {
         mailHost = credentials.host
         mailPort = credentials.port
         mailAppPassword = credentials.appPassword
+        reloadPublishedVoiceProfileForFocusedAccount()
         markMailHostVerifiedForGuidance()
         // Remember this account so it can be switched back to without re-entry.
         upsertSavedAccount(email: credentials.email, host: credentials.host, port: credentials.port)
@@ -336,6 +336,7 @@ extension AppState {
         savedAccounts = settings.savedAccounts
         mailHostExplicitlyEditedEmail = settings.mailHostGuidanceEmail
         mailHostExplicitlyEditedBeforeEmail = settings.mailHostGuidancePendingEmail
+        reloadPublishedVoiceProfileForFocusedAccount()
         let previousEmail = settings.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let previousPassword = storedMailPassword(forEmail: previousEmail) ?? ""
         mailAppPassword = previousPassword

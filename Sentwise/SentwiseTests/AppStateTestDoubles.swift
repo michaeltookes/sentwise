@@ -5,7 +5,9 @@ import XCTest
 
 final class AppStateMemoryPersistence: PersistenceProvider {
     private var settings: Settings
-    private(set) var voiceProfile: VoiceProfile?
+    /// Per-account voice profiles (item 99); empty key = legacy, seen via `voiceProfile`.
+    private(set) var voiceProfilesByAccount: [String: VoiceProfile]
+    var voiceProfile: VoiceProfile? { voiceProfilesByAccount[""] }
     private(set) var processedMessages: ProcessedMessages
     private(set) var pendingDrafts: [Draft]
     private(set) var skippedMessages: [SkippedMessage]
@@ -39,7 +41,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         draftFeedback: [DraftFeedbackRecord] = []
     ) {
         self.settings = settings
-        self.voiceProfile = voiceProfile
+        self.voiceProfilesByAccount = voiceProfile.map { ["": $0] } ?? [:]
         self.processedMessages = processedMessages
         self.pendingDrafts = pendingDrafts
         self.skippedMessages = skippedMessages
@@ -63,10 +65,22 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         savedSettingsHistory.append(settings)
     }
 
-    func loadVoiceProfile() -> VoiceProfile? { voiceProfile }
-    func saveVoiceProfile(_ profile: VoiceProfile) { voiceProfile = profile }
-    func removeVoiceProfile() throws {
-        voiceProfile = nil
+    func loadVoiceProfile(accountKey: String) -> VoiceProfile? {
+        voiceProfilesByAccount[SavedMailAccount.normalizedEmail(accountKey)]
+    }
+    func saveVoiceProfile(_ profile: VoiceProfile, accountKey: String) {
+        voiceProfilesByAccount[SavedMailAccount.normalizedEmail(accountKey)] = profile
+    }
+    func removeVoiceProfile(accountKey: String) throws {
+        voiceProfilesByAccount[SavedMailAccount.normalizedEmail(accountKey)] = nil
+        removedArtifacts.append("voice")
+    }
+    /// Models a voice-profile enumeration/removal failure so the purge no-false-
+    /// success contract (item 96) can be exercised without touching disk.
+    var removeAllVoiceProfilesError: Error?
+    func removeAllVoiceProfiles() throws {
+        if let removeAllVoiceProfilesError { throw removeAllVoiceProfilesError }
+        voiceProfilesByAccount = [:]
         removedArtifacts.append("voice")
     }
 
@@ -116,9 +130,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     }
 
     func loadActivityEvents() -> [ActivityEvent] { activityEvents }
-    // Deliberately does not append to `saveEvents`: the activity log is an
-    // additive side effect, so ordering assertions on the core save sequence
-    // (pending/processed/approved) stay stable.
+    // Not appended to `saveEvents` (additive side effect) so core save-order holds.
     func saveActivityEvents(_ events: [ActivityEvent]) {
         activityEvents = events
         activityEventSaveCount += 1
@@ -130,8 +142,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     }
 
     func loadDraftFeedback() -> [DraftFeedbackRecord] { draftFeedback }
-    // Like the activity log, the feedback store is an additive side effect and is
-    // deliberately left out of `saveEvents` so core save-order assertions hold.
+    // Additive side effect, left out of `saveEvents` so core save-order holds.
     func saveDraftFeedback(_ records: [DraftFeedbackRecord]) {
         draftFeedback = records
         draftFeedbackSaveCount += 1
@@ -200,7 +211,7 @@ final class AppStateMemoryPersistence: PersistenceProvider {
     func eraseAllLocalData() throws {
         if let eraseAllError { throw eraseAllError }
         settings = .default
-        voiceProfile = nil
+        voiceProfilesByAccount = [:]
         processedMessages = ProcessedMessages()
         pendingDrafts = []
         skippedMessages = []
@@ -208,17 +219,6 @@ final class AppStateMemoryPersistence: PersistenceProvider {
         activityEvents = []
         draftFeedback = []
         eraseAllCount += 1
-    }
-}
-
-enum AppStatePersistenceError: LocalizedError {
-    case writeDenied
-
-    var errorDescription: String? {
-        switch self {
-        case .writeDenied:
-            return "settings write denied"
-        }
     }
 }
 

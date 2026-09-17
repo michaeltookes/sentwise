@@ -54,6 +54,7 @@ extension AppState {
             if watchStatus == .watching {
                 resumeInboxWatcherAfterReachabilityConfirmed()
             }
+            resumeBackgroundInboxWatchersAfterReachabilityConfirmed()
             Task { await resumeQueuedDraftsAfterReconnect() }
             return
         }
@@ -65,6 +66,7 @@ extension AppState {
             if watchStatus == .watching {
                 resumeInboxWatcherAfterReachabilityConfirmed()
             }
+            resumeBackgroundInboxWatchersAfterReachabilityConfirmed()
         }
     }
 
@@ -193,6 +195,33 @@ extension AppState {
         }
         offlineQueuedDispatch.removeAll()
         draftsWaitingForNetwork.removeAll()
+        return true
+    }
+
+    @discardableResult
+    func clearOfflineQueueEntriesDurably(
+        disconnectedAccounts: Set<String>,
+        includeUnscoped: Bool
+    ) throws -> Bool {
+        let disconnectedAccounts = Set(disconnectedAccounts.map { SavedMailAccount.normalizedEmail($0) })
+        guard !disconnectedAccounts.isEmpty || includeUnscoped else { return false }
+        var nextDrafts = pendingDrafts
+        var identitiesToClear: Set<String> = []
+        for index in nextDrafts.indices where nextDrafts[index].offlineQueuedDispatch != nil {
+            let account = SavedMailAccount.normalizedEmail(nextDrafts[index].sourceAccountEmail ?? "")
+            let shouldClear = account.isEmpty ? includeUnscoped : disconnectedAccounts.contains(account)
+            guard shouldClear else { continue }
+            identitiesToClear.insert(nextDrafts[index].identity)
+            nextDrafts[index].offlineQueuedDispatch = nil
+        }
+        guard !identitiesToClear.isEmpty else { return false }
+        try persistence.savePendingDraftsSync(nextDrafts)
+        pendingDrafts = nextDrafts
+        pendingDraftCount = nextDrafts.count
+        for identity in identitiesToClear {
+            offlineQueuedDispatch.removeValue(forKey: identity)
+            draftsWaitingForNetwork.remove(identity)
+        }
         return true
     }
 

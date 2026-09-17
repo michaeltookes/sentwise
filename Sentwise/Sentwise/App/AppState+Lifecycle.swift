@@ -32,6 +32,9 @@ extension AppState {
         reachability.onChange = { [weak self] online in
             self?.handleReachabilityChange(online)
         }
+        // Multi-account (item 99): reconnect every saved mailbox as a concurrently
+        // connected account; watchers start with the normal watch flow.
+        restoreBackgroundConnectedAccounts()
     }
 
     func refreshManagedQuotaAfterBillingPortalReturnIfNeeded(reconciliationRetryDelays: [UInt64]? = nil) async {

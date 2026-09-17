@@ -77,6 +77,16 @@ public struct IMAPMailProvider: MailProvider {
     }
 }
 
+public enum LiveMailProvider {
+    public static func imap() -> any MailProvider {
+        imapProvider()
+    }
+
+    public static func imapProvider() -> IMAPMailProvider {
+        IMAPMailProvider()
+    }
+}
+
 /// Drives a minimal IMAP `LOGIN`/`LOGOUT` exchange and settles via `complete`.
 ///
 /// The exchange: wait for the server greeting (an untagged response), send a

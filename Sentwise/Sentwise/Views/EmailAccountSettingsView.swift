@@ -93,57 +93,6 @@ struct EmailAccountSettingsView: View {
 
     // MARK: - Saved accounts
 
-    private var savedAccountsSection: some View {
-        Section("Saved accounts") {
-            ForEach(appState.savedAccounts) { account in
-                savedAccountRow(account)
-            }
-            Text("Pick an account to switch to it. Switching keeps every account's saved password, "
-                 + "so you never have to re-enter it.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func savedAccountRow(_ account: SavedMailAccount) -> some View {
-        let isActive = appState.isActiveAccount(account)
-        return HStack(spacing: 8) {
-            Button {
-                Task { await switchTo(account) }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isActive ? Color.green : Color.secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(account.email).font(.callout)
-                        Text("\(account.host):\(account.port)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if isActive {
-                        Text("Active").font(.caption).foregroundStyle(.green)
-                    }
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(isActive || appState.isConnecting)
-            .accessibilityLabel(isActive
-                                ? "\(account.email), active account"
-                                : "Switch to \(account.email)")
-
-            Button(role: .destructive) {
-                accountPendingRemoval = account
-            } label: {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(.borderless)
-            .disabled(appState.isConnecting)
-            .accessibilityLabel("Remove \(account.email)")
-        }
-    }
-
     // MARK: - Connection / add form
 
     @ViewBuilder
@@ -452,5 +401,92 @@ struct EmailAccountSettingsView: View {
                 }
             }
         )
+    }
+}
+
+// MARK: - Mailboxes list + per-account status (item 99)
+
+extension EmailAccountSettingsView {
+    var savedAccountsSection: some View {
+        Section("Mailboxes") {
+            ForEach(appState.savedAccounts) { account in
+                savedAccountRow(account)
+            }
+            Text(savedAccountsFootnote)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    func savedAccountRow(_ account: SavedMailAccount) -> some View {
+        let isActive = appState.isActiveAccount(account)
+        return HStack(spacing: 8) {
+            Button {
+                Task { await switchTo(account) }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isActive ? Color.green : Color.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(account.email).font(.callout)
+                        Text("\(account.host):\(account.port)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(accountStatusLabel(for: account))
+                            .font(.caption2)
+                            .foregroundStyle(accountStatusColor(for: account))
+                            .lineLimit(1)
+                            .accessibilityIdentifier("accountStatus-\(account.id)")
+                    }
+                    Spacer()
+                    if isActive {
+                        Text("Active").font(.caption).foregroundStyle(.green)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isActive || appState.isConnecting)
+            .accessibilityLabel(isActive
+                                ? "\(account.email), active account"
+                                : "Switch to \(account.email)")
+
+            Button(role: .destructive) {
+                accountPendingRemoval = account
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .disabled(appState.isConnecting)
+            .accessibilityLabel("Remove \(account.email)")
+        }
+    }
+
+    var savedAccountsFootnote: String {
+        if appState.savedAccounts.count > 1 {
+            return "Every connected mailbox is watched at the same time, each drafting in "
+                + "its own voice. Selecting one makes it the account the connect form edits."
+        }
+        return "Connect another mailbox below to have Sentwise watch both at once "
+            + "(available on Pro and up)."
+    }
+
+    /// A per-account connection/health line for the mailboxes list.
+    func accountStatusLabel(for account: SavedMailAccount) -> String {
+        if let error = appState.watchError(forAccountEmail: account.email), !error.isEmpty {
+            return error
+        }
+        switch appState.watchStatus(forAccountEmail: account.email) {
+        case .watching: return "Watching"
+        case .paused: return "Paused"
+        case .idle: return appState.isConnectedAccount(email: account.email) ? "Connected" : "Not watching"
+        }
+    }
+
+    func accountStatusColor(for account: SavedMailAccount) -> Color {
+        if let error = appState.watchError(forAccountEmail: account.email), !error.isEmpty {
+            return .red
+        }
+        return appState.watchStatus(forAccountEmail: account.email) == .watching ? .green : .secondary
     }
 }

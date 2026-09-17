@@ -11,8 +11,11 @@ extension AppState {
         isAccountConnected && isLLMConnected && currentLLMProviderAllowsRequests
     }
 
-    /// Starts watching if ready — used at launch to auto-resume.
+    /// Starts watching if ready — used at launch to auto-resume. Also brings every
+    /// background connected account's watcher up (item 99), so all connected
+    /// mailboxes resume together.
     func startWatchingIfReady() {
+        startAllBackgroundWatchersIfReady()
         guard canWatch else {
             waitToStartWatchingAfterManagedLicenseRefreshIfNeeded()
             return
@@ -37,7 +40,7 @@ extension AppState {
         logger.info("Inbox watching started")
     }
 
-    private var canStartInboxWatcherImmediately: Bool {
+    var canStartInboxWatcherImmediately: Bool {
         hasConfirmedReachability || (!reachability.isStarted && reachability.hasCurrentPath)
     }
 
@@ -59,14 +62,16 @@ extension AppState {
     }
 
     /// Stops watching entirely (e.g. on disconnect); returns to idle.
-    func stopWatching() {
+    func stopWatching(cancelCountdowns: Bool = true) {
+        // Countdown ownership is account-scoped, not watcher-state-scoped. A
+        // draft can be counting down even when the watcher is already idle.
+        if cancelCountdowns {
+            cancelSendCountdowns(forAccountEmail: mailEmail)
+        }
         guard watchStatus != .idle else { return }
         resumeWatchingAfterManagedReauth = false
         watchStatus = .idle
         inboxWatcher.stop()
-        // Outstanding auto-send countdowns (item 23) simply never fire; their
-        // drafts stay pending in the queue.
-        cancelAllSendCountdowns()
         logger.info("Inbox watching stopped")
     }
 
@@ -74,9 +79,10 @@ extension AppState {
     func toggleWatching() {
         switch watchStatus {
         case .watching:
+            pauseAllBackgroundWatchers()
             pauseWatching()
         case .idle, .paused:
-            startWatching()
+            startWatchingIfReady()
         }
     }
 
@@ -85,12 +91,20 @@ extension AppState {
     /// a baseline so existing mail is not drafted as newly arrived. A message is
     /// marked processed only after its draft is durably queued.
     func pollInboxOnce() async {
-        guard watchStatus == .watching else {
+        await pollInbox(account: nil)
+    }
+
+    /// One inbox poll for a specific connected account: the focused account when
+    /// `account` is nil, or a background connected account otherwise (item 99). The
+    /// draft pipeline is credential-parameterized, so the only per-account state is
+    /// the watch status, the reentrancy flag, and the health error.
+    func pollInbox(account: ConnectedMailAccount?) async {
+        guard accountWatchStatus(account) == .watching else {
             DiagnosticLog.verbose("Inbox poll skipped; watcher is not active")
             return
         }
         let localDataGeneration = localDataEraseGeneration
-        guard await prepareWatcherPoll(localDataGeneration: localDataGeneration) else { return }
+        guard await prepareWatcherPoll(account: account, localDataGeneration: localDataGeneration) else { return }
         // Offline (item 27): skip the poll rather than burn retries against an
         // unreachable server. Reconnect triggers an immediate catch-up poll.
         guard hasConfirmedReachability || !reachability.isStarted else {
@@ -101,32 +115,29 @@ extension AppState {
             DiagnosticLog.verbose("Inbox poll skipped; network is offline")
             return
         }
-        guard !isPollingInbox else {
+        guard !accountIsPolling(account) else {
             DiagnosticLog.verbose("Inbox poll skipped; another poll is already running")
             return
         }
-        isPollingInbox = true
-        defer { isPollingInbox = false }
+        setAccountPolling(account, true)
+        defer { setAccountPolling(account, false) }
         DiagnosticLog.verbose("Inbox poll started")
 
-        let credentials = mailCredentials
+        let credentials = account?.credentials ?? mailCredentials
         let mailbox = Mailbox.inbox
         let messages: [MailMessage]
         do {
-            messages = try await fetchWatcherMessages(
-                credentials,
-                mailbox: mailbox
-            )
+            messages = try await fetchWatcherMessages(credentials, mailbox: mailbox)
         } catch {
-            handlePollFetchFailure(error, localDataGeneration: localDataGeneration)
+            handlePollFetchFailure(error, account: account, localDataGeneration: localDataGeneration)
             return
         }
         DiagnosticLog.verbose("Inbox poll fetched \(messages.count) recent messages")
-        guard isCurrentWatcherPoll(localDataGeneration: localDataGeneration, credentials: credentials) else {
+        guard isCurrentWatcherPoll(localDataGeneration: localDataGeneration, credentials: credentials, account: account) else {
             DiagnosticLog.verbose("Inbox poll discarded; account or watcher changed after fetch")
             return
         }
-        watchError = nil
+        setWatchError(nil, account: account)
 
         let messagesToProcess = messagesAfterSeedingWatcherBaselineIfNeeded(
             messages: messages,
@@ -141,9 +152,12 @@ extension AppState {
 
         // Oldest first so enqueued drafts read in chronological order.
         for message in messagesToProcess.reversed() {
-            guard isCurrentWatcherPoll(localDataGeneration: localDataGeneration, credentials: credentials) else { break }
+            guard isCurrentWatcherPoll(localDataGeneration: localDataGeneration, credentials: credentials, account: account) else {
+                break
+            }
             await draftMessageIfNeeded(
                 message,
+                account: account,
                 credentials: credentials,
                 mailbox: mailbox,
                 localDataGeneration: localDataGeneration
@@ -155,9 +169,11 @@ extension AppState {
     /// Light replyability gate for the watcher: the message must have a real
     /// sender that isn't the user. Fuller filtering (newsletters, no-reply,
     /// bulk headers) is item 17.
-    func isReplyable(_ message: MailMessage) -> Bool {
+    func isReplyable(_ message: MailMessage, accountEmail: String? = nil) -> Bool {
         guard let sender = message.from?.email, !sender.isEmpty else { return false }
-        let account = mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Filter self-sent mail against the account being polled (item 99), not just
+        // the focused account. Defaults to the focused account for the legacy call.
+        let account = (accountEmail ?? mailEmail).trimmingCharacters(in: .whitespacesAndNewlines)
         if !account.isEmpty, sender.caseInsensitiveCompare(account) == .orderedSame {
             return false
         }
@@ -214,15 +230,16 @@ extension AppState {
     /// Handles a poll-fetch failure: transient errors just surface as `watchError`
     /// (the next poll retries), but an auth failure won't self-heal, so we pause
     /// watching and record it (item 27) rather than fail every poll.
-    func handlePollFetchFailure(_ error: Error) {
-        watchError = Self.message(for: error)
+    func handlePollFetchFailure(_ error: Error, account: ConnectedMailAccount? = nil) {
+        setWatchError(Self.message(for: error), account: account)
         if ResilienceClassifier.classify(error) == .authentication {
+            let accountEmail = account.map { SavedMailAccount.normalizedEmail($0.email) } ?? normalizedConnectedAccountEmail
             recordActivity(ActivityEvent(
                 kind: .authFailed,
-                account: normalizedConnectedAccountEmail,
+                account: accountEmail,
                 detail: Self.message(for: error)
             ))
-            pauseWatching()
+            pauseWatching(account: account)
         }
         logger.error("Inbox poll fetch failed: \(error.localizedDescription)")
     }
@@ -249,7 +266,7 @@ extension AppState {
         return false
     }
 
-    private func recordWatcherBaselineStartIfNeeded(account: String, mailbox: Mailbox, date: Date = Date()) {
+    func recordWatcherBaselineStartIfNeeded(account: String, mailbox: Mailbox, date: Date = Date()) {
         guard !processedMessages.hasBaseline(account: account, mailbox: mailbox) else { return }
         guard !processedMessages.hasBaselineStart(account: account, mailbox: mailbox) else { return }
         processedMessages.setBaselineStart(account: account, mailbox: mailbox, date: date)
@@ -258,26 +275,30 @@ extension AppState {
 
     private func draftMessageIfNeeded(
         _ message: MailMessage,
+        account: ConnectedMailAccount?,
         credentials: MailAccountCredentials,
         mailbox: Mailbox,
         localDataGeneration: UInt64
     ) async {
-        guard isReplyable(message),
+        guard isReplyable(message, accountEmail: credentials.email),
               !processedMessages.contains(message, account: credentials.email, mailbox: mailbox),
               !hasPendingDraft(for: message, account: credentials.email, mailbox: mailbox) else {
             return
         }
         guard await canDraftAfterSenderRulesAndWorthiness(
             message,
+            account: account,
             credentials: credentials,
             mailbox: mailbox,
             localDataGeneration: localDataGeneration
         ) else {
             return
         }
-        guard isCurrentLocalDataGeneration(localDataGeneration),
-              watchStatus == .watching,
-              mailCredentials == credentials else { return }
+        guard isCurrentWatcherPoll(
+            localDataGeneration: localDataGeneration,
+            credentials: credentials,
+            account: account
+        ) else { return }
         let draftProvider = currentDraftLLMConfiguration?.provider
 
         do {
@@ -286,18 +307,40 @@ extension AppState {
             // it — the existing skip/pending-draft guards prevent re-notification.
             let result = try await gatedWatcherDraftResult(
                 message,
+                account: account,
                 credentials: credentials,
                 mailbox: mailbox,
                 localDataGeneration: localDataGeneration,
                 bypassModelSkip: senderRuleDecision(for: message) == .forceDraft
             )
-            guard isCurrentLocalDataGeneration(localDataGeneration),
-                  watchStatus == .watching,
-                  mailCredentials == credentials else { return }
+            guard isCurrentWatcherPoll(
+                localDataGeneration: localDataGeneration,
+                credentials: credentials,
+                account: account
+            ) else { return }
             handleWatcherDraftResult(result, for: message, credentials: credentials, mailbox: mailbox)
         } catch {
-            guard isCurrentLocalDataGeneration(localDataGeneration) else { return }
-            handleWatcherDraftError(error, draftProvider: draftProvider)
+            guard isCurrentWatcherPoll(
+                localDataGeneration: localDataGeneration,
+                credentials: credentials,
+                account: account
+            ) else {
+                if case DraftDispatchError.accountChanged = error {
+                    handleWatcherDraftError(
+                        error,
+                        credentials: credentials,
+                        draftProvider: draftProvider,
+                        account: account
+                    )
+                }
+                return
+            }
+            handleWatcherDraftError(
+                error,
+                credentials: credentials,
+                draftProvider: draftProvider,
+                account: account
+            )
         }
     }
 

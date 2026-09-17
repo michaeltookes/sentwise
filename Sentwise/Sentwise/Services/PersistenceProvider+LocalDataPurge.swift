@@ -43,7 +43,7 @@ extension PersistenceProvider {
     /// and credentials alone. This is used when the app no longer has a selected
     /// mailbox but retained mail records can still exist locally.
     func purgeAllMailArtifacts() throws {
-        try removeVoiceProfile()
+        try removeAllVoiceProfiles()
         try removeProcessedMessages()
         try removePendingDrafts()
         try removeSkippedMessages()
@@ -63,10 +63,17 @@ extension PersistenceProvider {
         let account = SavedMailAccount.normalizedEmail(accountEmail)
         guard !account.isEmpty else { return }
         let snapshot = makeAccountArtifactSnapshot()
+        // The account's own per-account voice profile, plus the legacy unscoped one
+        // (removed only for the active account), captured for rollback (item 99).
+        let accountVoiceProfile = loadVoiceProfile(accountKey: account)
+        let legacyVoiceProfile = includeUnscopedArtifacts ? loadVoiceProfile(accountKey: "") : nil
 
         do {
+            // The voice learned from this account's Sent mail is always its own; the
+            // legacy unscoped profile is removed only when purging the active account.
+            try removeVoiceProfile(accountKey: account)
             if includeUnscopedArtifacts {
-                try removeVoiceProfile()
+                try removeVoiceProfile(accountKey: "")
             }
 
             try updateProcessedMessagesSync { processed in
@@ -101,6 +108,19 @@ extension PersistenceProvider {
             }
         } catch {
             snapshot.restore(to: self)
+            // Restore the per-account voice profile the snapshot doesn't track.
+            if let accountVoiceProfile {
+                saveVoiceProfile(accountVoiceProfile, accountKey: account)
+            } else {
+                try? removeVoiceProfile(accountKey: account)
+            }
+            if includeUnscopedArtifacts {
+                if let legacyVoiceProfile {
+                    saveVoiceProfile(legacyVoiceProfile, accountKey: "")
+                } else {
+                    try? removeVoiceProfile(accountKey: "")
+                }
+            }
             throw error
         }
     }

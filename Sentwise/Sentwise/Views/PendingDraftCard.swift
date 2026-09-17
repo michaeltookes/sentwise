@@ -54,6 +54,15 @@ struct PendingDraftCard: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
             }
+            // Account attribution (item 99): which mailbox this draft belongs to,
+            // shown only when more than one account is connected.
+            if appState.showsAccountAttribution,
+               let mailbox = appState.accountAttributionLabel(forEmail: draft.sourceAccountEmail) {
+                Label(mailbox, systemImage: "tray.full")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("draftAccountBadge")
+            }
             HStack(alignment: .top, spacing: 12) {
                 incomingColumn
                 Divider()

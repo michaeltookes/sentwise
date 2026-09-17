@@ -13,12 +13,17 @@ protocol PersistenceProvider {
     func saveSettings(_ settings: Settings)
     func saveSettingsSync(_ settings: Settings) throws
 
-    /// The stored voice profile, or `nil` if the user hasn't learned one yet.
-    func loadVoiceProfile() -> VoiceProfile?
-    /// Persists the voice profile (replaces any existing one).
-    func saveVoiceProfile(_ profile: VoiceProfile)
-    /// Removes the stored voice profile.
-    func removeVoiceProfile() throws
+    /// The stored voice profile for a specific account, or `nil` if none learned.
+    /// `accountKey` is the normalized account email (item 99, per-account voice);
+    /// an empty key addresses the legacy single, unscoped profile.
+    func loadVoiceProfile(accountKey: String) -> VoiceProfile?
+    /// Persists the voice profile for `accountKey` (replaces any existing one).
+    func saveVoiceProfile(_ profile: VoiceProfile, accountKey: String)
+    /// Removes the stored voice profile for `accountKey`.
+    func removeVoiceProfile(accountKey: String) throws
+    /// Removes every stored voice profile — the legacy unscoped one and every
+    /// per-account profile. Used when wiping all mail artifacts (no account scope).
+    func removeAllVoiceProfiles() throws
 
     /// The set of inbox messages the watcher has already processed.
     func loadProcessedMessages() -> ProcessedMessages
@@ -90,6 +95,15 @@ protocol PersistenceProvider {
     func eraseAllLocalData() throws
 }
 
+extension PersistenceProvider {
+    /// The legacy single, unscoped voice profile (empty account key). Kept as a
+    /// convenience so pre-item-99 call sites and migration code read/write the
+    /// legacy `VoiceProfile.json` slot without repeating the empty-key argument.
+    func loadVoiceProfile() -> VoiceProfile? { loadVoiceProfile(accountKey: "") }
+    func saveVoiceProfile(_ profile: VoiceProfile) { saveVoiceProfile(profile, accountKey: "") }
+    func removeVoiceProfile() throws { try removeVoiceProfile(accountKey: "") }
+}
+
 /// File-based persistence for non-secret application settings.
 ///
 /// Data is stored as JSON in `~/Library/Application Support/Sentwise/`.
@@ -102,25 +116,27 @@ final class PersistenceService: PersistenceProvider {
 
     // MARK: - Properties
 
-    private let directory: URL
+    // `internal` (not `private`) so the voice-profile section in
+    // `PersistenceService+VoiceProfile.swift` can reach the shared IO primitives.
+    let directory: URL
     private let settingsURL: URL
-    private let voiceProfileURL: URL
+    let voiceProfileURL: URL
     private let processedMessagesURL: URL
     private let pendingDraftsURL: URL
     private let skippedMessagesURL: URL
     private let approvedDraftsURL: URL
     private let activityEventsURL: URL
     private let draftFeedbackURL: URL
-    private let ioQueue = DispatchQueue(label: "com.tookes.Sentwise.persistence", qos: .utility)
+    let ioQueue = DispatchQueue(label: "com.tookes.Sentwise.persistence", qos: .utility)
 
-    private let encoder: JSONEncoder = {
+    let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }()
 
-    private let decoder: JSONDecoder = {
+    let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
@@ -185,34 +201,6 @@ final class PersistenceService: PersistenceProvider {
             logger.error("Failed to save settings (sync): \(error.localizedDescription)")
             throw error
         }
-    }
-
-    // MARK: - Voice Profile
-
-    func loadVoiceProfile() -> VoiceProfile? {
-        guard FileManager.default.fileExists(atPath: voiceProfileURL.path) else { return nil }
-        do {
-            let data = try Data(contentsOf: voiceProfileURL)
-            return try decoder.decode(VoiceProfile.self, from: data)
-        } catch {
-            logger.error("Failed to load voice profile: \(error.localizedDescription)")
-            return nil
-        }
-    }
-
-    func saveVoiceProfile(_ profile: VoiceProfile) {
-        ioQueue.async { [encoder, voiceProfileURL] in
-            do {
-                let data = try encoder.encode(profile)
-                try data.write(to: voiceProfileURL, options: .atomic)
-            } catch {
-                logger.error("Failed to save voice profile: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    func removeVoiceProfile() throws {
-        try removeFile(at: voiceProfileURL)
     }
 
     // MARK: - Processed Messages
@@ -472,7 +460,7 @@ final class PersistenceService: PersistenceProvider {
         try removeFile(at: draftFeedbackURL)
     }
 
-    private func removeFile(at url: URL) throws {
+    func removeFile(at url: URL) throws {
         try ioQueue.sync {
             let fileManager = FileManager.default
             guard fileManager.fileExists(atPath: url.path) else { return }

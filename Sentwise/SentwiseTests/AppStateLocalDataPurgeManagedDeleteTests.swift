@@ -380,6 +380,45 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
         XCTAssertFalse(persistence.loadActivityEvents().isEmpty)
     }
 
+    func testPurgeAllMailArtifactsPropagatesVoiceProfileEnumerationFailure() {
+        // Regression (item 96): `removeAllVoiceProfiles()` must fail loudly. When the
+        // profile directory can be listed but enumeration/removal errors, the purge
+        // must throw rather than silently read "no profiles" and report success while
+        // VoiceProfile-*.json files with learned voice data remain.
+        let persistence = seededPersistence()
+        persistence.removeAllVoiceProfilesError = AppStatePersistenceError.writeDenied
+
+        XCTAssertThrowsError(try persistence.purgeAllMailArtifacts())
+        // The failing first step never cleared the voice profile: no false success.
+        XCTAssertNotNil(persistence.loadVoiceProfile())
+    }
+
+    func testManagedDeleteRetainedMailReportsFailureWhenVoiceProfilePurgeFails() async {
+        // The no-mailbox managed-delete purge routes through `purgeAllMailArtifacts`,
+        // so a voice-profile enumeration failure must surface as a failed delete —
+        // never a success that leaves learned voice data behind (item 96).
+        let persistence = seededPersistence()
+        persistence.removeAllVoiceProfilesError = AppStatePersistenceError.writeDenied
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: account): "app-pw",
+            .managedClientToken: "client",
+            .managedSessionID: "sess"
+        ])
+        let (app, _) = makeAppState(persistence: persistence, secrets: secrets)
+        let saved = try? XCTUnwrap(app.savedAccounts.first)
+        if let saved {
+            app.removeSavedAccount(saved, purgeLocalData: false)
+        }
+        XCTAssertFalse(app.isAccountConnected)
+
+        let ok = await app.deleteManagedAccount(purgeLocalData: true, isHuntMode: false)
+
+        XCTAssertFalse(ok)
+        // The learned voice profile is still on record — the purge did not falsely
+        // report success.
+        XCTAssertNotNil(persistence.loadVoiceProfile())
+    }
+
     func testManagedDeleteWithPurgeErasesRetainedMailDataWhenNoMailboxSelected() async {
         let persistence = seededPersistence()
         let retainedDraft = try? XCTUnwrap(persistence.loadPendingDrafts().first)

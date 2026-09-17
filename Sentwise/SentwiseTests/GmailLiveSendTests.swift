@@ -49,7 +49,7 @@ final class GmailLiveSendTests: XCTestCase {
 
     func testAutoSentReplyIsDeliveredCorrectlyAddressedAndThreaded() async throws {
         let credentials = try liveCredentials()
-        let provider = IMAPMailProvider()
+        let provider = LiveMailProvider.imapProvider()
 
         // A unique marker so we find and clean up exactly our own test message.
         let marker = UUID().uuidString

@@ -43,12 +43,56 @@ extension AppState {
             targetSchemaVersion: Settings.byokParkedSchemaVersion - 1,
             shouldPersist: false
         )
-        return migratedBYOKParkedSettings(
+        let byokMigrated = migratedBYOKParkedSettings(
             signatureMigrated,
             originalSchemaVersion: loaded.schemaVersion,
             secrets: secrets,
+            persistence: persistence,
+            targetSchemaVersion: Settings.voicePerAccountSchemaVersion - 1,
+            shouldPersist: false
+        )
+        return migratedVoicePerAccountSettings(
+            byokMigrated,
+            originalSchemaVersion: loaded.schemaVersion,
             persistence: persistence
         )
+    }
+
+    /// Terminal migration for per-account voice profiles (item 99). Attributes the
+    /// legacy single `VoiceProfile.json` to the currently-connected account so an
+    /// existing install keeps its learned voice under the new per-account keying,
+    /// then advances the schema to the current version. Runs once, gated on the
+    /// original schema version. The move is durable before the caller reads the
+    /// active account's voice: `saveVoiceProfile` enqueues on the persistence serial
+    /// queue and the following `removeVoiceProfile` blocks on that same queue, so
+    /// the keyed write has flushed by the time this returns.
+    static func migratedVoicePerAccountSettings(
+        _ settings: Settings,
+        originalSchemaVersion: Int,
+        persistence: PersistenceProvider
+    ) -> Settings {
+        guard originalSchemaVersion < Settings.voicePerAccountSchemaVersion else { return settings }
+        var migrated = settings
+
+        let activeKey = SavedMailAccount.normalizedEmail(settings.mailEmail)
+        if !activeKey.isEmpty,
+           persistence.loadVoiceProfile(accountKey: activeKey) == nil,
+           let legacy = persistence.loadVoiceProfile(accountKey: "") {
+            persistence.saveVoiceProfile(legacy, accountKey: activeKey)
+            do {
+                try persistence.removeVoiceProfile(accountKey: "")
+            } catch {
+                logger.error("Failed to remove legacy voice profile after per-account move: \(error.localizedDescription)")
+            }
+        }
+
+        migrated.schemaVersion = Settings.voicePerAccountSchemaVersion
+        do {
+            try persistence.saveSettingsSync(migrated)
+        } catch {
+            logger.error("Failed to persist per-account voice migration: \(error.localizedDescription)")
+        }
+        return migrated
     }
 
     /// Moves an existing install with no configured BYO provider onto managed
@@ -131,7 +175,9 @@ extension AppState {
         _ settings: Settings,
         originalSchemaVersion: Int,
         secrets: SecretStore,
-        persistence: PersistenceProvider
+        persistence: PersistenceProvider,
+        targetSchemaVersion: Int = Settings.byokParkedSchemaVersion,
+        shouldPersist: Bool = true
     ) -> Settings {
         guard originalSchemaVersion < Settings.byokParkedSchemaVersion else { return settings }
         var migrated = settings
@@ -144,9 +190,9 @@ extension AppState {
             migrated.llmVerifiedModel = ""
         }
         if clearedPendingOpenRouterState {
-            migrated.schemaVersion = Settings.byokParkedSchemaVersion
+            migrated.schemaVersion = targetSchemaVersion
         }
-        if migrated != settings {
+        if shouldPersist, migrated != settings {
             do {
                 try persistence.saveSettingsSync(migrated)
             } catch {

@@ -109,6 +109,7 @@ extension AppState {
         cancelAllSendCountdowns()
 
         voiceProfile = nil
+        publishedVoiceProfileAccountKey = nil
         processedMessages = ProcessedMessages()
 
         pendingDrafts = []
@@ -154,6 +155,7 @@ extension AppState {
 
         if includeUnscopedArtifacts {
             voiceProfile = nil
+            publishedVoiceProfileAccountKey = nil
             denyReasonPrompt = nil
             lastUsedDenyReason = nil
             denyReasonPromptSuppressedThisSession = false
@@ -181,9 +183,18 @@ extension AppState {
         offlineQueuedDispatch = offlineQueuedDispatch.filter { !removedIdentities.contains($0.key) }
         draftsWaitingForNetwork.subtract(removedIdentities)
 
-        skippedMessages.removeAll { SavedMailAccount.normalizedEmail($0.account) == account }
-        skippedMessageIDs = Set(skippedMessages.map(\.id))
-        skippedMessageReasonsByID = skippedMessages.reduce(into: [:]) { reasons, message in
+        let trackedSkippedMessages = Self.restoredTrackedSkippedMessages(
+            persistence: persistence,
+            processedMessages: processedMessages,
+            limit: skippedMessageLogLimit
+        )
+        skippedMessages = Self.visibleSkippedMessages(
+            from: trackedSkippedMessages,
+            accountEmail: mailEmail,
+            limit: skippedMessageLogLimit
+        )
+        skippedMessageIDs = Set(trackedSkippedMessages.map(\.id))
+        skippedMessageReasonsByID = trackedSkippedMessages.reduce(into: [:]) { reasons, message in
             reasons[message.id] = message.reason
         }
 
@@ -210,6 +221,7 @@ extension AppState {
             notifier.removeNotification(identity: draft.identity)
         }
         stopWatching()
+        stopAllBackgroundWatchers()
         stopTranscriptFolderWatching()
 
         await managedAccount.cancelSignIn()
@@ -261,6 +273,7 @@ extension AppState {
         mailHost = Settings.default.mailHost
         mailPort = Settings.default.mailPort
         savedAccounts = []
+        backgroundConnectedAccounts = []
         isAccountConnected = false
         mailHostExplicitlyEditedEmail = nil
         mailHostExplicitlyEditedBeforeEmail = false
@@ -330,15 +343,6 @@ extension AppState {
         cachedSubscriptionSnapshot = nil
         googleOAuthInterestRegistered = false
         isRegisteringGoogleOAuthInterest = false
-    }
-
-    private func cancelSendCountdowns(for identities: Set<String>) {
-        guard !identities.isEmpty else { return }
-        for identity in identities {
-            sendCountdownTasks.removeValue(forKey: identity)?.cancel()
-            pendingSendCountdowns.removeValue(forKey: identity)
-            sendCountdownNotificationApprovalIDs.remove(identity)
-        }
     }
 
     private static func draft(

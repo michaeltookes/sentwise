@@ -71,7 +71,7 @@ final class AppStateVoiceTests: XCTestCase {
 
         XCTAssertEqual(appState.voiceProfile?.greeting, "Hi,")
         XCTAssertEqual(appState.voiceProfile?.sampleCount, 1)
-        XCTAssertEqual(store.voiceProfile?.summary, "Brief and warm.")
+        XCTAssertEqual(store.loadVoiceProfile(accountKey: "me@gmail.com")?.summary, "Brief and warm.")
         XCTAssertNil(appState.voiceError)
         XCTAssertFalse(appState.isLearningVoice)
         XCTAssertEqual(llm.lastProvider, .anthropic)
@@ -371,7 +371,7 @@ final class AppStateVoiceTests: XCTestCase {
         appState.forgetVoiceProfile()
 
         XCTAssertNil(appState.voiceProfile)
-        XCTAssertNil(store.voiceProfile)
+        XCTAssertNil(store.loadVoiceProfile(accountKey: "me@gmail.com"))
     }
 
     func testExistingProfileLoadedOnInit() {
