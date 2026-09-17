@@ -2,15 +2,18 @@ import SentwiseMail
 import Foundation
 
 extension AppState {
-    func prepareWatcherPoll(localDataGeneration: UInt64) async -> Bool {
+    func prepareWatcherPoll(account: ConnectedMailAccount? = nil, localDataGeneration: UInt64) async -> Bool {
         await refreshManagedQuotaIfLicenseStatusStale()
         guard isCurrentLocalDataGeneration(localDataGeneration) else {
             DiagnosticLog.verbose("Inbox poll discarded; local data was purged")
             return false
         }
-        guard canWatch else {
+        guard canWatch(account: account) else {
             DiagnosticLog.verbose("Inbox poll paused; account or AI provider is unavailable")
-            pauseWatching(resumeAfterManagedReauthentication: shouldResumeWatchingAfterManagedLicenseRecovery)
+            pauseWatching(
+                account: account,
+                resumeAfterManagedReauthentication: shouldResumeWatchingAfterManagedLicenseRecovery
+            )
             return false
         }
         return true
@@ -27,8 +30,12 @@ extension AppState {
             && isConnectedAccount(credentials)
     }
 
-    func handlePollFetchFailure(_ error: Error, localDataGeneration: UInt64) {
+    func handlePollFetchFailure(
+        _ error: Error,
+        account: ConnectedMailAccount? = nil,
+        localDataGeneration: UInt64
+    ) {
         guard isCurrentLocalDataGeneration(localDataGeneration) else { return }
-        handlePollFetchFailure(error)
+        handlePollFetchFailure(error, account: account)
     }
 }

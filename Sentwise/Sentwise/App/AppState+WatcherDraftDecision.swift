@@ -43,8 +43,8 @@ extension AppState {
             DiagnosticLog.verbose("Inbox watcher candidate skipped; sender rule blocked it")
             guard skippedReason != .senderBlocklisted else { return false }
             guard isCurrentLocalDataGeneration(localDataGeneration),
-                  watchStatus == .watching,
-                  mailCredentials == credentials else { return false }
+                  isAccountWatching(credentials),
+                  isConnectedAccount(credentials) else { return false }
             recordSkip(message, reason: .senderBlocklisted, account: credentials.email, mailbox: mailbox)
             return false
         case .forceDraft:
@@ -67,8 +67,8 @@ extension AppState {
                     + "reason=\(reason.rawValue)"
                 )
                 guard isCurrentLocalDataGeneration(localDataGeneration),
-                      watchStatus == .watching,
-                      mailCredentials == credentials else { return false }
+                      isAccountWatching(credentials),
+                      isConnectedAccount(credentials) else { return false }
                 recordSkip(message, reason: reason, account: credentials.email, mailbox: mailbox)
                 return false
             }
@@ -85,7 +85,7 @@ extension AppState {
         guard skippedMessageReason(message, account: credentials.email, mailbox: mailbox) != nil else {
             return true
         }
-        guard watchStatus == .watching, mailCredentials == credentials else { return false }
+        guard isAccountWatching(credentials), isConnectedAccount(credentials) else { return false }
 
         let entry = SkippedMessage(
             message: message,
@@ -172,17 +172,26 @@ extension AppState {
 
     /// Surfaces a watcher draft error and, for an auth failure that won't
     /// self-heal, pauses watching and records it (item 27).
-    func handleWatcherDraftError(_ error: Error, draftProvider: LLMProviderKind?) {
-        watchError = Self.draftMessage(for: error)
+    func handleWatcherDraftError(
+        _ error: Error,
+        credentials: MailAccountCredentials,
+        draftProvider: LLMProviderKind?
+    ) {
+        // Multi-account (item 99): surface the failure on, and pause, the account
+        // whose draft failed — focused (nil) or a specific background account.
+        let account = backgroundConnectedAccounts.first { $0.credentials == credentials }
+        setWatchError(Self.draftMessage(for: error), account: account)
         let failureClass = ResilienceClassifier.classify(error)
         DiagnosticLog.verbose("Inbox watcher draft failed; failureClass=\(failureClass)")
         if failureClass == .authentication {
+            let accountEmail = account.map { SavedMailAccount.normalizedEmail($0.email) } ?? normalizedConnectedAccountEmail
             recordActivity(ActivityEvent(
                 kind: .authFailed,
-                account: normalizedConnectedAccountEmail,
+                account: accountEmail,
                 detail: Self.draftMessage(for: error)
             ))
             pauseWatching(
+                account: account,
                 resumeAfterManagedReauthentication: shouldResumeAfterManagedReauthentication(
                     error: error,
                     provider: draftProvider
@@ -196,9 +205,11 @@ extension AppState {
         _ credentials: MailAccountCredentials,
         localDataGeneration: UInt64
     ) throws {
+        // Multi-account (item 99): validate against the account whose poll is in
+        // flight (focused or background), not just the focused account.
         guard isCurrentLocalDataGeneration(localDataGeneration),
-              watchStatus == .watching,
-              mailCredentials == credentials else {
+              isAccountWatching(credentials),
+              isConnectedAccount(credentials) else {
             throw DraftDispatchError.accountChanged
         }
     }
