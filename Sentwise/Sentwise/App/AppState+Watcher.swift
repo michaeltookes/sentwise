@@ -63,15 +63,15 @@ extension AppState {
 
     /// Stops watching entirely (e.g. on disconnect); returns to idle.
     func stopWatching(cancelCountdowns: Bool = true) {
+        // Countdown ownership is account-scoped, not watcher-state-scoped. A
+        // draft can be counting down even when the watcher is already idle.
+        if cancelCountdowns {
+            cancelSendCountdowns(forAccountEmail: mailEmail)
+        }
         guard watchStatus != .idle else { return }
         resumeWatchingAfterManagedReauth = false
         watchStatus = .idle
         inboxWatcher.stop()
-        // Outstanding auto-send countdowns for this mailbox (item 23) simply
-        // never fire; drafts for other connected mailboxes keep their windows.
-        if cancelCountdowns {
-            cancelSendCountdowns(forAccountEmail: mailEmail)
-        }
         logger.info("Inbox watching stopped")
     }
 

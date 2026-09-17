@@ -34,7 +34,7 @@ extension AppState {
     func restorePublishedVoiceProfile(accountKey: String) {
         let key = SavedMailAccount.normalizedEmail(accountKey)
         publishedVoiceProfileAccountKey = key.isEmpty ? nil : key
-        voiceProfile = key.isEmpty ? nil : persistence.loadVoiceProfile(accountKey: key)
+        voiceProfile = persistence.loadVoiceProfile(accountKey: key)
     }
 
     /// Whether the prerequisites for learning are met (mail + a usable AI provider).
@@ -127,7 +127,9 @@ extension AppState {
     // MARK: - Helpers
 
     private var voiceProfileMutationAccountKey: String? {
-        guard let key = publishedVoiceProfileAccountKey, !key.isEmpty else { return nil }
+        guard let key = publishedVoiceProfileAccountKey, !key.isEmpty else {
+            return voiceProfile == nil ? nil : ""
+        }
         return key
     }
 
