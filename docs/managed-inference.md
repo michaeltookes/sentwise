@@ -368,6 +368,14 @@ tiers changed, so this replaced the earlier placeholder `individual` cleanly
 each; `SubscriptionPaneModel` renders every tier against every status
 (trialing / active / past_due / canceled / lapsed).
 
+`subscription.plan` also feeds the **multi-account connected-account gate** (item
+99): `AccountConnectionLimit.maxConnectedAccounts(for:)` maps the plan to the
+`docs/tier-matrix.md` caps (Starter 1, Pro 2, Unlimited 5, Trial 2), and the app
+blocks a connect that would exceed the cap. The gate reads the live plan, falling
+back to the cached `SubscriptionSnapshot` when offline; it consumes the existing
+payload with no wire change, and enforcement is client-side (accepted A-L5-style
+posture — a source-builder can bypass a client gate).
+
 ### Derivation (pre-56c)
 
 Until checkout (56c) ships, the Worker derives `subscription` from the trial

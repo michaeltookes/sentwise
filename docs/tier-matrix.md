@@ -30,7 +30,7 @@ Notes:
 
 ## Display rule (pricing cards)
 
-**Cards only ever show shipped capabilities** (owner, 2026-09-16) — no "coming soon". Account-count lines appear only after item 99 ships; integration lines only after 53/55/30 ship. Site ticket: `sentwise-landing-page` item 14 (carries the per-card copy).
+**Cards only ever show shipped capabilities** (owner, 2026-09-16) — no "coming soon". Account-count lines may now appear: **item 99 shipped** (branch `multi-account-support`) — concurrent multi-account with a client-side connected-account gate keyed off `subscription.plan` from `/v1/me`, enforcing Starter 1 / Pro 2 / Unlimited 5 / Trial 2. Integration lines still appear only after 53/55/30 ship. Site ticket: `sentwise-landing-page` item 14 (carries the per-card copy).
 
 ## Alignment work owed at cutover (item 74)
 
@@ -39,6 +39,6 @@ Notes:
 
 ## References
 
-- Multi-account build: item 99 (uses this matrix as its gating spec).
+- Multi-account build: item 99 (**shipped**, branch `multi-account-support`) — uses this matrix as its gating spec; the app enforces the connected-account caps client-side at connect time.
 - Metering defaults and wire contract: item 56b; `sentwise-service/wrangler.jsonc`.
 - Security postures cited: A-L5 and the 2026-09-13 security pass report.
