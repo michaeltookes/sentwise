@@ -145,6 +145,17 @@ extension AppState {
         }
     }
 
+    func resumeBackgroundInboxWatchersAfterReachabilityConfirmed() {
+        for account in backgroundConnectedAccounts where account.watchStatus == .watching {
+            ensureWatcher(for: account)
+            if account.watcher?.isActive == true {
+                account.watcher?.pollNow()
+            } else {
+                account.watcher?.start()
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     private func setAccountWatchStatus(_ account: ConnectedMailAccount, _ status: WatchStatus) {
@@ -154,7 +165,7 @@ extension AppState {
     }
 
     /// Lazily creates the account's own poll loop, wired to `pollInbox(account:)`.
-    private func ensureWatcher(for account: ConnectedMailAccount) {
+    func ensureWatcher(for account: ConnectedMailAccount) {
         guard account.watcher == nil else { return }
         account.watcher = InboxWatcher(
             interval: { [weak self] in TimeInterval(self?.pollIntervalSeconds ?? 300) },

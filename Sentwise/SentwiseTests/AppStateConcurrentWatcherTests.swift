@@ -177,6 +177,55 @@ final class AppStateConcurrentWatcherTests: XCTestCase {
         XCTAssertNotNil(account.watcher)
     }
 
+    func testReachabilityConfirmationPollsActiveBackgroundWatcher() async {
+        let reachability = FakeReachabilityMonitor(isOnline: true, hasCurrentPath: false)
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: focused): "gmail-pw",
+            .mailAppPassword(email: background): "side-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-live"
+        ])
+        let persistence = AppStateMemoryPersistence(
+            settings: Settings(
+                schemaVersion: Settings.currentSchemaVersion,
+                pollIntervalSeconds: 300,
+                mailEmail: focused,
+                llmProvider: "anthropic",
+                llmVerifiedModel: "claude-sonnet-4-6"
+            ),
+            processedMessages: baselinedProcessed()
+        )
+        let provider = FakeAppMailProvider(
+            result: .success(()),
+            fetchResult: .success([message(id: 7)]),
+            bodyResult: .success(Data("Please advise.".utf8))
+        )
+        let app = AppState(
+            persistence: persistence,
+            secrets: secrets,
+            mailProvider: provider,
+            llm: FakeLLMProvider(result: .success(()), completion: .success(LLMResponse(text: "On it."))),
+            reachability: reachability
+        )
+        app.mailAppPassword = "gmail-pw"
+        app.retryRunner = .immediate
+        let account = ConnectedMailAccount(
+            email: background,
+            host: "imap.side.com",
+            port: 993,
+            appPassword: "side-pw"
+        )
+        app.backgroundConnectedAccounts = [account]
+
+        app.startReachabilityMonitoring()
+        app.startWatching(account: account)
+        await Task.yield()
+        XCTAssertTrue(app.pendingDrafts.isEmpty)
+
+        reachability.setOnline(true)
+        await waitUntil { app.pendingDrafts.map(\.sourceAccountEmail) == [self.background] }
+        app.stopWatching(account: account)
+    }
+
     func testAuthFailurePausesOnlyThatAccount() async {
         let (app, account) = makeAppState(fetch: .failure(.authenticationFailed("bad app password")))
         app.watchStatus = .watching

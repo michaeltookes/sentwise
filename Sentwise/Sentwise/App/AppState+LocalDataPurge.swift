@@ -183,9 +183,18 @@ extension AppState {
         offlineQueuedDispatch = offlineQueuedDispatch.filter { !removedIdentities.contains($0.key) }
         draftsWaitingForNetwork.subtract(removedIdentities)
 
-        skippedMessages.removeAll { SavedMailAccount.normalizedEmail($0.account) == account }
-        skippedMessageIDs = Set(skippedMessages.map(\.id))
-        skippedMessageReasonsByID = skippedMessages.reduce(into: [:]) { reasons, message in
+        let trackedSkippedMessages = Self.restoredTrackedSkippedMessages(
+            persistence: persistence,
+            processedMessages: processedMessages,
+            limit: skippedMessageLogLimit
+        )
+        skippedMessages = Self.visibleSkippedMessages(
+            from: trackedSkippedMessages,
+            accountEmail: mailEmail,
+            limit: skippedMessageLogLimit
+        )
+        skippedMessageIDs = Set(trackedSkippedMessages.map(\.id))
+        skippedMessageReasonsByID = trackedSkippedMessages.reduce(into: [:]) { reasons, message in
             reasons[message.id] = message.reason
         }
 

@@ -40,7 +40,7 @@ extension AppState {
         logger.info("Inbox watching started")
     }
 
-    private var canStartInboxWatcherImmediately: Bool {
+    var canStartInboxWatcherImmediately: Bool {
         hasConfirmedReachability || (!reachability.isStarted && reachability.hasCurrentPath)
     }
 

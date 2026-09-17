@@ -15,7 +15,13 @@ extension AppState {
         let host: String
         let port: Int
         let password: String
-        let wasWatching: Bool
+        let watcherState: AccountWatcherRuntimeState
+    }
+
+    struct AccountWatcherRuntimeState {
+        let watchStatus: WatchStatus
+        let watchError: String?
+        let resumeWatchingAfterManagedReauth: Bool
     }
 
     /// Loads the persisted settings and applies the tier gate for `newEmail`,
@@ -70,24 +76,30 @@ extension AppState {
             host: previousSettings.mailHost,
             port: previousSettings.mailPort,
             password: password,
-            wasWatching: watchStatus == .watching
+            watcherState: focusedWatcherRuntimeState
         )
     }
 
     /// On focusing a different account, keep the previously focused account
     /// connected in the background and lift the newly focused account out of the
     /// background set, so exactly one runtime exists per connected mailbox.
-    func adoptFocusChange(previousFocused: FocusedAccountSnapshot?, newFocusedEmail: String) {
+    @discardableResult
+    func adoptFocusChange(
+        previousFocused: FocusedAccountSnapshot?,
+        newFocusedEmail: String
+    ) -> AccountWatcherRuntimeState? {
         let newKey = SavedMailAccount.normalizedEmail(newFocusedEmail)
+        var promotedState: AccountWatcherRuntimeState?
         if let existing = backgroundConnectedAccount(email: newKey) {
-            stopWatching(account: existing)
+            promotedState = watcherRuntimeState(for: existing)
+            existing.watcher?.stop()
             backgroundConnectedAccounts.removeAll { $0.id == newKey }
         }
 
         guard let previousFocused,
               !previousFocused.password.isEmpty,
               SavedMailAccount.normalizedEmail(previousFocused.email) != newKey else {
-            return
+            return promotedState
         }
         let previousKey = SavedMailAccount.normalizedEmail(previousFocused.email)
         backgroundConnectedAccounts.removeAll { $0.id == previousKey }
@@ -97,10 +109,13 @@ extension AppState {
             port: previousFocused.port,
             appPassword: previousFocused.password
         )
+        apply(previousFocused.watcherState, to: account)
         backgroundConnectedAccounts.append(account)
-        if previousFocused.wasWatching {
-            startWatchingIfReady(account: account)
+        if previousFocused.watcherState.watchStatus == .watching {
+            ensureWatcher(for: account)
+            account.watcher?.start()
         }
+        return promotedState
     }
 
     /// Post-verify cleanup when the connected account changed or was reconnected:
@@ -109,14 +124,22 @@ extension AppState {
     /// preserved because their drafts remain account-scoped when the source
     /// mailbox stays connected.
     func applyConnectionTransitionCleanup(
-        accountIdentityChanged: Bool,
-        wasWatching: Bool,
         previousFocused: FocusedAccountSnapshot?,
         newFocusedEmail: String
     ) {
-        adoptFocusChange(previousFocused: previousFocused, newFocusedEmail: newFocusedEmail)
-        if wasWatching {
+        let outgoingState = previousFocused?.watcherState ?? focusedWatcherRuntimeState
+        let promotedState = adoptFocusChange(
+            previousFocused: previousFocused,
+            newFocusedEmail: newFocusedEmail
+        )
+        if outgoingState.watchStatus == .watching {
             stopWatching(cancelCountdowns: false)
+        } else {
+            inboxWatcher.stop()
+        }
+        if let promotedState {
+            applyFocusedWatcherRuntimeState(promotedState)
+        } else if outgoingState.watchStatus == .watching {
             startWatchingIfReady()
         }
     }
@@ -161,5 +184,41 @@ extension AppState {
         stopWatching(account: account)
         backgroundConnectedAccounts.removeAll { $0.id == account.id }
         return true
+    }
+
+    var focusedWatcherRuntimeState: AccountWatcherRuntimeState {
+        AccountWatcherRuntimeState(
+            watchStatus: watchStatus,
+            watchError: watchError,
+            resumeWatchingAfterManagedReauth: resumeWatchingAfterManagedReauth
+        )
+    }
+
+    func watcherRuntimeState(for account: ConnectedMailAccount) -> AccountWatcherRuntimeState {
+        AccountWatcherRuntimeState(
+            watchStatus: account.watchStatus,
+            watchError: account.watchError,
+            resumeWatchingAfterManagedReauth: account.resumeWatchingAfterManagedReauth
+        )
+    }
+
+    func apply(_ state: AccountWatcherRuntimeState, to account: ConnectedMailAccount) {
+        account.watchStatus = state.watchStatus
+        account.watchError = state.watchError
+        account.resumeWatchingAfterManagedReauth = state.resumeWatchingAfterManagedReauth
+    }
+
+    func applyFocusedWatcherRuntimeState(_ state: AccountWatcherRuntimeState) {
+        resumeWatchingAfterManagedReauth = state.resumeWatchingAfterManagedReauth
+        watchError = state.watchError
+        watchStatus = state.watchStatus
+        switch state.watchStatus {
+        case .watching:
+            if canStartInboxWatcherImmediately {
+                inboxWatcher.start()
+            }
+        case .idle, .paused:
+            inboxWatcher.stop()
+        }
     }
 }
