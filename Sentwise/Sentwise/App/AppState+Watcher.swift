@@ -276,8 +276,8 @@ extension AppState {
             return
         }
         guard isCurrentLocalDataGeneration(localDataGeneration),
-              watchStatus == .watching,
-              mailCredentials == credentials else { return }
+              isAccountWatching(credentials),
+              isConnectedAccount(credentials) else { return }
         let draftProvider = currentDraftLLMConfiguration?.provider
 
         do {

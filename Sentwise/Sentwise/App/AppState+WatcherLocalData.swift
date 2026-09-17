@@ -20,9 +20,11 @@ extension AppState {
         localDataGeneration: UInt64,
         credentials: MailAccountCredentials
     ) -> Bool {
+        // Multi-account (item 99): validate against the account whose poll is in
+        // flight — focused or background — not just the focused account.
         isCurrentLocalDataGeneration(localDataGeneration)
-            && watchStatus == .watching
-            && mailCredentials == credentials
+            && isAccountWatching(credentials)
+            && isConnectedAccount(credentials)
     }
 
     func handlePollFetchFailure(_ error: Error, localDataGeneration: UInt64) {

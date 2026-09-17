@@ -50,13 +50,15 @@ extension AppState {
         guard !draft.isFlagged else {
             throw DraftError.needsUserInput
         }
-        let credentials = mailCredentials
-        guard credentials.isComplete else {
-            throw DraftDispatchError.missingCredentials
-        }
-        guard draftMatchesCurrentAccount(draft, credentials: credentials) else {
-            clearGeneratedDraftIfDisplayed(draft)
-            throw DraftDispatchError.accountMismatch
+        // Multi-account (item 99): dispatch from the account the message arrived in.
+        let credentials: MailAccountCredentials
+        do {
+            credentials = try dispatchCredentials(forDraft: draft)
+        } catch {
+            if case DraftDispatchError.accountMismatch = error {
+                clearGeneratedDraftIfDisplayed(draft)
+            }
+            throw error
         }
         guard draftSourceAllowsReplyDispatch(draft) else {
             clearGeneratedDraftIfDisplayed(draft)

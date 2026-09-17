@@ -69,9 +69,11 @@ extension AppState {
 
     /// Whether `credentials` belongs to a currently connected account (focused or
     /// background) with matching connection details. Generalizes the old
-    /// `mailCredentials == credentials` guard to the multi-account world.
+    /// `mailCredentials == credentials` guard to the multi-account world — keyed on
+    /// credential completeness (not the verified `isAccountConnected` flag) so the
+    /// manual draft/dispatch paths behave exactly as before for the focused account.
     func isConnectedAccount(_ credentials: MailAccountCredentials) -> Bool {
-        if isAccountConnected, mailCredentials == credentials { return true }
+        if mailCredentials.isComplete, mailCredentials == credentials { return true }
         return backgroundConnectedAccounts.contains { $0.credentials == credentials }
     }
 
@@ -87,7 +89,10 @@ extension AppState {
     func connectedCredentials(forAccountEmail email: String) -> MailAccountCredentials? {
         let key = SavedMailAccount.normalizedEmail(email)
         guard !key.isEmpty else { return nil }
-        if isAccountConnected, SavedMailAccount.normalizedEmail(mailEmail) == key {
+        // The focused account is usable for dispatch whenever its credentials are
+        // complete (mirrors the pre-item-99 dispatch path), regardless of whether
+        // the verified `isAccountConnected` flag has been set.
+        if SavedMailAccount.normalizedEmail(mailEmail) == key, mailCredentials.isComplete {
             return mailCredentials
         }
         return backgroundConnectedAccount(email: key)?.credentials
@@ -101,5 +106,33 @@ extension AppState {
             return watchStatus
         }
         return backgroundConnectedAccount(email: key)?.watchStatus ?? .idle
+    }
+
+    /// Whether the account identified by `credentials` (focused or background) is
+    /// currently watching. Generalizes the old `watchStatus == .watching` check to
+    /// the account whose poll is in flight (item 99).
+    func isAccountWatching(_ credentials: MailAccountCredentials) -> Bool {
+        if mailCredentials == credentials {
+            return watchStatus == .watching
+        }
+        return backgroundConnectedAccounts.first { $0.credentials == credentials }?.watchStatus == .watching
+    }
+
+    /// Resolves the credentials to dispatch `draft` from — the account the message
+    /// arrived in (item 99), so a reply is sent/saved from that mailbox even when a
+    /// different account is focused. Throws `.missingCredentials` when no mailbox is
+    /// connected, `.accountMismatch` when the draft's source account is not among
+    /// the connected accounts.
+    func dispatchCredentials(forDraft draft: Draft) throws -> MailAccountCredentials {
+        if let sourceEmail = draft.sourceAccountEmail,
+           let credentials = connectedCredentials(forAccountEmail: sourceEmail),
+           credentials.isComplete {
+            return credentials
+        }
+        // The draft's source account isn't available. Distinguish "no mailbox
+        // connected at all" (missing) from "a different account is connected"
+        // (mismatch), preserving the pre-item-99 error copy.
+        let anyAccountAvailable = mailCredentials.isComplete || !backgroundConnectedAccounts.isEmpty
+        throw anyAccountAvailable ? DraftDispatchError.accountMismatch : DraftDispatchError.missingCredentials
     }
 }

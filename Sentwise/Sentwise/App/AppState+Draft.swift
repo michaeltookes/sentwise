@@ -275,8 +275,11 @@ extension AppState {
         if let localDataGeneration, !isCurrentLocalDataGeneration(localDataGeneration) {
             return false
         }
-        return (!requireWatching || watchStatus == .watching)
-            && mailCredentials == credentials
+        // Multi-account (item 99): the context is current if the draft's account is
+        // still connected (and, for the watcher path, still watching), regardless of
+        // which account is focused.
+        return (!requireWatching || isAccountWatching(credentials))
+            && isConnectedAccount(credentials)
             && currentDraftLLMConfiguration == llmConfiguration
     }
 
