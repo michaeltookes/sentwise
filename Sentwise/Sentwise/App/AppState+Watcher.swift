@@ -11,8 +11,11 @@ extension AppState {
         isAccountConnected && isLLMConnected && currentLLMProviderAllowsRequests
     }
 
-    /// Starts watching if ready — used at launch to auto-resume.
+    /// Starts watching if ready — used at launch to auto-resume. Also brings every
+    /// background connected account's watcher up (item 99), so all connected
+    /// mailboxes resume together.
     func startWatchingIfReady() {
+        startAllBackgroundWatchersIfReady()
         guard canWatch else {
             waitToStartWatchingAfterManagedLicenseRefreshIfNeeded()
             return

@@ -322,14 +322,13 @@ final class AppState: ObservableObject {
     var hasConfirmedReachability = false
     /// Prevents overlapping reconnect drains from racing each other.
     var isResumingQueuedDrafts = false
-    /// Records a reconnect callback that arrived while the current queue drain
-    /// was already running, so the drain can replay missed queued work once.
+    /// Records a reconnect callback that arrived while a queue drain was running,
+    /// so the drain can replay missed queued work once.
     var needsQueuedDraftDrainAfterCurrent = false
     /// Set when managed auth/license refresh should restart a previously intended watcher.
     var resumeWatchingAfterManagedReauth = false
 
-    /// Observes reachability so the app can pause while offline and resume on
-    /// reconnect. Injected for deterministic offline→online tests.
+    /// Observes reachability to pause offline / resume on reconnect (injected for tests).
     let reachability: NetworkReachabilityMonitoring
     /// Messages the watcher passed over instead of drafting, newest first (visible
     /// slice for the active account; skip records persist across account transitions).

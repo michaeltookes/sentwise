@@ -210,6 +210,7 @@ extension AppState {
             notifier.removeNotification(identity: draft.identity)
         }
         stopWatching()
+        stopAllBackgroundWatchers()
         stopTranscriptFolderWatching()
 
         await managedAccount.cancelSignIn()
@@ -261,6 +262,7 @@ extension AppState {
         mailHost = Settings.default.mailHost
         mailPort = Settings.default.mailPort
         savedAccounts = []
+        backgroundConnectedAccounts = []
         isAccountConnected = false
         mailHostExplicitlyEditedEmail = nil
         mailHostExplicitlyEditedBeforeEmail = false
