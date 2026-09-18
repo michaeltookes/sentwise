@@ -10,7 +10,7 @@ import Foundation
 /// never blocked; the hard-block and real "buy more" arrive with 56c.
 struct ManagedQuota: Codable, Sendable, Equatable {
 
-    /// Whether the weekly allotment is enforced. `soft` warns but never blocks;
+    /// Whether the monthly allotment is enforced. `soft` warns but never blocks;
     /// `hard` blocks over-limit drafting server-side (56c).
     enum Enforcement: String, Codable, Sendable, Equatable {
         case soft
@@ -19,13 +19,13 @@ struct ManagedQuota: Codable, Sendable, Equatable {
 
     /// The user-facing unit the counters are expressed in (e.g. "drafts").
     var unit: String
-    /// Drafts consumed in the current weekly window.
+    /// Drafts consumed in the current monthly window.
     var used: Int
-    /// The weekly allotment (server-configurable — may change without an app release).
+    /// The monthly allotment (server-configurable — may change without an app release).
     var limit: Int
     /// Drafts remaining in the current window (server-computed).
     var remaining: Int
-    /// When the current weekly window resets (Monday 00:00 UTC by default).
+    /// When the current monthly window resets (00:00 UTC on the 1st by default).
     var resetsAt: Date
     /// Tokens consumed under the hood — surfaced for the margin dashboard, not the UI.
     var tokensUsed: Int
@@ -113,7 +113,7 @@ struct ManagedQuota: Codable, Sendable, Equatable {
 
     // MARK: - Derived values
 
-    /// Fraction of the weekly allotment consumed, clamped to `0...1`. `0` when the
+    /// Fraction of the monthly allotment consumed, clamped to `0...1`. `0` when the
     /// limit is unknown (so a `ProgressView` renders empty rather than crashing).
     var usedFraction: Double {
         guard limit > 0 else { return 0 }
@@ -134,15 +134,15 @@ struct ManagedQuota: Codable, Sendable, Equatable {
     // MARK: - Display
 
     /// The main usage line for the Settings pane, e.g.
-    /// "12 of 50 drafts used this week · resets Monday, 5:00 PM".
+    /// "12 of 50 drafts used this month · resets Oct 1".
     func usageSummary(calendar: Calendar = .current, locale: Locale = .current) -> String {
-        let base = "\(used) of \(limit) \(unit) used this week"
+        let base = "\(used) of \(limit) \(unit) used this month"
         guard hasKnownReset else { return base }
         return "\(base) · resets \(Self.resetDescription(resetsAt, calendar: calendar, locale: locale))"
     }
 
-    /// A weekday + time description of a reset instant in the user's locale,
-    /// e.g. "Monday, 5:00 PM".
+    /// A month/day description of a reset instant in the user's locale,
+    /// e.g. "Oct 1" — the monthly window resets at 00:00 UTC on the 1st.
     static func resetDescription(
         _ date: Date,
         calendar: Calendar = .current,
@@ -152,7 +152,7 @@ struct ManagedQuota: Codable, Sendable, Equatable {
         formatter.calendar = calendar
         formatter.locale = locale
         formatter.timeZone = calendar.timeZone
-        formatter.setLocalizedDateFormatFromTemplate("EEEE h mm a")
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
         return formatter.string(from: date)
     }
 }
