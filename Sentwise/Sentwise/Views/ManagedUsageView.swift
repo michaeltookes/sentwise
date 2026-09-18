@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The managed-inference weekly-usage display for the Settings → Subscription
-/// pane (backlog items 56b, 73): "N of M drafts used this week · resets
-/// <weekday, time>" with a progress bar, a subdued extra-usage line when the user
+/// The managed-inference monthly-usage display for the Settings → Subscription
+/// pane (backlog items 56b, 73): "N of M drafts used this month · resets
+/// <month day>" with a progress bar, a subdued extra-usage line when the user
 /// has bought more, and a "buy more usage" / upgrade path (56c wires the purchase).
 /// The own-key valve was parked 2026-09-16 (item 100) — managed inference is the
 /// only shipped path. Hidden gracefully when the quota is unknown. The `/v1/me`
@@ -34,7 +34,7 @@ struct ManagedUsageView: View {
 
                 ProgressView(value: quota.usedFraction)
                     .accessibilityIdentifier("managedUsageProgress")
-                    .accessibilityLabel("Weekly drafts used")
+                    .accessibilityLabel("Monthly drafts used")
                     .accessibilityValue("\(quota.usedPercent) percent")
 
                 if quota.extraPurchased > 0 {
