@@ -35,7 +35,7 @@ Notes:
 
 ## Alignment work owed at cutover (item 74)
 
-- **Window unit mismatch:** the Worker's per-tier limits (`STARTER_DRAFT_LIMIT=30`, `PRO_DRAFT_LIMIT=120`) are enforced over a **weekly** window, but the site markets those numbers as **monthly**. The marketed monthly caps are canonical; before launch, either switch the quota window to monthly or set weekly limits to ~monthly/4.33 (7 / 28). Tracked on item 74.
+- **Window unit — resolved:** the Worker's per-tier limits (`STARTER_DRAFT_LIMIT=30`, `PRO_DRAFT_LIMIT=120`) are now enforced over a **calendar-month UTC** window that resets at 00:00 UTC on the 1st (Worker `window-unit-fix`, 2026-09-18), matching the canonical monthly caps the site markets. The app copy and `resetsAt` formatting were aligned to the monthly window by item 101. No cutover change owed here.
 - **Live Paddle products/prices** must match this matrix exactly: Starter $9 / Pro $19 / Unlimited $39, plan ids `starter`/`pro`/`unlimited`. Tracked on item 74.
 
 ## References
