@@ -36,8 +36,8 @@ enum PaddlePlan: String, CaseIterable, Identifiable, Sendable, Equatable {
     var tagline: String {
         switch self {
         case .starter: return "For getting started with managed drafting"
-        case .pro: return "More weekly drafts for daily use"
-        case .unlimited: return "The most weekly drafts"
+        case .pro: return "More monthly drafts for daily use"
+        case .unlimited: return "The most monthly drafts"
         }
     }
 
@@ -52,12 +52,12 @@ enum PaddlePlan: String, CaseIterable, Identifiable, Sendable, Equatable {
         }
     }
 
-    /// The plan's weekly allowance headline (item 90), matching the enforced
+    /// The plan's monthly allowance headline (item 90), matching the enforced
     /// quota window. Billing-only copy.
     var allowanceSummary: String {
         switch self {
-        case .starter: return "30 follow-ups a week"
-        case .pro: return "120 follow-ups a week"
+        case .starter: return "30 follow-ups a month"
+        case .pro: return "120 follow-ups a month"
         case .unlimited: return "Unlimited follow-ups"
         }
     }
@@ -66,7 +66,7 @@ enum PaddlePlan: String, CaseIterable, Identifiable, Sendable, Equatable {
     var allowanceDetail: String {
         switch self {
         case .starter: return "About one a workday."
-        case .pro: return "Room for a full week of calls."
+        case .pro: return "Room for a full month of calls."
         case .unlimited: return "Fair-use — no cap to watch."
         }
     }
