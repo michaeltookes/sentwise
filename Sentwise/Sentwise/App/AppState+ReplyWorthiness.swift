@@ -216,14 +216,22 @@ extension AppState {
 
     private func persistedSkippedMessages(recording entry: SkippedMessage) -> [SkippedMessage] {
         var persistedMessages = persistence.loadSkippedMessages()
-        let persistedIDs = Set(persistedMessages.map(\.id))
-        persistedMessages.append(contentsOf: skippedMessages.filter { !persistedIDs.contains($0.id) })
+        appendMissingSkippedMessages(reviewSkippedMessages, to: &persistedMessages)
+        appendMissingSkippedMessages(skippedMessages, to: &persistedMessages)
         persistedMessages.removeAll { $0.id == entry.id }
         persistedMessages.insert(entry, at: 0)
         return Self.boundedPersistedSkippedMessages(
             persistedMessages,
             regularLimitPerAccount: skippedMessageLogLimit
         )
+    }
+
+    private func appendMissingSkippedMessages(
+        _ candidates: [SkippedMessage],
+        to messages: inout [SkippedMessage]
+    ) {
+        var messageIDs = Set(messages.map(\.id))
+        messages.append(contentsOf: candidates.filter { messageIDs.insert($0.id).inserted })
     }
 
     private func visibleSkippedMessages(recording entry: SkippedMessage) -> [SkippedMessage] {

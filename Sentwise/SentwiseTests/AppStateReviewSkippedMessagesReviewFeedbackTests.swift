@@ -67,6 +67,38 @@ final class ReviewSkippedMessagesTests: XCTestCase {
         XCTAssertEqual(appState.reviewSkippedMessages, [entry])
     }
 
+    func testSuccessfulRecordPersistsPreviouslyCachedReviewSkippedMessages() throws {
+        let (appState, persistence) = makeAppState()
+        persistence.skippedMessageSaveError = AppStatePersistenceError.writeDenied
+        appState.recordSkip(
+            message(id: 20, from: "alerts@x.com"),
+            reason: .automatedNotification,
+            account: "side-a@work.com",
+            mailbox: .inbox
+        )
+        appState.recordSkip(
+            message(id: 21, from: "notifications@x.com"),
+            reason: .bulkOrListMail,
+            account: "side-b@work.com",
+            mailbox: .inbox
+        )
+        let latestCached = try XCTUnwrap(appState.reviewSkippedMessages.first { $0.account == "side-b@work.com" })
+        let retained = try XCTUnwrap(appState.reviewSkippedMessages.first { $0.account == "side-a@work.com" })
+        XCTAssertTrue(persistence.skippedMessages.isEmpty)
+
+        persistence.skippedMessageSaveError = nil
+        let durable = try appState.recordSkipSync(
+            message(id: 22, from: "no-reply@x.com"),
+            reason: .noReplySender,
+            account: "me@gmail.com",
+            mailbox: .inbox
+        )
+
+        XCTAssertEqual(persistence.skippedMessages.map(\.id), [durable.id, latestCached.id, retained.id])
+        XCTAssertTrue(persistence.skippedMessages.contains(retained))
+        XCTAssertTrue(appState.reviewSkippedMessages.contains(retained))
+    }
+
     func testDismissReviewSkippedMessagesOnlyClearsProvidedFilteredRows() throws {
         let (appState, persistence) = makeAppState()
         let focused = try appState.recordSkipSync(
