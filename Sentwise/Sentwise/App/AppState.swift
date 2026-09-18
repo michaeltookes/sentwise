@@ -262,6 +262,13 @@ final class AppState: ObservableObject {
     /// Search inputs and results for the mailbox browser window.
     @Published var browser = MailboxBrowserState()
 
+    /// The mailbox the Browse window is pointed at (item 103): the normalized
+    /// email of the picked connected account, or nil to follow the focused
+    /// account. Purely a browse-window concern — it never changes the global
+    /// focused account, and browse/search/pagination/cleanup all read their
+    /// credentials through `browserCredentials`.
+    @Published var browserAccountEmail: String?
+
     // MARK: - Bulk Cleanup (item 42)
 
     /// Chosen bulk action, preview, and run progress.

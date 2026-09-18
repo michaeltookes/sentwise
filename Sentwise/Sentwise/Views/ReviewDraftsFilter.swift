@@ -71,3 +71,76 @@ enum ReviewDraftsFilter {
         return fields.contains { $0.lowercased().contains(needle) }
     }
 }
+
+// MARK: - Account scope (item 102)
+
+extension ReviewDraftsFilter {
+
+    /// A view-only mailbox scope for the Review Drafts account picker (item 102).
+    /// `.all` shows every mailbox's items; `.mailbox` narrows to one connected or
+    /// saved mailbox (keyed on its normalized email). Legacy items with no source
+    /// account are visible only under `.all`, so a draft is never attributed to a
+    /// guessed mailbox. Kept `Hashable` so it can tag a SwiftUI `Picker` directly.
+    enum AccountScope: Equatable, Hashable {
+        case all
+        case mailbox(String)
+
+        /// Builds a scope from a picker tag: `nil` (or blank) is "All Mailboxes",
+        /// any email narrows to that normalized mailbox.
+        init(mailbox email: String?) {
+            guard let email else { self = .all; return }
+            let normalized = SavedMailAccount.normalizedEmail(email)
+            self = normalized.isEmpty ? .all : .mailbox(normalized)
+        }
+
+        /// The normalized mailbox this scope narrows to, or `nil` for `.all`.
+        var mailbox: String? {
+            if case let .mailbox(email) = self { return email }
+            return nil
+        }
+
+        /// Whether a scope narrower than "All Mailboxes" is active.
+        var isFiltering: Bool { mailbox != nil }
+
+        /// Whether an item tagged with `accountEmail` (nil = legacy/untagged) is
+        /// visible under this scope. Untagged items match only `.all`.
+        func matches(accountEmail: String?) -> Bool {
+            switch self {
+            case .all:
+                return true
+            case let .mailbox(email):
+                guard let accountEmail else { return false }
+                let normalized = SavedMailAccount.normalizedEmail(accountEmail)
+                guard !normalized.isEmpty else { return false }
+                return normalized == email
+            }
+        }
+    }
+
+    /// The normalized source-account email a draft belongs to (item 99), or `nil`
+    /// for a legacy/untagged draft.
+    static func accountEmail(for draft: Draft) -> String? {
+        normalizedAccount(draft.sourceAccountEmail)
+    }
+
+    /// The normalized source-account email a skipped message belongs to (item 99).
+    static func accountEmail(for skipped: SkippedMessage) -> String? {
+        normalizedAccount(skipped.account)
+    }
+
+    /// Whether a draft passes both the account scope and the search query.
+    static func matches(_ draft: Draft, query: String, account: AccountScope) -> Bool {
+        account.matches(accountEmail: accountEmail(for: draft)) && matches(draft, query: query)
+    }
+
+    /// Whether a skipped message passes both the account scope and the search query.
+    static func matches(_ skipped: SkippedMessage, query: String, account: AccountScope) -> Bool {
+        account.matches(accountEmail: accountEmail(for: skipped)) && matches(skipped, query: query)
+    }
+
+    private static func normalizedAccount(_ email: String?) -> String? {
+        guard let email else { return nil }
+        let normalized = SavedMailAccount.normalizedEmail(email)
+        return normalized.isEmpty ? nil : normalized
+    }
+}

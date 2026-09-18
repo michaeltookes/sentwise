@@ -62,6 +62,88 @@ extension AppState {
         return email
     }
 
+    /// The compact source-mailbox badge for a collapsed Review Drafts row (item
+    /// 102): the account label when attribution is shown and the draft is tagged,
+    /// else nil so single-account users and legacy (untagged) drafts show none.
+    func draftRowAccountBadge(for draft: Draft) -> String? {
+        guard showsAccountAttribution else { return nil }
+        return accountAttributionLabel(forEmail: draft.sourceAccountEmail)
+    }
+
+    /// Every mailbox that can own a Review Drafts item, for the account picker
+    /// (item 102): the union of saved accounts, connected accounts, and the
+    /// focused mailbox — normalized, de-duplicated, and sorted for a stable menu
+    /// order. Legacy untagged items are reached through the picker's "All
+    /// Mailboxes" entry, so they need no dedicated row here.
+    var attributionMailboxes: [String] {
+        var seen = Set<String>()
+        var ordered: [String] = []
+        func add(_ email: String) {
+            let normalized = SavedMailAccount.normalizedEmail(email)
+            guard !normalized.isEmpty, seen.insert(normalized).inserted else { return }
+            ordered.append(normalized)
+        }
+        savedAccounts.forEach { add($0.email) }
+        allConnectedAccountEmails.forEach(add)
+        if isAccountConnected { add(mailEmail) }
+        return ordered.sorted()
+    }
+
+    // MARK: - Mailbox browser account selection (item 103)
+
+    /// The connected mailboxes the Browse window can point at (item 103): focused
+    /// first, then background accounts. Only *connected* accounts appear — the
+    /// browser needs live credentials, so a saved-but-disconnected account is not
+    /// browsable.
+    var browsableAccountEmails: [String] {
+        allConnectedAccountEmails
+    }
+
+    /// Whether the Browse window shows its account picker (item 103): only with
+    /// more than one connected mailbox, so single-account users — and Prowl hunt
+    /// mode, which seeds one fixture account — never see it.
+    var showsBrowserAccountPicker: Bool {
+        browsableAccountEmails.count > 1
+    }
+
+    /// The normalized email of the mailbox the Browse window is currently showing
+    /// (item 103): the explicitly picked account when it is still connected, else
+    /// the focused account.
+    var effectiveBrowserAccountEmail: String {
+        if let email = browserAccountEmail, isConnectedAccount(email: email) {
+            return SavedMailAccount.normalizedEmail(email)
+        }
+        return SavedMailAccount.normalizedEmail(mailEmail)
+    }
+
+    /// The credentials the mailbox browser and bulk cleanup operate through (item
+    /// 103): the picked account's when one is selected and still connected, else
+    /// the focused account's live inputs. This is the single seam that points
+    /// browse/search/pagination/cleanup at the chosen mailbox — no second
+    /// credential store.
+    var browserCredentials: MailAccountCredentials {
+        if let email = browserAccountEmail,
+           isConnectedAccount(email: email),
+           let credentials = connectedCredentials(forAccountEmail: email) {
+            return credentials
+        }
+        return mailCredentials
+    }
+
+    /// Switches the Browse window to another connected mailbox (item 103): swaps
+    /// the credentials browse/search/cleanup use and resets the browser and
+    /// cleanup state and generations so no results mix across accounts and no
+    /// stale page appends. The global focused account is untouched. A no-op if the
+    /// target is not a connected account.
+    func selectBrowserAccount(_ email: String) {
+        let normalized = SavedMailAccount.normalizedEmail(email)
+        guard isConnectedAccount(email: normalized) else { return }
+        guard normalized != effectiveBrowserAccountEmail else { return }
+        browserAccountEmail = normalized
+        resetMailboxBrowserForAccountChange()
+        resetBulkCleanupForAccountChange()
+    }
+
     // MARK: - Registry queries
 
     /// Normalized emails of every connected mailbox (focused + background).
