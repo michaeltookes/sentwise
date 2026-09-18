@@ -149,6 +149,17 @@ final class AppStateAccountAttributionTests: XCTestCase {
         XCTAssertEqual(app.attributionMailboxes, ["one@x.com", "removed@y.com"])
     }
 
+    func testAttributionMailboxesIncludeInMemorySkippedSources() {
+        let app = makeAppState(
+            mailEmail: "one@x.com",
+            savedAccounts: [SavedMailAccount(email: "one@x.com", host: "imap.x.com", port: 993)]
+        )
+        app.skippedMessages = [skipped(account: "removed@y.com")]
+
+        XCTAssertTrue(app.showsAccountAttribution)
+        XCTAssertEqual(app.attributionMailboxes, ["one@x.com", "removed@y.com"])
+    }
+
     func testPerAccountWatchStatusAndHealth() {
         let app = makeAppState(
             mailEmail: "one@x.com",

@@ -89,7 +89,7 @@ extension AppState {
         allConnectedAccountEmails.forEach(add)
         if isAccountConnected { add(mailEmail) }
         pendingDrafts.forEach { add($0.sourceAccountEmail ?? "") }
-        persistence.loadSkippedMessages().forEach { add($0.account) }
+        reviewSkippedMessages.forEach { add($0.account) }
         return ordered.sorted()
     }
 
