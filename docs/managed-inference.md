@@ -225,7 +225,8 @@ step.
 
 ## Metering (56b) — app side
 
-The Worker meters a **weekly draft allotment** that resets weekly, then
+The Worker meters a **monthly draft allotment** over a calendar-month UTC window
+that resets at 00:00 UTC on the 1st of each month, then
 pay-per-use overage (the purchase flow is 56c). Under the hood it counts tokens
 with a per-request safety cap; the UI presents a friendly unit (**drafts**).
 Enforcement is **soft** while dogfooding — drafting is never blocked; the
@@ -265,8 +266,8 @@ variant (absent → `.distantPast`, treated as "reset unknown" by the display).
 
 ### Settings display (`Views/ManagedUsageView.swift`)
 
-In the Sentwise AI section when signed in: **"N of M drafts used this week ·
-resets \<weekday, time\>"** with a `ProgressView`, a subdued "Extra usage
+In the Sentwise AI section when signed in: **"N of M drafts used this month ·
+resets \<month day\>"** (e.g. "resets Oct 1") with a `ProgressView`, a subdued "Extra usage
 purchased: X" line only when `extraPurchased > 0`, an **"Upgrade for more
 drafts"** button shown when at/over limit that opens the Paddle checkout plan
 picker (`AppState.presentBillingCheckout()`; 56c — the sheet is hosted by the
@@ -280,7 +281,7 @@ section was parked 2026-09-16 (item 100). Hidden gracefully when
 | Worker response | `LLMError` case | User copy |
 | --- | --- | --- |
 | `429` `rate_limited` (+`retryAfterSeconds`, `Retry-After` header) | `.managedRateLimited(retryAfter:)` | "You're drafting faster than Sentwise allows — try again in N seconds." |
-| `429` `quota_exceeded` (+`resetsAt`, hard mode only) | `.managedQuotaExceeded(resetsAt:)` | Explains the weekly reset, "Buy more usage in Settings → Subscription." (The "use your own key" clause was parked 2026-09-16 — item 100.) |
+| `429` `quota_exceeded` (+`resetsAt`, hard mode only) | `.managedQuotaExceeded(resetsAt:)` | Explains the monthly reset, "Buy more usage in Settings → Subscription." (The "use your own key" clause was parked 2026-09-16 — item 100.) |
 | `413` `request_too_large` | `.managedRequestTooLarge` | Suggests trimming the transcript/thread. |
 
 Body `retryAfterSeconds` takes precedence over the `Retry-After` header.
@@ -293,7 +294,7 @@ Existing `402`/`trial_expired` and `401` handling is unchanged.
 `UsageAlertEvaluator` (`Services/UsageAlert.swift`) is pure decision logic: given
 the latest quota and the previously-persisted `UsageAlertState`, it returns the
 thresholds to fire **now**. A threshold fires **once per managed account and
-weekly window**; fired thresholds are persisted by hashed account key plus
+monthly window**; fired thresholds are persisted by hashed account key plus
 `resetsAt` (`UserDefaultsUsageAlertStore`) so a relaunch never re-fires for the
 same account, while an account change or changed `resetsAt` resets the fired set.
 Alerts post via `NotificationService.notifyUsageAlert` under a distinct
@@ -314,7 +315,7 @@ renders deterministically. `ingestManagedQuota` skips alert scheduling under
 ## Account & subscription (item 73)
 
 The **Subscription** tab of Settings (`SettingsTab.subscription`, after "AI") is
-the Sentwise-account home: account email, plan / trial / renewal, weekly usage
+the Sentwise-account home: account email, plan / trial / renewal, monthly usage
 (reused from `ManagedUsageView`), a manage-billing entry point, sign-out, and a
 guarded delete-account flow. It is distinct from the **Account** tab, which is
 the *mailbox* (IMAP) account. The AI tab keeps only a one-line
