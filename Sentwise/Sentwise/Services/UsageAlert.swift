@@ -16,7 +16,7 @@ enum ManagedUsageAccountKey {
     }
 }
 
-/// The weekly-allotment usage thresholds that fire a native alert (backlog item
+/// The monthly-allotment usage thresholds that fire a native alert (backlog item
 /// 56b): 50%, 75%, and 100% of the account's `limit`.
 enum UsageAlertThreshold: Int, CaseIterable, Codable, Sendable, Comparable {
     case fifty = 50
@@ -32,7 +32,7 @@ enum UsageAlertThreshold: Int, CaseIterable, Codable, Sendable, Comparable {
 /// `UsageAlert.make(threshold:quota:accountKey:)` so `NotificationService` stays
 /// decoupled from `ManagedQuota` and just delivers copy.
 struct UsageAlert: Equatable, Sendable {
-    /// Stable per threshold + weekly window so re-posting replaces rather than
+    /// Stable per threshold + monthly window so re-posting replaces rather than
     /// stacks, and a relaunch never double-delivers.
     let identifier: String
     let title: String
@@ -54,8 +54,8 @@ struct UsageAlert: Equatable, Sendable {
         case .fifty, .seventyFive:
             return UsageAlert(
                 identifier: identifier,
-                title: "You've used \(threshold.rawValue)% of your weekly \(unit)",
-                body: "\(quota.used) of \(quota.limit) \(unit) used this week.\(resetPhrase)",
+                title: "You've used \(threshold.rawValue)% of your monthly \(unit)",
+                body: "\(quota.used) of \(quota.limit) \(unit) used this month.\(resetPhrase)",
                 threshold: threshold
             )
         case .hundred:
@@ -63,15 +63,15 @@ struct UsageAlert: Equatable, Sendable {
             // Parked 2026-09-16 (item 100): the "switch to your own key" option was
             // removed — managed inference is the only shipped path.
             if quota.enforcement == .hard {
-                body = "You've reached your weekly \(unit) allotment. Buy more usage to keep "
+                body = "You've reached your monthly \(unit) allotment. Buy more usage to keep "
                     + "drafting.\(resetPhrase)"
             } else {
-                body = "You've reached your weekly \(unit) allotment. Drafting continues for now — "
+                body = "You've reached your monthly \(unit) allotment. Drafting continues for now — "
                     + "buy more usage to stay ahead.\(resetPhrase)"
             }
             return UsageAlert(
                 identifier: identifier,
-                title: "You've used all your weekly \(unit)",
+                title: "You've used all your monthly \(unit)",
                 body: body,
                 threshold: threshold
             )
@@ -80,7 +80,7 @@ struct UsageAlert: Equatable, Sendable {
 }
 
 /// The persisted per-account, per-window alert state: which thresholds have
-/// already fired for the signed-in managed account in the current weekly window.
+/// already fired for the signed-in managed account in the current monthly window.
 /// When either the account or `resetsAt` changes, the fired set is reset.
 struct UsageAlertState: Codable, Equatable, Sendable {
     var accountKey: String
@@ -113,7 +113,7 @@ struct UsageAlertState: Codable, Equatable, Sendable {
 /// Pure decision logic for usage alerts (backlog item 56b): given the latest
 /// quota and the previously-persisted state, decides which thresholds to fire
 /// *now* and the state to persist. Idempotent — a threshold fires once per
-/// weekly window; a window change resets the fired set.
+/// monthly window; a window change resets the fired set.
 enum UsageAlertEvaluator {
 
     struct Outcome: Equatable {
