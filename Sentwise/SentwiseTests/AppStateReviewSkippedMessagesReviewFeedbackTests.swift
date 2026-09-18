@@ -5,7 +5,7 @@ import XCTest
 /// Regression coverage for PR review feedback around the all-mailbox skipped
 /// review list and filtered Clear behavior.
 @MainActor
-final class AppStateReviewSkippedMessagesReviewFeedbackTests: XCTestCase {
+final class ReviewSkippedMessagesTests: XCTestCase {
 
     private func message(id: UInt32, from: String) -> MailMessage {
         MailMessage(

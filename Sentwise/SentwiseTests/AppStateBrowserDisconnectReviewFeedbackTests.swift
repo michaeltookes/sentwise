@@ -5,7 +5,7 @@ import XCTest
 /// Regression coverage for PR review feedback around implicit Browse-window
 /// account selection when background mailboxes disconnect or are removed.
 @MainActor
-final class AppStateBrowserDisconnectReviewFeedbackTests: XCTestCase {
+final class BrowserDisconnectReviewTests: XCTestCase {
 
     private let focused = "me@gmail.com"
     private let focusedHost = "imap.gmail.com"
