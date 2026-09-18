@@ -26,6 +26,12 @@ struct MailboxBrowserState: Equatable {
 
     // MARK: Inputs
 
+    /// The connected mailbox the Browse window is pointed at (item 103): the
+    /// normalized email of the picked account, or nil to follow the focused
+    /// account. Lives here (not on `AppState`) so a full state reset on an
+    /// account switch clears it, and browse/search/pagination/cleanup resolve
+    /// their credentials through `AppState.browserCredentials`.
+    var accountEmail: String?
     var mailbox: Mailbox = .inbox
     var keyword: String = ""
     var sender: String = ""

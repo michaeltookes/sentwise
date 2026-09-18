@@ -110,7 +110,7 @@ extension AppState {
     /// (item 103): the explicitly picked account when it is still connected, else
     /// the focused account.
     var effectiveBrowserAccountEmail: String {
-        if let email = browserAccountEmail, isConnectedAccount(email: email) {
+        if let email = browser.accountEmail, isConnectedAccount(email: email) {
             return SavedMailAccount.normalizedEmail(email)
         }
         return SavedMailAccount.normalizedEmail(mailEmail)
@@ -122,7 +122,7 @@ extension AppState {
     /// browse/search/pagination/cleanup at the chosen mailbox — no second
     /// credential store.
     var browserCredentials: MailAccountCredentials {
-        if let email = browserAccountEmail,
+        if let email = browser.accountEmail,
            isConnectedAccount(email: email),
            let credentials = connectedCredentials(forAccountEmail: email) {
             return credentials
@@ -130,18 +130,19 @@ extension AppState {
         return mailCredentials
     }
 
-    /// Switches the Browse window to another connected mailbox (item 103): swaps
-    /// the credentials browse/search/cleanup use and resets the browser and
-    /// cleanup state and generations so no results mix across accounts and no
-    /// stale page appends. The global focused account is untouched. A no-op if the
+    /// Switches the Browse window to another connected mailbox (item 103): resets
+    /// the browser and cleanup state and generations so no results mix across
+    /// accounts and no stale page appends, then points the (now-clean) browser at
+    /// the picked account. The global focused account is untouched. A no-op if the
     /// target is not a connected account.
     func selectBrowserAccount(_ email: String) {
         let normalized = SavedMailAccount.normalizedEmail(email)
         guard isConnectedAccount(email: normalized) else { return }
         guard normalized != effectiveBrowserAccountEmail else { return }
-        browserAccountEmail = normalized
         resetMailboxBrowserForAccountChange()
         resetBulkCleanupForAccountChange()
+        // Re-apply after the reset, which wipes the whole browser state.
+        browser.accountEmail = normalized
     }
 
     // MARK: - Registry queries

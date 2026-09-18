@@ -116,9 +116,8 @@ extension AppState {
         clearRecentMessagePreview()
         clearDraftPreview()
         // A focused-account change (switch/disconnect) points the Browse window
-        // back at the new focused account (item 103); the picked-mailbox override
-        // must not survive it, or the browser would keep showing the old mailbox.
-        browserAccountEmail = nil
+        // back at the new focused account (item 103): resetMailboxBrowserForAccountChange
+        // wipes the whole browser state, clearing any picked-mailbox override too.
         resetMailboxBrowserForAccountChange()
         resetBulkCleanupForAccountChange()
         if shouldClearSkippedMessages {

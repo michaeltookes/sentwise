@@ -49,7 +49,7 @@ final class AppStateBrowserAccountTests: XCTestCase {
 
     func testBrowserCredentialsDefaultsToFocusedAccount() {
         let app = makeAppState(provider: PagingSearchMailProvider(allMessages: []))
-        XCTAssertNil(app.browserAccountEmail)
+        XCTAssertNil(app.browser.accountEmail)
         XCTAssertEqual(app.browserCredentials.email, focused)
         XCTAssertEqual(app.effectiveBrowserAccountEmail, focused)
     }
@@ -82,7 +82,7 @@ final class AppStateBrowserAccountTests: XCTestCase {
     func testSelectBrowserAccountIgnoresUnconnectedEmail() {
         let app = makeAppState(provider: PagingSearchMailProvider(allMessages: []))
         app.selectBrowserAccount("stranger@nowhere.com")
-        XCTAssertNil(app.browserAccountEmail)
+        XCTAssertNil(app.browser.accountEmail)
         XCTAssertEqual(app.effectiveBrowserAccountEmail, focused)
     }
 
@@ -126,11 +126,11 @@ final class AppStateBrowserAccountTests: XCTestCase {
     func testFocusedAccountChangeClearsBrowserAccountOverride() {
         let app = makeAppState(provider: PagingSearchMailProvider(allMessages: []))
         app.selectBrowserAccount(background)
-        XCTAssertEqual(app.browserAccountEmail, background)
+        XCTAssertEqual(app.browser.accountEmail, background)
         // Switching the focused account (or disconnecting) resets the browser to
         // the new focused account.
         app.resetMessagePreviewForAccountChange()
-        XCTAssertNil(app.browserAccountEmail)
+        XCTAssertNil(app.browser.accountEmail)
         XCTAssertEqual(app.effectiveBrowserAccountEmail, focused)
     }
 
