@@ -122,17 +122,22 @@ extension AppState {
         return bodyPreviewGeneration
     }
 
-    func resetMessagePreviewForAccountChange(clearSkippedMessages shouldClearSkippedMessages: Bool = true) {
+    func resetMessagePreviewForAccountChange(
+        clearSkippedMessages shouldClearSkippedMessages: Bool = true,
+        resetBrowser: Bool = true
+    ) {
         _ = nextPreviewGeneration()
         _ = nextBodyPreviewGeneration()
         _ = nextDraftGeneration()
         clearRecentMessagePreview()
         clearDraftPreview()
-        // A focused-account change (switch/disconnect) points the Browse window
-        // back at the new focused account (item 103): resetMailboxBrowserForAccountChange
-        // wipes the whole browser state, clearing any picked-mailbox override too.
-        resetMailboxBrowserForAccountChange()
-        resetBulkCleanupForAccountChange()
+        if resetBrowser {
+            // A focused-account change (switch/disconnect) points the Browse window
+            // back at the new focused account (item 103): resetMailboxBrowserForAccountChange
+            // wipes the whole browser state, clearing any picked-mailbox override too.
+            resetMailboxBrowserForAccountChange()
+            resetBulkCleanupForAccountChange()
+        }
         if shouldClearSkippedMessages {
             restoreSkippedMessagesFromPersistence()
         }

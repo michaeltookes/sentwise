@@ -319,6 +319,40 @@ final class AppStateBrowserAccountTests: XCTestCase {
         XCTAssertEqual(app.effectiveBrowserAccountEmail, focused)
     }
 
+    func testSameAccountConnectionTestPreservesBrowserSelection() async {
+        let message = MailMessage(
+            id: 42,
+            uidValidity: 1,
+            from: MailAddress(email: "alice@example.com"),
+            subject: "Invoice",
+            date: "",
+            messageID: "<42@example.com>"
+        )
+        let provider = PagingSearchMailProvider(allMessages: [message])
+        let app = makeAppState(provider: provider)
+        app.selectBrowserAccount(background)
+        app.browser.keyword = "invoice"
+        await app.runMailboxSearch()
+        app.browser.selectAllLoaded()
+        app.recentMessages = [
+            MailMessage(id: 1, from: MailAddress(email: "old@example.com"), subject: "Old", date: "")
+        ]
+
+        await app.testConnection(with: MailAccountCredentials(
+            email: focused,
+            appPassword: "gmail-pw",
+            host: focusedHost,
+            port: 993
+        ))
+
+        XCTAssertEqual(app.browser.accountEmail, background)
+        XCTAssertEqual(app.effectiveBrowserAccountEmail, background)
+        XCTAssertEqual(app.browser.keyword, "invoice")
+        XCTAssertEqual(app.browser.results.map(\.id), [42])
+        XCTAssertTrue(app.browser.selectedMessageIDs.contains(42))
+        XCTAssertTrue(app.recentMessages.isEmpty)
+    }
+
     // MARK: - Picker visibility
 
     func testPickerHiddenForSingleConnectedAccount() {

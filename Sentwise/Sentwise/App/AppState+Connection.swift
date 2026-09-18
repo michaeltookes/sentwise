@@ -106,7 +106,10 @@ extension AppState {
                 newFocusedEmail: credentials.email
             )
         }
-        resetMessagePreviewForAccountChange(clearSkippedMessages: requiresTransitionCleanup)
+        resetMessagePreviewForAccountChange(
+            clearSkippedMessages: requiresTransitionCleanup,
+            resetBrowser: requiresTransitionCleanup
+        )
         // Now that mail is connected, catch up any transcript that arrived while
         // the account was disconnected but the folder watcher was already active.
         startTranscriptFolderWatchingIfEnabled()
