@@ -108,7 +108,11 @@ extension AppState {
                 newFocusedEmail: credentials.email
             )
         }
-        resetAfterConnectionSuccess(clearSkippedMessages: requiresTransitionCleanup, resetBrowser: shouldResetBrowser)
+        // A no-op retest must not invalidate in-flight browser body/draft actions;
+        // reset only when the effective mailbox/endpoint actually changed.
+        if shouldResetBrowser {
+            resetAfterConnectionSuccess(clearSkippedMessages: requiresTransitionCleanup, resetBrowser: true)
+        }
         // Now that mail is connected, catch up any transcript that arrived while
         // the account was disconnected but the folder watcher was already active.
         startTranscriptFolderWatchingIfEnabled()

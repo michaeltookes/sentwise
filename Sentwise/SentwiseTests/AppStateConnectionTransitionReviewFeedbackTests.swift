@@ -223,4 +223,76 @@ final class AppStateConnectTransitionFeedbackTests: XCTestCase {
             OfflineQueuedDraftDispatch(sendBehavior: .autoSend)
         )
     }
+
+    func testUnchangedFocusedAccountRetestPreservesInFlightBrowserBodyPreview() async {
+        let focused = SavedMailAccount(email: "me@gmail.com", host: "imap.gmail.com", port: 993)
+        let background = SavedMailAccount(email: "side@work.com", host: "imap.work.com", port: 993)
+        let provider = SuspendedFetchMailProvider()
+        let app = AppState(
+            persistence: AppStateMemoryPersistence(settings: Settings(
+                schemaVersion: Settings.currentSchemaVersion,
+                pollIntervalSeconds: 300,
+                mailEmail: focused.email,
+                mailHost: focused.host,
+                mailPort: focused.port,
+                savedAccounts: [focused, background]
+            )),
+            secrets: InMemorySecretStore(seed: [
+                .mailAppPassword(email: focused.email): "focused-pw",
+                .mailAppPassword(email: background.email): "background-pw"
+            ]),
+            mailProvider: provider,
+            llm: FakeLLMProvider(result: .success(()))
+        )
+        app.mailEmail = focused.email
+        app.mailHost = focused.host
+        app.mailPort = focused.port
+        app.mailAppPassword = "focused-pw"
+        app.isAccountConnected = true
+        app.backgroundConnectedAccounts = [
+            ConnectedMailAccount(
+                email: background.email,
+                host: background.host,
+                port: background.port,
+                appPassword: "background-pw"
+            )
+        ]
+        app.selectBrowserAccount(background.email)
+        let message = MailMessage(
+            id: 42,
+            uidValidity: 99,
+            from: MailAddress(name: "Alice", email: "alice@example.com"),
+            subject: "Hello",
+            date: "",
+            messageID: "<42@example.com>"
+        )
+        let browserCredentials = app.browserCredentials
+
+        let previewTask = Task {
+            await app.previewBody(for: message, mailbox: .inbox, credentials: browserCredentials)
+        }
+        await fulfillment(of: [provider.didStartBodyFetch], timeout: 1)
+        let bodyGeneration = app.bodyPreviewGeneration
+        XCTAssertTrue(app.isFetchingBody)
+
+        let didConnect = await app.testConnection(with: MailAccountCredentials(
+            email: focused.email,
+            appPassword: "focused-pw",
+            host: focused.host,
+            port: focused.port
+        ))
+
+        XCTAssertTrue(didConnect)
+        XCTAssertEqual(app.bodyPreviewGeneration, bodyGeneration)
+        XCTAssertTrue(app.isFetchingBody)
+        XCTAssertEqual(app.browserCredentials, browserCredentials)
+
+        provider.completeBodyFetch(with: .success(Data("Browser body".utf8)))
+        let preview = await previewTask.value
+
+        XCTAssertEqual(preview?.id, message.id)
+        XCTAssertEqual(preview?.text, "Browser body")
+        XCTAssertEqual(app.openedBody?.id, message.id)
+        XCTAssertFalse(app.isFetchingBody)
+    }
 }
