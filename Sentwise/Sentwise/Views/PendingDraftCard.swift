@@ -54,14 +54,13 @@ struct PendingDraftCard: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
             }
-            // Account attribution (item 99): which mailbox this draft belongs to,
-            // shown only when more than one account is connected.
+            // Account attribution (item 99/102): which mailbox this draft belongs
+            // to, shown only when more than one account is connected. A labeled,
+            // tinted chip — not a bare gray email line — so it reads as "this draft
+            // belongs to this mailbox" at a glance.
             if appState.showsAccountAttribution,
                let mailbox = appState.accountAttributionLabel(forEmail: draft.sourceAccountEmail) {
-                Label(mailbox, systemImage: "tray.full")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("draftAccountBadge")
+                mailboxAttributionChip(mailbox)
             }
             HStack(alignment: .top, spacing: 12) {
                 incomingColumn
@@ -94,6 +93,29 @@ struct PendingDraftCard: View {
 
     private var cardStroke: Color {
         draft.isFlagged ? Color.orange.opacity(0.5) : Color.secondary.opacity(0.15)
+    }
+
+    /// The expanded card's mailbox attribution (item 102): a "Mailbox: <email>"
+    /// label inside a tinted chip. The explicit "Mailbox:" prefix and accent tint
+    /// were the fix — the previous bare gray email line read as boilerplate rather
+    /// than attribution.
+    private func mailboxAttributionChip(_ mailbox: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "tray.full")
+            Text("Mailbox:").fontWeight(.semibold)
+            Text(mailbox)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(mailbox)
+        }
+        .font(.caption2)
+        .foregroundStyle(Color.accentColor)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("draftAccountBadge")
+        .accessibilityLabel("Mailbox \(mailbox)")
     }
 
     @ViewBuilder

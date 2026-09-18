@@ -15,7 +15,7 @@ struct SkippedMessagesTab: View {
             emptyState
         } else {
             let filtered = appState.skippedMessages.filter {
-                ReviewDraftsFilter.matches($0, query: selection.searchQuery)
+                ReviewDraftsFilter.matches($0, query: selection.searchQuery, account: selection.accountScope)
             }
             if filtered.isEmpty {
                 noMatchesState
@@ -69,7 +69,11 @@ struct SkippedMessagesTab: View {
                 .foregroundStyle(.secondary)
             Text("No matches")
                 .foregroundStyle(.secondary)
-            Text("No skipped messages match “\(selection.searchQuery)”.")
+            Text(PendingDraftsView.noMatchesDetail(
+                searchQuery: selection.searchQuery,
+                mailbox: selection.accountScope.mailbox,
+                noun: "skipped messages"
+            ))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
