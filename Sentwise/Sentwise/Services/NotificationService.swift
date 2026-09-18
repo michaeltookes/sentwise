@@ -141,7 +141,7 @@ protocol DraftNotifying: AnyObject {
     /// Removes any delivered/pending notification for the given draft identity.
     func removeNotification(identity: String)
 
-    /// Posts a weekly-usage threshold alert (backlog item 56b). Its Open action
+    /// Posts a monthly-usage threshold alert (backlog item 56b). Its Open action
     /// routes to Settings → AI Provider (via `onOpenUsageSettings`), distinct from
     /// the draft-ready category which opens Review Drafts.
     func notifyUsageAlert(_ alert: UsageAlert)

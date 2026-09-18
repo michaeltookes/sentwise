@@ -259,7 +259,7 @@ enum LLMError: Error, Equatable, Sendable {
     /// The account is drafting faster than the managed rate limit allows (backlog
     /// item 56b). Carries the server's suggested back-off in seconds when known.
     case managedRateLimited(retryAfter: Int?)
-    /// The weekly draft allotment is exhausted and enforcement is `hard` (backlog
+    /// The monthly draft allotment is exhausted and enforcement is `hard` (backlog
     /// item 56b). Carries the window reset instant when the server provides it.
     case managedQuotaExceeded(resetsAt: Date?)
     /// The request (transcript/thread) exceeds the managed per-request token
