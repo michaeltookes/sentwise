@@ -132,9 +132,16 @@ struct PendingDraftRow: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(rowBackground))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.15)))
         .accessibilityIdentifier("pendingDraftRow")
-        .accessibilityLabel("Draft from \(senderText), \(status.label)")
+        .accessibilityLabel(accessibilityLabelText)
         .accessibilityHint(isExpanded ? "Collapse draft detail" : "Expand draft detail")
         .accessibilityAddTraits(isExpanded ? .isSelected : [])
+    }
+
+    var accessibilityLabelText: String {
+        guard let accountBadge, !accountBadge.isEmpty else {
+            return "Draft from \(senderText), \(status.label)"
+        }
+        return "Draft from \(senderText), mailbox \(accountBadge), \(status.label)"
     }
 
     private var rowBackground: Color {

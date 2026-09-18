@@ -52,6 +52,9 @@ struct PendingDraftsView: View {
         }
         .frame(width: 720, height: 540)
         .task { await appState.refreshNotificationPermission() }
+        .onAppear {
+            selection.resetAccountScopeIfUnavailable(availableMailboxes: appState.attributionMailboxes)
+        }
         .onChange(of: appState.attributionMailboxes) { _, mailboxes in
             selection.resetAccountScopeIfUnavailable(availableMailboxes: mailboxes)
         }
