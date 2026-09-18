@@ -222,15 +222,24 @@ struct BulkCleanupPanel: View {
         if hasCheckedRows {
             return AppState.bulkSelectionConfirmationMessage(
                 for: appState.bulk.action,
-                count: checkedCount
+                count: checkedCount,
+                account: confirmationAccount
             )
         }
         guard let preview = appState.bulk.preview else { return "" }
         return AppState.bulkConfirmationMessage(
             for: appState.bulk.action,
             matchCount: preview.matchCount,
-            isPartial: preview.isPartial
+            isPartial: preview.isPartial,
+            account: confirmationAccount
         )
+    }
+
+    /// The mailbox to name in the confirmation copy (item 103): the picked account
+    /// when the Browse window shows its account picker, else nil so single-account
+    /// users see the original, unqualified copy.
+    private var confirmationAccount: String? {
+        appState.showsBrowserAccountPicker ? appState.effectiveBrowserAccountEmail : nil
     }
 
     private func summaryText(_ preview: MailBulkPreview) -> String {

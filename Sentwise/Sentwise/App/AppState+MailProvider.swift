@@ -244,11 +244,15 @@ extension AppState {
         return String(domain)
     }
 
-    /// The special-folder layout for the currently-entered IMAP host.
-    var connectedMailboxNaming: MailboxNaming { MailboxNaming.forHost(mailHost) }
+    /// The special-folder layout for the mailbox the Browse window is pointed at
+    /// (item 103) — the picked account's host, or the focused account's when none
+    /// is picked. Both callers (the browser's folder picker and bulk-cleanup
+    /// archive availability) are browser-scoped, so this follows the account
+    /// switch rather than the global focused account.
+    var connectedMailboxNaming: MailboxNaming { MailboxNaming.forHost(browserCredentials.host) }
 
-    /// Whether the connected provider exposes an all-mail folder. Drives whether
-    /// the browser offers an "All Mail" target (Yahoo/AT&T have none).
+    /// Whether the browsed provider exposes an all-mail folder. Drives whether the
+    /// browser offers an "All Mail" target (Yahoo/AT&T have none).
     var supportsAllMailFolder: Bool { connectedMailboxNaming.supportsAllMail }
 
     /// Suggests an IMAP host from an email address's domain, so users don't have

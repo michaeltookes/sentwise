@@ -113,7 +113,7 @@ extension AppState {
         let action = bulk.action
         bulk.reset()
 
-        let credentials = mailCredentials
+        let credentials = browserCredentials
         guard credentials.isComplete else {
             bulk.error = "Connect an account first."
             return
@@ -157,7 +157,7 @@ extension AppState {
     /// path, inheriting its account/query/action checks and its guarantee that
     /// only the approved UID set is touched.
     func applyBulkCleanupToSelectedMessages() async {
-        let credentials = mailCredentials
+        let credentials = browserCredentials
         guard credentials.isComplete else {
             bulk.error = "Connect an account first."
             return
@@ -274,19 +274,27 @@ extension AppState {
         }
     }
 
-    /// The confirmation question shown before a destructive run.
-    static func bulkConfirmationMessage(for action: MailBulkAction, matchCount: Int, isPartial: Bool) -> String {
+    /// The confirmation question shown before a destructive run. `account` names
+    /// the picked mailbox (item 103) so a multi-account user sees exactly which
+    /// mailbox is about to be swept; nil (single account) omits the naming.
+    static func bulkConfirmationMessage(
+        for action: MailBulkAction,
+        matchCount: Int,
+        isPartial: Bool,
+        account: String? = nil
+    ) -> String {
         // Name the scope, not just the count. The browser lists one page at a
         // time ("Showing 25 of 605"), so a bare count reads as "the 25 I can
         // see" — a dangerous misreading for a destructive action.
         let noun = matchCount == 1 ? "message" : "messages"
+        let inMailbox = Self.bulkAccountClause(account)
         let subject: String
         if isPartial {
-            subject = "at least \(matchCount) \(noun) matching this filter"
+            subject = "at least \(matchCount) \(noun)\(inMailbox) matching this filter"
         } else if matchCount == 1 {
-            subject = "1 \(noun) matching this filter"
+            subject = "1 \(noun)\(inMailbox) matching this filter"
         } else {
-            subject = "all \(matchCount) \(noun) matching this filter"
+            subject = "all \(matchCount) \(noun)\(inMailbox) matching this filter"
         }
 
         // Move actions sweep until the mailbox is clear, so the true total may
@@ -307,10 +315,15 @@ extension AppState {
 
     /// The confirmation question for a checked-rows cleanup (item 47). Scope is
     /// the specific messages picked, so this must not say "matching this filter"
-    /// — that would overstate what is about to happen.
-    static func bulkSelectionConfirmationMessage(for action: MailBulkAction, count: Int) -> String {
+    /// — that would overstate what is about to happen. `account` names the picked
+    /// mailbox (item 103); nil (single account) omits it.
+    static func bulkSelectionConfirmationMessage(
+        for action: MailBulkAction,
+        count: Int,
+        account: String? = nil
+    ) -> String {
         let noun = count == 1 ? "message" : "messages"
-        let subject = "\(count) checked \(noun)"
+        let subject = "\(count) checked \(noun)\(Self.bulkAccountClause(account))"
         switch action {
         case .markRead:
             return "Mark \(subject) as read?"
@@ -319,6 +332,15 @@ extension AppState {
         case .moveToTrash:
             return "Move \(subject) to Trash? You can recover them from Trash."
         }
+    }
+
+    /// The " in <mailbox>" clause naming the picked account in bulk-cleanup
+    /// confirmation copy (item 103), or an empty string when unset (single
+    /// account). Trimmed/blank emails yield no clause so copy never dangles.
+    static func bulkAccountClause(_ account: String?) -> String {
+        guard let account = account?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !account.isEmpty else { return "" }
+        return " in \(account)"
     }
 
     static let bulkArchiveUnavailableMessage =
@@ -341,7 +363,7 @@ extension AppState {
             bulk.error = "Preview the cleanup before running it."
             return nil
         }
-        let credentials = mailCredentials
+        let credentials = browserCredentials
         guard credentials.isComplete else {
             bulk.reset()
             bulk.error = "Connect an account first."
@@ -422,7 +444,7 @@ extension AppState {
         _ requestGeneration: Int,
         credentials: MailAccountCredentials
     ) -> Bool {
-        bulkGeneration == requestGeneration && mailCredentials == credentials
+        bulkGeneration == requestGeneration && browserCredentials == credentials
     }
 
     func isCurrentBulkCleanupApply(
@@ -430,6 +452,6 @@ extension AppState {
         account: BulkCleanupAccountIdentity
     ) -> Bool {
         bulkGeneration == requestGeneration
-            && BulkCleanupAccountIdentity(credentials: mailCredentials) == account
+            && BulkCleanupAccountIdentity(credentials: browserCredentials) == account
     }
 }

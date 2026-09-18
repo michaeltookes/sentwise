@@ -37,10 +37,48 @@ struct MailboxBrowserView: View {
 
     private var controls: some View {
         VStack(spacing: 8) {
+            if appState.showsBrowserAccountPicker {
+                accountRow
+            }
             searchRow
             filterRow
         }
         .padding()
+    }
+
+    /// The mailbox account picker (item 103): choose which connected mailbox the
+    /// Browse window searches and cleans up, without changing the focused account
+    /// in Settings. Shown only with more than one connected mailbox, so
+    /// single-account users — and Prowl hunt mode, which seeds one fixture account
+    /// — never see it. Switching runs a fresh search against the picked account;
+    /// like the folder picker it triggers a live search, so it is forbidden to
+    /// hunts in `.prowl/config.yml`.
+    private var accountRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "tray.2").foregroundStyle(.secondary)
+            Picker("Mailbox", selection: accountSelection) {
+                ForEach(appState.browsableAccountEmails, id: \.self) { email in
+                    Text(email).tag(email)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 320)
+            .disabled(appState.browser.isSearching || appState.bulk.isBusy)
+            .accessibilityIdentifier("browseMailboxAccountPicker")
+            .accessibilityLabel("Browse mailbox account")
+            Spacer()
+        }
+    }
+
+    private var accountSelection: Binding<String> {
+        Binding(
+            get: { appState.effectiveBrowserAccountEmail },
+            set: { email in
+                guard email != appState.effectiveBrowserAccountEmail else { return }
+                appState.selectBrowserAccount(email)
+                runSearch()
+            }
+        )
     }
 
     /// Bulk cleanup acts on the current filter, so it sits directly under the
