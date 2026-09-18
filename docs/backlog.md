@@ -55,19 +55,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - **Production Paddle cutover** (**unblocked 2026-09-12 — Paddle vendor account fully verified**; from item 56): point `PaddleConfig.active` / `PADDLE_API_BASE` at the live token + price ids, and mint the **live API key with the `customer_portal_session.write` permission** — discovered 2026-09-12 (item 91): without it the portal-session create fails silently and billing links regress to the email sign-in page. Also: production Clerk instance needs a real Google OAuth client + its own `/auth/callback` redirect-allowlist entry (item 89), and real per-tier allotment numbers set from 56b measurements. **Tier-matrix alignment (from item 98, 2026-09-16):** live Paddle products/prices must match `docs/tier-matrix.md` exactly (Starter $9 / Pro $19 / Unlimited $39, plan ids `starter`/`pro`/`unlimited`); and resolve the **quota window-unit mismatch** — the Worker enforces `STARTER/PRO_DRAFT_LIMIT` (30/120) over a *weekly* window while the site markets those numbers as *monthly* (canonical) — switch the window to monthly or set weekly ≈ monthly/4.33 before the public link goes out.
     - Launch checklist recorded in `docs/` and ticked; this item closes when the public link goes out.
 
-
-101. **Monthly-window usage copy + reset-date format in the app**
-    Companion to the `sentwise-service` `window-unit-fix` branch (2026-09-18): the Worker now enforces draft quotas over a **calendar-month UTC** window (the marketed monthly caps are canonical — see `docs/tier-matrix.md`), but the app hardcodes "week"/"weekly" in usage copy and formats the quota `resetsAt` as a **weekday + time**, which is wrong for a monthly reset. Wire contract is unchanged (same field names; `resetsAt` is data-driven), so this is copy/formatting only — but user-visible and misleading until fixed. Should merge in the same launch window as the service change.
-    *As a subscriber, I want usage copy that says what my plan actually meters — drafts per month, resetting on the 1st — so that the numbers in the app match what I bought.*
-    - `Services/LLM/ManagedQuota.swift` — `resetDescription` (~L146-156): replace the weekday date-format template (`"EEEE h mm a"`) with a month/day rendering (e.g. "Oct 1"); `usageSummary` (~L139) "used this week" → monthly wording; update the weekly/"Monday 00:00 UTC" doc comments (~L13/22/24/28/116).
-    - `Services/Billing/PaddleConfig.swift` — `allowanceSummary` (~L57-63) "a week" → "a month"; `tagline` (~L38-40) "weekly drafts" wording; `allowanceDetail` (~L69) "Room for a full week of calls." reworded; doc comment ~L55.
-    - `Services/UsageAlert.swift` (~L57-74) — alert copy "weekly"/"used this week" → monthly.
-    - `App/AppState+LLM.swift` (~L328) — "You've used all your weekly Sentwise AI drafts." → monthly.
-    - `Views/ManagedUsageView.swift` (~L37) accessibility label "Weekly drafts used"; `Views/AnalyticsSettingsView.swift` (~L62, L91) "Remaining this week" / "weekly usage".
-    - Doc-comment-only cleanups: `App/AppState.swift` ~L387, `App/AppState+Quota.swift` ~L25/L88.
-    - `docs/managed-inference.md` (~L228/283/285/296) — the wire-contract doc's weekly-window description updated to monthly.
-    - Tests asserting the old copy/format updated; no behavior change beyond strings/formatting.
-
 ## Medium Priority
 
 83. **Approval-signal learning loop (accept-as-is / edit / deny → better drafts + smarter filtering)** — *ongoing/strategic; phase 1 is a cheap early slice*
