@@ -44,6 +44,62 @@ final class AppStateAccountAttributionTests: XCTestCase {
         XCTAssertNil(app.accountAttributionLabel(forEmail: "  "))
     }
 
+    private func draft(account: String?) -> Draft {
+        Draft(
+            id: 3,
+            sourceUIDValidity: 10,
+            sourceAccountEmail: account,
+            sourceMailbox: "INBOX",
+            sourceSubject: "Lunch?",
+            sourceFrom: MailAddress(name: "Alice", email: "alice@example.com"),
+            sourceReplyTo: nil,
+            sourceMessageID: "<orig@example.com>",
+            incomingBody: "body",
+            replySubject: "Re: Lunch?",
+            body: "reply",
+            model: "claude-sonnet-4-6",
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+    }
+
+    func testDraftRowAccountBadgeHiddenForSingleAccount() {
+        let app = makeAppState(
+            mailEmail: "solo@x.com",
+            savedAccounts: [SavedMailAccount(email: "solo@x.com", host: "imap.x.com", port: 993)]
+        )
+        // No badge for single-account users, even for a tagged draft.
+        XCTAssertNil(app.draftRowAccountBadge(for: draft(account: "solo@x.com")))
+    }
+
+    func testDraftRowAccountBadgeShownWhenMultipleAndTagged() {
+        let app = makeAppState(
+            mailEmail: "one@x.com",
+            savedAccounts: [
+                SavedMailAccount(email: "one@x.com", host: "imap.x.com", port: 993),
+                SavedMailAccount(email: "two@y.com", host: "imap.y.com", port: 993)
+            ]
+        )
+        XCTAssertEqual(app.draftRowAccountBadge(for: draft(account: "two@y.com")), "two@y.com")
+        // A legacy untagged draft shows no badge even in multi-account mode.
+        XCTAssertNil(app.draftRowAccountBadge(for: draft(account: nil)))
+    }
+
+    func testAttributionMailboxesUnionsSavedConnectedAndFocusedSorted() {
+        let app = makeAppState(
+            mailEmail: "one@x.com",
+            savedAccounts: [
+                SavedMailAccount(email: "one@x.com", host: "imap.x.com", port: 993),
+                SavedMailAccount(email: "two@y.com", host: "imap.y.com", port: 993)
+            ]
+        )
+        app.isAccountConnected = true
+        app.backgroundConnectedAccounts = [
+            ConnectedMailAccount(email: "three@z.com", host: "imap.z.com", port: 993, appPassword: "pw3")
+        ]
+        // Saved + connected + focused, normalized, de-duplicated, sorted.
+        XCTAssertEqual(app.attributionMailboxes, ["one@x.com", "three@z.com", "two@y.com"])
+    }
+
     func testPerAccountWatchStatusAndHealth() {
         let app = makeAppState(
             mailEmail: "one@x.com",
