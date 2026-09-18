@@ -24,7 +24,9 @@ final class ReviewSkippedMessagesTests: XCTestCase {
         return processed
     }
 
-    private func makeAppState() -> (AppState, AppStateMemoryPersistence) {
+    private func makeAppState(
+        skippedMessages: [SkippedMessage] = []
+    ) -> (AppState, AppStateMemoryPersistence) {
         let secrets = InMemorySecretStore(seed: [
             .mailAppPassword: "app-pw",
             .llmAPIKey(provider: "anthropic"): "sk-live"
@@ -37,7 +39,8 @@ final class ReviewSkippedMessagesTests: XCTestCase {
                 llmProvider: "anthropic",
                 llmVerifiedModel: "claude-sonnet-4-6"
             ),
-            processedMessages: baselineProcessed()
+            processedMessages: baselineProcessed(),
+            skippedMessages: skippedMessages
         )
         let appState = AppState(
             persistence: persistence,
@@ -96,5 +99,42 @@ final class ReviewSkippedMessagesTests: XCTestCase {
             account: background.account,
             mailbox: background.mailbox
         ))
+    }
+
+    func testReviewSkippedMessagesUsesRestoredCache() throws {
+        let retained = SkippedMessage(
+            message: message(id: 17, from: "alerts@x.com"),
+            mailbox: .inbox,
+            account: "me@gmail.com",
+            reason: .automatedNotification
+        )
+        let replacement = SkippedMessage(
+            message: message(id: 18, from: "other@x.com"),
+            mailbox: .inbox,
+            account: "side@work.com",
+            reason: .bulkOrListMail
+        )
+        let (appState, persistence) = makeAppState(skippedMessages: [retained])
+        XCTAssertEqual(appState.reviewSkippedMessages, [retained])
+
+        try persistence.saveSkippedMessagesSync([replacement])
+
+        XCTAssertEqual(appState.reviewSkippedMessages, [retained])
+    }
+
+    func testSkippedMessageRowIncludesMailboxIdentity() {
+        let entry = SkippedMessage(
+            message: message(id: 19, from: "alerts@x.com"),
+            mailbox: .inbox,
+            account: "side@work.com",
+            reason: .automatedNotification
+        )
+        let row = SkippedMessageRow(entry: entry, selection: ReviewWindowSelection())
+
+        XCTAssertEqual(row.mailboxBadgeText, "side@work.com")
+        XCTAssertEqual(
+            row.accessibilityLabelText,
+            "Skipped message from Alice, mailbox side@work.com, Automated notification, Subject 19"
+        )
     }
 }

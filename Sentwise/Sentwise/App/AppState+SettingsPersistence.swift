@@ -171,9 +171,19 @@ extension AppState {
             processedMessages: processedMessages,
             limit: skippedMessageLogLimit
         )
+        applyTrackedSkippedMessages(trackedMessages)
+    }
+
+    /// Applies a persisted, processed-message-filtered skip collection to both
+    /// the active-account watcher slice and the Review window's all-account cache.
+    func applyTrackedSkippedMessages(_ trackedMessages: [SkippedMessage]) {
         skippedMessages = Self.visibleSkippedMessages(
             from: trackedMessages,
             accountEmail: mailEmail,
+            limit: skippedMessageLogLimit
+        )
+        reviewSkippedMessages = Self.visibleSkippedMessagesForAllAccounts(
+            from: trackedMessages,
             limit: skippedMessageLogLimit
         )
         skippedMessageIDs = Set(trackedMessages.map(\.id))

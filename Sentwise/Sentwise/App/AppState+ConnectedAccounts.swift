@@ -89,6 +89,7 @@ extension AppState {
         allConnectedAccountEmails.forEach(add)
         if isAccountConnected { add(mailEmail) }
         pendingDrafts.forEach { add($0.sourceAccountEmail ?? "") }
+        skippedMessages.forEach { add($0.account) }
         reviewSkippedMessages.forEach { add($0.account) }
         return ordered.sorted()
     }
@@ -164,17 +165,10 @@ extension AppState {
         resetBrowserScopedPreviewsForAccountChange()
     }
 
-    /// Clears browser-scoped rows/actions and invalidates in-flight body/draft
-    /// row actions. This leaves the focused Settings previews alone unless they
-    /// share the same global body/draft presentation state.
+    /// Clears browser-scoped rows/actions. Explicit Browse body/draft requests
+    /// already guard completions against `browserCredentials`, so switching the
+    /// Browse mailbox does not need to touch Settings preview/draft state.
     func resetBrowserScopedPreviewsForAccountChange() {
-        _ = nextBodyPreviewGeneration()
-        _ = nextDraftGeneration()
-        bodyError = nil
-        openedBody = nil
-        clearDraftPreview()
-        isFetchingBody = false
-        isGeneratingDraft = false
         resetMailboxBrowserForAccountChange()
         resetBulkCleanupForAccountChange()
     }

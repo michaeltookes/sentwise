@@ -124,6 +124,7 @@ extension AppState {
         draftsWaitingForNetwork = []
 
         skippedMessages = []
+        reviewSkippedMessages = []
         skippedMessageIDs = []
         skippedMessageReasonsByID = [:]
 
@@ -188,15 +189,7 @@ extension AppState {
             processedMessages: processedMessages,
             limit: skippedMessageLogLimit
         )
-        skippedMessages = Self.visibleSkippedMessages(
-            from: trackedSkippedMessages,
-            accountEmail: mailEmail,
-            limit: skippedMessageLogLimit
-        )
-        skippedMessageIDs = Set(trackedSkippedMessages.map(\.id))
-        skippedMessageReasonsByID = trackedSkippedMessages.reduce(into: [:]) { reasons, message in
-            reasons[message.id] = message.reason
-        }
+        applyTrackedSkippedMessages(trackedSkippedMessages)
 
         activityEvents.removeAll {
             Self.activity($0, belongsTo: account, includeUnscopedArtifacts: includeUnscopedArtifacts)

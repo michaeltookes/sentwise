@@ -308,6 +308,27 @@ final class AppStateBrowserAccountTests: XCTestCase {
         XCTAssertGreaterThan(app.bulkGeneration, bulkGenerationBefore)
     }
 
+    func testSwitchingBrowserAccountPreservesSettingsPreviewState() async {
+        let provider = PagingSearchMailProvider(allMessages: [])
+        let app = makeAppState(provider: provider)
+        await app.runMailboxSearch()
+        app.openedBody = MailBodyPreview(id: 7, subject: "Settings", text: "Keep me")
+        app.bodyError = "Keep this error"
+        app.isFetchingBody = true
+        app.isGeneratingDraft = true
+        let bodyGenerationBefore = app.bodyPreviewGeneration
+        let draftGenerationBefore = app.draftGeneration
+
+        app.selectBrowserAccount(background)
+
+        XCTAssertEqual(app.bodyPreviewGeneration, bodyGenerationBefore)
+        XCTAssertEqual(app.draftGeneration, draftGenerationBefore)
+        XCTAssertEqual(app.openedBody, MailBodyPreview(id: 7, subject: "Settings", text: "Keep me"))
+        XCTAssertEqual(app.bodyError, "Keep this error")
+        XCTAssertTrue(app.isFetchingBody)
+        XCTAssertTrue(app.isGeneratingDraft)
+    }
+
     func testFocusedAccountChangeClearsBrowserAccountOverride() {
         let app = makeAppState(provider: PagingSearchMailProvider(allMessages: []))
         app.selectBrowserAccount(background)

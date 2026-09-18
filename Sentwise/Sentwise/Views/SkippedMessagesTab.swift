@@ -106,12 +106,23 @@ struct SkippedMessageRow: View {
                         .padding(.vertical, 1)
                         .background(Capsule().fill(Color.secondary.opacity(0.18)))
                         .foregroundStyle(.secondary)
+                    if let mailboxBadgeText {
+                        Text(mailboxBadgeText)
+                            .font(.caption2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 Text(subjectText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityLabelText)
             Spacer()
             if isDrafting {
                 ProgressView().controlSize(.small)
@@ -142,5 +153,15 @@ struct SkippedMessageRow: View {
 
     private var subjectText: String {
         MIMEEncodedWord.displaySubject(entry.subject)
+    }
+
+    var mailboxBadgeText: String? {
+        let account = entry.account.trimmingCharacters(in: .whitespacesAndNewlines)
+        return account.isEmpty ? nil : account
+    }
+
+    var accessibilityLabelText: String {
+        let mailboxText = mailboxBadgeText.map { ", mailbox \($0)" } ?? ""
+        return "Skipped message from \(entry.senderDisplay)\(mailboxText), \(entry.reason.headline), \(subjectText)"
     }
 }
