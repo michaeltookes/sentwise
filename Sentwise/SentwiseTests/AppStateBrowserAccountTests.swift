@@ -168,6 +168,35 @@ final class AppStateBrowserAccountTests: XCTestCase {
         XCTAssertEqual(provider.lastBodyCredentials?.host, backgroundHost)
     }
 
+    func testDraftAnywayUsesSkippedMessageAccountCredentials() async {
+        let provider = PagingSearchMailProvider(allMessages: [])
+        let (app, _) = makeDraftingAppState(provider: provider)
+        let message = MailMessage(
+            id: 99,
+            uidValidity: 14,
+            from: MailAddress(name: "Alice", email: "alice@example.com"),
+            subject: "Background skip",
+            date: "",
+            messageID: "<99@example.com>"
+        )
+        let entry = SkippedMessage(
+            message: message,
+            mailbox: .inbox,
+            account: background,
+            reason: .bulkOrListMail
+        )
+
+        let didCreateDraft = await app.forceDraftSkippedMessage(entry)
+
+        XCTAssertTrue(didCreateDraft)
+        XCTAssertEqual(provider.lastBodyUID, 99)
+        XCTAssertEqual(provider.lastBodyCredentials?.email, background)
+        XCTAssertEqual(provider.lastBodyCredentials?.host, backgroundHost)
+        XCTAssertTrue(app.pendingDrafts.contains { draft in
+            draft.id == 99 && draft.sourceAccountEmail == background
+        })
+    }
+
     func testSelectBrowserAccountIgnoresUnconnectedEmail() {
         let app = makeAppState(provider: PagingSearchMailProvider(allMessages: []))
         app.selectBrowserAccount("stranger@nowhere.com")
@@ -184,6 +213,21 @@ final class AppStateBrowserAccountTests: XCTestCase {
         app.backgroundConnectedAccounts = []
         XCTAssertEqual(app.effectiveBrowserAccountEmail, focused)
         XCTAssertEqual(app.browserCredentials.email, focused)
+    }
+
+    func testBrowserFallsBackToBackgroundWhenFocusedAccountDisconnects() {
+        let app = makeAppState(provider: PagingSearchMailProvider(allMessages: []))
+
+        app.mailAppPassword = ""
+        app.isAccountConnected = false
+        app.resetMessagePreviewForAccountChange(clearSkippedMessages: false)
+
+        XCTAssertFalse(app.showsBrowserAccountPicker)
+        XCTAssertEqual(app.browsableAccountEmails, [background])
+        XCTAssertEqual(app.effectiveBrowserAccountEmail, background)
+        XCTAssertEqual(app.browserCredentials.email, background)
+        XCTAssertEqual(app.browserCredentials.host, backgroundHost)
+        XCTAssertEqual(app.browserCredentials.appPassword, "side-pw")
     }
 
     func testDisconnectingSelectedBrowserAccountResetsBrowserAndBulkState() async throws {

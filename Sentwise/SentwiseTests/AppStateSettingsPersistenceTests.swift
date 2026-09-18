@@ -122,12 +122,17 @@ final class AppStateSettingsPersistenceTests: XCTestCase {
         )
         let appState = makeAppState(persistence: persistence)
         XCTAssertEqual(appState.skippedMessages, [primary])
+        XCTAssertEqual(appState.reviewSkippedMessages, [primary, secondary])
+        XCTAssertTrue(appState.hasReviewWindowContent)
+        XCTAssertEqual(appState.reviewWindowMenuTitle, "Review Skipped Messages (2)…")
+        XCTAssertTrue(appState.opensReviewWindowOnSkippedTab)
         XCTAssertTrue(appState.hasSkippedMessage(secondary.message, account: secondary.account, mailbox: secondary.mailbox))
 
         appState.mailEmail = "other@gmail.com"
         appState.resetMessagePreviewForAccountChange()
 
         XCTAssertEqual(appState.skippedMessages, [secondary])
+        XCTAssertEqual(appState.reviewSkippedMessages, [primary, secondary])
         XCTAssertTrue(appState.hasSkippedMessage(primary.message, account: primary.account, mailbox: primary.mailbox))
         XCTAssertEqual(persistence.skippedMessages, [primary, secondary])
 
@@ -135,6 +140,7 @@ final class AppStateSettingsPersistenceTests: XCTestCase {
         appState.resetMessagePreviewForAccountChange()
 
         XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertEqual(appState.reviewSkippedMessages, [primary, secondary])
         XCTAssertEqual(persistence.skippedMessages, [primary, secondary])
     }
 

@@ -11,10 +11,11 @@ struct SkippedMessagesTab: View {
 
     @ViewBuilder
     var body: some View {
-        if appState.skippedMessages.isEmpty {
+        let skippedMessages = appState.reviewSkippedMessages
+        if skippedMessages.isEmpty {
             emptyState
         } else {
-            let filtered = appState.skippedMessages.filter {
+            let filtered = skippedMessages.filter {
                 ReviewDraftsFilter.matches($0, query: selection.searchQuery, account: selection.accountScope)
             }
             if filtered.isEmpty {
@@ -26,7 +27,7 @@ struct SkippedMessagesTab: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Button("Clear") { appState.dismissAllSkippedMessages() }
+                        Button("Clear") { appState.dismissAllReviewSkippedMessages() }
                             .buttonStyle(.link)
                             .font(.caption)
                     }

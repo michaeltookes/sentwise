@@ -112,12 +112,14 @@ extension AppState {
 
     /// The normalized email of the mailbox the Browse window is currently showing
     /// (item 103): the explicitly picked account when it is still connected, else
-    /// the focused account.
+    /// the first connected mailbox. `disconnectMail` can leave the focused email
+    /// populated but offline, so falling back to `mailEmail` alone would strand
+    /// the browser on incomplete credentials while background mailboxes remain.
     var effectiveBrowserAccountEmail: String {
         if let email = browser.accountEmail, isConnectedAccount(email: email) {
             return SavedMailAccount.normalizedEmail(email)
         }
-        return SavedMailAccount.normalizedEmail(mailEmail)
+        return browsableAccountEmails.first ?? SavedMailAccount.normalizedEmail(mailEmail)
     }
 
     /// The credentials the mailbox browser and bulk cleanup operate through (item
@@ -126,8 +128,8 @@ extension AppState {
     /// browse/search/pagination/cleanup at the chosen mailbox — no second
     /// credential store.
     var browserCredentials: MailAccountCredentials {
-        if let email = browser.accountEmail,
-           isConnectedAccount(email: email),
+        let email = effectiveBrowserAccountEmail
+        if !email.isEmpty,
            let credentials = connectedCredentials(forAccountEmail: email) {
             return credentials
         }

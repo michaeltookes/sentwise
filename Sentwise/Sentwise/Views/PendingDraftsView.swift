@@ -52,6 +52,9 @@ struct PendingDraftsView: View {
         }
         .frame(width: 720, height: 540)
         .task { await appState.refreshNotificationPermission() }
+        .onChange(of: appState.attributionMailboxes) { _, mailboxes in
+            selection.resetAccountScopeIfUnavailable(availableMailboxes: mailboxes)
+        }
         .sheet(item: denyReasonPromptBinding) { prompt in
             DenyReasonPicker(prompt: prompt)
                 .environmentObject(appState)
@@ -260,8 +263,9 @@ struct PendingDraftsView: View {
 
     /// The Skipped tab badge: the total, or "N of M" while filtering (item 76/102).
     private var skippedBadge: String? {
-        let total = appState.skippedMessages.count
-        let filtered = appState.skippedMessages.filter {
+        let skippedMessages = appState.reviewSkippedMessages
+        let total = skippedMessages.count
+        let filtered = skippedMessages.filter {
             ReviewDraftsFilter.matches($0, query: selection.searchQuery, account: selection.accountScope)
         }.count
         return ReviewDraftsFilter.countLabel(filtered: filtered, total: total, isFiltering: isFiltering)
@@ -385,6 +389,14 @@ final class ReviewWindowSelection: ObservableObject {
     func selectDraftsAfterSuccessfulOverride(_ didCreateDraft: Bool) {
         guard didCreateDraft else { return }
         selectedTab = .drafts
+    }
+
+    func resetAccountScopeIfUnavailable(availableMailboxes: [String]) {
+        guard let mailbox = accountScope.mailbox else { return }
+        let normalizedMailbox = SavedMailAccount.normalizedEmail(mailbox)
+        let available = Set(availableMailboxes.map(SavedMailAccount.normalizedEmail))
+        guard !available.contains(normalizedMailbox) else { return }
+        accountScope = .all
     }
 
     /// Toggles the expanded state of one draft row (item 82). Expanding a row

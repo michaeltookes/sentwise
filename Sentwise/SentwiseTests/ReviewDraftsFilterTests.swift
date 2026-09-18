@@ -229,6 +229,24 @@ final class ReviewDraftsFilterTests: XCTestCase {
         XCTAssertEqual(ReviewDraftsFilter.AccountScope(mailbox: "Me@Gmail.com"), .mailbox("me@gmail.com"))
     }
 
+    func testSelectionResetsMissingAccountScope() {
+        let selection = ReviewWindowSelection()
+        selection.accountScope = .mailbox("removed@work.com")
+
+        selection.resetAccountScopeIfUnavailable(availableMailboxes: ["me@gmail.com"])
+
+        XCTAssertEqual(selection.accountScope, .all)
+    }
+
+    func testSelectionKeepsAvailableAccountScope() {
+        let selection = ReviewWindowSelection()
+        selection.accountScope = .mailbox("side@work.com")
+
+        selection.resetAccountScopeIfUnavailable(availableMailboxes: ["ME@Gmail.com", "Side@Work.com"])
+
+        XCTAssertEqual(selection.accountScope, .mailbox("side@work.com"))
+    }
+
     func testAccountAccessorsNormalizeAndTreatBlankAsUntagged() {
         XCTAssertEqual(ReviewDraftsFilter.accountEmail(for: draft(subject: "x", account: "Me@Gmail.com")), "me@gmail.com")
         XCTAssertNil(ReviewDraftsFilter.accountEmail(for: draft(subject: "x", account: nil)))

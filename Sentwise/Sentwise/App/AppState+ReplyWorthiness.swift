@@ -156,6 +156,27 @@ extension AppState {
         dismissSkippedMessages(skippedMessages)
     }
 
+    /// All retained skipped entries the Review window can show across mailboxes.
+    /// `skippedMessages` intentionally remains focused-account scoped for watcher
+    /// internals; the review surface uses this all-account view so its mailbox
+    /// filter can reveal background and retained-account skips.
+    var reviewSkippedMessages: [SkippedMessage] {
+        let trackedMessages = Self.restoredTrackedSkippedMessages(
+            persistence: persistence,
+            processedMessages: processedMessages,
+            limit: skippedMessageLogLimit
+        )
+        return Self.visibleSkippedMessagesForAllAccounts(
+            from: trackedMessages,
+            limit: skippedMessageLogLimit
+        )
+    }
+
+    /// Clears every skipped entry currently reachable from the Review window.
+    func dismissAllReviewSkippedMessages() {
+        dismissSkippedMessages(reviewSkippedMessages)
+    }
+
     /// Whether a skipped entry already exists for the same account/mailbox UID.
     func hasSkippedMessage(_ message: MailMessage, account: String, mailbox: Mailbox) -> Bool {
         let entry = SkippedMessage(message: message, mailbox: mailbox, account: account, reason: .noReplySender)
@@ -306,6 +327,13 @@ extension AppState {
         )
     }
 
+    static func visibleSkippedMessagesForAllAccounts(
+        from messages: [SkippedMessage],
+        limit: Int
+    ) -> [SkippedMessage] {
+        boundedPersistedSkippedMessages(messages, regularLimitPerAccount: limit)
+    }
+
     private static func skippedAccountKey(_ account: String?) -> String? {
         let normalized = (account ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return normalized.isEmpty ? nil : normalized
@@ -322,16 +350,15 @@ extension AppState {
     func forceDraftSkippedMessage(_ entry: SkippedMessage) async -> Bool {
         approvalError = nil
 
-        let credentials = mailCredentials
-        guard credentials.isComplete else {
-            approvalError = "Connect an email account first."
+        guard let credentials = connectedCredentials(forAccountEmail: entry.account),
+              credentials.isComplete else {
+            let hasAnyConnectedMailbox = mailCredentials.isComplete || !backgroundConnectedAccounts.isEmpty
+            approvalError = hasAnyConnectedMailbox
+                ? "Connect \(entry.account) to draft this message."
+                : "Connect an email account first."
             return false
         }
-        guard credentials.email.caseInsensitiveCompare(entry.account) == .orderedSame else {
-            approvalError = "That message belongs to a different account than the one connected."
-            return false
-        }
-        guard canGenerateDraft else {
+        guard isLLMConnected && (currentLLMProviderAllowsRequests || canAttemptStaleManagedLicenseRefresh) else {
             approvalError = "Connect an AI provider first."
             return false
         }
@@ -342,6 +369,7 @@ extension AppState {
                     entry.message,
                     mailbox: entry.mailbox,
                     requireWatching: false,
+                    credentials: credentials,
                     replyWorthinessOverride: true
                 )
                 guard enqueued else { return false }
