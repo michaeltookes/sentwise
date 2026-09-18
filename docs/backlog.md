@@ -238,26 +238,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Tests: webhook parse/store/clear, `/v1/me` exposure, pane rendering for scheduled-cancel and reversal.
     - Live-verify rides the existing sandbox subscription (a cancel is already scheduled for 2026-10-07): once built, the pane should show it without a new purchase.
 
-102. **Review Drafts multi-account legibility: row badges, clearer card attribution, account picker** — *discovered 2026-09-18 by the owner reviewing item 99 with two mailboxes connected*
-    Item 99 tags each draft with its source mailbox and dispatches through the right account, but the Review Drafts window barely shows it: the collapsed rows carry no account indicator at all, and the expanded card's only cue is an unlabeled gray email line (`PendingDraftCard` account badge) that reads as boilerplate rather than "this draft belongs to this mailbox." With 20+ drafts across two accounts there is zero at-a-glance differentiation, and it only gets worse at Unlimited's 5-account cap.
-    *As a user with multiple mailboxes connected, I want the Review Drafts window to show me which mailbox each draft belongs to and let me focus on one mailbox at a time, so that I can triage a busy queue without expanding every card.*
-    - Collapsed `PendingDraftRow` shows the source-mailbox badge (compact, secondary style) when `showsAccountAttribution` is true; single-account users see no change.
-    - Expanded `PendingDraftCard` attribution becomes legible — labeled (e.g. "Mailbox: \<email\>") or a tinted chip — instead of the current bare gray email line.
-    - An account picker on the window (e.g. "All Mailboxes" + one entry per connected/saved mailbox) filters both the Drafts and Skipped tabs; it composes with the item 76 search filter and the tab count badges reflect the filtered scope. Hidden when `showsAccountAttribution` is false.
-    - Legacy drafts with no `sourceAccountEmail` tag appear under "All Mailboxes" only; they are not attributed to a guess.
-    - Filtering is view-only: send countdowns, offline queue, and approval/deny behavior are unaffected for hidden drafts.
-    - Prowl hunt-safe; AX ids on the picker and row badges; existing AX ids preserved.
-    - Tests: pure filter logic (per-account + search + count labels), row/card badge visibility rules, untagged-draft bucketing.
-
-103. **Browse Mailbox account picker** — *discovered 2026-09-18 by the owner reviewing item 99*
-    The mailbox browser (search/browse/bulk cleanup) still reads the focused account's credentials only (`AppState+MailboxBrowser` uses `mailCredentials`), so browsing another connected mailbox requires switching the focused account in Settings. Item 99 deliberately scoped the browser out; this closes that gap.
-    *As a user with multiple mailboxes connected, I want to pick which mailbox the Browse window shows, so that I can search or clean up any of my accounts without changing my focused account in Settings.*
-    - A picker in the Browse Mailbox window lists all connected mailboxes, defaulting to the focused account; hidden for single-account users.
-    - Switching accounts swaps the credentials used by browse/search/pagination and resets the browser state/generation (no result mixing across accounts, no stale-page appends); the global focused account is untouched.
-    - Bulk cleanup preview/apply operates strictly on the picked account's mailbox, including its confirmation copy naming the account.
-    - Prowl hunt-safe; AX id on the picker; existing browser AX ids preserved.
-    - Tests: credential selection per picked account, state reset on switch, bulk-cleanup scoping, picker visibility rules.
-
 ## Low Priority
 
 31. **Outlook / Microsoft 365 support**
