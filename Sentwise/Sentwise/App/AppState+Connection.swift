@@ -110,9 +110,7 @@ extension AppState {
         }
         // A no-op retest must not invalidate in-flight browser body/draft actions;
         // reset only when the effective mailbox/endpoint actually changed.
-        if shouldResetBrowser {
-            resetAfterConnectionSuccess(clearSkippedMessages: requiresTransitionCleanup, resetBrowser: true)
-        }
+        resetAfterConnectionSuccess(clearSkippedMessages: requiresTransitionCleanup, resetBrowser: shouldResetBrowser)
         // Now that mail is connected, catch up any transcript that arrived while
         // the account was disconnected but the folder watcher was already active.
         startTranscriptFolderWatchingIfEnabled()
@@ -121,7 +119,8 @@ extension AppState {
     }
 
     private func resetAfterConnectionSuccess(clearSkippedMessages: Bool, resetBrowser: Bool) {
-        resetMessagePreviewForAccountChange(clearSkippedMessages: clearSkippedMessages, resetBrowser: resetBrowser)
+        guard resetBrowser else { return }
+        resetMessagePreviewForAccountChange(clearSkippedMessages: clearSkippedMessages, resetBrowser: true)
     }
 
     private func hasAccountIdentityChanged(from previousEmail: String, to nextEmail: String) -> Bool {
