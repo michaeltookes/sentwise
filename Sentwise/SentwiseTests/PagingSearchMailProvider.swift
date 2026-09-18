@@ -7,6 +7,7 @@ import Foundation
 final class PagingSearchMailProvider: MailProvider, @unchecked Sendable {
     var allMessages: [MailMessage]
     var searchError: MailError?
+    var bodyResult: Result<Data, MailError> = .success(Data("Body".utf8))
     private(set) var searchCallCount = 0
     private(set) var lastCriteria: MailSearchCriteria?
     private(set) var lastMailbox: Mailbox?
@@ -16,6 +17,8 @@ final class PagingSearchMailProvider: MailProvider, @unchecked Sendable {
     /// The credentials the most recent search/page fetch ran under, so tests can
     /// assert which account the browser reached (item 103).
     private(set) var lastCredentials: MailAccountCredentials?
+    private(set) var lastBodyCredentials: MailAccountCredentials?
+    private(set) var lastBodyUID: UInt32?
 
     init(allMessages: [MailMessage]) {
         self.allMessages = allMessages
@@ -37,7 +40,9 @@ final class PagingSearchMailProvider: MailProvider, @unchecked Sendable {
         uid: UInt32,
         expectedUIDValidity: UInt32?
     ) async throws -> Data {
-        Data()
+        lastBodyCredentials = credentials
+        lastBodyUID = uid
+        return try bodyResult.get()
     }
 
     func appendMessage(

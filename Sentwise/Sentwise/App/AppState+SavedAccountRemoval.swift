@@ -60,6 +60,7 @@ extension AppState {
         if let background = backgroundConnectedAccount(email: account.id) {
             stopWatching(account: background)
             backgroundConnectedAccounts.removeAll { $0.id == account.id }
+            resetBrowserIfShowingAccount(account.email)
         }
         logger.info("Saved account removed")
     }

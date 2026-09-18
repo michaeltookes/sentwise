@@ -7,7 +7,12 @@ import XCTest
 @MainActor
 final class AppStateAccountAttributionTests: XCTestCase {
 
-    private func makeAppState(mailEmail: String, savedAccounts: [SavedMailAccount]) -> AppState {
+    private func makeAppState(
+        mailEmail: String,
+        savedAccounts: [SavedMailAccount],
+        pendingDrafts: [Draft] = [],
+        skippedMessages: [SkippedMessage] = []
+    ) -> AppState {
         let settings = Settings(
             schemaVersion: Settings.currentSchemaVersion,
             pollIntervalSeconds: 300,
@@ -15,7 +20,11 @@ final class AppStateAccountAttributionTests: XCTestCase {
             savedAccounts: savedAccounts
         )
         return AppState(
-            persistence: AppStateMemoryPersistence(settings: settings),
+            persistence: AppStateMemoryPersistence(
+                settings: settings,
+                pendingDrafts: pendingDrafts,
+                skippedMessages: skippedMessages
+            ),
             secrets: InMemorySecretStore(seed: [.mailAppPassword(email: mailEmail): "pw"]),
             mailProvider: FakeAppMailProvider(result: .success(())),
             llm: FakeLLMProvider(result: .success(()))
@@ -62,6 +71,22 @@ final class AppStateAccountAttributionTests: XCTestCase {
         )
     }
 
+    private func skipped(account: String) -> SkippedMessage {
+        SkippedMessage(
+            message: MailMessage(
+                id: 4,
+                uidValidity: 11,
+                from: MailAddress(email: "no-reply@example.com"),
+                subject: "Receipt",
+                date: "",
+                messageID: "<skip@example.com>"
+            ),
+            mailbox: .inbox,
+            account: account,
+            reason: .automatedNotification
+        )
+    }
+
     func testDraftRowAccountBadgeHiddenForSingleAccount() {
         let app = makeAppState(
             mailEmail: "solo@x.com",
@@ -98,6 +123,30 @@ final class AppStateAccountAttributionTests: XCTestCase {
         ]
         // Saved + connected + focused, normalized, de-duplicated, sorted.
         XCTAssertEqual(app.attributionMailboxes, ["one@x.com", "three@z.com", "two@y.com"])
+    }
+
+    func testAttributionMailboxesIncludeRetainedDraftSources() {
+        let removedDraft = draft(account: "removed@y.com")
+        let app = makeAppState(
+            mailEmail: "one@x.com",
+            savedAccounts: [SavedMailAccount(email: "one@x.com", host: "imap.x.com", port: 993)],
+            pendingDrafts: [removedDraft]
+        )
+
+        XCTAssertTrue(app.showsAccountAttribution)
+        XCTAssertEqual(app.attributionMailboxes, ["one@x.com", "removed@y.com"])
+        XCTAssertEqual(app.draftRowAccountBadge(for: removedDraft), "removed@y.com")
+    }
+
+    func testAttributionMailboxesIncludeRetainedSkippedSources() {
+        let app = makeAppState(
+            mailEmail: "one@x.com",
+            savedAccounts: [SavedMailAccount(email: "one@x.com", host: "imap.x.com", port: 993)],
+            skippedMessages: [skipped(account: "removed@y.com")]
+        )
+
+        XCTAssertTrue(app.showsAccountAttribution)
+        XCTAssertEqual(app.attributionMailboxes, ["one@x.com", "removed@y.com"])
     }
 
     func testPerAccountWatchStatusAndHealth() {

@@ -49,10 +49,11 @@ extension AppState {
     }
 
     /// Whether Review Drafts and Activity should badge each item with the mailbox
-    /// it belongs to (item 99). Only meaningful once the user has more than one
-    /// mailbox, so single-account users see no extra noise.
+    /// it belongs to (item 99). Only meaningful once more than one mailbox can
+    /// appear in the review surface, including retained drafts/skips for accounts
+    /// the user disconnected without purging local data.
     var showsAccountAttribution: Bool {
-        savedAccounts.count > 1 || connectedAccountCount > 1
+        attributionMailboxes.count > 1
     }
 
     /// The short mailbox label for account attribution — the account's email.
@@ -71,10 +72,11 @@ extension AppState {
     }
 
     /// Every mailbox that can own a Review Drafts item, for the account picker
-    /// (item 102): the union of saved accounts, connected accounts, and the
-    /// focused mailbox — normalized, de-duplicated, and sorted for a stable menu
-    /// order. Legacy untagged items are reached through the picker's "All
-    /// Mailboxes" entry, so they need no dedicated row here.
+    /// (item 102): the union of saved accounts, connected accounts, the focused
+    /// mailbox, and retained draft/skip source accounts — normalized,
+    /// de-duplicated, and sorted for a stable menu order. Legacy untagged items
+    /// are reached through the picker's "All Mailboxes" entry, so they need no
+    /// dedicated row here.
     var attributionMailboxes: [String] {
         var seen = Set<String>()
         var ordered: [String] = []
@@ -86,6 +88,8 @@ extension AppState {
         savedAccounts.forEach { add($0.email) }
         allConnectedAccountEmails.forEach(add)
         if isAccountConnected { add(mailEmail) }
+        pendingDrafts.forEach { add($0.sourceAccountEmail ?? "") }
+        persistence.loadSkippedMessages().forEach { add($0.account) }
         return ordered.sorted()
     }
 
@@ -139,10 +143,36 @@ extension AppState {
         let normalized = SavedMailAccount.normalizedEmail(email)
         guard isConnectedAccount(email: normalized) else { return }
         guard normalized != effectiveBrowserAccountEmail else { return }
-        resetMailboxBrowserForAccountChange()
-        resetBulkCleanupForAccountChange()
+        resetBrowserScopedPreviewsForAccountChange()
         // Re-apply after the reset, which wipes the whole browser state.
         browser.accountEmail = normalized
+    }
+
+    /// Resets the Browse window if it is currently scoped to `email`. Used when a
+    /// background account disconnects so stale result UIDs and checked rows never
+    /// fall through to the focused account.
+    func resetBrowserIfShowingAccount(_ email: String) {
+        let normalized = SavedMailAccount.normalizedEmail(email)
+        guard !normalized.isEmpty,
+              SavedMailAccount.normalizedEmail(browser.accountEmail ?? "") == normalized else {
+            return
+        }
+        resetBrowserScopedPreviewsForAccountChange()
+    }
+
+    /// Clears browser-scoped rows/actions and invalidates in-flight body/draft
+    /// row actions. This leaves the focused Settings previews alone unless they
+    /// share the same global body/draft presentation state.
+    func resetBrowserScopedPreviewsForAccountChange() {
+        _ = nextBodyPreviewGeneration()
+        _ = nextDraftGeneration()
+        bodyError = nil
+        openedBody = nil
+        clearDraftPreview()
+        isFetchingBody = false
+        isGeneratingDraft = false
+        resetMailboxBrowserForAccountChange()
+        resetBulkCleanupForAccountChange()
     }
 
     // MARK: - Registry queries

@@ -298,16 +298,18 @@ struct MailboxBrowserView: View {
     }
 
     private func previewBody(for message: MailMessage, mailbox: Mailbox) {
+        let credentials = appState.browserCredentials
         Task {
-            if let preview = await appState.previewBody(for: message, mailbox: mailbox) {
+            if let preview = await appState.previewBody(for: message, mailbox: mailbox, credentials: credentials) {
                 openedBody = preview
             }
         }
     }
 
     private func generateDraft(for message: MailMessage, mailbox: Mailbox) {
+        let credentials = appState.browserCredentials
         Task {
-            if let draft = await appState.generateDraft(for: message, mailbox: mailbox) {
+            if let draft = await appState.generateDraft(for: message, mailbox: mailbox, credentials: credentials) {
                 generatedDraft = draft
             }
         }

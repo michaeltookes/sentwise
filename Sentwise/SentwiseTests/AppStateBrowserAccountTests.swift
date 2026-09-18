@@ -45,6 +45,44 @@ final class AppStateBrowserAccountTests: XCTestCase {
         return app
     }
 
+    private func makeDraftingAppState(provider: MailProvider) -> (AppState, FakeLLMProvider) {
+        let secrets = InMemorySecretStore(seed: [
+            .mailAppPassword(email: focused): "gmail-pw",
+            .mailAppPassword(email: background): "side-pw",
+            .llmAPIKey(provider: "anthropic"): "sk-test"
+        ])
+        let store = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            mailEmail: focused,
+            savedAccounts: [
+                SavedMailAccount(email: focused, host: focusedHost, port: 993),
+                SavedMailAccount(email: background, host: backgroundHost, port: 993)
+            ],
+            llmProvider: "anthropic",
+            llmVerifiedModel: "claude-sonnet-4-6"
+        ))
+        let llm = FakeLLMProvider(
+            result: .success(()),
+            completion: .success(LLMResponse(text: "Reply from selected account."))
+        )
+        let app = AppState(
+            persistence: store,
+            secrets: secrets,
+            mailProvider: provider,
+            llm: llm
+        )
+        app.mailEmail = focused
+        app.mailHost = focusedHost
+        app.mailPort = 993
+        app.mailAppPassword = "gmail-pw"
+        app.isAccountConnected = true
+        app.backgroundConnectedAccounts = [
+            ConnectedMailAccount(email: background, host: backgroundHost, port: 993, appPassword: "side-pw")
+        ]
+        return (app, llm)
+    }
+
     // MARK: - Credential selection
 
     func testBrowserCredentialsDefaultsToFocusedAccount() {
@@ -79,6 +117,57 @@ final class AppStateBrowserAccountTests: XCTestCase {
         XCTAssertEqual(provider.lastCredentials?.host, backgroundHost)
     }
 
+    func testPreviewBodyUsesPickedAccountCredentials() async {
+        let provider = PagingSearchMailProvider(allMessages: [])
+        let app = makeAppState(provider: provider)
+        app.selectBrowserAccount(background)
+        let message = MailMessage(
+            id: 77,
+            uidValidity: 12,
+            from: MailAddress(email: "alice@example.com"),
+            subject: "Background body",
+            date: ""
+        )
+
+        let preview = await app.previewBody(
+            for: message,
+            mailbox: .inbox,
+            credentials: app.browserCredentials
+        )
+
+        XCTAssertEqual(preview?.id, 77)
+        XCTAssertEqual(provider.lastBodyUID, 77)
+        XCTAssertEqual(provider.lastBodyCredentials?.email, background)
+        XCTAssertEqual(provider.lastBodyCredentials?.host, backgroundHost)
+    }
+
+    func testGenerateDraftUsesPickedAccountCredentials() async {
+        let provider = PagingSearchMailProvider(allMessages: [])
+        let (app, _) = makeDraftingAppState(provider: provider)
+        app.selectBrowserAccount(background)
+        let message = MailMessage(
+            id: 88,
+            uidValidity: 13,
+            from: MailAddress(name: "Alice", email: "alice@example.com"),
+            subject: "Background draft",
+            date: ""
+        )
+
+        let draft = await app.generateDraft(
+            for: message,
+            mailbox: .inbox,
+            credentials: app.browserCredentials
+        )
+
+        XCTAssertEqual(draft?.id, 88)
+        XCTAssertEqual(draft?.body, "Reply from selected account.")
+        XCTAssertEqual(draft?.sourceAccountEmail, background)
+        XCTAssertEqual(draft?.sourceMailHost, backgroundHost)
+        XCTAssertEqual(provider.lastBodyUID, 88)
+        XCTAssertEqual(provider.lastBodyCredentials?.email, background)
+        XCTAssertEqual(provider.lastBodyCredentials?.host, backgroundHost)
+    }
+
     func testSelectBrowserAccountIgnoresUnconnectedEmail() {
         let app = makeAppState(provider: PagingSearchMailProvider(allMessages: []))
         app.selectBrowserAccount("stranger@nowhere.com")
@@ -95,6 +184,41 @@ final class AppStateBrowserAccountTests: XCTestCase {
         app.backgroundConnectedAccounts = []
         XCTAssertEqual(app.effectiveBrowserAccountEmail, focused)
         XCTAssertEqual(app.browserCredentials.email, focused)
+    }
+
+    func testDisconnectingSelectedBrowserAccountResetsBrowserAndBulkState() async throws {
+        let message = MailMessage(
+            id: 42,
+            uidValidity: 1,
+            from: MailAddress(email: "list@news.co"),
+            subject: "Weekly",
+            date: "",
+            messageID: "<42@news.co>"
+        )
+        let provider = PagingSearchMailProvider(allMessages: [message])
+        let app = makeAppState(provider: provider)
+        app.selectBrowserAccount(background)
+        await app.runMailboxSearch()
+        app.browser.selectAllLoaded()
+        app.bulk.error = "Old cleanup error."
+        app.bulk.previewAccount = BulkCleanupAccountIdentity(credentials: app.browserCredentials)
+        let browserGenerationBefore = app.browserGeneration
+        let bulkGenerationBefore = app.bulkGeneration
+        let account = try XCTUnwrap(app.backgroundConnectedAccounts.first)
+
+        XCTAssertTrue(app.disconnectBackgroundAccount(account))
+
+        XCTAssertNil(app.browser.accountEmail)
+        XCTAssertEqual(app.effectiveBrowserAccountEmail, focused)
+        XCTAssertTrue(app.browser.results.isEmpty)
+        XCTAssertTrue(app.browser.selectedMessageIDs.isEmpty)
+        XCTAssertNil(app.browser.resultQuery)
+        XCTAssertFalse(app.browser.hasSearched)
+        XCTAssertNil(app.bulk.previewAccount)
+        XCTAssertNil(app.bulk.error)
+        XCTAssertGreaterThan(app.browserGeneration, browserGenerationBefore)
+        XCTAssertGreaterThan(app.bulkGeneration, bulkGenerationBefore)
+        XCTAssertTrue(app.backgroundConnectedAccounts.isEmpty)
     }
 
     // MARK: - State reset on switch

@@ -1,6 +1,13 @@
 import SentwiseMail
 import Foundation
 
+private struct GenerateDraftRequestContext {
+    var credentials: MailAccountCredentials
+    var llmConfiguration: DraftLLMConfiguration
+    var generation: Int
+    var usesBrowserCredentials: Bool
+}
+
 /// Draft-generation actions on `AppState`. Kept in a separate file so `AppState`
 /// stays within the file/type length limits.
 extension AppState {
@@ -14,7 +21,11 @@ extension AppState {
 
     /// Fetches a message's body and generates a reply draft in the user's voice.
     @discardableResult
-    func generateDraft(for message: MailMessage, mailbox: Mailbox = .inbox) async -> Draft? {
+    func generateDraft(
+        for message: MailMessage,
+        mailbox: Mailbox = .inbox,
+        credentials explicitCredentials: MailAccountCredentials? = nil
+    ) async -> Draft? {
         let requestGeneration = prepareDraftGeneration()
 
         guard mailbox.supportsReplyDrafting else {
@@ -26,7 +37,14 @@ extension AppState {
             draftError = "Connect an AI provider first (Test Connection above)."
             return nil
         }
-        let credentials = mailCredentials
+        let credentials = explicitCredentials ?? mailCredentials
+        let usesBrowserCredentials = explicitCredentials != nil
+        let requestContext = GenerateDraftRequestContext(
+            credentials: credentials,
+            llmConfiguration: llmConfiguration,
+            generation: requestGeneration,
+            usesBrowserCredentials: usesBrowserCredentials
+        )
         guard credentials.isComplete else {
             draftError = "Connect an email account first."
             return nil
@@ -40,44 +58,64 @@ extension AppState {
         }
 
         do {
-            let data = try await mailProvider.fetchBodyText(
-                credentials,
-                mailbox: mailbox,
-                uid: message.id,
-                expectedUIDValidity: message.uidValidity
-            )
-            guard isCurrentDraftRequest(requestGeneration, credentials: credentials, llmConfiguration: llmConfiguration) else {
-                return nil
-            }
-            let context = ReplyContext(
-                senderName: message.from?.name,
-                senderEmail: message.from?.email,
-                subject: message.subject,
-                body: MailBodyText.plainText(from: data)
-            )
-            let outcome = try await makeReplyOutcome(context: context, llmConfiguration: llmConfiguration, accountEmail: credentials.email)
-            guard isCurrentDraftRequest(requestGeneration, credentials: credentials, llmConfiguration: llmConfiguration) else {
-                return nil
-            }
-            let draft = draftPreview(
+            guard let draft = try await generatedDraftPreview(
                 for: message,
-                outcome: outcome,
-                llmConfiguration: llmConfiguration,
-                credentials: credentials,
-                mailbox: mailbox
-            )
+                mailbox: mailbox,
+                request: requestContext
+            ) else { return nil }
             generatedDraft = draft
             recordDraftActivity(.draftCreated, for: draft)
             return draft
         } catch {
-            let wasCurrent = isCurrentDraftRequest(requestGeneration, credentials: credentials, llmConfiguration: llmConfiguration)
-            let signedOut = await reconcileManagedAccountState(after: error, provider: llmConfiguration.provider)
-            guard wasCurrent,
-                  signedOut || isCurrentDraftRequest(requestGeneration, credentials: credentials, llmConfiguration: llmConfiguration)
-            else { return nil }
-            draftError = Self.draftMessage(for: error)
+            await handleGenerateDraftError(error, request: requestContext)
             return nil
         }
+    }
+
+    private func generatedDraftPreview(
+        for message: MailMessage,
+        mailbox: Mailbox,
+        request: GenerateDraftRequestContext
+    ) async throws -> Draft? {
+        let data = try await mailProvider.fetchBodyText(
+            request.credentials,
+            mailbox: mailbox,
+            uid: message.id,
+            expectedUIDValidity: message.uidValidity
+        )
+        guard isCurrentDraftRequest(request) else { return nil }
+        let context = ReplyContext(
+            senderName: message.from?.name,
+            senderEmail: message.from?.email,
+            subject: message.subject,
+            body: MailBodyText.plainText(from: data)
+        )
+        let outcome = try await makeReplyOutcome(
+            context: context,
+            llmConfiguration: request.llmConfiguration,
+            accountEmail: request.credentials.email
+        )
+        guard isCurrentDraftRequest(request) else { return nil }
+        return draftPreview(
+            for: message,
+            outcome: outcome,
+            llmConfiguration: request.llmConfiguration,
+            credentials: request.credentials,
+            mailbox: mailbox
+        )
+    }
+
+    private func handleGenerateDraftError(
+        _ error: Error,
+        request: GenerateDraftRequestContext
+    ) async {
+        let wasCurrent = isCurrentDraftRequest(request)
+        let signedOut = await reconcileManagedAccountState(
+            after: error,
+            provider: request.llmConfiguration.provider
+        )
+        guard wasCurrent, signedOut || isCurrentDraftRequest(request) else { return }
+        draftError = Self.draftMessage(for: error)
     }
 
     /// Builds a watcher-style queued draft without persisting it.
@@ -255,11 +293,21 @@ extension AppState {
     private func isCurrentDraftRequest(
         _ requestGeneration: Int,
         credentials: MailAccountCredentials,
-        llmConfiguration: DraftLLMConfiguration
+        llmConfiguration: DraftLLMConfiguration,
+        usesBrowserCredentials: Bool = false
     ) -> Bool {
         draftGeneration == requestGeneration
-            && mailCredentials == credentials
             && currentDraftLLMConfiguration == llmConfiguration
+            && (usesBrowserCredentials ? browserCredentials == credentials : mailCredentials == credentials)
+    }
+
+    private func isCurrentDraftRequest(_ request: GenerateDraftRequestContext) -> Bool {
+        isCurrentDraftRequest(
+            request.generation,
+            credentials: request.credentials,
+            llmConfiguration: request.llmConfiguration,
+            usesBrowserCredentials: request.usesBrowserCredentials
+        )
     }
 
     /// Whether the account/LLM context is still the one an in-flight draft began

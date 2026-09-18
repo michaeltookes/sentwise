@@ -188,6 +188,7 @@ extension AppState {
         }
         stopWatching(account: account)
         backgroundConnectedAccounts.removeAll { $0.id == account.id }
+        resetBrowserIfShowingAccount(account.email)
         return true
     }
 
