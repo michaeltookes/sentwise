@@ -127,6 +127,16 @@ final class ManagedQuotaTests: XCTestCase {
         XCTAssertTrue(summary.contains("Sep 1"), summary)
     }
 
+    func testResetDescriptionPreservesUTCMonthBoundaryForWesternTimeZones() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        let reset = try XCTUnwrap(ManagedQuotaDate.date(from: "2026-10-01T00:00:00Z"))
+
+        let description = ManagedQuota.resetDescription(reset, calendar: calendar, locale: Locale(identifier: "en_US_POSIX"))
+
+        XCTAssertEqual(description, "Oct 1")
+    }
+
     func testUsageSummaryOmitsResetWhenUnknown() {
         let quota = ManagedQuota(used: 3, limit: 10, resetsAt: .distantPast)
         let summary = quota.usageSummary()

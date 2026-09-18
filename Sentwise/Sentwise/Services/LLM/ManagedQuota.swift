@@ -141,17 +141,21 @@ struct ManagedQuota: Codable, Sendable, Equatable {
         return "\(base) · resets \(Self.resetDescription(resetsAt, calendar: calendar, locale: locale))"
     }
 
-    /// A month/day description of a reset instant in the user's locale,
+    /// A month/day description of a reset boundary in the user's locale,
     /// e.g. "Oct 1" — the monthly window resets at 00:00 UTC on the 1st.
     static func resetDescription(
         _ date: Date,
         calendar: Calendar = .current,
         locale: Locale = .current
     ) -> String {
+        let resetTimeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
+        var resetCalendar = calendar
+        resetCalendar.timeZone = resetTimeZone
+
         let formatter = DateFormatter()
-        formatter.calendar = calendar
+        formatter.calendar = resetCalendar
         formatter.locale = locale
-        formatter.timeZone = calendar.timeZone
+        formatter.timeZone = resetTimeZone
         formatter.setLocalizedDateFormatFromTemplate("MMM d")
         return formatter.string(from: date)
     }
