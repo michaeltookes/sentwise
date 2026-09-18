@@ -376,7 +376,7 @@ private struct MailboxBrowserRow: View {
             }
             .buttonStyle(.borderless)
             .help(canDraftReply ? "Draft reply" : "Draft reply is unavailable for this folder")
-            .disabled(!canDraftReply || appState.isGeneratingDraft || !appState.canGenerateDraft)
+            .disabled(!canDraftReply || appState.isGeneratingDraft || !appState.canGenerateBrowserDraft)
             .accessibilityLabel("Draft reply")
         }
         .padding(.horizontal)

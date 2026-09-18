@@ -19,6 +19,15 @@ extension AppState {
             && (currentLLMProviderAllowsRequests || canAttemptStaleManagedLicenseRefresh)
     }
 
+    /// Whether the Browse window can generate a draft with its effective mailbox.
+    /// This may differ from `canGenerateDraft` when the focused account is offline
+    /// but a background mailbox remains connected and browseable.
+    var canGenerateBrowserDraft: Bool {
+        isLLMConnected
+            && browserCredentials.isComplete
+            && (currentLLMProviderAllowsRequests || canAttemptStaleManagedLicenseRefresh)
+    }
+
     /// Fetches a message's body and generates a reply draft in the user's voice.
     @discardableResult
     func generateDraft(

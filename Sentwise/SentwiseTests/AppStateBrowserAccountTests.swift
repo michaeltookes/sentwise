@@ -230,6 +230,23 @@ final class AppStateBrowserAccountTests: XCTestCase {
         XCTAssertEqual(app.browserCredentials.appPassword, "side-pw")
     }
 
+    func testBrowserDraftEligibilityUsesEffectiveBrowserCredentials() {
+        let provider = PagingSearchMailProvider(allMessages: [])
+        let (app, _) = makeDraftingAppState(provider: provider)
+
+        XCTAssertTrue(app.canGenerateDraft)
+        XCTAssertTrue(app.canGenerateBrowserDraft)
+
+        app.mailAppPassword = ""
+        app.isAccountConnected = false
+        app.resetMessagePreviewForAccountChange(clearSkippedMessages: false)
+
+        XCTAssertFalse(app.canGenerateDraft)
+        XCTAssertEqual(app.effectiveBrowserAccountEmail, background)
+        XCTAssertEqual(app.browserCredentials.email, background)
+        XCTAssertTrue(app.canGenerateBrowserDraft)
+    }
+
     func testDisconnectingSelectedBrowserAccountResetsBrowserAndBulkState() async throws {
         let message = MailMessage(
             id: 42,
