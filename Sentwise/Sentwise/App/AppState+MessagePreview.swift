@@ -146,6 +146,13 @@ extension AppState {
         isGeneratingDraft = false
     }
 
+    func resetRecentMessagePreviewForConnectionRetest() {
+        _ = nextPreviewGeneration()
+        recentMessages = []
+        fetchError = nil
+        isFetching = false
+    }
+
     private func clearRecentMessagePreview() {
         recentMessages = []
         fetchError = nil

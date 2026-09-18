@@ -221,7 +221,7 @@ extension AppState {
         persistedMessages.removeAll { $0.id == entry.id }
         persistedMessages.insert(entry, at: 0)
         return Self.boundedPersistedSkippedMessages(
-            persistedMessages,
+            Self.skippedMessagesNewestFirst(persistedMessages),
             regularLimitPerAccount: skippedMessageLogLimit
         )
     }
@@ -232,6 +232,15 @@ extension AppState {
     ) {
         var messageIDs = Set(messages.map(\.id))
         messages.append(contentsOf: candidates.filter { messageIDs.insert($0.id).inserted })
+    }
+
+    private static func skippedMessagesNewestFirst(_ messages: [SkippedMessage]) -> [SkippedMessage] {
+        messages.enumerated().sorted { lhs, rhs in
+            guard lhs.element.skippedAt != rhs.element.skippedAt else {
+                return lhs.offset < rhs.offset
+            }
+            return lhs.element.skippedAt > rhs.element.skippedAt
+        }.map(\.element)
     }
 
     private func visibleSkippedMessages(recording entry: SkippedMessage) -> [SkippedMessage] {

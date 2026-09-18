@@ -119,7 +119,10 @@ extension AppState {
     }
 
     private func resetAfterConnectionSuccess(clearSkippedMessages: Bool, resetBrowser: Bool) {
-        guard resetBrowser else { return }
+        guard resetBrowser else {
+            resetRecentMessagePreviewForConnectionRetest()
+            return
+        }
         resetMessagePreviewForAccountChange(clearSkippedMessages: clearSkippedMessages, resetBrowser: true)
     }
 

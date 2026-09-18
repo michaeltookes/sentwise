@@ -18,6 +18,16 @@ final class ReviewSkippedMessagesTests: XCTestCase {
         )
     }
 
+    private func skippedMessage(id: UInt32, account: String, skippedAt: Date) -> SkippedMessage {
+        SkippedMessage(
+            message: message(id: id, from: "alerts-\(id)@x.com"),
+            mailbox: .inbox,
+            account: account,
+            reason: .automatedNotification,
+            skippedAt: skippedAt
+        )
+    }
+
     private func baselineProcessed() -> ProcessedMessages {
         var processed = ProcessedMessages()
         processed.insertBaseline(account: "me@gmail.com", mailbox: .inbox)
@@ -97,6 +107,40 @@ final class ReviewSkippedMessagesTests: XCTestCase {
         XCTAssertEqual(persistence.skippedMessages.map(\.id), [durable.id, latestCached.id, retained.id])
         XCTAssertTrue(persistence.skippedMessages.contains(retained))
         XCTAssertTrue(appState.reviewSkippedMessages.contains(retained))
+    }
+
+    func testSuccessfulRecordKeepsNewerCachedReviewSkipWithinPerAccountLimit() throws {
+        let oldBase = Date(timeIntervalSince1970: 1)
+        let account = "side-a@work.com"
+        let persistedEntries = (0..<100).map { index in
+            skippedMessage(
+                id: UInt32(index + 1),
+                account: account,
+                skippedAt: oldBase.addingTimeInterval(Double(100 - index))
+            )
+        }
+        let (appState, persistence) = makeAppState(skippedMessages: persistedEntries)
+        persistence.skippedMessageSaveError = AppStatePersistenceError.writeDenied
+        appState.recordSkip(
+            message(id: 150, from: "recovered@x.com"),
+            reason: .bulkOrListMail,
+            account: account,
+            mailbox: .inbox
+        )
+        let cached = try XCTUnwrap(appState.reviewSkippedMessages.first { $0.message.id == 150 })
+        XCTAssertFalse(persistence.skippedMessages.contains(cached))
+
+        persistence.skippedMessageSaveError = nil
+        let durable = try appState.recordSkipSync(
+            message(id: 151, from: "fresh@x.com"),
+            reason: .noReplySender,
+            account: account,
+            mailbox: .inbox
+        )
+
+        XCTAssertEqual(persistence.skippedMessages.count, appState.skippedMessageLogLimit)
+        XCTAssertEqual(persistence.skippedMessages.prefix(2).map(\.id), [durable.id, cached.id])
+        XCTAssertTrue(persistence.skippedMessages.contains(cached))
     }
 
     func testDismissReviewSkippedMessagesOnlyClearsProvidedFilteredRows() throws {
