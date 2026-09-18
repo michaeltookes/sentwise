@@ -251,7 +251,7 @@ final class ManagedInferenceLiveTests: XCTestCase {
 
         XCTAssertFalse(quota.unit.isEmpty, "quota.unit should be a user-facing unit")
         XCTAssertGreaterThanOrEqual(quota.used, 0)
-        XCTAssertGreaterThan(quota.limit, 0, "a live account should carry a positive weekly limit")
+        XCTAssertGreaterThan(quota.limit, 0, "a live account should carry a positive monthly limit")
         XCTAssertTrue(quota.hasKnownReset, "quota.resetsAt should be a valid ISO-8601 instant")
     }
 

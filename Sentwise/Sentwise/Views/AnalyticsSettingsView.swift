@@ -59,7 +59,7 @@ struct AnalyticsSettingsView: View {
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("analyticsDraftsUsed")
                     }
-                    LabeledContent("Remaining this week") {
+                    LabeledContent("Remaining this month") {
                         Text("\(usage.remaining)")
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("analyticsDraftsRemaining")
@@ -88,7 +88,7 @@ struct AnalyticsSettingsView: View {
                     .accessibilityIdentifier("analyticsOpenSubscription")
                     .accessibilityLabel("Open the Subscription tab to manage your plan and usage")
                 } else {
-                    Text("Sign in to Sentwise AI to see your weekly usage. It appears here once "
+                    Text("Sign in to Sentwise AI to see your monthly usage. It appears here once "
                          + "your first draft is counted.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

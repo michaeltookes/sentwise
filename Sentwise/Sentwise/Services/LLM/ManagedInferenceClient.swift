@@ -365,14 +365,14 @@ struct StubManagedInferenceClient: LLMClient {
 
     /// A plausible, fixed quota surfaced in Prowl hunt mode (backlog item 56b) so
     /// the usage display renders deterministically with zero network. Halfway
-    /// through the week, soft enforcement, resets at a fixed instant.
+    /// through the month, soft enforcement, resets at a fixed instant.
     static var stubbedQuota: ManagedQuota {
         ManagedQuota(
             unit: "drafts",
             used: 25,
             limit: 50,
             remaining: 25,
-            resetsAt: Date(timeIntervalSince1970: 1_756_512_000), // fixed, deterministic
+            resetsAt: Date(timeIntervalSince1970: 1_756_684_800), // fixed, deterministic (Sep 1 00:00 UTC)
             tokensUsed: 125_000,
             tokenLimit: 250_000,
             enforcement: .soft,

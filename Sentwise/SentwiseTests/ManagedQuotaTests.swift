@@ -118,19 +118,29 @@ final class ManagedQuotaTests: XCTestCase {
             used: 12,
             limit: 50,
             remaining: 38,
-            resetsAt: ManagedQuotaDate.date(from: "2025-09-01T00:00:00Z")!, // a Monday, UTC
+            resetsAt: ManagedQuotaDate.date(from: "2025-09-01T00:00:00Z")!, // the 1st, UTC
             enforcement: .soft
         )
         let summary = quota.usageSummary(calendar: calendar, locale: Locale(identifier: "en_US_POSIX"))
-        XCTAssertTrue(summary.hasPrefix("12 of 50 drafts used this week"), summary)
+        XCTAssertTrue(summary.hasPrefix("12 of 50 drafts used this month"), summary)
         XCTAssertTrue(summary.contains("resets"), summary)
-        XCTAssertTrue(summary.contains("Monday"), summary)
+        XCTAssertTrue(summary.contains("Sep 1"), summary)
+    }
+
+    func testResetDescriptionPreservesUTCMonthBoundaryForWesternTimeZones() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        let reset = try XCTUnwrap(ManagedQuotaDate.date(from: "2026-10-01T00:00:00Z"))
+
+        let description = ManagedQuota.resetDescription(reset, calendar: calendar, locale: Locale(identifier: "en_US_POSIX"))
+
+        XCTAssertEqual(description, "Oct 1")
     }
 
     func testUsageSummaryOmitsResetWhenUnknown() {
         let quota = ManagedQuota(used: 3, limit: 10, resetsAt: .distantPast)
         let summary = quota.usageSummary()
-        XCTAssertEqual(summary, "3 of 10 drafts used this week")
+        XCTAssertEqual(summary, "3 of 10 drafts used this month")
         XCTAssertFalse(summary.contains("resets"))
     }
 

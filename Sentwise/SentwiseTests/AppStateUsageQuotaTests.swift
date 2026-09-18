@@ -220,7 +220,7 @@ final class AppStateUsageQuotaTests: XCTestCase {
         appState.ingestManagedQuota(quota(used: 100))
         XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.fifty, .seventyFive, .hundred])
 
-        // New week, back to 55% — 50% fires again in the fresh window.
+        // New month, back to 55% — 50% fires again in the fresh window.
         appState.ingestManagedQuota(quota(used: 55, resetsAt: nextWindow))
         XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.fifty, .seventyFive, .hundred, .fifty])
     }

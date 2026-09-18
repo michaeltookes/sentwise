@@ -325,7 +325,7 @@ extension AppState {
             } ?? ""
             // Parked 2026-09-16 (item 100): no "use your own key" valve — managed is
             // the only shipped path.
-            return "You've used all your weekly Sentwise AI drafts.\(resetPhrase)"
+            return "You've used all your monthly Sentwise AI drafts.\(resetPhrase)"
                 + " Buy more usage in Settings → Subscription."
         case LLMError.managedRequestTooLarge(let message):
             return message.isEmpty

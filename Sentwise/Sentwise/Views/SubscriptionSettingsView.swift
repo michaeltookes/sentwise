@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The "Subscription" tab of Settings (backlog item 73): the Sentwise account
-/// home. Shows the signed-in account email, plan / trial / renewal, weekly usage
+/// home. Shows the signed-in account email, plan / trial / renewal, monthly usage
 /// (reused from `ManagedUsageView`), in-app plan management (the three tiers with
 /// the current one marked, plus upgrade/downgrade and cancel — item 90), an
 /// on-demand manage-billing entry point, sign-out, and a guarded delete-account

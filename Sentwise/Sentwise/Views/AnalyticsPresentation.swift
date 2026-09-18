@@ -11,15 +11,15 @@ import Foundation
 /// lives in the Subscription pane (item 73's `ManagedUsageView`) and must not be
 /// duplicated here.
 struct AnalyticsQuotaPresentation: Equatable {
-    /// Drafts consumed in the current weekly window.
+    /// Drafts consumed in the current monthly window.
     var draftsUsed: Int
-    /// The weekly allotment.
+    /// The monthly allotment.
     var limit: Int
     /// Drafts remaining in the current window.
     var remaining: Int
     /// A subdued "under the hood" tokens caption (the UI unit is drafts).
     var tokensCaption: String
-    /// "resets <weekday>, <time>" text, or `nil` when the reset instant is unknown
+    /// "resets <month day>" text, or `nil` when the reset instant is unknown
     /// (the Worker omitted `resetsAt`).
     var resetText: String?
     /// The extra-usage row — present only when `extraPurchased > 0`.
