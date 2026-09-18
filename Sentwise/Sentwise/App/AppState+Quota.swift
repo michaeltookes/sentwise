@@ -22,7 +22,7 @@ private struct ManagedAccountStatusRefreshOptions {
 
 /// Managed-inference usage metering on `AppState` (backlog item 56b): mirroring
 /// the latest quota into published state, refreshing it from `/v1/me`, and firing
-/// the 50/75/100% weekly-usage alerts idempotently. Kept in its own file so
+/// the 50/75/100% monthly-usage alerts idempotently. Kept in its own file so
 /// `AppState` stays within length limits.
 extension AppState {
 
@@ -85,7 +85,7 @@ extension AppState {
 
     /// Records the latest quota (from a `/v1/draft` response or a `/v1/me` fetch)
     /// into published state and fires any newly-crossed usage-threshold alerts.
-    /// Idempotent per managed account + weekly window — a threshold fires once
+    /// Idempotent per managed account + monthly window — a threshold fires once
     /// until the account changes or the window resets. Alerts are suppressed in
     /// Prowl hunt mode so hunts stay side-effect free; the display value still
     /// updates so the pane renders deterministically.
@@ -349,7 +349,7 @@ extension AppState {
         }
     }
 
-    /// Whether the account is at or over its weekly allotment (drives the pane's
+    /// Whether the account is at or over its monthly allotment (drives the pane's
     /// "buy more usage" placeholder and the over-limit copy). `false` when the
     /// quota is unknown.
     var isManagedQuotaExhausted: Bool {

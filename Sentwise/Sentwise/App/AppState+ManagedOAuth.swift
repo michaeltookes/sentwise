@@ -64,7 +64,7 @@ extension AppState {
         refreshGoogleOAuthInterestState()
         resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
         startTranscriptFolderWatchingIfEnabled()
-        // Pull the current weekly allotment now that we can authenticate (item 56b).
+        // Pull the current monthly allotment now that we can authenticate (item 56b).
         Task { await refreshManagedQuota() }
     }
 

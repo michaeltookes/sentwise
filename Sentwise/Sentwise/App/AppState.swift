@@ -384,7 +384,7 @@ final class AppState: ObservableObject {
     /// Bridges managed-quota reports from the LLM layer onto the main actor so the
     /// published quota and usage alerts update (backlog item 56b).
     let managedQuotaRelay = ManagedQuotaRelay()
-    /// Persists which usage thresholds have fired for the current weekly window so
+    /// Persists which usage thresholds have fired for the current monthly window so
     /// alerts fire once per threshold and never re-fire across relaunches (56b).
     /// A `var` with a default so tests can substitute an in-memory store.
     var usageAlertStore: UsageAlertStateStoring = UserDefaultsUsageAlertStore()
