@@ -365,6 +365,56 @@ final class AppStateReplyWorthinessTests: XCTestCase {
         ))
     }
 
+    func testReviewSkippedMessagesIncludesInMemoryEntryAfterPersistenceFailure() throws {
+        let (appState, _, persistence) = makeAppState()
+        persistence.skippedMessageSaveError = AppStatePersistenceError.writeDenied
+
+        appState.recordSkip(
+            message(id: 14, uidValidity: 7, from: "no-reply@x.com"),
+            reason: .noReplySender,
+            account: "me@gmail.com",
+            mailbox: .inbox
+        )
+
+        let entry = try XCTUnwrap(appState.skippedMessages.first)
+        XCTAssertTrue(persistence.skippedMessages.isEmpty)
+        XCTAssertEqual(appState.reviewSkippedMessages, [entry])
+    }
+
+    func testDismissReviewSkippedMessagesOnlyClearsProvidedFilteredRows() throws {
+        let (appState, _, persistence) = makeAppState()
+        let focused = try appState.recordSkipSync(
+            message(id: 15, uidValidity: 7, from: "no-reply@x.com"),
+            reason: .noReplySender,
+            account: "me@gmail.com",
+            mailbox: .inbox,
+            preservesRecoveryWhenProcessed: true
+        )
+        let background = try appState.recordSkipSync(
+            message(id: 16, uidValidity: 7, from: "notifications@x.com"),
+            reason: .automatedNotification,
+            account: "side@work.com",
+            mailbox: .inbox,
+            preservesRecoveryWhenProcessed: true
+        )
+        let filtered = appState.reviewSkippedMessages.filter {
+            ReviewDraftsFilter.matches($0, query: "", account: .mailbox("me@gmail.com"))
+        }
+        XCTAssertEqual(filtered, [focused])
+
+        appState.dismissReviewSkippedMessages(filtered)
+
+        XCTAssertTrue(appState.skippedMessages.isEmpty)
+        XCTAssertEqual(persistence.skippedMessages, [background])
+        XCTAssertEqual(appState.reviewSkippedMessages, [background])
+        XCTAssertFalse(appState.hasSkippedMessage(focused.message, account: focused.account, mailbox: focused.mailbox))
+        XCTAssertTrue(appState.hasSkippedMessage(
+            background.message,
+            account: background.account,
+            mailbox: background.mailbox
+        ))
+    }
+
     func testClearSkippedMessagesPersistenceFailureKeepsEntriesVisible() throws {
         let (appState, _, persistence) = makeAppState()
         let entry = try appState.recordSkipSync(

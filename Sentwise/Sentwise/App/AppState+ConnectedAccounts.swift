@@ -155,8 +155,10 @@ extension AppState {
     /// fall through to the focused account.
     func resetBrowserIfShowingAccount(_ email: String) {
         let normalized = SavedMailAccount.normalizedEmail(email)
+        let explicitAccount = SavedMailAccount.normalizedEmail(browser.accountEmail ?? "")
+        let effectiveAccount = SavedMailAccount.normalizedEmail(effectiveBrowserAccountEmail)
         guard !normalized.isEmpty,
-              SavedMailAccount.normalizedEmail(browser.accountEmail ?? "") == normalized else {
+              explicitAccount == normalized || effectiveAccount == normalized else {
             return
         }
         resetBrowserScopedPreviewsForAccountChange()

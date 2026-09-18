@@ -27,7 +27,7 @@ struct SkippedMessagesTab: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Button("Clear") { appState.dismissAllReviewSkippedMessages() }
+                        Button("Clear") { appState.dismissReviewSkippedMessages(filtered) }
                             .buttonStyle(.link)
                             .font(.caption)
                     }

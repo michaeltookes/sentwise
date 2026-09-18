@@ -282,6 +282,96 @@ final class AppStateBrowserAccountTests: XCTestCase {
         XCTAssertTrue(app.backgroundConnectedAccounts.isEmpty)
     }
 
+    func testDisconnectingImplicitBrowserAccountResetsBrowserAndBulkState() throws {
+        let message = MailMessage(
+            id: 43,
+            uidValidity: 2,
+            from: MailAddress(email: "list@news.co"),
+            subject: "Weekly",
+            date: "",
+            messageID: "<43@news.co>"
+        )
+        let app = makeAppState(provider: PagingSearchMailProvider(allMessages: []))
+        let fallback = ConnectedMailAccount(
+            email: "archive@work.com",
+            host: "imap.archive.com",
+            port: 993,
+            appPassword: "archive-pw"
+        )
+        app.backgroundConnectedAccounts.append(fallback)
+        app.mailAppPassword = ""
+        app.isAccountConnected = false
+        app.resetMessagePreviewForAccountChange(clearSkippedMessages: false)
+        XCTAssertNil(app.browser.accountEmail)
+        XCTAssertEqual(app.effectiveBrowserAccountEmail, background)
+
+        app.browser.results = [message]
+        app.browser.resultQuery = MailboxBrowserQuery(mailbox: .inbox, criteria: app.browser.criteria)
+        app.browser.hasSearched = true
+        app.browser.toggleSelection(message.id)
+        app.bulk.error = "Old cleanup error."
+        app.bulk.previewAccount = BulkCleanupAccountIdentity(credentials: app.browserCredentials)
+        let browserGenerationBefore = app.browserGeneration
+        let bulkGenerationBefore = app.bulkGeneration
+        let account = try XCTUnwrap(app.backgroundConnectedAccounts.first)
+
+        XCTAssertTrue(app.disconnectBackgroundAccount(account))
+
+        XCTAssertNil(app.browser.accountEmail)
+        XCTAssertEqual(app.effectiveBrowserAccountEmail, fallback.id)
+        XCTAssertTrue(app.browser.results.isEmpty)
+        XCTAssertTrue(app.browser.selectedMessageIDs.isEmpty)
+        XCTAssertNil(app.browser.resultQuery)
+        XCTAssertFalse(app.browser.hasSearched)
+        XCTAssertNil(app.bulk.previewAccount)
+        XCTAssertNil(app.bulk.error)
+        XCTAssertGreaterThan(app.browserGeneration, browserGenerationBefore)
+        XCTAssertGreaterThan(app.bulkGeneration, bulkGenerationBefore)
+        XCTAssertEqual(app.backgroundConnectedAccounts.map(\.id), [fallback.id])
+    }
+
+    func testRemovingImplicitBrowserAccountResetsBeforeRuntimeRemoval() {
+        let message = MailMessage(
+            id: 44,
+            uidValidity: 3,
+            from: MailAddress(email: "list@news.co"),
+            subject: "Weekly",
+            date: "",
+            messageID: "<44@news.co>"
+        )
+        let app = makeAppState(provider: PagingSearchMailProvider(allMessages: []))
+        let fallback = ConnectedMailAccount(
+            email: "archive@work.com",
+            host: "imap.archive.com",
+            port: 993,
+            appPassword: "archive-pw"
+        )
+        app.backgroundConnectedAccounts.append(fallback)
+        app.mailAppPassword = ""
+        app.isAccountConnected = false
+        app.resetMessagePreviewForAccountChange(clearSkippedMessages: false)
+        app.browser.results = [message]
+        app.browser.resultQuery = MailboxBrowserQuery(mailbox: .inbox, criteria: app.browser.criteria)
+        app.browser.hasSearched = true
+        app.browser.toggleSelection(message.id)
+        app.bulk.error = "Old cleanup error."
+        let browserGenerationBefore = app.browserGeneration
+        let bulkGenerationBefore = app.bulkGeneration
+
+        app.removeSavedAccount(SavedMailAccount(email: background, host: backgroundHost, port: 993))
+
+        XCTAssertEqual(app.effectiveBrowserAccountEmail, fallback.id)
+        XCTAssertTrue(app.browser.results.isEmpty)
+        XCTAssertTrue(app.browser.selectedMessageIDs.isEmpty)
+        XCTAssertNil(app.browser.resultQuery)
+        XCTAssertFalse(app.browser.hasSearched)
+        XCTAssertNil(app.bulk.error)
+        XCTAssertGreaterThan(app.browserGeneration, browserGenerationBefore)
+        XCTAssertGreaterThan(app.bulkGeneration, bulkGenerationBefore)
+        XCTAssertEqual(app.backgroundConnectedAccounts.map(\.id), [fallback.id])
+        XCTAssertFalse(app.savedAccounts.contains { $0.id == SavedMailAccount.normalizedEmail(background) })
+    }
+
     // MARK: - State reset on switch
 
     func testSwitchingAccountResetsBrowserStateAndGeneration() async {

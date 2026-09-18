@@ -395,8 +395,10 @@ final class ReviewWindowSelection: ObservableObject {
         guard let mailbox = accountScope.mailbox else { return }
         let normalizedMailbox = SavedMailAccount.normalizedEmail(mailbox)
         let available = Set(availableMailboxes.map(SavedMailAccount.normalizedEmail))
-        guard !available.contains(normalizedMailbox) else { return }
-        accountScope = .all
+        guard available.count > 1, available.contains(normalizedMailbox) else {
+            accountScope = .all
+            return
+        }
     }
 
     /// Toggles the expanded state of one draft row (item 82). Expanding a row

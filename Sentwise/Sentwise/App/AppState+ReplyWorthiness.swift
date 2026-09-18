@@ -166,8 +166,10 @@ extension AppState {
             processedMessages: processedMessages,
             limit: skippedMessageLogLimit
         )
+        let trackedIDs = Set(trackedMessages.map(\.id))
+        let inMemoryOnlyMessages = skippedMessages.filter { !trackedIDs.contains($0.id) }
         return Self.visibleSkippedMessagesForAllAccounts(
-            from: trackedMessages,
+            from: inMemoryOnlyMessages + trackedMessages,
             limit: skippedMessageLogLimit
         )
     }
@@ -175,6 +177,12 @@ extension AppState {
     /// Clears every skipped entry currently reachable from the Review window.
     func dismissAllReviewSkippedMessages() {
         dismissSkippedMessages(reviewSkippedMessages)
+    }
+
+    /// Clears the supplied Review-window skipped entries. Used by filtered review
+    /// surfaces so "Clear" only dismisses the rows the user can currently see.
+    func dismissReviewSkippedMessages(_ entries: [SkippedMessage]) {
+        dismissSkippedMessages(entries)
     }
 
     /// Whether a skipped entry already exists for the same account/mailbox UID.
