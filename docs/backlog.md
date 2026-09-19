@@ -287,13 +287,17 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Enable branch protection on `main` requiring the CI check to pass before merge.
     - Cache SwiftPM/Xcode build dependencies to speed up runs.
 
-53. **Platform transcript integrations (Zoom first, Teams later)** — *tier-gated: Pro and above (owner direction 2026-09-16, item 98 matrix)*
+53. **Platform transcript integrations (Zoom first, Teams later)** — *tier-gated: Pro and above (owner direction 2026-09-16, item 98 matrix); elevated 2026-09-19: build in parallel with the item 74 cutover, launch-NOT-blocking*
     Pull call transcripts automatically from the user's own meeting-platform account — no bot joins the call, nothing transits an sentwise server.
     *As Marcus, whose org records to Zoom cloud, I want new call transcripts picked up automatically, so that I never export a file by hand.*
     - **Zoom first:** poll the cloud-recordings API with the user's own credentials for newly completed transcripts. **Polling, not webhooks** — a local-first app has no public URL; a "dumb relay" push function (Cloudflare Worker/Lambda that forwards only a "new recording exists" ping, never the transcript) is a natural later upgrade now that the managed-inference service (item 56) means a server exists anyway.
     - Transcripts are fetched directly from the platform to the Mac and feed the item 51 `TranscriptSource` pipeline.
     - **Teams (Microsoft Graph) is a follow-on**; its tenant-admin-consent requirement must be documented honestly — same lesson as the parked BYO-OAuth path (item 3). Requires-IT-approval is expected for many orgs.
     - Per-platform setup friction (cloud recording enabled, plan requirements, credentials) documented; when the API path isn't available, degrade cleanly to item 51's file/folder ingestion.
+    - **Owner rationale (2026-09-19):** auto-ingestion removes the 3–5 manual clicks per call that Starter users keep, making the Pro upgrade tangible for the Marcus ICP (5–8 calls/day). It complements item 99 multi-account as the Pro anchor.
+    - **Marketplace-review reality (2026-09-19) — the schedule gate is external:** a "Connect Zoom" that works for any Zoom account requires a **published Zoom Marketplace OAuth app**, and Zoom's app review (security questionnaire included) typically takes weeks and can bounce. Unpublished apps only work under the developer's own Zoom account, and asking users to create their own Zoom OAuth app is the exact BYO-credentials friction that killed items 3 and 100 — not an option. RingCentral's marketplace has the same shape. Therefore: **submit the Zoom app for review as early as the integration can demo end-to-end**; the review clock, not the build, is the long pole.
+    - **Parallel-track decision (owner, 2026-09-19):** the item 74 production cutover proceeds simultaneously and does NOT wait for this item. If Zoom review clears before the launch checklist closes, 1.0 ships with it; otherwise it ships in a 1.0.x Sparkle update. Per the item 98 display rule, the pricing page and tier cards show the integration only once shipped.
+    - **Prerequisites to document for users:** Zoom cloud transcripts require a paid Zoom plan with cloud recording + audio transcript enabled (often an admin setting). Add a support-doc table of "if your tool is X, here's your setup," including which tools can auto-export transcripts to a local folder today — item 51's watched folder already makes that zero-click, and it is the bridge while connectors roll out.
 
 54. **Native call capture + on-device transcription**
     Capture call audio locally and transcribe on-device. The biggest lift in the pivot; explicitly gated on item 51 proving demand.
