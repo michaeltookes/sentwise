@@ -20,14 +20,14 @@ Today the app compiles in the **dev** instance
 publishable key (`wrangler.jsonc` `CLERK_PUBLISHABLE_KEY`) + `CLERK_SECRET_KEY`
 secret. Security finding A-M1.
 
-- [ ] **[owner]** Create the **production instance** in the Clerk dashboard
+- [x] **[owner]** Create the **production instance** in the Clerk dashboard
       (Development → Production on the existing app). Home domain:
       `sentwise.ai`.
-- [ ] **[owner]** Add the DNS records Clerk requests (CNAMEs on
+- [x] **[owner]** Add the DNS records Clerk requests (CNAMEs on
       `clerk.sentwise.ai` etc.) in Cloudflare — **DNS-only/grey-cloud**, not
       proxied, same as the landing-page CNAME. Wait for Clerk to show all
       records verified + SSL issued.
-- [ ] **[owner]** Google OAuth for production (Clerk prod instances require
+- [x] **[owner]** Google OAuth for production (Clerk prod instances require
       your own client, not Clerk's shared dev credentials):
       - Google Cloud console → new project (or reuse) → OAuth consent screen:
         External, app name **Sentwise**, domain `sentwise.ai`, logo. Scopes:
@@ -37,7 +37,7 @@ secret. Security finding A-M1.
       - Create an OAuth **Web application** client; authorized redirect URI =
         the exact URI Clerk's prod instance shows under SSO connections →
         Google (custom credentials). Paste client id/secret into Clerk.
-- [ ] **[owner]** Enable the same sign-in methods as dev (email code +
+- [x] **[owner]** Enable the same sign-in methods as dev (email code +
       Google), and confirm session lifetime settings match dev.
 - [ ] **[owner]** Clerk dashboard → allowlist the worker callback redirect for
       the managed OAuth flow (item 89):
