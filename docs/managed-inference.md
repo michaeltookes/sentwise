@@ -670,7 +670,13 @@ draft mutation, LLM generation, mailbox search, and system toggles stay forbidde
 ## Live end-to-end sign-in test (env-gated)
 
 `ClerkLiveSignInTests` exercises the **real `ClerkClient`** against the live Clerk
-dev instance (`peaceful-eel-9660.clerk.accounts.dev`) via the Frontend API. It
+instance the app is compiled for — the production instance (`clerk.sentwise.ai`)
+since the item 74 cutover (2026-09-19; previously the `peaceful-eel-9660` dev
+instance) — via the Frontend API. **Note:** Clerk's `+clerk_test` email mechanism
+requires the instance's test mode, which production instances disable by default;
+the live sign-in payload (and the managed live-draft payload's sign-in) need
+production-instance test users or test mode consciously enabled before they can
+run post-cutover. It
 **skips by default** and only runs when `SENTWISE_LIVE_CLERK_TEST` is set, so CI
 and normal `xcodebuild test` runs stay offline.
 
