@@ -42,13 +42,18 @@ secret. Security finding A-M1.
 - [ ] **[owner]** Clerk dashboard → allowlist the worker callback redirect for
       the managed OAuth flow (item 89):
       `https://sentwise-inference.sentwise-service.workers.dev/auth/callback`.
-- [ ] **[agent]** Worker: set `CLERK_PUBLISHABLE_KEY` var to the `pk_live_…`
+- [x] **[agent]** Worker: set `CLERK_PUBLISHABLE_KEY` var to the `pk_live_…`
       key; `wrangler secret put CLERK_SECRET_KEY` with the `sk_live_…` key
       (from a real TTY — see §3 gotcha).
-- [ ] **[agent]** App: point `ClerkClient.defaultFrontendAPIBaseURLString` at
+- [x] **[agent]** App: point `ClerkClient.defaultFrontendAPIBaseURLString` at
       the production Frontend API URL (e.g. `https://clerk.sentwise.ai`).
 - [ ] **[agent]** Verify end-to-end on the deployed worker: email-code
       sign-in, Google sign-in via `/auth/callback`, `/v1/me`, one draft.
+- [ ] **[owner+agent]** Lucius live-test payloads: the Clerk/managed live
+      tests sign in against the instance the app compiles for — after the flip
+      they need production-instance test users (or test mode consciously
+      enabled) and updated `SENTWISE_LIVE_*` repo secrets before those payloads
+      run again.
 - [ ] **`CLERK_AUTHORIZED_PARTIES` stays UNSET** until production native
       tokens are confirmed to carry a matching `azp` claim (S-L1 — setting it
       while tokens lack `azp` rejects every session).
