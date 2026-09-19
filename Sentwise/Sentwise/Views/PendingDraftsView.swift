@@ -23,6 +23,9 @@ struct PendingDraftsView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             tabBar
+            if appState.showsAccountAttribution {
+                accountPicker
+            }
             searchField
             Divider()
 
@@ -49,6 +52,12 @@ struct PendingDraftsView: View {
         }
         .frame(width: 720, height: 540)
         .task { await appState.refreshNotificationPermission() }
+        .onAppear {
+            selection.resetAccountScopeIfUnavailable(availableMailboxes: appState.attributionMailboxes)
+        }
+        .onChange(of: appState.attributionMailboxes) { _, mailboxes in
+            selection.resetAccountScopeIfUnavailable(availableMailboxes: mailboxes)
+        }
         .sheet(item: denyReasonPromptBinding) { prompt in
             DenyReasonPicker(prompt: prompt)
                 .environmentObject(appState)
@@ -103,7 +112,7 @@ struct PendingDraftsView: View {
             emptyState
         } else {
             let filtered = appState.pendingDrafts.filter {
-                ReviewDraftsFilter.matches($0, query: selection.searchQuery)
+                ReviewDraftsFilter.matches($0, query: selection.searchQuery, account: selection.accountScope)
             }
             if filtered.isEmpty {
                 noMatchesState
@@ -113,7 +122,11 @@ struct PendingDraftsView: View {
                         ForEach(filtered, id: \.identity) { draft in
                             let isExpanded = selection.expandedDraftIdentity == draft.identity
                             VStack(spacing: 0) {
-                                PendingDraftRow(draft: draft, isExpanded: isExpanded) {
+                                PendingDraftRow(
+                                    draft: draft,
+                                    isExpanded: isExpanded,
+                                    accountBadge: appState.draftRowAccountBadge(for: draft)
+                                ) {
                                     selection.toggleExpanded(draft.identity)
                                 }
                                 if isExpanded {
@@ -167,6 +180,42 @@ struct PendingDraftsView: View {
         .padding(.bottom, 8)
     }
 
+    /// The account filter (item 102): "All Mailboxes" plus one entry per
+    /// connected/saved mailbox, narrowing both tabs to the chosen mailbox. Shown
+    /// only when more than one mailbox is in play (`showsAccountAttribution`), so
+    /// single-account users — and Prowl hunt mode, which seeds a single fixture
+    /// account — never see it. Read-only view filter: it changes which items are
+    /// listed and reaches no approve/deny/send action.
+    private var accountPicker: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "tray.2")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Picker("Mailbox", selection: accountScopeSelection) {
+                Text("All Mailboxes").tag(String?.none)
+                ForEach(appState.attributionMailboxes, id: \.self) { mailbox in
+                    Text(mailbox).tag(String?.some(mailbox))
+                }
+            }
+            .labelsHidden()
+            .accessibilityIdentifier("reviewDraftsAccountPicker")
+            .accessibilityLabel("Filter by mailbox")
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+    }
+
+    /// Bridges the `String?` picker tag (nil = All Mailboxes) to the pure
+    /// `AccountScope`, so the picker stays declarative and the matching logic
+    /// stays in `ReviewDraftsFilter`.
+    private var accountScopeSelection: Binding<String?> {
+        Binding(
+            get: { selection.accountScope.mailbox },
+            set: { selection.accountScope = ReviewDraftsFilter.AccountScope(mailbox: $0) }
+        )
+    }
+
     private var header: some View {
         HStack(spacing: 8) {
             Text("Review Drafts")
@@ -199,25 +248,28 @@ struct PendingDraftsView: View {
         .padding(.bottom, 8)
     }
 
-    /// Whether a search filter is currently active (non-empty after trimming).
+    /// Whether any filter is active — the search query (item 76) or the account
+    /// scope (item 102). Drives the "N of M" badges, so narrowing to a mailbox
+    /// shows the filtered scope even with an empty search box.
     private var isFiltering: Bool {
-        !ReviewDraftsFilter.normalized(selection.searchQuery).isEmpty
+        !ReviewDraftsFilter.normalized(selection.searchQuery).isEmpty || selection.accountScope.isFiltering
     }
 
-    /// The Drafts tab badge: the total, or "N of M" while filtering (item 76).
+    /// The Drafts tab badge: the total, or "N of M" while filtering (item 76/102).
     private var draftsBadge: String? {
         let total = appState.pendingDrafts.count
         let filtered = appState.pendingDrafts.filter {
-            ReviewDraftsFilter.matches($0, query: selection.searchQuery)
+            ReviewDraftsFilter.matches($0, query: selection.searchQuery, account: selection.accountScope)
         }.count
         return ReviewDraftsFilter.countLabel(filtered: filtered, total: total, isFiltering: isFiltering)
     }
 
-    /// The Skipped tab badge: the total, or "N of M" while filtering (item 76).
+    /// The Skipped tab badge: the total, or "N of M" while filtering (item 76/102).
     private var skippedBadge: String? {
-        let total = appState.skippedMessages.count
-        let filtered = appState.skippedMessages.filter {
-            ReviewDraftsFilter.matches($0, query: selection.searchQuery)
+        let skippedMessages = appState.reviewSkippedMessages
+        let total = skippedMessages.count
+        let filtered = skippedMessages.filter {
+            ReviewDraftsFilter.matches($0, query: selection.searchQuery, account: selection.accountScope)
         }.count
         return ReviewDraftsFilter.countLabel(filtered: filtered, total: total, isFiltering: isFiltering)
     }
@@ -277,12 +329,38 @@ struct PendingDraftsView: View {
                 .foregroundStyle(.secondary)
             Text("No matches")
                 .foregroundStyle(.secondary)
-            Text("No drafts match “\(selection.searchQuery)”.")
+            Text(noMatchesDetail)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityIdentifier("reviewDraftsNoMatches")
+    }
+
+    /// The "no matches" detail line, phrased for whichever filter is narrowing the
+    /// list: the search term, the chosen mailbox, or both (item 76/102).
+    private var noMatchesDetail: String {
+        Self.noMatchesDetail(
+            searchQuery: selection.searchQuery,
+            mailbox: selection.accountScope.mailbox,
+            noun: "drafts"
+        )
+    }
+
+    /// Pure phrasing for the no-matches detail line, so the search/account/both
+    /// wording is unit-testable without SwiftUI.
+    static func noMatchesDetail(searchQuery: String, mailbox: String?, noun: String) -> String {
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch (trimmed.isEmpty, mailbox) {
+        case (false, .some(let mailbox)):
+            return "No \(noun) in \(mailbox) match “\(trimmed)”."
+        case (false, .none):
+            return "No \(noun) match “\(trimmed)”."
+        case (true, .some(let mailbox)):
+            return "No \(noun) in \(mailbox)."
+        case (true, .none):
+            return "No \(noun) match your filter."
+        }
     }
 }
 
@@ -301,6 +379,12 @@ final class ReviewWindowSelection: ObservableObject {
     /// switches between Drafts and Skipped. Matching lives in `ReviewDraftsFilter`.
     @Published var searchQuery: String = ""
 
+    /// The Review Drafts account scope (item 102). Narrows both tabs to one
+    /// connected/saved mailbox, or `.all` for every mailbox. Composes with
+    /// `searchQuery`; shared across tabs so switching Drafts/Skipped keeps the
+    /// chosen mailbox. Matching lives in `ReviewDraftsFilter.AccountScope`.
+    @Published var accountScope: ReviewDraftsFilter.AccountScope = .all
+
     init(selectedTab: PendingDraftsView.ReviewTab = .drafts) {
         self.selectedTab = selectedTab
     }
@@ -308,6 +392,16 @@ final class ReviewWindowSelection: ObservableObject {
     func selectDraftsAfterSuccessfulOverride(_ didCreateDraft: Bool) {
         guard didCreateDraft else { return }
         selectedTab = .drafts
+    }
+
+    func resetAccountScopeIfUnavailable(availableMailboxes: [String]) {
+        guard let mailbox = accountScope.mailbox else { return }
+        let normalizedMailbox = SavedMailAccount.normalizedEmail(mailbox)
+        let available = Set(availableMailboxes.map(SavedMailAccount.normalizedEmail))
+        guard available.count > 1, available.contains(normalizedMailbox) else {
+            accountScope = .all
+            return
+        }
     }
 
     /// Toggles the expanded state of one draft row (item 82). Expanding a row

@@ -11,11 +11,12 @@ struct SkippedMessagesTab: View {
 
     @ViewBuilder
     var body: some View {
-        if appState.skippedMessages.isEmpty {
+        let skippedMessages = appState.reviewSkippedMessages
+        if skippedMessages.isEmpty {
             emptyState
         } else {
-            let filtered = appState.skippedMessages.filter {
-                ReviewDraftsFilter.matches($0, query: selection.searchQuery)
+            let filtered = skippedMessages.filter {
+                ReviewDraftsFilter.matches($0, query: selection.searchQuery, account: selection.accountScope)
             }
             if filtered.isEmpty {
                 noMatchesState
@@ -26,7 +27,7 @@ struct SkippedMessagesTab: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Button("Clear") { appState.dismissAllSkippedMessages() }
+                        Button("Clear") { appState.dismissReviewSkippedMessages(filtered) }
                             .buttonStyle(.link)
                             .font(.caption)
                     }
@@ -69,7 +70,11 @@ struct SkippedMessagesTab: View {
                 .foregroundStyle(.secondary)
             Text("No matches")
                 .foregroundStyle(.secondary)
-            Text("No skipped messages match “\(selection.searchQuery)”.")
+            Text(PendingDraftsView.noMatchesDetail(
+                searchQuery: selection.searchQuery,
+                mailbox: selection.accountScope.mailbox,
+                noun: "skipped messages"
+            ))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -101,12 +106,23 @@ struct SkippedMessageRow: View {
                         .padding(.vertical, 1)
                         .background(Capsule().fill(Color.secondary.opacity(0.18)))
                         .foregroundStyle(.secondary)
+                    if let mailboxBadgeText {
+                        Text(mailboxBadgeText)
+                            .font(.caption2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 Text(subjectText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityLabelText)
             Spacer()
             if isDrafting {
                 ProgressView().controlSize(.small)
@@ -137,5 +153,15 @@ struct SkippedMessageRow: View {
 
     private var subjectText: String {
         MIMEEncodedWord.displaySubject(entry.subject)
+    }
+
+    var mailboxBadgeText: String? {
+        let account = entry.account.trimmingCharacters(in: .whitespacesAndNewlines)
+        return account.isEmpty ? nil : account
+    }
+
+    var accessibilityLabelText: String {
+        let mailboxText = mailboxBadgeText.map { ", mailbox \($0)" } ?? ""
+        return "Skipped message from \(entry.senderDisplay)\(mailboxText), \(entry.reason.headline), \(subjectText)"
     }
 }

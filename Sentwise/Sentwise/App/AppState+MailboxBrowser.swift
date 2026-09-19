@@ -26,6 +26,12 @@ struct MailboxBrowserState: Equatable {
 
     // MARK: Inputs
 
+    /// The connected mailbox the Browse window is pointed at (item 103): the
+    /// normalized email of the picked account, or nil to follow the focused
+    /// account. Lives here (not on `AppState`) so a full state reset on an
+    /// account switch clears it, and browse/search/pagination/cleanup resolve
+    /// their credentials through `AppState.browserCredentials`.
+    var accountEmail: String?
     var mailbox: Mailbox = .inbox
     var keyword: String = ""
     var sender: String = ""
@@ -142,7 +148,7 @@ extension AppState {
         // a new search could act on a message the user can no longer see.
         browser.clearSelection()
 
-        let credentials = mailCredentials
+        let credentials = browserCredentials
         guard credentials.isComplete else {
             browser.error = "Connect an account first."
             browser.hasSearched = true
@@ -209,7 +215,7 @@ extension AppState {
         let requestGeneration = browserGeneration
         let loadedCount = browser.results.count
 
-        let credentials = mailCredentials
+        let credentials = browserCredentials
         guard credentials.isComplete else { return }
 
         browser.error = nil
@@ -290,7 +296,10 @@ extension AppState {
         _ requestGeneration: Int,
         credentials: MailAccountCredentials
     ) -> Bool {
-        browserGeneration == requestGeneration && mailCredentials == credentials
+        // Guard on the *browser's* current account (item 103), not the focused
+        // account, so switching the Browse-window mailbox invalidates in-flight
+        // pages exactly as the generation bump does.
+        browserGeneration == requestGeneration && browserCredentials == credentials
     }
 
     private func appendUniqueBrowserResults(_ messages: [MailMessage]) {

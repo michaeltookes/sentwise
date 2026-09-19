@@ -160,6 +160,12 @@ guardrails:
     - "Preview cleanup"
     - "Preview recent inbox messages"
     - "Folder"
+    # Browse Mailbox account picker (item 103): switching the browsed mailbox runs
+    # a fresh live search, exactly like the Folder picker above, so it is forbidden
+    # by AX id and label. It is hidden in hunt mode anyway (the fixture seeds one
+    # account), but forbidding it keeps a future multi-account fixture safe.
+    - "browseMailboxAccountPicker"
+    - "Browse mailbox account"
     - "Show"
     - "From"
     - "Cleanup"

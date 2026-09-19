@@ -59,6 +59,7 @@ extension AppState {
         // background, stop its watcher and drop its runtime too.
         if let background = backgroundConnectedAccount(email: account.id) {
             stopWatching(account: background)
+            resetBrowserIfShowingAccount(account.email)
             backgroundConnectedAccounts.removeAll { $0.id == account.id }
         }
         logger.info("Saved account removed")

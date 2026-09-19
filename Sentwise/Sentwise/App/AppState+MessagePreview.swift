@@ -49,13 +49,18 @@ extension AppState {
 
     /// Fetches and reduces a single message's body to readable text for preview.
     @discardableResult
-    func previewBody(for message: MailMessage, mailbox: Mailbox = .inbox) async -> MailBodyPreview? {
+    func previewBody(
+        for message: MailMessage,
+        mailbox: Mailbox = .inbox,
+        credentials explicitCredentials: MailAccountCredentials? = nil
+    ) async -> MailBodyPreview? {
         let requestGeneration = nextBodyPreviewGeneration()
         bodyError = nil
         openedBody = nil
         isFetchingBody = false
 
-        let credentials = mailCredentials
+        let credentials = explicitCredentials ?? mailCredentials
+        let usesBrowserCredentials = explicitCredentials != nil
         guard credentials.isComplete else {
             bodyError = "Connect an account first."
             return nil
@@ -70,11 +75,19 @@ extension AppState {
 
         do {
             let preview = try await fetchBodyPreview(for: message, mailbox: mailbox, credentials: credentials)
-            guard isCurrentBodyPreviewRequest(requestGeneration, credentials: credentials) else { return nil }
+            guard isCurrentBodyPreviewRequest(
+                requestGeneration,
+                credentials: credentials,
+                usesBrowserCredentials: usesBrowserCredentials
+            ) else { return nil }
             openedBody = preview
             return preview
         } catch {
-            guard isCurrentBodyPreviewRequest(requestGeneration, credentials: credentials) else { return nil }
+            guard isCurrentBodyPreviewRequest(
+                requestGeneration,
+                credentials: credentials,
+                usesBrowserCredentials: usesBrowserCredentials
+            ) else { return nil }
             bodyError = Self.message(for: error)
             return nil
         }
@@ -109,20 +122,35 @@ extension AppState {
         return bodyPreviewGeneration
     }
 
-    func resetMessagePreviewForAccountChange(clearSkippedMessages shouldClearSkippedMessages: Bool = true) {
+    func resetMessagePreviewForAccountChange(
+        clearSkippedMessages shouldClearSkippedMessages: Bool = true,
+        resetBrowser: Bool = true
+    ) {
         _ = nextPreviewGeneration()
         _ = nextBodyPreviewGeneration()
         _ = nextDraftGeneration()
         clearRecentMessagePreview()
         clearDraftPreview()
-        resetMailboxBrowserForAccountChange()
-        resetBulkCleanupForAccountChange()
+        if resetBrowser {
+            // A focused-account change (switch/disconnect) points the Browse window
+            // back at the new focused account (item 103): resetMailboxBrowserForAccountChange
+            // wipes the whole browser state, clearing any picked-mailbox override too.
+            resetMailboxBrowserForAccountChange()
+            resetBulkCleanupForAccountChange()
+        }
         if shouldClearSkippedMessages {
             restoreSkippedMessagesFromPersistence()
         }
         isFetching = false
         isFetchingBody = false
         isGeneratingDraft = false
+    }
+
+    func resetRecentMessagePreviewForConnectionRetest() {
+        _ = nextPreviewGeneration()
+        recentMessages = []
+        fetchError = nil
+        isFetching = false
     }
 
     private func clearRecentMessagePreview() {
@@ -141,8 +169,10 @@ extension AppState {
 
     private func isCurrentBodyPreviewRequest(
         _ requestGeneration: Int,
-        credentials: MailAccountCredentials
+        credentials: MailAccountCredentials,
+        usesBrowserCredentials: Bool = false
     ) -> Bool {
-        bodyPreviewGeneration == requestGeneration && mailCredentials == credentials
+        bodyPreviewGeneration == requestGeneration
+            && (usesBrowserCredentials ? browserCredentials == credentials : mailCredentials == credentials)
     }
 }

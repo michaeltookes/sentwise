@@ -61,7 +61,18 @@ enum PendingDraftRowStatus: Equatable {
 struct PendingDraftRow: View {
     let draft: Draft
     let isExpanded: Bool
+    /// The source-mailbox label to badge this row with (item 102), or nil to show
+    /// none — the parent passes nil for single-account users and legacy drafts, so
+    /// the row itself carries no visibility logic.
+    let accountBadge: String?
     let onToggle: () -> Void
+
+    init(draft: Draft, isExpanded: Bool, accountBadge: String? = nil, onToggle: @escaping () -> Void) {
+        self.draft = draft
+        self.isExpanded = isExpanded
+        self.accountBadge = accountBadge
+        self.onToggle = onToggle
+    }
 
     private var status: PendingDraftRowStatus { .status(for: draft) }
 
@@ -104,6 +115,9 @@ struct PendingDraftRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    if let accountBadge {
+                        mailboxBadge(accountBadge)
+                    }
                 }
 
                 Spacer(minLength: 8)
@@ -118,9 +132,16 @@ struct PendingDraftRow: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(rowBackground))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.15)))
         .accessibilityIdentifier("pendingDraftRow")
-        .accessibilityLabel("Draft from \(senderText), \(status.label)")
+        .accessibilityLabel(accessibilityLabelText)
         .accessibilityHint(isExpanded ? "Collapse draft detail" : "Expand draft detail")
         .accessibilityAddTraits(isExpanded ? .isSelected : [])
+    }
+
+    var accessibilityLabelText: String {
+        guard let accountBadge, !accountBadge.isEmpty else {
+            return "Draft from \(senderText), \(status.label)"
+        }
+        return "Draft from \(senderText), mailbox \(accountBadge), \(status.label)"
     }
 
     private var rowBackground: Color {
@@ -137,5 +158,22 @@ struct PendingDraftRow: View {
             .padding(.vertical, 2)
             .background(Capsule().fill(status.tint.opacity(0.15)))
             .foregroundStyle(status.tint)
+    }
+
+    /// The compact source-mailbox badge (item 102): a small tray-icon chip in a
+    /// secondary style, so it reads as attribution without competing with the
+    /// sender or the status chip. Shown only when the parent supplies a label.
+    private func mailboxBadge(_ mailbox: String) -> some View {
+        Label(mailbox, systemImage: "tray.full")
+            .labelStyle(.titleAndIcon)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(Color.secondary.opacity(0.12)))
+            .accessibilityIdentifier("pendingDraftRowAccountBadge")
+            .accessibilityLabel("Mailbox \(mailbox)")
     }
 }

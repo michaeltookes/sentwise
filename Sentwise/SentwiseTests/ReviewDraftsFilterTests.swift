@@ -166,4 +166,143 @@ final class ReviewDraftsFilterTests: XCTestCase {
         XCTAssertNil(ReviewDraftsFilter.countLabel(filtered: 0, total: 0, isFiltering: false))
         XCTAssertNil(ReviewDraftsFilter.countLabel(filtered: 0, total: 0, isFiltering: true))
     }
+
+    // MARK: - Account scope (item 102)
+
+    private func draft(subject: String, account: String?) -> Draft {
+        Draft(
+            id: 2,
+            sourceUIDValidity: 10,
+            sourceAccountEmail: account,
+            sourceMailbox: "INBOX",
+            sourceSubject: subject,
+            sourceFrom: MailAddress(name: "Alice Example", email: "alice@example.com"),
+            sourceReplyTo: nil,
+            sourceMessageID: "<orig@example.com>",
+            incomingBody: "body",
+            replySubject: "Re: subject",
+            body: "reply body",
+            model: "claude-sonnet-4-6",
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+    }
+
+    private func skipped(subject: String, account: String) -> SkippedMessage {
+        let message = MailMessage(
+            id: 6, uidValidity: 7,
+            from: MailAddress(name: "Bob", email: "bob@work.co"),
+            subject: subject, date: "", messageID: "<6@work.co>"
+        )
+        return SkippedMessage(message: message, mailbox: .inbox, account: account, reason: .bulkOrListMail)
+    }
+
+    func testAccountScopeAllMatchesEveryMailbox() {
+        let scope = ReviewDraftsFilter.AccountScope.all
+        XCTAssertTrue(scope.matches(accountEmail: "me@gmail.com"))
+        XCTAssertTrue(scope.matches(accountEmail: "other@work.com"))
+        XCTAssertTrue(scope.matches(accountEmail: nil))
+        XCTAssertFalse(scope.isFiltering)
+        XCTAssertNil(scope.mailbox)
+    }
+
+    func testAccountScopeMailboxMatchesOnlyThatMailbox() {
+        let scope = ReviewDraftsFilter.AccountScope.mailbox("me@gmail.com")
+        XCTAssertTrue(scope.matches(accountEmail: "me@gmail.com"))
+        // Casing/whitespace is normalized on both sides.
+        XCTAssertTrue(scope.matches(accountEmail: "  ME@Gmail.com "))
+        XCTAssertFalse(scope.matches(accountEmail: "other@work.com"))
+        XCTAssertTrue(scope.isFiltering)
+        XCTAssertEqual(scope.mailbox, "me@gmail.com")
+    }
+
+    func testLegacyUntaggedItemsAppearOnlyUnderAllMailboxes() {
+        let scope = ReviewDraftsFilter.AccountScope.mailbox("me@gmail.com")
+        // A legacy draft with no source account is never attributed to a guess.
+        XCTAssertFalse(scope.matches(accountEmail: nil))
+        XCTAssertFalse(scope.matches(accountEmail: ""))
+        XCTAssertTrue(ReviewDraftsFilter.AccountScope.all.matches(accountEmail: nil))
+    }
+
+    func testAccountScopeInitFromPickerTag() {
+        XCTAssertEqual(ReviewDraftsFilter.AccountScope(mailbox: nil), .all)
+        XCTAssertEqual(ReviewDraftsFilter.AccountScope(mailbox: "  "), .all)
+        XCTAssertEqual(ReviewDraftsFilter.AccountScope(mailbox: "Me@Gmail.com"), .mailbox("me@gmail.com"))
+    }
+
+    func testSelectionResetsMissingAccountScope() {
+        let selection = ReviewWindowSelection()
+        selection.accountScope = .mailbox("removed@work.com")
+
+        selection.resetAccountScopeIfUnavailable(availableMailboxes: ["me@gmail.com"])
+
+        XCTAssertEqual(selection.accountScope, .all)
+    }
+
+    func testSelectionKeepsAvailableAccountScope() {
+        let selection = ReviewWindowSelection()
+        selection.accountScope = .mailbox("side@work.com")
+
+        selection.resetAccountScopeIfUnavailable(availableMailboxes: ["ME@Gmail.com", "Side@Work.com"])
+
+        XCTAssertEqual(selection.accountScope, .mailbox("side@work.com"))
+    }
+
+    func testSelectionResetsWhenAccountPickerWouldHide() {
+        let selection = ReviewWindowSelection()
+        selection.accountScope = .mailbox("me@gmail.com")
+
+        selection.resetAccountScopeIfUnavailable(availableMailboxes: ["me@gmail.com"])
+
+        XCTAssertEqual(selection.accountScope, .all)
+    }
+
+    func testAccountAccessorsNormalizeAndTreatBlankAsUntagged() {
+        XCTAssertEqual(ReviewDraftsFilter.accountEmail(for: draft(subject: "x", account: "Me@Gmail.com")), "me@gmail.com")
+        XCTAssertNil(ReviewDraftsFilter.accountEmail(for: draft(subject: "x", account: nil)))
+        XCTAssertNil(ReviewDraftsFilter.accountEmail(for: draft(subject: "x", account: "  ")))
+        XCTAssertEqual(ReviewDraftsFilter.accountEmail(for: skipped(subject: "x", account: "Side@Work.com")), "side@work.com")
+    }
+
+    func testAccountAndSearchCompose() {
+        let mine = draft(subject: "Quarterly report", account: "me@gmail.com")
+        let theirs = draft(subject: "Quarterly report", account: "side@work.com")
+        let scope = ReviewDraftsFilter.AccountScope.mailbox("me@gmail.com")
+        // Same subject, different mailbox: the account scope excludes the other.
+        XCTAssertTrue(ReviewDraftsFilter.matches(mine, query: "quarterly", account: scope))
+        XCTAssertFalse(ReviewDraftsFilter.matches(theirs, query: "quarterly", account: scope))
+        // A non-matching query still excludes even the in-scope mailbox.
+        XCTAssertFalse(ReviewDraftsFilter.matches(mine, query: "zzznope", account: scope))
+        // Under .all, both mailboxes pass the (matching) query.
+        XCTAssertTrue(ReviewDraftsFilter.matches(theirs, query: "quarterly", account: .all))
+    }
+
+    func testAccountAndSearchComposeForSkipped() {
+        let mine = skipped(subject: "Newsletter", account: "me@gmail.com")
+        let theirs = skipped(subject: "Newsletter", account: "side@work.com")
+        let scope = ReviewDraftsFilter.AccountScope.mailbox("me@gmail.com")
+        XCTAssertTrue(ReviewDraftsFilter.matches(mine, query: "news", account: scope))
+        XCTAssertFalse(ReviewDraftsFilter.matches(theirs, query: "news", account: scope))
+        XCTAssertTrue(ReviewDraftsFilter.matches(theirs, query: "news", account: .all))
+    }
+
+    // MARK: - No-matches copy (item 76/102)
+
+    func testNoMatchesDetailPhrasingBySearchAndAccount() {
+        XCTAssertEqual(
+            PendingDraftsView.noMatchesDetail(searchQuery: "lunch", mailbox: nil, noun: "drafts"),
+            "No drafts match “lunch”."
+        )
+        XCTAssertEqual(
+            PendingDraftsView.noMatchesDetail(searchQuery: "lunch", mailbox: "me@gmail.com", noun: "drafts"),
+            "No drafts in me@gmail.com match “lunch”."
+        )
+        XCTAssertEqual(
+            PendingDraftsView.noMatchesDetail(searchQuery: "  ", mailbox: "me@gmail.com", noun: "skipped messages"),
+            "No skipped messages in me@gmail.com."
+        )
+        XCTAssertEqual(
+            PendingDraftsView.noMatchesDetail(searchQuery: "", mailbox: nil, noun: "drafts"),
+            "No drafts match your filter."
+        )
+    }
 }

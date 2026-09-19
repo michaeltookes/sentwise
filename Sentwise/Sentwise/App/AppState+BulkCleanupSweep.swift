@@ -60,7 +60,7 @@ extension AppState {
     /// marking read leaves the window unchanged, so callers route that to the
     /// single-pass path instead.
     func applyBulkCleanupSweep() async {
-        let credentials = mailCredentials
+        let credentials = browserCredentials
         guard credentials.isComplete else {
             bulk.error = "Connect an account first."
             return

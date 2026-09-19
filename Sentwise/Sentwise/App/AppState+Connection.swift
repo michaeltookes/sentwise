@@ -89,6 +89,8 @@ extension AppState {
         let previousEmail = previousSettings.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let accountIdentityChanged = hasAccountIdentityChanged(from: previousEmail, to: credentials.email)
         let requiresTransitionCleanup = !isAccountConnected || accountIdentityChanged
+        let shouldResetBrowser = requiresTransitionCleanup
+            || browserNeedsResetForFocusedEndpointChange(previousSettings: previousSettings, credentials: credentials)
         guard persistVerifiedConnectionTransition(
             credentials,
             previousSettings: previousSettings,
@@ -106,7 +108,9 @@ extension AppState {
                 newFocusedEmail: credentials.email
             )
         }
-        resetMessagePreviewForAccountChange(clearSkippedMessages: requiresTransitionCleanup)
+        // A no-op retest must not invalidate in-flight browser body/draft actions;
+        // reset only when the effective mailbox/endpoint actually changed.
+        resetAfterConnectionSuccess(clearSkippedMessages: requiresTransitionCleanup, resetBrowser: shouldResetBrowser)
         // Now that mail is connected, catch up any transcript that arrived while
         // the account was disconnected but the folder watcher was already active.
         startTranscriptFolderWatchingIfEnabled()
@@ -114,9 +118,36 @@ extension AppState {
         return true
     }
 
+    private func resetAfterConnectionSuccess(clearSkippedMessages: Bool, resetBrowser: Bool) {
+        guard resetBrowser else {
+            resetRecentMessagePreviewForConnectionRetest()
+            return
+        }
+        resetMessagePreviewForAccountChange(clearSkippedMessages: clearSkippedMessages, resetBrowser: true)
+    }
+
     private func hasAccountIdentityChanged(from previousEmail: String, to nextEmail: String) -> Bool {
         guard !previousEmail.isEmpty else { return false }
         return previousEmail.caseInsensitiveCompare(nextEmail) != .orderedSame
+    }
+
+    private func browserNeedsResetForFocusedEndpointChange(
+        previousSettings: Settings,
+        credentials: MailAccountCredentials
+    ) -> Bool {
+        let previousEmail = SavedMailAccount.normalizedEmail(previousSettings.mailEmail)
+        guard !previousEmail.isEmpty,
+              previousEmail == SavedMailAccount.normalizedEmail(credentials.email) else {
+            return false
+        }
+        if let browserAccount = browser.accountEmail,
+           SavedMailAccount.normalizedEmail(browserAccount) != previousEmail {
+            return false
+        }
+        let previousHost = previousSettings.mailHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nextHost = credentials.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        return previousHost.caseInsensitiveCompare(nextHost) != .orderedSame
+            || previousSettings.mailPort != credentials.port
     }
 
     private func normalizedConnectionCredentials(_ credentials: MailAccountCredentials) -> MailAccountCredentials {

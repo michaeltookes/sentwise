@@ -70,4 +70,14 @@ final class PendingDraftRowStatusTests: XCTestCase {
         )
         XCTAssertEqual(PendingDraftRowStatus.status(for: subject), .needsInfo)
     }
+
+    func testAccessibilityLabelOmitsMissingMailbox() {
+        let row = PendingDraftRow(draft: draft(), isExpanded: false) {}
+        XCTAssertEqual(row.accessibilityLabelText, "Draft from Alice, Ready")
+    }
+
+    func testAccessibilityLabelIncludesMailbox() {
+        let row = PendingDraftRow(draft: draft(), isExpanded: false, accountBadge: "me@gmail.com") {}
+        XCTAssertEqual(row.accessibilityLabelText, "Draft from Alice, mailbox me@gmail.com, Ready")
+    }
 }

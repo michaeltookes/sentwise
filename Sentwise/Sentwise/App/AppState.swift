@@ -259,7 +259,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Mailbox Browser (item 40)
 
-    /// Search inputs and results for the mailbox browser window.
+    /// Search inputs, results, and picked-mailbox selection for the browser window.
     @Published var browser = MailboxBrowserState()
 
     // MARK: - Bulk Cleanup (item 42)
@@ -331,10 +331,8 @@ final class AppState: ObservableObject {
 
     /// Observes reachability to pause offline / resume on reconnect (injected for tests).
     let reachability: NetworkReachabilityMonitoring
-    /// Messages the watcher passed over instead of drafting, newest first (visible
-    /// slice for the active account; skip records persist across account transitions).
-    @Published var skippedMessages: [SkippedMessage] = []
-
+    @Published var skippedMessages: [SkippedMessage] = [] // Active-account visible skip slice.
+    @Published var reviewSkippedMessages: [SkippedMessage] = [] // Cached all-account Review skip log.
     var skippedMessageIDs: Set<String> = []
     var skippedMessageReasonsByID: [String: ReplyWorthinessReason] = [:]
 

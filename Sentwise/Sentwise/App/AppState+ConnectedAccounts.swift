@@ -49,10 +49,11 @@ extension AppState {
     }
 
     /// Whether Review Drafts and Activity should badge each item with the mailbox
-    /// it belongs to (item 99). Only meaningful once the user has more than one
-    /// mailbox, so single-account users see no extra noise.
+    /// it belongs to (item 99). Only meaningful once more than one mailbox can
+    /// appear in the review surface, including retained drafts/skips for accounts
+    /// the user disconnected without purging local data.
     var showsAccountAttribution: Bool {
-        savedAccounts.count > 1 || connectedAccountCount > 1
+        attributionMailboxes.count > 1
     }
 
     /// The short mailbox label for account attribution — the account's email.
@@ -60,6 +61,116 @@ extension AppState {
     func accountAttributionLabel(forEmail email: String?) -> String? {
         guard let email, !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return email
+    }
+
+    /// The compact source-mailbox badge for a collapsed Review Drafts row (item
+    /// 102): the account label when attribution is shown and the draft is tagged,
+    /// else nil so single-account users and legacy (untagged) drafts show none.
+    func draftRowAccountBadge(for draft: Draft) -> String? {
+        guard showsAccountAttribution else { return nil }
+        return accountAttributionLabel(forEmail: draft.sourceAccountEmail)
+    }
+
+    /// Every mailbox that can own a Review Drafts item, for the account picker
+    /// (item 102): the union of saved accounts, connected accounts, the focused
+    /// mailbox, and retained draft/skip source accounts — normalized,
+    /// de-duplicated, and sorted for a stable menu order. Legacy untagged items
+    /// are reached through the picker's "All Mailboxes" entry, so they need no
+    /// dedicated row here.
+    var attributionMailboxes: [String] {
+        var seen = Set<String>()
+        var ordered: [String] = []
+        func add(_ email: String) {
+            let normalized = SavedMailAccount.normalizedEmail(email)
+            guard !normalized.isEmpty, seen.insert(normalized).inserted else { return }
+            ordered.append(normalized)
+        }
+        savedAccounts.forEach { add($0.email) }
+        allConnectedAccountEmails.forEach(add)
+        if isAccountConnected { add(mailEmail) }
+        pendingDrafts.forEach { add($0.sourceAccountEmail ?? "") }
+        skippedMessages.forEach { add($0.account) }
+        reviewSkippedMessages.forEach { add($0.account) }
+        return ordered.sorted()
+    }
+
+    // MARK: - Mailbox browser account selection (item 103)
+
+    /// The connected mailboxes the Browse window can point at (item 103): focused
+    /// first, then background accounts. Only *connected* accounts appear — the
+    /// browser needs live credentials, so a saved-but-disconnected account is not
+    /// browsable.
+    var browsableAccountEmails: [String] {
+        allConnectedAccountEmails
+    }
+
+    /// Whether the Browse window shows its account picker (item 103): only with
+    /// more than one connected mailbox, so single-account users — and Prowl hunt
+    /// mode, which seeds one fixture account — never see it.
+    var showsBrowserAccountPicker: Bool {
+        browsableAccountEmails.count > 1
+    }
+
+    /// The normalized email of the mailbox the Browse window is currently showing
+    /// (item 103): the explicitly picked account when it is still connected, else
+    /// the first connected mailbox. `disconnectMail` can leave the focused email
+    /// populated but offline, so falling back to `mailEmail` alone would strand
+    /// the browser on incomplete credentials while background mailboxes remain.
+    var effectiveBrowserAccountEmail: String {
+        if let email = browser.accountEmail, isConnectedAccount(email: email) {
+            return SavedMailAccount.normalizedEmail(email)
+        }
+        return browsableAccountEmails.first ?? SavedMailAccount.normalizedEmail(mailEmail)
+    }
+
+    /// The credentials the mailbox browser and bulk cleanup operate through (item
+    /// 103): the picked account's when one is selected and still connected, else
+    /// the focused account's live inputs. This is the single seam that points
+    /// browse/search/pagination/cleanup at the chosen mailbox — no second
+    /// credential store.
+    var browserCredentials: MailAccountCredentials {
+        let email = effectiveBrowserAccountEmail
+        if !email.isEmpty,
+           let credentials = connectedCredentials(forAccountEmail: email) {
+            return credentials
+        }
+        return mailCredentials
+    }
+
+    /// Switches the Browse window to another connected mailbox (item 103): resets
+    /// the browser and cleanup state and generations so no results mix across
+    /// accounts and no stale page appends, then points the (now-clean) browser at
+    /// the picked account. The global focused account is untouched. A no-op if the
+    /// target is not a connected account.
+    func selectBrowserAccount(_ email: String) {
+        let normalized = SavedMailAccount.normalizedEmail(email)
+        guard isConnectedAccount(email: normalized) else { return }
+        guard normalized != effectiveBrowserAccountEmail else { return }
+        resetBrowserScopedPreviewsForAccountChange()
+        // Re-apply after the reset, which wipes the whole browser state.
+        browser.accountEmail = normalized
+    }
+
+    /// Resets the Browse window if it is currently scoped to `email`. Used when a
+    /// background account disconnects so stale result UIDs and checked rows never
+    /// fall through to the focused account.
+    func resetBrowserIfShowingAccount(_ email: String) {
+        let normalized = SavedMailAccount.normalizedEmail(email)
+        let explicitAccount = SavedMailAccount.normalizedEmail(browser.accountEmail ?? "")
+        let effectiveAccount = SavedMailAccount.normalizedEmail(effectiveBrowserAccountEmail)
+        guard !normalized.isEmpty,
+              explicitAccount == normalized || effectiveAccount == normalized else {
+            return
+        }
+        resetBrowserScopedPreviewsForAccountChange()
+    }
+
+    /// Clears browser-scoped rows/actions. Explicit Browse body/draft requests
+    /// already guard completions against `browserCredentials`, so switching the
+    /// Browse mailbox does not need to touch Settings preview/draft state.
+    func resetBrowserScopedPreviewsForAccountChange() {
+        resetMailboxBrowserForAccountChange()
+        resetBulkCleanupForAccountChange()
     }
 
     // MARK: - Registry queries
