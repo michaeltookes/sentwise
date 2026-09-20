@@ -181,8 +181,9 @@ struct PaddleConfig: Sendable, Equatable {
         checkoutOrigin: URL(string: "https://sentwise.ai")!
     )
 
-    /// The config the app actually uses. Keep sandbox active until live Paddle
-    /// approved-domain and webhook setup are complete and verified; then this is
-    /// a one-line swap to `production`.
-    static let active: PaddleConfig = sandbox
+    /// The config the app actually uses — production since the item 74 atomic
+    /// activation (2026-09-20: approved domain + live webhook confirmed, worker
+    /// on the live API base with live tier price vars). Point back at `sandbox`
+    /// only for local checkout testing against a sandbox-configured worker.
+    static let active: PaddleConfig = production
 }

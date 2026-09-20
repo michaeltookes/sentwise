@@ -74,7 +74,7 @@ portal-permission trap.
       exactly per `docs/tier-matrix.md` — **Starter $9/mo, Pro $19/mo,
       Unlimited $39/mo**, monthly recurring, USD. Record the three live
       `pri_…` ids.
-- [ ] **[owner]** Checkout settings → approved domains: add `sentwise.ai`
+- [x] **[owner]** Checkout settings → approved domains: add `sentwise.ai`
       (the WKWebView checkout's base origin).
 - [x] **[owner]** Mint the live **API key** — MUST include
       `customer_portal_session.write` (item 91: without it portal-session
@@ -82,7 +82,7 @@ portal-permission trap.
       page). Record it for §3.
 - [x] **[owner]** Create the live **client-side token** (frontend token) for
       Paddle.js.
-- [ ] **[owner]** Notifications → add webhook destination
+- [x] **[owner]** Notifications → add webhook destination
       `https://sentwise-inference.sentwise-service.workers.dev/v1/paddle/webhook`
       subscribed to the same events as sandbox (subscription lifecycle +
       transaction.completed). Record the webhook **secret** for §3.
