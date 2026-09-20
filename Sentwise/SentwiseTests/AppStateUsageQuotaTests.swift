@@ -344,7 +344,7 @@ final class AppStateUsageQuotaTests: XCTestCase {
             .managedSessionID: "sess_legacy"
         ])
         let persistence = AppStateMemoryPersistence(settings: Settings(
-            schemaVersion: 18,
+            schemaVersion: Settings.currentSchemaVersion,
             pollIntervalSeconds: 300,
             llmProvider: "managed",
             managedAccountEmail: "your Google account"
@@ -380,7 +380,7 @@ final class AppStateUsageQuotaTests: XCTestCase {
             .managedSessionID: "sess_legacy"
         ])
         let persistence = AppStateMemoryPersistence(settings: Settings(
-            schemaVersion: 18,
+            schemaVersion: Settings.currentSchemaVersion,
             pollIntervalSeconds: 300,
             llmProvider: "managed",
             managedAccountEmail: "your Google account"
@@ -412,7 +412,7 @@ final class AppStateUsageQuotaTests: XCTestCase {
             .managedSessionID: "sess_legacy"
         ])
         let persistence = AppStateMemoryPersistence(settings: Settings(
-            schemaVersion: 18,
+            schemaVersion: Settings.currentSchemaVersion,
             pollIntervalSeconds: 300,
             llmProvider: "managed",
             managedAccountEmail: "your Google account"
