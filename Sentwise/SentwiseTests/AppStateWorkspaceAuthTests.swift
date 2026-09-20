@@ -179,7 +179,8 @@ final class AppStateWorkspaceAuthTests: XCTestCase {
         let store = InMemoryGoogleOAuthInterestStore()
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_legacy",
-            .managedSessionID: "sess_legacy"
+            .managedSessionID: "sess_legacy",
+            .managedClerkFrontendAPIBaseURL: ClerkClient.defaultFrontendAPIBaseURLString
         ])
         let appState = AppState(
             persistence: AppStateMemoryPersistence(),

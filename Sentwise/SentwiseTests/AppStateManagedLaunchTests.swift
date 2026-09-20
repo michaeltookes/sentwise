@@ -110,4 +110,29 @@ final class AppStateManagedLaunchTests: XCTestCase {
             ClerkClient.defaultFrontendAPIBaseURLString
         )
     }
+
+    func testUnmarkedCurrentSchemaPendingOAuthStateSurvivesWhenSessionIsMissing() throws {
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "client_A",
+            .managedOAuthSignInID: "sia_1",
+            .managedOAuthFlowID: "flow_1",
+            .managedOAuthMessageSurface: "settings"
+        ])
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed",
+            llmVerifiedModel: LLMProviderKind.managed.defaultModel
+        ))
+
+        let appState = makeAppState(secrets: secrets, persistence: persistence)
+
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertFalse(appState.isLLMConnected)
+        XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_A")
+        XCTAssertEqual(try secrets.value(for: .managedOAuthSignInID), "sia_1")
+        XCTAssertEqual(try secrets.value(for: .managedOAuthFlowID), "flow_1")
+        XCTAssertEqual(try secrets.value(for: .managedOAuthMessageSurface), "settings")
+        XCTAssertNil(try secrets.value(for: .managedClerkFrontendAPIBaseURL))
+    }
 }

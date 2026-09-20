@@ -151,14 +151,11 @@ extension AppState {
             return true
         }
 
-        let hasManagedCredentialState = managedClerkCutoverCredentialKeys.contains {
-            secrets.hasValue(for: $0)
-        }
         if originalSchemaVersion < Settings.clerkProductionCutoverSchemaVersion {
             guard clearManagedClerkCutoverState(secrets: secrets) else { return false }
             return persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets)
         }
-        guard hasManagedCredentialState else { return true }
+        guard hasStoredManagedClerkCredentialPair(secrets: secrets) else { return true }
         if hasPersistedManagedAccountIdentity(settings) {
             return persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets)
         }
@@ -212,6 +209,10 @@ extension AppState {
 
     private static var managedClerkEnvMarkerValue: String {
         ClerkClient.defaultFrontendAPIBaseURLString
+    }
+
+    private static func hasStoredManagedClerkCredentialPair(secrets: SecretStore) -> Bool {
+        secrets.hasValue(for: .managedClientToken) && secrets.hasValue(for: .managedSessionID)
     }
 
     private static func hasPersistedManagedAccountIdentity(_ settings: Settings) -> Bool {
