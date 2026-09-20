@@ -9,7 +9,7 @@ final class PaddleCheckoutTests: XCTestCase {
 
     // MARK: - Config / price-id routing
 
-    func testActiveConfigIsSandboxWithEmbeddedCredentials() {
+    func testActiveConfigRemainsSandboxUntilLivePrereqsVerified() {
         let config = PaddleConfig.active
         XCTAssertEqual(config.environment, .sandbox)
         XCTAssertEqual(config.clientSideToken, "test_7a55409b65e7f906b94b863e63a")
@@ -21,6 +21,26 @@ final class PaddleCheckoutTests: XCTestCase {
         XCTAssertEqual(config.priceID(for: .starter), "pri_01m1syd7nfarp8pggpcnvjbgyy")
         XCTAssertEqual(config.priceID(for: .pro), "pri_01m1symsxarc4c3jdea0ntb09w")
         XCTAssertEqual(config.priceID(for: .unlimited), "pri_01m1syrdg05f49kz705gbzn6tz")
+    }
+
+    func testProductionConfigHasEmbeddedLiveCredentialsForCutover() {
+        let config = PaddleConfig.production
+        XCTAssertEqual(config.environment, .production)
+        XCTAssertEqual(config.clientSideToken, "live_3affc7e38f8efd6ebd94616ab39")
+        XCTAssertEqual(config.paddleJSEnvironment, "production")
+    }
+
+    func testProductionPriceIDRoutingPerTier() {
+        let config = PaddleConfig.production
+        XCTAssertEqual(config.priceID(for: .starter), "pri_01m307sdxtk64vb7yjn4vptrcx")
+        XCTAssertEqual(config.priceID(for: .pro), "pri_01m307vkn7zf0k194trcmx0qg1")
+        XCTAssertEqual(config.priceID(for: .unlimited), "pri_01m307xfej4zjp0n7wkf4rf9cd")
+    }
+
+    func testSandboxConfigKeptForLocalTesting() {
+        let config = PaddleConfig.sandbox
+        XCTAssertEqual(config.environment, .sandbox)
+        XCTAssertEqual(config.paddleJSEnvironment, "sandbox")
     }
 
     func testEveryPurchasablePlanMapsToADistinctPrice() {

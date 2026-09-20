@@ -169,8 +169,20 @@ struct PaddleConfig: Sendable, Equatable {
         checkoutOrigin: URL(string: "https://sentwise.ai")!
     )
 
-    /// The config the app actually uses. Sandbox until the production merchant
-    /// account, live client-side token, and live price ids are provisioned; then
-    /// this points at a `.production` config in a single edit.
+    /// Paddle production credentials (item 74 cutover, 2026-09-20). The
+    /// client-side token is frontend-scoped and safe to embed; price ids match
+    /// `docs/tier-matrix.md` (Starter $9 / Pro $19 / Unlimited $39, monthly).
+    static let production = PaddleConfig(
+        environment: .production,
+        clientSideToken: "live_3affc7e38f8efd6ebd94616ab39",
+        starterPriceID: "pri_01m307sdxtk64vb7yjn4vptrcx",
+        proPriceID: "pri_01m307vkn7zf0k194trcmx0qg1",
+        unlimitedPriceID: "pri_01m307xfej4zjp0n7wkf4rf9cd",
+        checkoutOrigin: URL(string: "https://sentwise.ai")!
+    )
+
+    /// The config the app actually uses. Keep sandbox active until live Paddle
+    /// approved-domain and webhook setup are complete and verified; then this is
+    /// a one-line swap to `production`.
     static let active: PaddleConfig = sandbox
 }
