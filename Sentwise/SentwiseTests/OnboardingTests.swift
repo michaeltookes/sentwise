@@ -164,12 +164,9 @@ final class OnboardingTests: XCTestCase {
 
     // MARK: - Reconcile (already-configured install)
 
-    func testReconcileMarksLegacyConfiguredInstallCompleteAndSkipsFlow() {
-        // Parked 2026-09-16 (item 100): managed inference is the only shipped path, so
-        // a legacy pre-onboarding-flag install counts as "configured" when the account
-        // and the managed account are connected. (A legacy BYO selection would fall
-        // back to managed on this launch and correctly need sign-in — see
-        // testReconcileSendsLegacyBYOInstallThroughOnboarding.)
+    func testReconcileSendsPreCutoverManagedInstallThroughOnboarding() {
+        // The production Clerk cutover clears pre-v22 managed credentials, so even a
+        // legacy install with both Keychain values present must sign in again.
         let secrets = InMemorySecretStore(seed: [
             .mailAppPassword: "app-pw",
             .managedClientToken: "client-token",
@@ -194,11 +191,10 @@ final class OnboardingTests: XCTestCase {
 
         let needsOnboarding = appState.reconcileOnboardingState()
 
-        XCTAssertTrue(appState.isLLMConnected)
-        XCTAssertFalse(needsOnboarding)
-        XCTAssertTrue(appState.onboardingCompleted)
-        XCTAssertTrue(persistence.loadSettings().onboardingCompleted,
-                      "reconcile must persist the completion so it survives relaunch")
+        XCTAssertFalse(appState.isLLMConnected)
+        XCTAssertTrue(needsOnboarding)
+        XCTAssertFalse(appState.onboardingCompleted)
+        XCTAssertFalse(persistence.loadSettings().onboardingCompleted)
     }
 
     func testReconcileSendsLegacyBYOInstallThroughOnboarding() {

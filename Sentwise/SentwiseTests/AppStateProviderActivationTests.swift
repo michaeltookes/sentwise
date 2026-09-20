@@ -344,7 +344,7 @@ final class AppStateProviderActivationTests: XCTestCase {
         let appState = makeAppState(provider: "anthropic", secrets: secrets, managedAccount: managed)
 
         var opened: URL?
-        await appState.startManagedGoogleSignIn { opened = $0 }
+        await appState.startManagedGoogleSignIn(openURL: { opened = $0 }, isGoogleSignInEnabled: true)
         XCTAssertEqual(opened?.absoluteString, "https://accounts.google.com/o/oauth2/auth?x=1")
         XCTAssertEqual(appState.managedSignInStage, .awaitingBrowser,
                        "opening the browser should switch the panel to the waiting state")
@@ -357,6 +357,27 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertTrue(appState.isManagedProviderActive)
         XCTAssertEqual(appState.managedAccountEmail, "marcus@example.com")
         XCTAssertNil(appState.managedError)
+    }
+
+    func testGoogleSignInIsGatedUntilProductionRedirectAllowlistIsReady() async throws {
+        let secrets = InMemorySecretStore()
+        let transport = QueueClerkTransport([clerkReply(startResponse, clientToken: "client_A")])
+        let clerk = ClerkClient(
+            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            transport: transport
+        )
+        let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
+        let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
+        var opened: URL?
+
+        await appState.startManagedGoogleSignIn(openURL: { opened = $0 })
+
+        XCTAssertNil(opened)
+        XCTAssertEqual(transport.callCount, 0)
+        XCTAssertEqual(appState.managedSignInStage, .idle)
+        XCTAssertEqual(appState.managedError, AppState.managedGoogleSignInUnavailableMessage)
+        XCTAssertNil(try secrets.value(for: .managedOAuthFlowID))
+        XCTAssertNil(try secrets.value(for: .managedOAuthSignInID))
     }
 
     func testEmailCodeSignInActivatesManagedFromBYOProvider() async throws {
@@ -414,7 +435,7 @@ final class AppStateProviderActivationTests: XCTestCase {
         let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
         let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
 
-        await appState.startManagedGoogleSignIn { _ in }
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true)
         XCTAssertEqual(appState.managedSignInStage, .awaitingBrowser)
 
         await appState.cancelManagedSignInFlow()
@@ -440,7 +461,7 @@ final class AppStateProviderActivationTests: XCTestCase {
         let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
         let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
 
-        await appState.startManagedGoogleSignIn(openURL: { _ in }, messageSurface: .settings)
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true, messageSurface: .settings)
         let flowID = try XCTUnwrap(callbackState(from: transport.requests[0].form["redirect_url"]))
 
         await appState.handleManagedOAuthCallback(nonce: "bad_nonce", flowID: flowID)

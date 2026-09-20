@@ -80,11 +80,12 @@ is not exercised, so provision the ones you want covered.
 | --- | --- | --- |
 | `SENTWISE_LIVE_PADDLE_CHECKOUT` | `PaddleCheckoutLiveTests` | Any truthy value (`1`). Renders the Paddle **sandbox** checkout overlay; no purchase. Requires `sentwise.ai` to be an approved domain in the Paddle sandbox account (it is the harness base origin). |
 | `SENTWISE_LIVE_CLERK_TEST` | `ClerkLiveSignInTests` | Any truthy value (`1`). Uses Clerk's `+clerk_test` address + universal code `424242` — no real inbox, no secret key. |
+| `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE` | `ClerkLiveSignInTests`, `ManagedInferenceLiveTests` | Required only when the compiled Clerk default is production (`clerk.sentwise.ai`). Set to `1` only after production Clerk test mode is intentionally enabled; otherwise the `+clerk_test` payloads skip. |
 | `SENTWISE_LIVE_GMAIL_EMAIL` | `GmailLiveSendTests`, `ReplyWorthinessLiveTests` | The Gmail address. |
 | `SENTWISE_LIVE_GMAIL_APP_PASSWORD` | same | 16-char Google app password (2FA required). |
 | `SENTWISE_LIVE_ATTNET_EMAIL` | `AttNetLiveDraftTests` | The att.net address (item 44 save-as-draft verify). |
 | `SENTWISE_LIVE_ATTNET_APP_PASSWORD` | same | AT&T Secure Mail Key. |
-| `SENTWISE_LIVE_MANAGED_INFERENCE` | `ManagedInferenceLiveTests` | Any truthy value (`1`). Explicitly opts the Worker account-shape tests into live Worker calls. The test mints a fresh Clerk session JWT during the run using `SENTWISE_LIVE_CLERK_TEST`; no JWT is stored as a repo secret. |
+| `SENTWISE_LIVE_MANAGED_INFERENCE` | `ManagedInferenceLiveTests` | Any truthy value (`1`). Explicitly opts the Worker account-shape tests into live Worker calls. The test mints a fresh Clerk session JWT during the run using `SENTWISE_LIVE_CLERK_TEST`; after the production cutover it also requires `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE`. No JWT is stored as a repo secret. |
 | `SENTWISE_LIVE_MANAGED_DRAFT` | `ManagedInferenceLiveTests.testLiveDraftReturnsText` | Optional. Any truthy value (`1`) enables the live `/v1/draft` spend check. Provision only with `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL` below. |
 | `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL` | `ManagedInferenceLiveTests.testLiveDraftReturnsText` | Optional with `SENTWISE_LIVE_MANAGED_DRAFT`. A Clerk `+clerk_test` email whose Worker account has a durable entitlement or trial bypass; otherwise recurring push-to-main runs will eventually fail when the normal trial expires. |
 | `SENTWISE_LIVE_MANAGED_PORTAL` | `ManagedInferenceLiveTests.testLiveManageBillingReturnsPortalURL` | Optional. Any truthy value (`1`) enables the read-only live `/v1/paddle/manage-billing` portal-link fetch. Provision only with `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL` below. |
@@ -123,8 +124,11 @@ live Clerk sign-in + server-minted transaction (the overlay and its sub-frames
 render identically either way, with far fewer live dependencies).
 
 `ManagedInferenceLiveTests` mints a fresh Clerk session token during each run.
-The `/v1/me` account-shape checks run under `SENTWISE_LIVE_MANAGED_INFERENCE`;
-the `/v1/draft` spend check has the extra `SENTWISE_LIVE_MANAGED_DRAFT` gate and
+The `/v1/me` account-shape checks run under `SENTWISE_LIVE_MANAGED_INFERENCE`.
+After the production Clerk cutover, all managed-inference live checks also require
+`SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE` so `+clerk_test` sign-ins only run
+after production test mode is enabled. The `/v1/draft` spend check has the extra
+`SENTWISE_LIVE_MANAGED_DRAFT` gate and
 uses `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL`, so recurring runs only enable drafting
 with a Clerk test account that cannot age out of its trial. The
 `/v1/paddle/manage-billing` portal-link fetch has the extra

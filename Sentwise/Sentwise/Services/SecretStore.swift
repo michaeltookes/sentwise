@@ -47,6 +47,10 @@ struct SecretKey: RawRepresentable, Hashable {
     /// Kept separate from the credentials so a failed Keychain cleanup cannot make
     /// an invalid pair look signed in again on the next launch.
     static let managedCredentialsInvalidated = SecretKey(rawValue: "managed.credentialsInvalidated")
+    /// Clerk Frontend API base URL the stored managed credentials belong to. This
+    /// keeps a missing settings file from blessing pre-cutover credentials that
+    /// use the same Keychain slots as production credentials.
+    static let managedClerkFrontendAPIBaseURL = SecretKey(rawValue: "managed.clerkFrontendAPIBaseURL")
     /// A fresh Clerk client token recovered while credentials are invalidated.
     /// Kept apart from the rejected stored session so reauthentication retries can
     /// echo Clerk's latest rotation without reviving the stale credential pair.

@@ -195,8 +195,9 @@ struct ClerkClient: Sendable {
     let frontendAPIBaseURL: URL
     let transport: ClerkHTTPTransport
 
-    /// Clerk's default dev instance for Sentwise (peaceful-eel-9660).
-    static let defaultFrontendAPIBaseURLString = "https://peaceful-eel-9660.clerk.accounts.dev"
+    /// The production Clerk Frontend API on the sentwise.ai custom domain
+    /// (item 74 cutover, 2026-09-19; dev instance was peaceful-eel-9660).
+    static let defaultFrontendAPIBaseURLString = "https://clerk.sentwise.ai"
 
     init(
         frontendAPIBaseURL: URL = URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,

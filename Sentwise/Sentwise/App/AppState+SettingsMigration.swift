@@ -11,11 +11,10 @@ extension AppState {
 
     // MARK: - Migration (items 56a, 100)
 
-    /// Runs all launch-time settings migrations in order: the saved-accounts move
-    /// (item 48), the managed-inference default (item 56a), the additive signature
-    /// schema (item 24), then the BYOK-parked fallback (item 100). Only the terminal
-    /// step persists, so a launch that migrates writes the fully-migrated settings
-    /// exactly once, at the current schema version. Keeps `AppState.init` short.
+    /// Runs all launch-time settings migrations in order: saved accounts (item 48),
+    /// managed inference (item 56a), signature, BYOK parking, per-account voice, and
+    /// the Clerk production cutover. Only the terminal step persists, so a launch
+    /// that migrates writes the fully-migrated settings exactly once.
     static func fullyMigratedSettings(
         loaded: Settings,
         secrets: SecretStore,
@@ -51,9 +50,17 @@ extension AppState {
             targetSchemaVersion: Settings.voicePerAccountSchemaVersion - 1,
             shouldPersist: false
         )
-        return migratedVoicePerAccountSettings(
+        let voiceMigrated = migratedVoicePerAccountSettings(
             byokMigrated,
             originalSchemaVersion: loaded.schemaVersion,
+            persistence: persistence,
+            targetSchemaVersion: Settings.clerkProductionCutoverSchemaVersion - 1,
+            shouldPersist: false
+        )
+        return migratedClerkProductionCutoverSettings(
+            voiceMigrated,
+            originalSchemaVersion: loaded.schemaVersion,
+            secrets: secrets,
             persistence: persistence
         )
     }
@@ -61,15 +68,17 @@ extension AppState {
     /// Terminal migration for per-account voice profiles (item 99). Attributes the
     /// legacy single `VoiceProfile.json` to the currently-connected account so an
     /// existing install keeps its learned voice under the new per-account keying,
-    /// then advances the schema to the current version. Runs once, gated on the
-    /// original schema version. The move is durable before the caller reads the
+    /// then advances the schema. Runs once, gated on the original schema version.
+    /// The move is durable before the caller reads the
     /// active account's voice: `saveVoiceProfile` enqueues on the persistence serial
     /// queue and the following `removeVoiceProfile` blocks on that same queue, so
     /// the keyed write has flushed by the time this returns.
     static func migratedVoicePerAccountSettings(
         _ settings: Settings,
         originalSchemaVersion: Int,
-        persistence: PersistenceProvider
+        persistence: PersistenceProvider,
+        targetSchemaVersion: Int = Settings.voicePerAccountSchemaVersion,
+        shouldPersist: Bool = true
     ) -> Settings {
         guard originalSchemaVersion < Settings.voicePerAccountSchemaVersion else { return settings }
         var migrated = settings
@@ -86,13 +95,139 @@ extension AppState {
             }
         }
 
-        migrated.schemaVersion = Settings.voicePerAccountSchemaVersion
-        do {
-            try persistence.saveSettingsSync(migrated)
-        } catch {
-            logger.error("Failed to persist per-account voice migration: \(error.localizedDescription)")
+        migrated.schemaVersion = targetSchemaVersion
+        if shouldPersist, migrated != settings {
+            do {
+                try persistence.saveSettingsSync(migrated)
+            } catch {
+                logger.error("Failed to persist per-account voice migration: \(error.localizedDescription)")
+            }
         }
         return migrated
+    }
+
+    /// Production Clerk cutover (item 74): pre-cutover managed credentials were
+    /// issued by the dev Clerk instance but use the same Keychain keys. Clear or
+    /// durably invalidate them before v22 can restore a managed account at launch.
+    static func migratedClerkProductionCutoverSettings(
+        _ settings: Settings,
+        originalSchemaVersion: Int,
+        secrets: SecretStore,
+        persistence: PersistenceProvider,
+        targetSchemaVersion: Int = Settings.clerkProductionCutoverSchemaVersion,
+        shouldPersist: Bool = true
+    ) -> Settings {
+        var migrated = settings
+        guard ensureManagedClerkProductionCutoverState(
+            settings: settings,
+            originalSchemaVersion: originalSchemaVersion,
+            secrets: secrets
+        ) else { return migrated }
+        guard originalSchemaVersion < Settings.clerkProductionCutoverSchemaVersion else { return settings }
+
+        migrated.managedAccountEmail = ""
+        migrated.managedAccountID = ""
+        if migrated.llmProvider == LLMProviderKind.managed.rawValue {
+            migrated.llmModel = ""
+            migrated.llmVerifiedModel = ""
+        }
+        migrated.schemaVersion = targetSchemaVersion
+        if shouldPersist, migrated != settings {
+            do {
+                try persistence.saveSettingsSync(migrated)
+            } catch {
+                logger.error("Failed to persist Clerk production cutover migration: \(error.localizedDescription)")
+            }
+        }
+        return migrated
+    }
+
+    static func ensureManagedClerkProductionCutoverState(
+        settings: Settings,
+        originalSchemaVersion: Int,
+        secrets: SecretStore
+    ) -> Bool {
+        if hasCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets) {
+            return true
+        }
+
+        if originalSchemaVersion < Settings.clerkProductionCutoverSchemaVersion {
+            guard clearManagedClerkCutoverState(secrets: secrets) else { return false }
+            return persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets)
+        }
+        guard hasStoredManagedClerkClientToken(secrets: secrets) else { return true }
+        if hasPersistedManagedAccountIdentity(settings) {
+            return persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets)
+        }
+        guard clearManagedClerkCutoverState(secrets: secrets) else { return false }
+        return persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets)
+    }
+
+    static func clearManagedClerkCutoverState(secrets: SecretStore) -> Bool {
+        var didClear = true
+        for key in managedClerkCutoverCredentialKeys {
+            do {
+                try secrets.remove(key)
+            } catch {
+                didClear = false
+                logger.error("Failed to clear managed Clerk cutover credential: \(error.localizedDescription)")
+            }
+        }
+        return didClear || markManagedClerkCutoverCredentialsInvalidated(secrets: secrets)
+    }
+
+    static func hasCurrentManagedClerkCredentialEnvironmentMarker(secrets: SecretStore) -> Bool {
+        let marker = ((try? secrets.value(for: .managedClerkFrontendAPIBaseURL)) ?? nil)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return marker == managedClerkEnvMarkerValue
+    }
+
+    static func persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: SecretStore) -> Bool {
+        do {
+            try secrets.set(
+                managedClerkEnvMarkerValue,
+                for: .managedClerkFrontendAPIBaseURL
+            )
+            return true
+        } catch {
+            logger.error("Failed to persist managed Clerk environment marker: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private static var managedClerkCutoverCredentialKeys: [SecretKey] {
+        [
+            .managedClientToken,
+            .managedSessionID,
+            .managedReauthenticationClientToken,
+            .managedOAuthSignInID,
+            .managedOAuthMessageSurface,
+            .managedOAuthFlowID,
+            .managedOAuthCanceledCallbackSurface
+        ]
+    }
+
+    private static var managedClerkEnvMarkerValue: String {
+        ClerkClient.defaultFrontendAPIBaseURLString
+    }
+
+    private static func hasStoredManagedClerkClientToken(secrets: SecretStore) -> Bool {
+        secrets.hasValue(for: .managedClientToken)
+    }
+
+    private static func hasPersistedManagedAccountIdentity(_ settings: Settings) -> Bool {
+        !settings.managedAccountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !settings.managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private static func markManagedClerkCutoverCredentialsInvalidated(secrets: SecretStore) -> Bool {
+        do {
+            try secrets.set(ManagedAccountService.invalidatedCredentialsMarkerValue, for: .managedCredentialsInvalidated)
+            return true
+        } catch {
+            logger.error("Failed to invalidate managed Clerk cutover credentials: \(error.localizedDescription)")
+            return false
+        }
     }
 
     /// Moves an existing install with no configured BYO provider onto managed

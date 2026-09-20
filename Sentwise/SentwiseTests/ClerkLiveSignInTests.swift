@@ -1,10 +1,10 @@
 import XCTest
 @testable import Sentwise
 
-/// Env-gated live end-to-end email-code sign-in against the **real Clerk dev
-/// instance** (`peaceful-eel-9660.clerk.accounts.dev`) via the Frontend API,
-/// exercising the real `ClerkClient`. SKIPS unless `SENTWISE_LIVE_CLERK_TEST` is
-/// set, so CI and normal `xcodebuild test` runs stay fully offline.
+/// Env-gated live end-to-end email-code sign-in against the **real Clerk instance**
+/// the app is compiled for via the Frontend API, exercising the real
+/// `ClerkClient`. SKIPS unless `SENTWISE_LIVE_CLERK_TEST` is set, so CI and normal
+/// `xcodebuild test` runs stay fully offline.
 ///
 /// ## Clerk's test-email mechanism (verified against the docs)
 ///
@@ -16,8 +16,9 @@ import XCTest
 ///   authenticates with the public (publishable) instance, exactly as the app's
 ///   native flow does. So the test is deterministic and hard-codes no secret.
 ///
-/// The dev instance must have email-code sign-in on and Password/Organizations
-/// off (already configured — see docs/managed-inference.md "Live verification").
+/// The target instance must have email-code sign-in on and Password/Organizations
+/// off. Production also needs Clerk test mode consciously enabled before the
+/// `+clerk_test` mechanism is allowed to run.
 /// A brand-new test email goes through Clerk's sign-up flow (which `ClerkClient`
 /// handles transparently); a re-run signs in. Both end `status=complete`.
 ///
@@ -31,20 +32,32 @@ final class ClerkLiveSignInTests: XCTestCase {
     private static let testEmail = "sentwise-live+clerk_test@sentwise.ai"
     /// Clerk's universal test verification code.
     private static let testCode = "424242"
+    private static let productionTestModeGate = "SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE"
 
     private func requireLive() throws {
-        let flag = ProcessInfo.processInfo.environment["SENTWISE_LIVE_CLERK_TEST"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        guard flag == "1" || flag == "true" || flag == "yes" else {
+        let env = ProcessInfo.processInfo.environment
+        guard Self.isTruthy(env["SENTWISE_LIVE_CLERK_TEST"]) else {
             throw XCTSkip("Set SENTWISE_LIVE_CLERK_TEST=1 to run the live Clerk email-code sign-in test.")
         }
+        if ClerkClient.defaultFrontendAPIBaseURLString == "https://clerk.sentwise.ai",
+           !Self.isTruthy(env[Self.productionTestModeGate]) {
+            throw XCTSkip(
+                "Set \(Self.productionTestModeGate)=1 only after enabling Clerk test mode on the production instance."
+            )
+        }
+    }
+
+    private static func isTruthy(_ value: String?) -> Bool {
+        let normalized = value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return normalized == "1" || normalized == "true" || normalized == "yes"
     }
 
     func testLiveEmailCodeSignInCompletesSession() async throws {
         try requireLive()
 
-        // Real ClerkClient against the default dev instance — no secret key.
+        // Real ClerkClient against the compiled default instance — no secret key.
         let clerk = ClerkClient()
 
         // Create the sign-in (transparently falls back to sign-up for a new test

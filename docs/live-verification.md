@@ -29,8 +29,8 @@ completes a purchase.
 | `GmailLiveSendTests` | 9 | Dispatches a reply through the app's real auto-send path (`AppState.performSend` → SMTP submission over implicit TLS on the derived `smtp.` host, port 465), then fetches the delivered copy back from the inbox and asserts recipient addressing, the marker subject, and the `In-Reply-To` threading header. Also confirms Gmail auto-filed a copy in Sent Mail, then trashes every copy. |
 | `AttNetLiveDraftTests` | 44 | Saves a reply to the real Drafts mailbox through the app's save path (IMAP `APPEND` with `\Draft`), fetches it back to assert addressing + threading, then trashes it. |
 | `ReplyWorthinessLiveTests` | 66 | **Read-only.** Runs a fresh reply-worthiness pass (the same `AppState.replyWorthinessSkipReason` the watcher uses, including the live `HEADER.FIELDS` fetch) over recent inbox mail and asserts that known machine-sending senders (GitHub, Stripe/Anthropic receipts, AWS cost alerts, recruiting blasts) produce a skip — zero drafts — while personal mail stays worthy when the mailbox sample contains one. If the sample lacks either known transactional mail or a worthy message, it skips instead of failing for mailbox composition. Never drafts, sends, or mutates the mailbox; reuses the Gmail credentials below. |
-| `ClerkLiveSignInTests` | 59 | Email-code sign-in against the real Clerk dev instance via the Frontend API, exercising the real `ClerkClient`. Uses Clerk's `+clerk_test` address + universal code `424242` — no real inbox, no secret key. Gated on `SENTWISE_LIVE_CLERK_TEST`. See `docs/managed-inference.md`. |
-| `ManagedInferenceLiveTests` | 56b / 73 / 97 | Calls the deployed `sentwise-service` Worker with a fresh Clerk session JWT minted during the run through Clerk's test email-code flow. `/v1/me` and optional quota/subscription blocks are gated on `SENTWISE_LIVE_MANAGED_INFERENCE`, `SENTWISE_LIVE_CLERK_TEST`, and `SENTWISE_INFERENCE_URL`; `/v1/draft` also requires `SENTWISE_LIVE_MANAGED_DRAFT` and `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL`, an entitled/nonexpiring Clerk test account; `/v1/paddle/manage-billing` also requires `SENTWISE_LIVE_MANAGED_PORTAL` and `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL`, a subscribed Clerk test account. |
+| `ClerkLiveSignInTests` | 59 | Email-code sign-in against the real Clerk instance compiled into the app via the Frontend API, exercising the real `ClerkClient`. Uses Clerk's `+clerk_test` address + universal code `424242` — no real inbox, no secret key. Gated on `SENTWISE_LIVE_CLERK_TEST`; when the compiled default is production (`clerk.sentwise.ai`), also gated on `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE`. See `docs/managed-inference.md`. |
+| `ManagedInferenceLiveTests` | 56b / 73 / 97 | Calls the deployed `sentwise-service` Worker with a fresh Clerk session JWT minted during the run through Clerk's test email-code flow. `/v1/me` and optional quota/subscription blocks are gated on `SENTWISE_LIVE_MANAGED_INFERENCE`, `SENTWISE_LIVE_CLERK_TEST`, `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE` after production cutover, and `SENTWISE_INFERENCE_URL`; `/v1/draft` also requires `SENTWISE_LIVE_MANAGED_DRAFT` and `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL`, an entitled/nonexpiring Clerk test account; `/v1/paddle/manage-billing` also requires `SENTWISE_LIVE_MANAGED_PORTAL` and `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL`, a subscribed Clerk test account. |
 | `PaddleCheckoutLiveTests` | 95 / 97 | **No purchase.** Loads the real `PaddleCheckoutHTML` harness in a `WKWebView` under the real `CheckoutNavigationPolicy` navigation rule and drives the harness's own `window.sentwiseOpenCheckout` to open the **Paddle sandbox** overlay by `items` (client-side token + a sandbox price id). Asserts the overlay reaches Paddle's real `checkout.loaded` event and that the navigation policy blocked none of the Paddle navigations the overlay needs — catching the "navigation policy too tight" regression class. Needs a window server (Lucius GUI session). Gated on `SENTWISE_LIVE_PADDLE_CHECKOUT`. |
 
 ## Credentials
@@ -55,6 +55,8 @@ gated; optional host/port vars default to the provider's standard IMAP endpoint.
 **Clerk** (`ClerkLiveSignInTests`) — no real credentials needed (Clerk test mode):
 
 - `SENTWISE_LIVE_CLERK_TEST` — any truthy value (`1`) to run it (required)
+- `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE` — required only when the compiled
+  Clerk default is production; set after Clerk test mode is intentionally enabled
 
 **Managed inference Worker** (`ManagedInferenceLiveTests`) — uses Clerk test
 mode to mint a fresh session token at runtime:
@@ -62,6 +64,8 @@ mode to mint a fresh session token at runtime:
 - `SENTWISE_LIVE_MANAGED_INFERENCE` — any truthy value (`1`) to run it (required)
 - `SENTWISE_LIVE_CLERK_TEST` — any truthy value (`1`) to enable the Clerk test
   email-code flow (required)
+- `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE` — required only when the compiled
+  Clerk default is production; set after Clerk test mode is intentionally enabled
 - `SENTWISE_INFERENCE_URL` — deployed Worker base URL (required)
 - `SENTWISE_LIVE_MANAGED_DRAFT` — optional; enables the `/v1/draft` spend check
   only with the dedicated draft test email below

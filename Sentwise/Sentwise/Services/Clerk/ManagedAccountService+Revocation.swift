@@ -290,10 +290,13 @@ extension ManagedAccountService {
 
         if removedAllCredentials {
             let markerClearError = clearCredentialInvalidationMarkerBestEffort(context: "after sign-out")
+            let environmentMarkerClearError =
+                clearClerkCredentialEnvironmentMarkerBestEffort(context: "after sign-out")
             if markerClearError != nil {
                 areStoredCredentialsInvalidated = hasDurableInvalidationMarker
             }
             firstError = firstError ?? markerClearError
+            firstError = firstError ?? environmentMarkerClearError
         } else if !durableSignedOutState, let invalidationError = invalidation.error {
             firstError = firstError ?? invalidationError
         }

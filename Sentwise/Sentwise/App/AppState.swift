@@ -426,6 +426,9 @@ final class AppState: ObservableObject {
         self.persistence = persistence
         self.secrets = secrets
         self.mailProvider = mailProvider ?? LiveMailProvider.imap()
+        // Run launch migrations before constructing services that cache secret state.
+        let loadedSettings = persistence.loadSettings()
+        let settings = Self.fullyMigratedSettings(loaded: loadedSettings, secrets: secrets, persistence: persistence)
         // Managed account (item 56a) + wire it as the LLM session provider.
         let managedAccount = managedAccount ?? ManagedAccountService(secrets: secrets)
         self.managedAccount = managedAccount
@@ -439,11 +442,8 @@ final class AppState: ObservableObject {
         self.reachability = reachability
         self.isOnline = reachability.isOnline
         self.hasConfirmedReachability = reachability.hasCurrentPath
-        // Migrate a pre-v11 file to the saved-accounts model before anything reads
-        // the mail secret (item 48); the original settings still drive the
-        // schema-version-sensitive guidance/onboarding one-shot migrations below.
-        let loadedSettings = persistence.loadSettings()
-        let settings = Self.fullyMigratedSettings(loaded: loadedSettings, secrets: secrets, persistence: persistence)
+        // The original settings still drive schema-version-sensitive guidance and
+        // onboarding one-shot migrations below.
         self.pollIntervalSeconds = settings.pollIntervalSeconds
         self.onboardingCompleted = settings.onboardingCompleted
         self.senderAllowlist = settings.senderAllowlist
