@@ -91,11 +91,12 @@ portal-permission trap.
 - [x] **[agent]** App: add `PaddleConfig.production` (live client token +
       three live price ids, same `checkoutOrigin`), while keeping
       `PaddleConfig.active = sandbox`.
-- [ ] **[agent]** After approved domains + webhook setup are checked above,
-      flip `PaddleConfig.active` to production.
-- [ ] **[agent]** Verify: live checkout overlay loads for each tier (NO real
-      purchase — billing guardrail), webhook signature verifies on a Paddle
-      test notification, portal link resolves.
+- [ ] **[agent]** Preflight before enabling paid checkout: live checkout
+      overlay loads for each tier (billing guardrail: NO real purchase),
+      webhook signature verifies on a Paddle test notification, portal link
+      resolves.
+- [ ] **[agent]** After approved domains, webhook setup, and preflight
+      verification are checked above, flip `PaddleConfig.active` to production.
 
 ## 3. Cloudflare secret hygiene (worker)
 
