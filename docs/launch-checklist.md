@@ -86,17 +86,20 @@ portal-permission trap.
       `https://sentwise-inference.sentwise-service.workers.dev/v1/paddle/webhook`
       subscribed to the same events as sandbox (subscription lifecycle +
       transaction.completed). Record the webhook **secret** for §3.
-- [x] **[agent]** Worker: `PADDLE_API_BASE` → `https://api.paddle.com`;
-      `wrangler secret put PADDLE_API_KEY` / `PADDLE_WEBHOOK_SECRET` (TTY).
 - [x] **[agent]** App: add `PaddleConfig.production` (live client token +
       three live price ids, same `checkoutOrigin`), while keeping
       `PaddleConfig.active = sandbox`.
-- [ ] **[agent]** Preflight before enabling paid checkout: live checkout
+- [ ] **[agent]** Atomic paid-checkout activation, after approved domains and
+      webhook setup are checked above: set Worker `PADDLE_API_BASE` →
+      `https://api.paddle.com`, `wrangler secret put PADDLE_API_KEY` /
+      `PADDLE_WEBHOOK_SECRET` with the live values (TTY), and flip
+      `PaddleConfig.active` to production in the same release window. Until
+      then, keep both the Worker and app on sandbox.
+- [ ] **[agent]** Verify immediately after the atomic activation: live checkout
       overlay loads for each tier (billing guardrail: NO real purchase),
       webhook signature verifies on a Paddle test notification, portal link
-      resolves.
-- [ ] **[agent]** After approved domains, webhook setup, and preflight
-      verification are checked above, flip `PaddleConfig.active` to production.
+      resolves. If verification fails, roll both Worker and app back to sandbox
+      together.
 
 ## 3. Cloudflare secret hygiene (worker)
 
