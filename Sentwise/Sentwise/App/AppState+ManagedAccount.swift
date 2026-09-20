@@ -337,8 +337,11 @@ extension AppState {
         // are reset to managed by `migratedBYOKParkedSettings` before launch reads them.
         let provider = LLMProviderKind(rawValue: settings.llmProvider) ?? .managed
         let clerkCutoverPending = settings.schemaVersion < Settings.clerkProductionCutoverSchemaVersion
+        let hasCurrentClerkCredentialEnvironment =
+            hasCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets)
         let hasInvalidatedCredentials = secrets.hasValue(for: .managedCredentialsInvalidated)
         let hasCredentials = !clerkCutoverPending
+            && hasCurrentClerkCredentialEnvironment
             && !hasInvalidatedCredentials
             && secrets.hasValue(for: .managedClientToken)
             && secrets.hasValue(for: .managedSessionID)

@@ -117,9 +117,13 @@ extension AppState {
         targetSchemaVersion: Int = Settings.clerkProductionCutoverSchemaVersion,
         shouldPersist: Bool = true
     ) -> Settings {
-        guard originalSchemaVersion < Settings.clerkProductionCutoverSchemaVersion else { return settings }
         var migrated = settings
-        guard clearManagedClerkCutoverState(secrets: secrets) else { return migrated }
+        guard ensureManagedClerkProductionCutoverState(
+            settings: settings,
+            originalSchemaVersion: originalSchemaVersion,
+            secrets: secrets
+        ) else { return migrated }
+        guard originalSchemaVersion < Settings.clerkProductionCutoverSchemaVersion else { return settings }
 
         migrated.managedAccountEmail = ""
         migrated.managedAccountID = ""
@@ -138,6 +142,30 @@ extension AppState {
         return migrated
     }
 
+    static func ensureManagedClerkProductionCutoverState(
+        settings: Settings,
+        originalSchemaVersion: Int,
+        secrets: SecretStore
+    ) -> Bool {
+        if hasCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets) {
+            return true
+        }
+
+        let hasManagedCredentialState = managedClerkCutoverCredentialKeys.contains {
+            secrets.hasValue(for: $0)
+        }
+        if originalSchemaVersion < Settings.clerkProductionCutoverSchemaVersion {
+            guard clearManagedClerkCutoverState(secrets: secrets) else { return false }
+            return persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets)
+        }
+        guard hasManagedCredentialState else { return true }
+        if hasPersistedManagedAccountIdentity(settings) {
+            return persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets)
+        }
+        guard clearManagedClerkCutoverState(secrets: secrets) else { return false }
+        return persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets)
+    }
+
     static func clearManagedClerkCutoverState(secrets: SecretStore) -> Bool {
         var didClear = true
         for key in managedClerkCutoverCredentialKeys {
@@ -151,6 +179,25 @@ extension AppState {
         return didClear || markManagedClerkCutoverCredentialsInvalidated(secrets: secrets)
     }
 
+    static func hasCurrentManagedClerkCredentialEnvironmentMarker(secrets: SecretStore) -> Bool {
+        let marker = ((try? secrets.value(for: .managedClerkFrontendAPIBaseURL)) ?? nil)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return marker == managedClerkEnvMarkerValue
+    }
+
+    static func persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: SecretStore) -> Bool {
+        do {
+            try secrets.set(
+                managedClerkEnvMarkerValue,
+                for: .managedClerkFrontendAPIBaseURL
+            )
+            return true
+        } catch {
+            logger.error("Failed to persist managed Clerk environment marker: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     private static var managedClerkCutoverCredentialKeys: [SecretKey] {
         [
             .managedClientToken,
@@ -161,6 +208,15 @@ extension AppState {
             .managedOAuthFlowID,
             .managedOAuthCanceledCallbackSurface
         ]
+    }
+
+    private static var managedClerkEnvMarkerValue: String {
+        ClerkClient.defaultFrontendAPIBaseURLString
+    }
+
+    private static func hasPersistedManagedAccountIdentity(_ settings: Settings) -> Bool {
+        !settings.managedAccountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !settings.managedAccountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private static func markManagedClerkCutoverCredentialsInvalidated(secrets: SecretStore) -> Bool {

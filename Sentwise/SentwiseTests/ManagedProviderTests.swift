@@ -327,6 +327,10 @@ final class ManagedProviderTests: XCTestCase {
         XCTAssertNil(try secrets.value(for: .managedSessionID))
         XCTAssertNil(try secrets.value(for: .managedReauthenticationClientToken))
         XCTAssertNil(try secrets.value(for: .managedOAuthSignInID))
+        XCTAssertEqual(
+            try secrets.value(for: .managedClerkFrontendAPIBaseURL),
+            ClerkClient.defaultFrontendAPIBaseURLString
+        )
         XCTAssertEqual(persistence.savedSettingsHistory.map(\.schemaVersion), [Settings.currentSchemaVersion])
     }
 

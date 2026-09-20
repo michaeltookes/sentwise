@@ -166,6 +166,7 @@ actor ManagedAccountService: ManagedSessionProviding {
     func finalizeVerifiedSession(sessionID: String, clientToken: String) throws {
         try persistClientToken(clientToken)
         try persistSessionID(sessionID)
+        try persistClerkCredentialEnvironmentMarker()
         try clearCredentialInvalidationMarker()
         clearReauthenticationClientTokenBestEffort(context: "after sign-in")
         areStoredCredentialsInvalidated = false
@@ -216,6 +217,7 @@ actor ManagedAccountService: ManagedSessionProviding {
         clearPendingOAuthSignInIDBestEffort(context: "after invalidation")
         if !hasStoredManagedCredential {
             clearCredentialInvalidationMarkerBestEffort(context: "after invalidation cleanup")
+            clearClerkCredentialEnvironmentMarkerBestEffort(context: "after invalidation cleanup")
         }
     }
 

@@ -50,6 +50,10 @@ final class AppStateManagedLaunchTests: XCTestCase {
         XCTAssertEqual(appState.llmModel, "")
         XCTAssertEqual(appState.verifiedLLMModel, LLMProviderKind.managed.defaultModel)
         XCTAssertTrue(appState.isLLMConnected)
+        XCTAssertEqual(
+            try? secrets.value(for: .managedClerkFrontendAPIBaseURL),
+            ClerkClient.defaultFrontendAPIBaseURLString
+        )
         let saved = persistence.loadSettings()
         XCTAssertEqual(saved.llmModel, "")
         XCTAssertEqual(saved.llmVerifiedModel, LLMProviderKind.managed.defaultModel)
@@ -81,5 +85,29 @@ final class AppStateManagedLaunchTests: XCTestCase {
         XCTAssertEqual(saved.schemaVersion, Settings.currentSchemaVersion)
         XCTAssertEqual(saved.managedAccountEmail, "")
         XCTAssertEqual(saved.managedAccountID, "")
+    }
+
+    func testUnmarkedCurrentSchemaManagedCredentialsAreClearedWhenSettingsIdentityIsMissing() throws {
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "dev-client",
+            .managedSessionID: "dev-session"
+        ])
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: Settings.currentSchemaVersion,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed",
+            llmVerifiedModel: LLMProviderKind.managed.defaultModel
+        ))
+
+        let appState = makeAppState(secrets: secrets, persistence: persistence)
+
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertFalse(appState.isLLMConnected)
+        XCTAssertNil(try secrets.value(for: .managedClientToken))
+        XCTAssertNil(try secrets.value(for: .managedSessionID))
+        XCTAssertEqual(
+            try secrets.value(for: .managedClerkFrontendAPIBaseURL),
+            ClerkClient.defaultFrontendAPIBaseURLString
+        )
     }
 }

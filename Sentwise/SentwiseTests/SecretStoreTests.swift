@@ -116,6 +116,7 @@ final class SecretStoreTests: XCTestCase {
 
     func testLogSafeIdentifierKindPrefixForWellKnownKeys() {
         XCTAssertEqual(SecretKey.managedClientToken.logSafeIdentifier, "managed.clientToken")
+        XCTAssertEqual(SecretKey.managedClerkFrontendAPIBaseURL.logSafeIdentifier, "managed.clerkFrontendAPIBaseURL")
         XCTAssertEqual(SecretKey.gmailToken.logSafeIdentifier, "gmail.token")
     }
 }
