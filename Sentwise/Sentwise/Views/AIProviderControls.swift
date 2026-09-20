@@ -118,11 +118,14 @@ struct ManagedSignInControls: View {
     }
 
     private var isHuntMode: Bool { ProwlHuntRuntime.current.isEnabled }
+    private var shouldShowGoogleOption: Bool {
+        showsGoogleOption && (AppState.isManagedGoogleSignInEnabled || isHuntMode)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if appState.managedSignInStage == .idle {
-                if showsGoogleOption {
+                if shouldShowGoogleOption {
                     Button {
                         Task {
                             await appState.startManagedGoogleSignIn(

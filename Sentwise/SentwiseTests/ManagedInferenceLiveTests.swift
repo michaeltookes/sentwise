@@ -11,6 +11,7 @@ private struct EnvSessionProvider: ManagedSessionProviding {
 /// unless all gates are set, so CI and normal runs stay offline:
 ///   SENTWISE_LIVE_MANAGED_INFERENCE — explicit Worker live-test gate
 ///   SENTWISE_LIVE_CLERK_TEST        — enables the Clerk test email-code flow
+///   SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE — confirms prod Clerk test mode
 ///   SENTWISE_INFERENCE_URL          — the deployed Worker base URL
 ///
 /// `testLiveDraftReturnsText` also requires `SENTWISE_LIVE_MANAGED_DRAFT`,
@@ -40,6 +41,7 @@ final class ManagedInferenceLiveTests: XCTestCase {
     /// the recurring spend payload can point at a nonexpiring entitled user.
     private static let accountShapeTestEmail = "sentwise-live+clerk_test@sentwise.ai"
     private static let testCode = "424242"
+    private static let productionTestModeGate = "SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE"
     private static let customerPortalHosts: Set<String> = [
         "customer-portal.paddle.com",
         "sandbox-customer-portal.paddle.com"
@@ -62,6 +64,7 @@ final class ManagedInferenceLiveTests: XCTestCase {
         let env = ProcessInfo.processInfo.environment
         try requireTruthy("SENTWISE_LIVE_MANAGED_INFERENCE", in: env)
         try requireTruthy("SENTWISE_LIVE_CLERK_TEST", in: env)
+        try requireProductionClerkTestModeIfNeeded(in: env)
         switch account {
         case .accountShape:
             break
@@ -101,6 +104,15 @@ final class ManagedInferenceLiveTests: XCTestCase {
         }
         guard Self.isTruthy(env[name]) else {
             throw XCTSkip("Set \(name)=1 to run live managed-inference tests.")
+        }
+    }
+
+    private func requireProductionClerkTestModeIfNeeded(in env: [String: String]) throws {
+        guard ClerkClient.defaultFrontendAPIBaseURLString == "https://clerk.sentwise.ai" else { return }
+        guard Self.isTruthy(env[Self.productionTestModeGate]) else {
+            throw XCTSkip(
+                "Set \(Self.productionTestModeGate)=1 only after enabling Clerk test mode on the production instance."
+            )
         }
     }
 

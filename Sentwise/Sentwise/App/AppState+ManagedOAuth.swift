@@ -9,6 +9,12 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "Managed
 /// Kept in its own file so `AppState+ManagedAccount` stays within length limits.
 extension AppState {
 
+    /// Production Clerk Google OAuth stays gated until the production instance
+    /// allowlists the Worker callback URL in `docs/launch-checklist.md`.
+    static let isManagedGoogleSignInEnabled = false
+    static let managedGoogleSignInUnavailableMessage =
+        "Google sign-in is temporarily unavailable. Use email sign-in for now."
+
     /// The custom-scheme URL Clerk redirects back to after the Google handshake.
     /// Registered in `Info.plist` (`CFBundleURLTypes`) and must be added as an
     /// allowed redirect URL in the Clerk dashboard.
@@ -78,17 +84,27 @@ extension AppState {
         openURL: (URL) -> Void = { NSWorkspace.shared.open($0) },
         activatesManagedProvider: Bool = true,
         isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
+        isGoogleSignInEnabled: Bool = AppState.isManagedGoogleSignInEnabled,
         messageSurface: TransientMessageSurface = .shared
     ) async {
         setManagedError(nil, for: messageSurface)
         pendingManagedSignInMessageSurface = messageSurface
+        let settingsMessageGeneration = settingsTransientMessageGeneration
         if isHuntMode {
             // Deterministic offline fake: show the browser-wait panel, open nothing.
             pendingManagedSignInActivatesProvider = activatesManagedProvider
             managedSignInStage = .awaitingBrowser
             return
         }
-        let settingsMessageGeneration = settingsTransientMessageGeneration
+        guard isGoogleSignInEnabled else {
+            pendingManagedSignInActivatesProvider = true
+            reportManagedErrorIfCurrent(
+                Self.managedGoogleSignInUnavailableMessage,
+                generation: settingsMessageGeneration,
+                surface: messageSurface
+            )
+            return
+        }
         managedBusyAction = .google
         defer { managedBusyAction = nil }
         let flowID = Self.newBrowserCallbackFlowID()

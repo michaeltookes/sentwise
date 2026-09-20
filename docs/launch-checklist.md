@@ -42,13 +42,18 @@ secret. Security finding A-M1.
 - [ ] **[owner]** Clerk dashboard → allowlist the worker callback redirect for
       the managed OAuth flow (item 89):
       `https://sentwise-inference.sentwise-service.workers.dev/auth/callback`.
+- [x] **[agent]** Until the production callback allowlist is complete, keep
+      managed Google sign-in hidden and blocked in the app
+      (`AppState.isManagedGoogleSignInEnabled = false`); re-enable only after
+      the owner step above is checked and production Google sign-in is verified.
 - [x] **[agent]** Worker: set `CLERK_PUBLISHABLE_KEY` var to the `pk_live_…`
       key; `wrangler secret put CLERK_SECRET_KEY` with the `sk_live_…` key
       (from a real TTY — see §3 gotcha).
 - [x] **[agent]** App: point `ClerkClient.defaultFrontendAPIBaseURLString` at
       the production Frontend API URL (e.g. `https://clerk.sentwise.ai`).
 - [ ] **[agent]** Verify end-to-end on the deployed worker: email-code
-      sign-in, Google sign-in via `/auth/callback`, `/v1/me`, one draft.
+      sign-in, `/v1/me`, one draft; after the owner allowlist step above,
+      re-enable and verify Google sign-in via `/auth/callback`.
 - [ ] **[owner+agent]** Lucius live-test payloads: the Clerk/managed live
       tests sign in against the instance the app compiles for — after the flip
       they need production-instance test users (or test mode consciously

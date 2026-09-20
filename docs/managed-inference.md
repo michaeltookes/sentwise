@@ -99,9 +99,13 @@ the "Connected as …" display.
 
 ## Google sign-in via Clerk OAuth (item 59)
 
-Google is offered as the one-click sign-in alongside email code. It uses Clerk's
-Frontend-API OAuth flow, driven natively (no clerk-ios SDK), and hands off to the
-system browser through a registered custom URL scheme.
+Google is the one-click sign-in alongside email code once the active Clerk
+instance has its dashboard prerequisites. It uses Clerk's Frontend-API OAuth flow,
+driven natively (no clerk-ios SDK), and hands off to the system browser through a
+registered custom URL scheme. Since the 2026-09-19 production cutover, the
+production app hides and hard-gates this entry point until the production Clerk
+redirect allowlist item in `docs/launch-checklist.md` is complete; email-code
+sign-in remains available.
 
 Flow:
 
@@ -137,9 +141,11 @@ Both dashboard steps are done on the dev instance and the flow is **live-verifie
   this the redirect allowlist for the OAuth `redirect_url`). Without it Clerk
   rejects the `redirect_url` on the `sign_ins` create call.
 
-Production cutover note: the shared dev Google credentials do not carry over — a
-real Google OAuth client and the production instance's redirect allowlist entry
-are launch steps under item 74.
+Production cutover note: the shared dev Google credentials do not carry over. A
+real Google OAuth client is configured, but the production instance's Worker
+callback redirect allowlist entry is still an item 74 launch step; keep
+`AppState.isManagedGoogleSignInEnabled` false until that checklist item is done
+and the flow has been re-verified against production.
 
 ## OpenRouter one-click BYO (item 59)
 
@@ -193,8 +199,10 @@ completed by a hijacked callback.
 - The native flow is implemented to Clerk's Frontend-API spec and is covered by
   the env-gated `ClerkLiveSignInTests` test address flow. `ManagedInferenceLiveTests`
   verifies the **Worker** by minting a fresh Clerk session token during the run
-  via `SENTWISE_LIVE_CLERK_TEST`, then calling the deployed URL supplied in
-  `SENTWISE_INFERENCE_URL`. `SENTWISE_LIVE_MANAGED_INFERENCE` is the explicit
+  via `SENTWISE_LIVE_CLERK_TEST` (and
+  `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE` after the production cutover), then
+  calling the deployed URL supplied in `SENTWISE_INFERENCE_URL`.
+  `SENTWISE_LIVE_MANAGED_INFERENCE` is the explicit
   gate for the `/v1/me` account-shape payload so no short-lived Clerk JWT is
   stored as a repo secret. The live `/v1/draft` spend check is additionally gated
   by `SENTWISE_LIVE_MANAGED_DRAFT` and uses
@@ -676,9 +684,11 @@ instance) — via the Frontend API. **Note:** Clerk's `+clerk_test` email mechan
 requires the instance's test mode, which production instances disable by default;
 the live sign-in payload (and the managed live-draft payload's sign-in) need
 production-instance test users or test mode consciously enabled before they can
-run post-cutover. It
-**skips by default** and only runs when `SENTWISE_LIVE_CLERK_TEST` is set, so CI
-and normal `xcodebuild test` runs stay offline.
+run post-cutover. It **skips by default** and only runs when
+`SENTWISE_LIVE_CLERK_TEST` is set; when the compiled default is the production
+instance it also requires `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE=1`, so CI and
+normal `xcodebuild test` runs stay offline and production is not exercised by the
+old boolean gate alone.
 
 It uses **Clerk's test-email mechanism**
 ([docs](https://clerk.com/docs/testing/test-emails-and-phones)): any address with
@@ -692,14 +702,17 @@ completed session, and mints a session token.
 Run it:
 
 ```bash
-SENTWISE_LIVE_CLERK_TEST=1 xcodebuild test \
+SENTWISE_LIVE_CLERK_TEST=1 \
+SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE=1 \
+xcodebuild test \
   -project Sentwise/Sentwise.xcodeproj -scheme Sentwise \
   -only-testing:SentwiseTests/ClerkLiveSignInTests \
   -derivedDataPath <scratch> CODE_SIGNING_ALLOWED=NO
 ```
 
-Prerequisite (already configured on the dev instance): Email address (verification
-code) on, Password off, Organizations off.
+Prerequisite: Email address (verification code) on, Password off, Organizations
+off. On the production instance, Clerk test mode must be consciously enabled
+before setting `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE`.
 
 **Google and OpenRouter are not tested live** — their browser round-trips are not
 automatable from a headless test. Google/OpenRouter are covered by the offline
@@ -723,11 +736,15 @@ hunt fakes (above) and their unit tests (`ManagedAccountServiceOAuthTests`,
 universal test code `424242`, and got a completed session with a minted token. This exercises the
 real `ClerkClient` including the sign-up fallback and native token rotation.
 
-Running it: the gate reads `SENTWISE_LIVE_CLERK_TEST=1` from the test process environment. A plain
-shell `env` (or `TEST_RUNNER_…`) does **not** propagate into a macOS app-hosted unit test via
-`xcodebuild test`; set it in the scheme/test-plan test-action environment, or inject it into the
-`.xctestrun` (`build-for-testing` → set `SentwiseTests.EnvironmentVariables.SENTWISE_LIVE_CLERK_TEST=1`
-→ `test-without-building -destination 'platform=macOS'`). Google/OpenRouter remain browser
+Running it: the gate reads `SENTWISE_LIVE_CLERK_TEST=1` from the test process
+environment, and production builds also require
+`SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE=1`. A plain shell `env` (or
+`TEST_RUNNER_…`) does **not** propagate into a macOS app-hosted unit test via
+`xcodebuild test`; set it in the scheme/test-plan test-action environment, or
+inject it into the `.xctestrun` (`build-for-testing` → set
+`SentwiseTests.EnvironmentVariables.SENTWISE_LIVE_CLERK_TEST=1` and, for
+production, `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE=1` →
+`test-without-building -destination 'platform=macOS'`). Google/OpenRouter remain browser
 round-trips and are not automatable as live tests — they are covered by the deterministic hunt-mode
 fake and unit tests instead.
 

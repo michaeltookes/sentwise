@@ -40,6 +40,7 @@ final class AppStateManagedOAuthStartupSurfaceTests: XCTestCase {
 
         await appState.startManagedGoogleSignIn(
             openURL: { openedURLs.append($0) },
+            isGoogleSignInEnabled: true,
             messageSurface: .settings
         )
 
