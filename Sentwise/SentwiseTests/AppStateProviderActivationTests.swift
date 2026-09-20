@@ -344,10 +344,7 @@ final class AppStateProviderActivationTests: XCTestCase {
         let appState = makeAppState(provider: "anthropic", secrets: secrets, managedAccount: managed)
 
         var opened: URL?
-        await appState.startManagedGoogleSignIn(
-            openURL: { opened = $0 },
-            isGoogleSignInEnabled: true
-        )
+        await appState.startManagedGoogleSignIn(openURL: { opened = $0 }, isGoogleSignInEnabled: true)
         XCTAssertEqual(opened?.absoluteString, "https://accounts.google.com/o/oauth2/auth?x=1")
         XCTAssertEqual(appState.managedSignInStage, .awaitingBrowser,
                        "opening the browser should switch the panel to the waiting state")
@@ -438,10 +435,7 @@ final class AppStateProviderActivationTests: XCTestCase {
         let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
         let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
 
-        await appState.startManagedGoogleSignIn(
-            openURL: { _ in },
-            isGoogleSignInEnabled: true
-        )
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true)
         XCTAssertEqual(appState.managedSignInStage, .awaitingBrowser)
 
         await appState.cancelManagedSignInFlow()
@@ -467,11 +461,7 @@ final class AppStateProviderActivationTests: XCTestCase {
         let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
         let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
 
-        await appState.startManagedGoogleSignIn(
-            openURL: { _ in },
-            isGoogleSignInEnabled: true,
-            messageSurface: .settings
-        )
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true, messageSurface: .settings)
         let flowID = try XCTUnwrap(callbackState(from: transport.requests[0].form["redirect_url"]))
 
         await appState.handleManagedOAuthCallback(nonce: "bad_nonce", flowID: flowID)

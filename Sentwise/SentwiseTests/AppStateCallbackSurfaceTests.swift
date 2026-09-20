@@ -242,18 +242,10 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
         let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
 
-        await appState.startManagedGoogleSignIn(
-            openURL: { _ in },
-            isGoogleSignInEnabled: true,
-            messageSurface: .settings
-        )
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true, messageSurface: .settings)
         let flowA = try XCTUnwrap(callbackState(from: transport.requests[0].form["redirect_url"]))
         await appState.cancelManagedSignInFlow(messageSurface: .settings)
-        await appState.startManagedGoogleSignIn(
-            openURL: { _ in },
-            isGoogleSignInEnabled: true,
-            messageSurface: .settings
-        )
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true, messageSurface: .settings)
         let flowB = try XCTUnwrap(callbackState(from: transport.requests[1].form["redirect_url"]))
 
         await appState.handleManagedOAuthCallback(nonce: "nonce_from_a", flowID: flowA)
@@ -282,17 +274,9 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
         let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
 
-        await appState.startManagedGoogleSignIn(
-            openURL: { _ in },
-            isGoogleSignInEnabled: true,
-            messageSurface: .settings
-        )
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true, messageSurface: .settings)
         await appState.cancelManagedSignInFlow(messageSurface: .settings)
-        await appState.startManagedGoogleSignIn(
-            openURL: { _ in },
-            isGoogleSignInEnabled: true,
-            messageSurface: .settings
-        )
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true, messageSurface: .settings)
         let flowB = try XCTUnwrap(callbackState(from: transport.requests[1].form["redirect_url"]))
 
         await appState.handleManagedOAuthCallback(nonce: "nonce_from_a")
@@ -345,11 +329,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
         appState.managedError = "setup assistant error"
 
-        await appState.startManagedGoogleSignIn(
-            openURL: { _ in },
-            isGoogleSignInEnabled: true,
-            messageSurface: .settings
-        )
+        await appState.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true, messageSurface: .settings)
         await appState.cancelManagedSignInFlow(messageSurface: .settings)
         await appState.handleManagedOAuthCallback(nonce: "nonce_1")
 
@@ -368,11 +348,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         )
         let firstManaged = ManagedAccountService(secrets: secrets, clerk: startClerk)
         let firstLaunch = makeAppState(provider: "managed", secrets: secrets, managedAccount: firstManaged)
-        await firstLaunch.startManagedGoogleSignIn(
-            openURL: { _ in },
-            isGoogleSignInEnabled: true,
-            messageSurface: .settings
-        )
+        await firstLaunch.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true, messageSurface: .settings)
         let flowID = try XCTUnwrap(callbackState(from: startTransport.requests[0].form["redirect_url"]))
         let callbackTransport = QueueClerkTransport([
             clerkReply(#"{"errors":[{"message":"Bad nonce"}]}"#, status: 400, clientToken: "client_B")
@@ -400,11 +376,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         )
         let firstManaged = ManagedAccountService(secrets: secrets, clerk: startClerk)
         let firstLaunch = makeAppState(provider: "managed", secrets: secrets, managedAccount: firstManaged)
-        await firstLaunch.startManagedGoogleSignIn(
-            openURL: { _ in },
-            isGoogleSignInEnabled: true,
-            messageSurface: .settings
-        )
+        await firstLaunch.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true, messageSurface: .settings)
         let flowID = try XCTUnwrap(callbackState(from: startTransport.requests[0].form["redirect_url"]))
         let callbackTransport = SuspendedClerkTransport()
         let callbackClerk = ClerkClient(
@@ -447,11 +419,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         )
         let firstManaged = ManagedAccountService(secrets: secrets, clerk: startClerk)
         let firstLaunch = makeAppState(provider: "managed", secrets: secrets, managedAccount: firstManaged)
-        await firstLaunch.startManagedGoogleSignIn(
-            openURL: { _ in },
-            isGoogleSignInEnabled: true,
-            messageSurface: .settings
-        )
+        await firstLaunch.startManagedGoogleSignIn(openURL: { _ in }, isGoogleSignInEnabled: true, messageSurface: .settings)
         let flowID = try XCTUnwrap(callbackState(from: startTransport.requests[0].form["redirect_url"]))
         let callbackTransport = SuspendedClerkTransport()
         let callbackClerk = ClerkClient(
