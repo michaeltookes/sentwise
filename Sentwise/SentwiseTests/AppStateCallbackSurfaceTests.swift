@@ -236,7 +236,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
             clerkReply(secondStartResponse, clientToken: "client_B")
         ])
         let clerk = ClerkClient(
-            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            frontendAPIBaseURL: URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,
             transport: transport
         )
         let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
@@ -268,7 +268,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
             clerkReply(secondStartResponse, clientToken: "client_B")
         ])
         let clerk = ClerkClient(
-            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            frontendAPIBaseURL: URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,
             transport: transport
         )
         let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
@@ -301,7 +301,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
             clerkReply(#"{"response":{"id":"sia_1","status":"complete","created_session_id":"sess_1"}}"#)
         ])
         let clerk = ClerkClient(
-            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            frontendAPIBaseURL: URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,
             transport: transport
         )
         let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
@@ -322,7 +322,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let secrets = InMemorySecretStore()
         let transport = QueueClerkTransport([clerkReply(startResponse, clientToken: "client_A")])
         let clerk = ClerkClient(
-            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            frontendAPIBaseURL: URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,
             transport: transport
         )
         let managed = ManagedAccountService(secrets: secrets, clerk: clerk)
@@ -343,7 +343,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let secrets = InMemorySecretStore()
         let startTransport = QueueClerkTransport([clerkReply(startResponse, clientToken: "client_A")])
         let startClerk = ClerkClient(
-            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            frontendAPIBaseURL: URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,
             transport: startTransport
         )
         let firstManaged = ManagedAccountService(secrets: secrets, clerk: startClerk)
@@ -354,7 +354,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
             clerkReply(#"{"errors":[{"message":"Bad nonce"}]}"#, status: 400, clientToken: "client_B")
         ])
         let callbackClerk = ClerkClient(
-            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            frontendAPIBaseURL: URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,
             transport: callbackTransport
         )
         let callbackManaged = ManagedAccountService(secrets: secrets, clerk: callbackClerk)
@@ -371,7 +371,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let secrets = InMemorySecretStore()
         let startTransport = QueueClerkTransport([clerkReply(startResponse, clientToken: "client_A")])
         let startClerk = ClerkClient(
-            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            frontendAPIBaseURL: URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,
             transport: startTransport
         )
         let firstManaged = ManagedAccountService(secrets: secrets, clerk: startClerk)
@@ -380,7 +380,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let flowID = try XCTUnwrap(callbackState(from: startTransport.requests[0].form["redirect_url"]))
         let callbackTransport = SuspendedClerkTransport()
         let callbackClerk = ClerkClient(
-            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            frontendAPIBaseURL: URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,
             transport: callbackTransport
         )
         let callbackManaged = ManagedAccountService(secrets: secrets, clerk: callbackClerk)
@@ -414,7 +414,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let secrets = InMemorySecretStore()
         let startTransport = QueueClerkTransport([clerkReply(startResponse, clientToken: "client_A")])
         let startClerk = ClerkClient(
-            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            frontendAPIBaseURL: URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,
             transport: startTransport
         )
         let firstManaged = ManagedAccountService(secrets: secrets, clerk: startClerk)
@@ -423,7 +423,7 @@ final class AppStateCallbackSurfaceTests: XCTestCase {
         let flowID = try XCTUnwrap(callbackState(from: startTransport.requests[0].form["redirect_url"]))
         let callbackTransport = SuspendedClerkTransport()
         let callbackClerk = ClerkClient(
-            frontendAPIBaseURL: URL(string: "https://peaceful-eel-9660.clerk.accounts.dev")!,
+            frontendAPIBaseURL: URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,
             transport: callbackTransport
         )
         let callbackManaged = ManagedAccountService(secrets: secrets, clerk: callbackClerk)

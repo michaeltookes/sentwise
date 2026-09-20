@@ -318,11 +318,6 @@ actor ManagedAccountService: ManagedSessionProviding {
 
     var storedCredentialsAreInvalidated: Bool { areStoredCredentialsInvalidated || secrets.hasValue(for: .managedCredentialsInvalidated) }
 
-    func persistClientToken(_ token: String) throws {
-        guard !token.isEmpty else { return }
-        try secrets.set(token, for: .managedClientToken)
-    }
-
     func persistClientTokenBestEffort(_ token: String?, context: String) {
         persistSignInClientTokenBestEffort(token, context: context)
     }

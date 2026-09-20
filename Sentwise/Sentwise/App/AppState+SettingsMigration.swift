@@ -155,7 +155,7 @@ extension AppState {
             guard clearManagedClerkCutoverState(secrets: secrets) else { return false }
             return persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets)
         }
-        guard hasStoredManagedClerkCredentialPair(secrets: secrets) else { return true }
+        guard hasStoredManagedClerkClientToken(secrets: secrets) else { return true }
         if hasPersistedManagedAccountIdentity(settings) {
             return persistCurrentManagedClerkCredentialEnvironmentMarker(secrets: secrets)
         }
@@ -211,8 +211,8 @@ extension AppState {
         ClerkClient.defaultFrontendAPIBaseURLString
     }
 
-    private static func hasStoredManagedClerkCredentialPair(secrets: SecretStore) -> Bool {
-        secrets.hasValue(for: .managedClientToken) && secrets.hasValue(for: .managedSessionID)
+    private static func hasStoredManagedClerkClientToken(secrets: SecretStore) -> Bool {
+        secrets.hasValue(for: .managedClientToken)
     }
 
     private static func hasPersistedManagedAccountIdentity(_ settings: Settings) -> Bool {

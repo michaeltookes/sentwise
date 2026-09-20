@@ -29,6 +29,10 @@ final class ManagedAccountServiceOAuthTests: XCTestCase {
 
         XCTAssertEqual(url.absoluteString, "https://accounts.google.com/o/oauth2/auth?x=1")
         XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_A")
+        XCTAssertEqual(
+            try secrets.value(for: .managedClerkFrontendAPIBaseURL),
+            "https://peaceful-eel-9660.clerk.accounts.dev"
+        )
     }
 
     func testCompleteGoogleSignInStoresSessionAndReturnsIdentifier() async throws {

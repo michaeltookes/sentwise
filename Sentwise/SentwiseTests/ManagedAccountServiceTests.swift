@@ -108,6 +108,10 @@ final class ManagedAccountServiceTests: XCTestCase {
         }
 
         XCTAssertEqual(try secrets.value(for: .managedClientToken), "client_A")
+        XCTAssertEqual(
+            try secrets.value(for: .managedClerkFrontendAPIBaseURL),
+            "https://peaceful-eel-9660.clerk.accounts.dev"
+        )
 
         try await account.startSignIn(email: "marcus@example.com")
 

@@ -7,6 +7,12 @@ private let credentialEnvironmentLogger = Logger(
 )
 
 extension ManagedAccountService {
+    func persistClientToken(_ token: String) throws {
+        guard !token.isEmpty else { return }
+        try persistClerkCredentialEnvironmentMarker()
+        try secrets.set(token, for: .managedClientToken)
+    }
+
     func persistClerkCredentialEnvironmentMarker() throws {
         try secrets.set(clerk.frontendAPIBaseURL.absoluteString, for: .managedClerkFrontendAPIBaseURL)
     }
