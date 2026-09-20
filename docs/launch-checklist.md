@@ -89,8 +89,10 @@ portal-permission trap.
 - [x] **[agent]** Worker: `PADDLE_API_BASE` → `https://api.paddle.com`;
       `wrangler secret put PADDLE_API_KEY` / `PADDLE_WEBHOOK_SECRET` (TTY).
 - [x] **[agent]** App: add `PaddleConfig.production` (live client token +
-      three live price ids, same `checkoutOrigin`) and flip
-      `PaddleConfig.active` to it.
+      three live price ids, same `checkoutOrigin`), while keeping
+      `PaddleConfig.active = sandbox`.
+- [ ] **[agent]** After approved domains + webhook setup are checked above,
+      flip `PaddleConfig.active` to production.
 - [ ] **[agent]** Verify: live checkout overlay loads for each tier (NO real
       purchase — billing guardrail), webhook signature verifies on a Paddle
       test notification, portal link resolves.
