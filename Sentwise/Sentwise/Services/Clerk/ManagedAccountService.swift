@@ -67,9 +67,7 @@ actor ManagedAccountService: ManagedSessionProviding {
 
     /// True when a device token and session id are both stored — i.e. the user
     /// has a usable managed account.
-    var isSignedIn: Bool {
-        !areStoredCredentialsInvalidated && storedClientToken != nil && storedSessionID != nil
-    }
+    var isSignedIn: Bool { !storedCredentialsAreInvalidated && storedClientToken != nil && storedSessionID != nil }
 
     /// Begins email-code sign-in and sends the OTP. The device (client) token is
     /// persisted immediately so a rotated token survives even if the user quits
@@ -246,7 +244,7 @@ actor ManagedAccountService: ManagedSessionProviding {
 
     private func mintCurrentManagedSession() async throws -> ManagedSessionToken {
         while true {
-            guard !areStoredCredentialsInvalidated,
+            guard !storedCredentialsAreInvalidated,
                   let storedClientToken = storedClientToken,
                   let sessionID = storedSessionID
             else {
@@ -310,11 +308,13 @@ actor ManagedAccountService: ManagedSessionProviding {
     }
 
     func signInClientTokenForCurrentCredentialState() -> String {
-        if areStoredCredentialsInvalidated {
+        if storedCredentialsAreInvalidated {
             return reauthenticationClientToken ?? ""
         }
         return storedClientToken ?? ""
     }
+
+    var storedCredentialsAreInvalidated: Bool { areStoredCredentialsInvalidated || secrets.hasValue(for: .managedCredentialsInvalidated) }
 
     func persistClientToken(_ token: String) throws {
         guard !token.isEmpty else { return }

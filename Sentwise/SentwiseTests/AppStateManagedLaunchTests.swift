@@ -54,4 +54,32 @@ final class AppStateManagedLaunchTests: XCTestCase {
         XCTAssertEqual(saved.llmModel, "")
         XCTAssertEqual(saved.llmVerifiedModel, LLMProviderKind.managed.defaultModel)
     }
+
+    func testPreCutoverManagedCredentialsDoNotRestoreAfterProductionClerkMigration() throws {
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "dev-client",
+            .managedSessionID: "dev-session"
+        ])
+        let persistence = AppStateMemoryPersistence(settings: Settings(
+            schemaVersion: Settings.clerkProductionCutoverSchemaVersion - 1,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed",
+            llmVerifiedModel: LLMProviderKind.managed.defaultModel,
+            managedAccountEmail: "marcus@example.com",
+            managedAccountID: "clerk-user:user_dev"
+        ))
+
+        let appState = makeAppState(secrets: secrets, persistence: persistence)
+
+        XCTAssertFalse(appState.isManagedSignedIn)
+        XCTAssertFalse(appState.isLLMConnected)
+        XCTAssertEqual(appState.managedAccountEmail, "")
+        XCTAssertEqual(appState.managedAccountID, "")
+        XCTAssertNil(try secrets.value(for: .managedClientToken))
+        XCTAssertNil(try secrets.value(for: .managedSessionID))
+        let saved = persistence.loadSettings()
+        XCTAssertEqual(saved.schemaVersion, Settings.currentSchemaVersion)
+        XCTAssertEqual(saved.managedAccountEmail, "")
+        XCTAssertEqual(saved.managedAccountID, "")
+    }
 }

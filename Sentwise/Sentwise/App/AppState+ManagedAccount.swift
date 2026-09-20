@@ -336,8 +336,10 @@ extension AppState {
         // to managed, the only shipped path. Genuine pre-release non-managed values
         // are reset to managed by `migratedBYOKParkedSettings` before launch reads them.
         let provider = LLMProviderKind(rawValue: settings.llmProvider) ?? .managed
+        let clerkCutoverPending = settings.schemaVersion < Settings.clerkProductionCutoverSchemaVersion
         let hasInvalidatedCredentials = secrets.hasValue(for: .managedCredentialsInvalidated)
-        let hasCredentials = !hasInvalidatedCredentials
+        let hasCredentials = !clerkCutoverPending
+            && !hasInvalidatedCredentials
             && secrets.hasValue(for: .managedClientToken)
             && secrets.hasValue(for: .managedSessionID)
         let restore = provider == .managed && hasCredentials

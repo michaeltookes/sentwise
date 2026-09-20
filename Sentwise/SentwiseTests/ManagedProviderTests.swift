@@ -292,6 +292,44 @@ final class ManagedProviderTests: XCTestCase {
         XCTAssertEqual(persistence.settingsSaveCount, 0)
     }
 
+    // MARK: - Settings migration (Clerk production cutover, item 74)
+
+    func testClerkProductionCutoverClearsPreCutoverManagedCredentials() throws {
+        let secrets = InMemorySecretStore(seed: [
+            .managedClientToken: "dev-client",
+            .managedSessionID: "dev-session",
+            .managedReauthenticationClientToken: "dev-reauth",
+            .managedOAuthSignInID: "dev-oauth"
+        ])
+        let settings = Settings(
+            schemaVersion: Settings.clerkProductionCutoverSchemaVersion - 1,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed",
+            llmModel: "stale-custom-model",
+            llmVerifiedModel: LLMProviderKind.managed.defaultModel,
+            managedAccountEmail: "marcus@example.com",
+            managedAccountID: "clerk-user:user_dev"
+        )
+        let persistence = AppStateMemoryPersistence(settings: settings)
+
+        let migrated = AppState.fullyMigratedSettings(
+            loaded: settings,
+            secrets: secrets,
+            persistence: persistence
+        )
+
+        XCTAssertEqual(migrated.schemaVersion, Settings.currentSchemaVersion)
+        XCTAssertEqual(migrated.managedAccountEmail, "")
+        XCTAssertEqual(migrated.managedAccountID, "")
+        XCTAssertEqual(migrated.llmModel, "")
+        XCTAssertEqual(migrated.llmVerifiedModel, "")
+        XCTAssertNil(try secrets.value(for: .managedClientToken))
+        XCTAssertNil(try secrets.value(for: .managedSessionID))
+        XCTAssertNil(try secrets.value(for: .managedReauthenticationClientToken))
+        XCTAssertNil(try secrets.value(for: .managedOAuthSignInID))
+        XCTAssertEqual(persistence.savedSettingsHistory.map(\.schemaVersion), [Settings.currentSchemaVersion])
+    }
+
     // MARK: - LLMService routing + hunt-mode stub
 
     func testHuntModeReturnsCannedResponseWithoutNetwork() async throws {
