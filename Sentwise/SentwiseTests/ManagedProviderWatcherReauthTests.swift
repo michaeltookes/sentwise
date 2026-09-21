@@ -143,6 +143,9 @@ final class ManagedProviderWatcherReauthTests: XCTestCase {
             status: .active,
             capturedAt: Date()
         )
+        // Item 108: this fixture exercises the auto-generate path (a draft's managed
+        // 401 pauses watching), so opt in to automatic drafting.
+        appState.inboxDrafting.autoDraftEnabled = true
         return (appState, secrets)
     }
 }

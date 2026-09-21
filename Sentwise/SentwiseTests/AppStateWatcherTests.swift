@@ -88,6 +88,7 @@ final class AppStateWatcherTests: XCTestCase {
         // Retry transient failures instantly so poll-fetch/draft retries (item 27)
         // don't add real backoff waits to the watcher tests.
         appState.retryRunner = .immediate
+        appState.inboxDrafting.autoDraftEnabled = true // item 108: exercise auto-generate pipeline
         return (appState, provider, persistence)
     }
 
@@ -333,6 +334,7 @@ final class AppStateWatcherTests: XCTestCase {
             llm: FakeLLMProvider(result: .success(()), completion: .success(LLMResponse(text: "On it.")))
         )
         appState.watchStatus = .watching
+        appState.inboxDrafting.autoDraftEnabled = true // item 108: exercise auto-generate pipeline
 
         await appState.pollInboxOnce()
 

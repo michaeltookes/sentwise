@@ -47,12 +47,14 @@ final class AppStateWatcherFetchExpansionTests: XCTestCase {
             ),
             processedMessages: processed
         )
-        return AppState(
+        let appState = AppState(
             persistence: persistence,
             secrets: secrets,
             mailProvider: provider,
             llm: FakeLLMProvider(result: .success(()), completion: .success(LLMResponse(text: "On it.")))
         )
+        appState.inboxDrafting.autoDraftEnabled = true // item 108: exercise auto-generate pipeline
+        return appState
     }
 
     private func baselineWithStartProcessed(_ date: Date) -> ProcessedMessages {

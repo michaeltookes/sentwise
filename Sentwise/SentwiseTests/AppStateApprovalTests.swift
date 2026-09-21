@@ -63,6 +63,7 @@ final class AppStateApprovalTests: XCTestCase {
         )
         appState.pendingDrafts = drafts
         appState.pendingDraftCount = drafts.count
+        appState.inboxDrafting.autoDraftEnabled = true // item 108: exercise auto-generate pipeline
         return (appState, provider, notifier, persistence)
     }
 
@@ -93,6 +94,7 @@ final class AppStateApprovalTests: XCTestCase {
         )
         appState.pendingDrafts = drafts
         appState.pendingDraftCount = drafts.count
+        appState.inboxDrafting.autoDraftEnabled = true // item 108: exercise auto-generate pipeline
         return (appState, provider, notifier, persistence)
     }
 
@@ -466,6 +468,7 @@ final class AppStateApprovalTests: XCTestCase {
             notifier: notifier
         )
         appState.watchStatus = .watching
+        appState.inboxDrafting.autoDraftEnabled = true // item 108: exercise auto-generate pipeline
 
         await appState.pollInboxOnce()
 

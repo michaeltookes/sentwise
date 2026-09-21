@@ -79,6 +79,7 @@ final class AppStateActivityHistoryTests: XCTestCase {
         )
         let llm = FakeLLMProvider(result: .success(()), completion: .success(LLMResponse(text: "On it.")))
         let appState = AppState(persistence: persistence, secrets: secrets, mailProvider: provider, llm: llm)
+        appState.inboxDrafting.autoDraftEnabled = true // item 108: exercise auto-generate pipeline
         appState.pendingDrafts = drafts
         appState.pendingDraftCount = drafts.count
         // Item 27: retry instantly so any transient-failure test doesn't wait on
