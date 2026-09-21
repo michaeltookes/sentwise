@@ -44,6 +44,15 @@ Prioritized list of planned features, improvements, and technical debt for **sen
    - ✅ Connected-account indicator and a "disconnect" action in Settings (disconnect clears the token, keeps credentials).
    - ⬜ **Remaining:** verify the live end-to-end consent flow against a real Google client; **empirically verify refresh-token lifetime** (Testing vs Production) and document the setup so users avoid weekly re-auth; optionally show the connected account's email address; consider server-side token revocation on disconnect.
 
+107. **Checkout tier-switch conflict: closing one tier's overlay blocks opening another** — *found by the owner 2026-09-21 during the item 74 live-checkout verification; launch-blocking UX in the purchase path*
+    Opening a tier's checkout server-mints a Paddle transaction and stores a per-user reservation. Closing the overlay leaves that transaction recoverable (`draft`/`ready`), so requesting a *different* tier hits the worker's `billing_checkout_conflict` 409 ("A different subscription checkout is already in progress") until the reservation expires — only the originally opened tier can be reopened (it recovers the same transaction). Observed live: Starter opened and closed, then Pro blocked. Comparing tiers before buying is normal shopping behavior; this turns it into a dead end at the exact moment of purchase intent.
+    *As a user deciding between plans, I want to open one tier's checkout, close it, and open another, so that comparing prices never blocks me from paying.*
+    - Preferred fix: on a checkout request for a different price than the recoverable reservation, **supersede** — cancel the old draft transaction (Paddle allows canceling drafts) / release the reservation, and mint the new tier's transaction. No app-side change required.
+    - Optional companion: app notifies the worker on overlay dismissal to release eagerly (nice-to-have; the supersede path alone fixes the UX).
+    - Same-price reopen keeps today's recovery behavior (no duplicate transactions).
+    - Tests: different-price request supersedes (old transaction canceled, new minted); same-price recovers; concurrent-request race stays safe (reservation semantics preserved); expired-reservation path unchanged.
+    - Verify live after deploy: Starter → close → Pro → close → Unlimited all load their overlays in one session (completes the item 74 §2 checkout verification).
+
 74. **Launch readiness: clean-Mac verification, security pass, and the 1.0 release**
     The last item to close before inviting the public. Every release so far was tested on the maintainer's own configured Mac; a stranger's experience — Gatekeeper, fresh Keychain, no prior Application Support, TCC prompts — has never been observed.
     *As the maintainer, I want proof that a first-time user on a clean Mac gets from download to first draft without help, so that launch day isn't debugging day.*
