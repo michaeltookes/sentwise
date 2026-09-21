@@ -59,7 +59,7 @@ secret. Security finding A-M1.
       they need production-instance test users (or test mode consciously
       enabled) and updated `SENTWISE_LIVE_*` repo secrets before those payloads
       run again.
-- [ ] **`CLERK_AUTHORIZED_PARTIES` stays UNSET** until production native
+- [x] **`CLERK_AUTHORIZED_PARTIES` stays UNSET** until production native
       tokens are confirmed to carry a matching `azp` claim (S-L1 — setting it
       while tokens lack `azp` rejects every session).
 
@@ -97,7 +97,9 @@ Findings A-I4/S-L2; item 91 portal-permission trap.
 - [ ] **[agent]** Verify immediately after the atomic activation: live checkout
       overlay loads for each tier (billing guardrail: NO real purchase),
       webhook signature verifies on a Paddle test notification, portal link
-      resolves. If verification fails, roll both Worker and app back to sandbox
+      resolves. *(2026-09-21: webhook simulation verified — 200 with the live
+      secret; checkout overlays pending owner check; portal-link check deferred
+      until the first real subscription exists — no Paddle customer yet.)* If verification fails, roll both Worker and app back to sandbox
       together.
 
 ## 3. Cloudflare secret hygiene (worker)
