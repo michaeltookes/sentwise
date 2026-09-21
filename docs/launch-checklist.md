@@ -65,16 +65,16 @@ secret. Security finding A-M1.
 
 ## 2. Live Paddle
 
-Vendor account fully verified 2026-09-12. Today: app `PaddleConfig.active =
-sandbox` (sandbox client token + `pri_…` sandbox price ids), worker
-`PADDLE_API_BASE = https://sandbox-api.paddle.com`. Findings A-I4/S-L2; item 91
-portal-permission trap.
+Vendor account fully verified 2026-09-12. Since the 2026-09-20 atomic
+activation, app `PaddleConfig.active = production` (live client token + live
+`pri_…` price ids) and worker `PADDLE_API_BASE = https://api.paddle.com`.
+Findings A-I4/S-L2; item 91 portal-permission trap.
 
 - [x] **[owner]** Paddle **live** dashboard: create the three products/prices
       exactly per `docs/tier-matrix.md` — **Starter $9/mo, Pro $19/mo,
       Unlimited $39/mo**, monthly recurring, USD. Record the three live
       `pri_…` ids.
-- [ ] **[owner]** Checkout settings → approved domains: add `sentwise.ai`
+- [x] **[owner]** Checkout settings → approved domains: add `sentwise.ai`
       (the WKWebView checkout's base origin).
 - [x] **[owner]** Mint the live **API key** — MUST include
       `customer_portal_session.write` (item 91: without it portal-session
@@ -82,19 +82,18 @@ portal-permission trap.
       page). Record it for §3.
 - [x] **[owner]** Create the live **client-side token** (frontend token) for
       Paddle.js.
-- [ ] **[owner]** Notifications → add webhook destination
+- [x] **[owner]** Notifications → add webhook destination
       `https://sentwise-inference.sentwise-service.workers.dev/v1/paddle/webhook`
       subscribed to the same events as sandbox (subscription lifecycle +
       transaction.completed). Record the webhook **secret** for §3.
 - [x] **[agent]** App: add `PaddleConfig.production` (live client token +
-      three live price ids, same `checkoutOrigin`), while keeping
-      `PaddleConfig.active = sandbox`.
-- [ ] **[agent]** Atomic paid-checkout activation, after approved domains and
+      three live price ids, same `checkoutOrigin`) and flip
+      `PaddleConfig.active` to production.
+- [x] **[agent]** Atomic paid-checkout activation, after approved domains and
       webhook setup are checked above: set Worker `PADDLE_API_BASE` →
       `https://api.paddle.com`, `wrangler secret put PADDLE_API_KEY` /
       `PADDLE_WEBHOOK_SECRET` with the live values (TTY), and flip
-      `PaddleConfig.active` to production in the same release window. Until
-      then, keep both the Worker and app on sandbox.
+      `PaddleConfig.active` to production in the same release window.
 - [ ] **[agent]** Verify immediately after the atomic activation: live checkout
       overlay loads for each tier (billing guardrail: NO real purchase),
       webhook signature verifies on a Paddle test notification, portal link
