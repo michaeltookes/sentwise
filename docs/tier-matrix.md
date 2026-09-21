@@ -1,6 +1,6 @@
 # Tier feature matrix
 
-The committed feature-by-tier decision record (backlog item 98; owner decisions 2026-09-16). Pricing surfaces (landing page), the app's plan picker and client-side gates, and the Worker's per-tier caps all implement from this document. Change it only with an owner decision, dated.
+The committed feature-by-tier decision record (backlog item 98; owner decisions 2026-09-16). Pricing surfaces (landing page), the app's plan picker and client-side gates, and the Worker's per-tier caps all implement from this document. Change it only with an owner decision, dated. (Inbox-drafting rows: owner decision 2026-09-21, item 108.)
 
 **Managed inference only** (item 100, 2026-09-16): every tier drafts through the managed proxy — no BYO-key or local-model option exists in the product or pricing. Tiers differentiate on **features + follow-up volume**, all managed.
 
@@ -10,6 +10,9 @@ The committed feature-by-tier decision record (backlog item 98; owner decisions 
 |---|---|---|---|---|
 | Follow-up drafts | 56b trial default | **30 / month** | **120 / month** | **Unlimited (fair-use)** |
 | Connected email accounts | **2** (Pro-equivalent) | **1** | **2** | **up to 5** |
+| Inbox watching (reply-worthiness gate + notifications) — item 108 | ✓ | — | ✓ | ✓ |
+| Inbox drafting mode — item 108 | draft-on-click default; auto opt-in | manual on-demand only | draft-on-click default; auto opt-in (sender rules + budget cap) | draft-on-click default; auto opt-in (sender rules + budget cap) |
+| Post-call transcript follow-ups (auto-draft on ingest) | ✓ | ✓ | ✓ | ✓ |
 | Calling-tool integrations (Zoom/Teams — item 53, not yet built) | per Pro | — | **✓** when shipped | **✓** when shipped |
 | Calendar awareness + unified agenda view (EventKit — item 52, not yet built) | per Pro | — | **✓** when shipped | **✓** when shipped |
 | CRM integrations (item 55, not yet built) | — | — | — | **✓** when shipped |
