@@ -19,6 +19,10 @@ struct PendingDraftCard: View {
 
     private var isBusy: Bool { appState.approvingDraftIDs.contains(draft.identity) }
 
+    /// Whether this is a draft-on-click awaiting-request entry (item 108): no reply
+    /// has been generated yet and clicking Draft is the only action that spends a credit.
+    private var isAwaitingRequest: Bool { draft.isAwaitingDraftRequest }
+
     private var staleReason: StaleThreadReason? { appState.pendingStaleWarnings[draft.identity] }
 
     /// Remaining seconds on this draft's auto-send countdown (item 23), if any.
@@ -65,10 +69,17 @@ struct PendingDraftCard: View {
             HStack(alignment: .top, spacing: 12) {
                 incomingColumn
                 Divider()
-                replyColumn
+                if isAwaitingRequest {
+                    AwaitingRequestReplyColumn()
+                } else {
+                    replyColumn
+                }
             }
             Divider()
-            if let countdownRemaining {
+            if isAwaitingRequest {
+                AwaitingRequestActions(draft: draft, isBusy: isBusy)
+                    .environmentObject(appState)
+            } else if let countdownRemaining {
                 countdownRow(countdownRemaining)
             } else if isQueuedForNetwork {
                 waitingForNetworkRow()
@@ -414,5 +425,59 @@ struct PendingDraftCard: View {
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.08)))
+    }
+}
+
+/// The right column of an awaiting-request card (item 108 draft-on-click): no
+/// reply exists yet, so instead of the editor it explains that drafting happens
+/// on request and spends one of the monthly drafts. A sibling view so
+/// `PendingDraftCard` stays within its type-body length limit.
+struct AwaitingRequestReplyColumn: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Draft on request")
+                .font(.caption).bold()
+                .foregroundStyle(.secondary)
+            Label("Reply-worthy", systemImage: "hand.tap.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+            Text(
+                "Sentwise flagged this as worth a reply but hasn't drafted one yet. "
+                + "Draft a reply when you're ready — it spends one of your monthly drafts."
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The action row of an awaiting-request card (item 108): Draft (generate the
+/// reply on request — the only spend point) and Dismiss (drop it, undrafted).
+struct AwaitingRequestActions: View {
+    let draft: Draft
+    let isBusy: Bool
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        HStack {
+            if isBusy {
+                ProgressView().controlSize(.small)
+            }
+            Spacer()
+            Button("Dismiss", role: .destructive) {
+                appState.dismissAwaitingRequestDraft(draft)
+            }
+            .disabled(isBusy)
+            Button("Draft reply") {
+                Task { await appState.draftAwaitingRequest(draft) }
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(isBusy)
+            .accessibilityIdentifier("awaitingRequestDraftButton")
+            .accessibilityLabel("Draft a reply to this message")
+        }
     }
 }

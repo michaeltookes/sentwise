@@ -53,6 +53,36 @@ extension AppState {
         removeBlockedSenders(offsets.map { senderBlocklist[$0] })
     }
 
+    // MARK: - Auto-draft list (item 108)
+
+    /// Adds a sender/domain to the auto-draft list (item 108): senders that are
+    /// auto-drafted even when the global auto-draft toggle is off. Grows item 18's
+    /// `SenderRule` infrastructure — a separate list from allow/block, so an
+    /// "always draft" allowlist entry is never silently promoted to auto-spend.
+    /// Returns `false` when the input can't form a usable rule.
+    @discardableResult
+    func addAutoDraftSender(_ rawInput: String) -> Bool {
+        guard let rule = SenderRule(rawInput: rawInput) else { return false }
+        var rules = inboxDrafting.autoDraftSenders
+        rules.removeAll { $0.pattern == rule.pattern }
+        rules.append(rule)
+        rules.sort { $0.pattern < $1.pattern }
+        inboxDrafting.autoDraftSenders = rules
+        return true
+    }
+
+    /// Removes the given auto-draft rules and persists the change.
+    func removeAutoDraftSenders(_ rules: [SenderRule]) {
+        guard !rules.isEmpty else { return }
+        let patterns = Set(rules.map(\.pattern))
+        inboxDrafting.autoDraftSenders.removeAll { patterns.contains($0.pattern) }
+    }
+
+    /// Removes auto-draft rules at the given list offsets (SwiftUI `onDelete`).
+    func removeAutoDraftSenders(atOffsets offsets: IndexSet) {
+        removeAutoDraftSenders(offsets.map { inboxDrafting.autoDraftSenders[$0] })
+    }
+
     private func addSenderRule(_ rawInput: String, toAllowlist: Bool) -> Bool {
         guard let rule = SenderRule(rawInput: rawInput) else { return false }
         // A pattern lives on only one list: adding it to one drops the identical

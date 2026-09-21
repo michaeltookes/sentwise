@@ -215,7 +215,21 @@ guardrails:
     - "Add another account"
     - "Add sender to allowlist"
     - "Add sender to blocklist"
+    - "Add sender to auto-draft list"
     - "Add"
+    # Inbox-drafting policy controls (item 108). The awaiting-request "Draft reply"
+    # button GENERATES a reply (spends a managed credit), so it is forbidden by AX id
+    # and by name (the "Draft reply" / "Draft a reply to this message" labels above
+    # already match it). The automatic-drafting toggle, the monthly-cap toggle and its
+    # stepper, and the auto-draft sender-list field all mutate persisted settings, so
+    # they are forbidden by AX id and by their visible labels — open-and-assert only.
+    - "awaitingRequestDraftButton"
+    - "autoDraftToggle"
+    - "autoDraftBudgetToggle"
+    - "autoDraftBudgetStepper"
+    - "Automatically draft replies"
+    - "Cap monthly auto-drafts"
+    - "Always auto-draft"
     - "Switch to"
     - "Remove "
     - "AI provider"
