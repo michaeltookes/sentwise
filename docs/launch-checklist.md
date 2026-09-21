@@ -94,11 +94,11 @@ Findings A-I4/S-L2; item 91 portal-permission trap.
       `https://api.paddle.com`, `wrangler secret put PADDLE_API_KEY` /
       `PADDLE_WEBHOOK_SECRET` with the live values (TTY), and flip
       `PaddleConfig.active` to production in the same release window.
-- [ ] **[agent]** Verify immediately after the atomic activation: live checkout
+- [x] **[agent]** Verify immediately after the atomic activation: live checkout
       overlay loads for each tier (billing guardrail: NO real purchase),
       webhook signature verifies on a Paddle test notification, portal link
       resolves. *(2026-09-21: webhook simulation verified — 200 with the live
-      secret; checkout overlays pending owner check; portal-link check deferred
+      secret; checkout overlays verified 2026-09-21 — all three tiers loaded live prices in one session after the item 107 supersede fix; portal-link check deferred
       until the first real subscription exists — no Paddle customer yet.)* If verification fails, roll both Worker and app back to sandbox
       together.
 
