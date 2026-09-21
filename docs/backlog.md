@@ -66,6 +66,22 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - **Tier placement: ALL tiers (decision pending owner confirmation).** Owner floated Pro+-gating with Starter staying on app passwords; agent recommendation is against — connect friction hits at trial signup before any payment, trial is Pro-equivalent so a trial→Starter conversion would downgrade the user's connection method, and the CASA cost is fixed regardless of who uses it. Differentiate on capability (items 98/99/53/55), not setup ease.
     - Ties to items 3 (parked engine), 32 (current path), 64/75 (app-password mitigation), 31 (Outlook OAuth is a separate, unrestricted-scope story).
 
+105. **Sign-in verify shows a transient error despite succeeding — instrument and pin it down** — *observed by the owner 2026-09-21 during the production-Clerk cutover sign-in*
+    Entering the email code and hitting Verify flashed an error on the Subscription pane, yet the account came up signed in moments later with no further action. Code review shows `completeSignIn` is strictly ordered (verify → mint → finalize; any throw leaves the app signed out), so the error almost certainly surfaced *after* a successful sign-in — most likely a transient `/v1/me` status-refresh failure sharing the same message surface (the observation window overlapped a worker deploy). The unified log carries no managed-account error lines, so today the path cannot be diagnosed after the fact.
+    *As the maintainer, I want sign-in failures and post-sign-in status failures separately visible in logs and in the UI, so that a transient status blip never reads as "my sign-in failed."*
+    - Add redaction-safe error-level `Logger` lines through the managed sign-in path (`completeSignIn` stages, post-finalize status refresh), using `SecretKey.logSafeIdentifier`-style hygiene — no emails/tokens in the unified log.
+    - Unit-test fault injection: verify succeeds, first `/v1/me` refresh throws transiently — assert the pane distinguishes "signed in; status refresh failed, retrying" from a sign-in failure (today both hit the same transient message surface).
+    - Repro harness reality: Prowl hunts are offline (hunt mode cannot exercise live Clerk), and the production instance has no test mode, so a live GUI repro on Lucius needs production test users + mailbox code retrieval — build only if the instrumented logs don't settle it first.
+    - Consider surfacing distinct copy for post-sign-in refresh failures ("Signed in — couldn't load your plan yet, retrying…").
+
+106. **Branded Clerk transactional emails (verification code, security notices)** — *owner request 2026-09-21*
+    The sign-in code and other Clerk-sent emails currently use Clerk's default template and sender identity. Brand them as Sentwise before launch — these are among the first emails a new user ever receives from the product.
+    *As a new user, I want the verification-code email to look like it comes from Sentwise, so that I trust it and recognize it in my inbox.*
+    - Clerk dashboard → Customization → Emails: apply Sentwise branding (owl logo, emerald palette, sender name "Sentwise") to the verification-code template and every other enabled template (sign-in code, password/security notices as applicable).
+    - Sender domain: the production instance's Email DNS records (3/3 verified on sentwise.ai, 2026-09-19) enable sending from the sentwise.ai domain — confirm the from-address reads as Sentwise (e.g. `noreply@clerkmail.sentwise.ai` or the configured equivalent), not clerk.dev.
+    - Send-test each customized template to a real inbox; check rendering in Gmail (light + dark) and Apple Mail, and confirm SPF/DKIM/DMARC pass on the received message.
+    - Mostly dashboard work (owner) with agent-drafted template HTML/copy; no app code expected.
+
 ## Medium Priority
 
 83. **Approval-signal learning loop (accept-as-is / edit / deny → better drafts + smarter filtering)** — *ongoing/strategic; phase 1 is a cheap early slice*
