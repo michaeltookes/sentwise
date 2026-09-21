@@ -95,13 +95,18 @@ extension AppState {
         }
     }
 
-    func stopWatching(account: ConnectedMailAccount?) {
-        guard let account else { stopWatching(); return }
+    func stopWatching(account: ConnectedMailAccount?, cancelCountdowns: Bool = true) {
+        guard let account else {
+            stopWatching(cancelCountdowns: cancelCountdowns)
+            return
+        }
+        if cancelCountdowns {
+            cancelSendCountdowns(forAccountEmail: account.email, includeUnscoped: false)
+        }
         guard account.watchStatus != .idle else { return }
         account.resumeWatchingAfterManagedReauth = false
         setAccountWatchStatus(account, .idle)
         account.watcher?.stop()
-        cancelSendCountdowns(forAccountEmail: account.email, includeUnscoped: false)
     }
 
     /// Starts every background account's watcher that is ready but idle (used at
@@ -134,9 +139,9 @@ extension AppState {
     }
 
     /// Stops every background account's watcher (used on erase/teardown).
-    func stopAllBackgroundWatchers() {
+    func stopAllBackgroundWatchers(cancelCountdowns: Bool = true) {
         for account in backgroundConnectedAccounts {
-            stopWatching(account: account)
+            stopWatching(account: account, cancelCountdowns: cancelCountdowns)
         }
     }
 

@@ -46,8 +46,8 @@ extension AppState {
             return
         }
         policyLogger.info("Stopping inbox watchers; current tier does not permit inbox watching")
-        stopWatching()
-        stopAllBackgroundWatchers()
+        stopWatching(cancelCountdowns: false)
+        stopAllBackgroundWatchers(cancelCountdowns: false)
     }
 
     // MARK: - Draft-on-click vs. automatic drafting
@@ -167,6 +167,7 @@ extension AppState {
                 return
             }
             try replacePendingDraft(draft, with: generated, staleReason: nil)
+            recordDraftActivity(.draftCreated, for: generated)
         } catch {
             approvalError = Self.draftMessage(for: error)
         }

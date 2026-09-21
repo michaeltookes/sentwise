@@ -26,6 +26,30 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
         )
     }
 
+    private func pendingDraft(
+        id: UInt32,
+        account: String = "me@gmail.com",
+        host: String = "imap.gmail.com"
+    ) -> Draft {
+        Draft(
+            id: id,
+            sourceUIDValidity: 10,
+            sourceAccountEmail: account,
+            sourceMailHost: host,
+            sourceMailPort: 993,
+            sourceMailbox: Mailbox.inbox.imapName,
+            sourceSubject: "Subject \(id)",
+            sourceFrom: MailAddress(name: "Alice", email: "alice@x.com"),
+            sourceReplyTo: nil,
+            sourceMessageID: "<\(id)@x.com>",
+            incomingBody: "Please advise.",
+            replySubject: "Re: Subject \(id)",
+            body: "On it.",
+            model: "claude-sonnet-4-6",
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+    }
+
     private func baselineProcessed() -> ProcessedMessages {
         var processed = ProcessedMessages()
         processed.insertBaseline(account: "me@gmail.com", mailbox: .inbox)
@@ -159,6 +183,41 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
         XCTAssertEqual(app.watchStatus, .idle)
     }
 
+    func testLiveDowngradeToStarterStopsWatchersWithoutCancelingSendCountdowns() async {
+        let (app, _, _, _) = makeAppState(plan: .pro)
+        let focusedDraft = pendingDraft(id: 10)
+        let backgroundDraft = pendingDraft(id: 11, account: "side@work.com", host: "imap.work.com")
+        let background = ConnectedMailAccount(
+            email: "side@work.com", host: "imap.work.com", port: 993, appPassword: "side-pw"
+        )
+        app.pendingDrafts = [focusedDraft, backgroundDraft]
+        app.pendingDraftCount = app.pendingDrafts.count
+        app.backgroundConnectedAccounts = [background]
+        app.sendBehavior = .autoSend
+        app.sendDelaySeconds = 30
+        app.sendCountdownTickNanoseconds = 1_000_000_000
+        app.watchStatus = .watching
+        background.watchStatus = .watching
+
+        await app.approveDraft(focusedDraft)
+        await app.approveDraft(backgroundDraft)
+
+        XCTAssertEqual(app.pendingSendCountdowns[focusedDraft.identity], 30)
+        XCTAssertEqual(app.pendingSendCountdowns[backgroundDraft.identity], 30)
+
+        app.managedAccountStatus = ManagedAccountStatus(
+            subscription: ManagedSubscription(plan: .starter, status: .active)
+        )
+        app.enforceInboxWatchingTierGate()
+
+        XCTAssertEqual(app.watchStatus, .idle)
+        XCTAssertEqual(background.watchStatus, .idle)
+        XCTAssertEqual(app.pendingSendCountdowns[focusedDraft.identity], 30)
+        XCTAssertEqual(app.pendingSendCountdowns[backgroundDraft.identity], 30)
+
+        app.cancelAllSendCountdowns()
+    }
+
     // MARK: - Manual drafting stays on Starter
 
     func testStarterKeepsManualOnDemandDrafting() async {
@@ -192,6 +251,7 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
         await app.pollInboxOnce()
         let awaiting = try XCTUnwrap(app.pendingDrafts.first)
         XCTAssertEqual(provider.bodyFetchCallCount, 0)
+        XCTAssertTrue(app.activityEvents.isEmpty)
 
         await app.draftAwaitingRequest(awaiting)
 
@@ -199,6 +259,8 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
         XCTAssertEqual(app.pendingDrafts.count, 1)
         XCTAssertFalse(app.pendingDrafts[0].isAwaitingDraftRequest)
         XCTAssertEqual(app.pendingDrafts[0].body, "On it.")
+        XCTAssertEqual(app.activityEvents.map(\.kind), [.draftCreated])
+        XCTAssertEqual(app.activityEvents.first?.subject, "Subject 1")
     }
 
     // MARK: - Automatic drafting opt-in

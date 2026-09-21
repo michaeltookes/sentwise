@@ -54,4 +54,32 @@ final class LocalDataPurgeFeedbackTests: XCTestCase {
         XCTAssertEqual(app.skippedMessageReasonsByID[retainedSkip.id], .senderBlocklisted)
         XCTAssertNil(app.skippedMessageReasonsByID[purgedSkip.id])
     }
+
+    func testEraseAllClearsInboxDraftingPolicyAndAutoDraftBudgetStore() async {
+        let budgetStore = InMemoryAutoDraftBudgetStore()
+        budgetStore.save(AutoDraftBudgetState(
+            accountKey: "acct-test",
+            windowResetsAt: Date(timeIntervalSince1970: 1_700_000_000),
+            used: 3,
+            capAlertFired: true
+        ))
+        let app = AppState(
+            persistence: AppStateMemoryPersistence(settings: .default),
+            secrets: InMemorySecretStore(),
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: FakeLLMProvider(result: .success(()))
+        )
+        app.inboxDrafting = InboxDraftingSettings(
+            autoDraftEnabled: true,
+            autoDraftSenders: [SenderRule(normalized: "client.com")],
+            monthlyAutoDraftBudget: 7
+        )
+        app.autoDraftBudgetStore = budgetStore
+
+        let result = await app.eraseAllLocalData()
+
+        XCTAssertTrue(result.succeeded)
+        XCTAssertEqual(app.inboxDrafting, InboxDraftingSettings())
+        XCTAssertNil(budgetStore.loadState(for: "acct-test"))
+    }
 }
