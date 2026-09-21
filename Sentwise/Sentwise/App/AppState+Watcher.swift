@@ -333,10 +333,10 @@ extension AppState {
         )
     }
 
-    /// Today's auto-generate-on-reply-worthy path (item 108 opt-in): reserves one
-    /// monthly auto-draft budget slot, then builds a watcher draft, spending a
-    /// managed credit. Reached only when the user has opted into automatic drafting
-    /// and the budget is not spent.
+    /// Today's auto-generate-on-reply-worthy path (item 108 opt-in): builds a
+    /// watcher draft, reserving one monthly auto-draft budget slot immediately
+    /// before each managed draft call attempt. Reached only when the user has opted
+    /// into automatic drafting and the budget is not spent.
     private func autoGenerateWatcherDraft(
         _ message: MailMessage,
         account: ConnectedMailAccount?,
@@ -344,16 +344,6 @@ extension AppState {
         mailbox: Mailbox,
         localDataGeneration: UInt64
     ) async {
-        guard reserveAutoDraftBudgetUsageIfAvailable() else {
-            enqueueAwaitingRequestWatcherEntry(
-                message,
-                account: account,
-                credentials: credentials,
-                mailbox: mailbox,
-                localDataGeneration: localDataGeneration
-            )
-            return
-        }
         let draftProvider = currentDraftLLMConfiguration?.provider
         do {
             // Retry transient fetch/LLM hiccups within the poll (item 27). On
@@ -365,7 +355,12 @@ extension AppState {
                 credentials: credentials,
                 mailbox: mailbox,
                 localDataGeneration: localDataGeneration,
-                bypassModelSkip: senderRuleDecision(for: message) == .forceDraft
+                bypassModelSkip: senderRuleDecision(for: message) == .forceDraft,
+                reserveBeforeLLMCall: { [weak self] in
+                    guard self?.reserveAutoDraftBudgetUsageIfAvailable() == true else {
+                        throw AutoDraftBudgetReservationError.exhausted
+                    }
+                }
             )
             guard isCurrentWatcherPoll(
                 localDataGeneration: localDataGeneration,
@@ -373,6 +368,14 @@ extension AppState {
                 account: account
             ) else { return }
             handleWatcherDraftResult(result, for: message, credentials: credentials, mailbox: mailbox)
+        } catch let error as AutoDraftBudgetReservationError where error == .exhausted {
+            enqueueAwaitingRequestWatcherEntry(
+                message,
+                account: account,
+                credentials: credentials,
+                mailbox: mailbox,
+                localDataGeneration: localDataGeneration
+            )
         } catch {
             guard isCurrentWatcherPoll(
                 localDataGeneration: localDataGeneration,

@@ -4,6 +4,10 @@ import os
 
 private let policyLogger = Logger(subsystem: "com.tookes.Sentwise", category: "InboxDraftingPolicy")
 
+enum AutoDraftBudgetReservationError: Error, Equatable {
+    case exhausted
+}
+
 /// The tier-gated inbox-drafting policy on `AppState` (item 108): the Starter
 /// watcher gate, the draft-on-click default, the opt-in automatic-drafting
 /// decision (global toggle + auto-draft sender list), the monthly auto-draft
@@ -42,16 +46,26 @@ extension AppState {
     /// on-demand drafting from Browse/preview is unaffected.
     func enforceInboxWatchingTierGate() {
         guard !inboxWatchingAllowedForTier else { return }
-        guard watchStatus != .idle || backgroundConnectedAccounts.contains(where: { $0.watchStatus != .idle }) else {
+        guard watchStatus != .idle ||
+                resumeWatchingAfterManagedReauth ||
+                backgroundConnectedAccounts.contains(where: {
+                    $0.watchStatus != .idle || $0.resumeWatchingAfterManagedReauth
+                }) else {
             return
         }
         policyLogger.info("Stopping inbox watchers; current tier does not permit inbox watching")
         let shouldResumeFocusedWatcher = watchStatus == .watching || resumeWatchingAfterManagedReauth
+        let backgroundAccountsToResume = backgroundConnectedAccounts.filter {
+            $0.watchStatus == .watching || $0.resumeWatchingAfterManagedReauth
+        }
         stopWatching(cancelCountdowns: false)
         if shouldResumeFocusedWatcher {
             resumeWatchingAfterManagedReauth = true
         }
         stopAllBackgroundWatchers(cancelCountdowns: false)
+        for account in backgroundAccountsToResume {
+            account.resumeWatchingAfterManagedReauth = true
+        }
     }
 
     // MARK: - Draft-on-click vs. automatic drafting

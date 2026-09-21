@@ -134,7 +134,8 @@ extension AppState {
         requireWatching: Bool = true,
         credentials capturedCredentials: MailAccountCredentials? = nil,
         userSuppliedFacts: UserSuppliedFacts? = nil,
-        localDataGeneration: UInt64? = nil
+        localDataGeneration: UInt64? = nil,
+        reserveBeforeLLMCall: (() throws -> Void)? = nil
     ) async throws -> Draft? {
         guard mailbox.supportsReplyDrafting else {
             throw DraftError.unsupportedSourceMailbox
@@ -156,11 +157,10 @@ extension AppState {
         ) else { return nil }
         let incomingText = MailBodyText.plainText(from: data)
         let context = ReplyContext(
-            senderName: message.from?.name,
-            senderEmail: message.from?.email,
-            subject: message.subject,
-            body: incomingText
+            senderName: message.from?.name, senderEmail: message.from?.email,
+            subject: message.subject, body: incomingText
         )
+        try reserveBeforeLLMCall?()
         let outcome: DraftOutcome
         do {
             outcome = try await makeReplyOutcome(

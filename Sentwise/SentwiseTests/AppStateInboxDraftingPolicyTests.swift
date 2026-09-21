@@ -61,7 +61,8 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
         fetch: Result<[MailMessage], MailError> = .success([]),
         body: Result<Data, MailError> = .success(Data("Please advise.".utf8)),
         completion: Result<LLMResponse, LLMError> = .success(LLMResponse(text: "On it.")),
-        processed: ProcessedMessages? = nil
+        processed: ProcessedMessages? = nil,
+        llm: LLMProviding? = nil
     ) -> (AppState, FakeAppMailProvider, FakeDraftNotifier, AppStateMemoryPersistence) {
         let secrets = InMemorySecretStore(seed: [
             .mailAppPassword: "app-pw",
@@ -78,7 +79,7 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
             processedMessages: processed ?? baselineProcessed()
         )
         let provider = FakeAppMailProvider(result: .success(()), fetchResult: fetch, bodyResult: body)
-        let llm = FakeLLMProvider(result: .success(()), completion: completion)
+        let llm = llm ?? FakeLLMProvider(result: .success(()), completion: completion)
         let notifier = FakeDraftNotifier()
         let appState = AppState(
             persistence: persistence, secrets: secrets, mailProvider: provider, llm: llm, notifier: notifier
@@ -213,6 +214,7 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
         XCTAssertEqual(app.watchStatus, .idle)
         XCTAssertEqual(background.watchStatus, .idle)
         XCTAssertTrue(app.resumeWatchingAfterManagedReauth)
+        XCTAssertTrue(background.resumeWatchingAfterManagedReauth)
         XCTAssertEqual(app.pendingSendCountdowns[focusedDraft.identity], 30)
         XCTAssertEqual(app.pendingSendCountdowns[backgroundDraft.identity], 30)
 
@@ -358,6 +360,31 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
         XCTAssertTrue(app.reserveAutoDraftBudgetUsageIfAvailable())
         XCTAssertFalse(app.reserveAutoDraftBudgetUsageIfAvailable())
 
+        XCTAssertEqual(app.autoDraftUsedThisWindow, 1)
+        XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.hundred])
+    }
+
+    func testRetriedAutoDraftCallStopsWhenFirstAttemptConsumesOnlyBudgetSlot() async {
+        let llm = SequencedTestLLMProvider(completions: [
+            .failure(.transport("timeout")),
+            .success(LLMResponse(text: "On it."))
+        ])
+        let (app, _, notifier, _) = makeAppState(
+            plan: .pro,
+            fetch: .success([message(id: 1)]),
+            llm: llm
+        )
+        app.managedQuota = ManagedQuota(limit: 100, resetsAt: Date().addingTimeInterval(86_400 * 10))
+        app.inboxDrafting.autoDraftEnabled = true
+        app.inboxDrafting.monthlyAutoDraftBudget = 1
+        app.watchStatus = .watching
+
+        await app.pollInboxOnce()
+
+        let completionCount = await llm.completionCount()
+        XCTAssertEqual(completionCount, 1)
+        XCTAssertEqual(app.pendingDrafts.count, 1)
+        XCTAssertTrue(app.pendingDrafts[0].isAwaitingDraftRequest)
         XCTAssertEqual(app.autoDraftUsedThisWindow, 1)
         XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.hundred])
     }

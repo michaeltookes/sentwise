@@ -43,6 +43,32 @@ final class FakeLLMProvider: LLMProviding, @unchecked Sendable {
     }
 }
 
+actor SequencedTestLLMProvider: LLMProviding {
+    private var completions: [Result<LLMResponse, LLMError>]
+    private var completedRequests = 0
+
+    init(completions: [Result<LLMResponse, LLMError>]) {
+        self.completions = completions
+    }
+
+    func testConnection(provider: LLMProviderKind, apiKey: String, model: String, baseURL: String?) async throws {}
+
+    func complete(
+        _ request: LLMRequest,
+        provider: LLMProviderKind,
+        apiKey: String,
+        baseURL: String?
+    ) async throws -> LLMResponse {
+        completedRequests += 1
+        let next = completions.isEmpty
+            ? Result.success(LLMResponse(text: "On it."))
+            : completions.removeFirst()
+        return try next.get()
+    }
+
+    func completionCount() -> Int { completedRequests }
+}
+
 final class SuspendedLLMProvider: LLMProviding, @unchecked Sendable {
     let didStartCompletion = XCTestExpectation(description: "LLM completion started")
     private let lock = NSLock()
