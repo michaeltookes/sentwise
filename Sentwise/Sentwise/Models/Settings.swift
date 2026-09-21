@@ -19,7 +19,7 @@ enum SendBehavior: String, CaseIterable, Equatable {
 struct Settings: Codable, Equatable {
 
     /// The current settings schema version.
-    static let currentSchemaVersion = 22
+    static let currentSchemaVersion = 23
 
     /// Schema version that introduced the persisted onboarding completion flag.
     static let onboardingCompletionSchemaVersion = 6
@@ -100,6 +100,13 @@ struct Settings: Codable, Equatable {
     /// first launch at this version, old managed Clerk credentials are cleared or
     /// durably invalidated so dev-instance tokens never restore as production sign-in.
     static let clerkProductionCutoverSchemaVersion = 22
+
+    /// Schema version that introduced the tier-gated inbox-drafting policy (item
+    /// 108). Purely additive: older files decode `inboxDrafting` to its default
+    /// (auto-drafting OFF), so every existing install on a watcher tier lands on
+    /// draft-on-click rather than silently continuing the pre-108 auto-generate
+    /// behavior, and no allowlist entry is promoted to the auto-draft list.
+    static let inboxDraftingPolicySchemaVersion = 23
 
     /// The default auto-send undo window, in seconds (item 23). Zero disables it.
     static let defaultSendDelaySeconds = 10
@@ -216,6 +223,12 @@ struct Settings: Codable, Equatable {
     /// sweep exactly once at launch and then persists `true` here.
     var hasRunPreGateDraftSweep: Bool
 
+    /// The tier-gated inbox-drafting policy (item 108): the automatic-drafting
+    /// opt-in, the auto-draft sender list, and the optional monthly budget cap.
+    /// Purely additive — older files decode it to its default (auto-drafting off,
+    /// draft-on-click).
+    var inboxDrafting: InboxDraftingSettings
+
     init(
         schemaVersion: Int,
         pollIntervalSeconds: Int,
@@ -242,7 +255,8 @@ struct Settings: Codable, Equatable {
         transcriptWatchedFolderEnabled: Bool = false,
         transcriptWatchedFolderPath: String = "",
         transcriptWatchedFolderSeenSnapshots: [String: WatchedFolderFileSnapshot]? = nil,
-        hasRunPreGateDraftSweep: Bool = false
+        hasRunPreGateDraftSweep: Bool = false,
+        inboxDrafting: InboxDraftingSettings = InboxDraftingSettings()
     ) {
         self.schemaVersion = schemaVersion
         self.pollIntervalSeconds = pollIntervalSeconds
@@ -270,6 +284,7 @@ struct Settings: Codable, Equatable {
         self.transcriptWatchedFolderPath = transcriptWatchedFolderPath
         self.transcriptWatchedFolderSeenSnapshots = transcriptWatchedFolderSeenSnapshots
         self.hasRunPreGateDraftSweep = hasRunPreGateDraftSweep
+        self.inboxDrafting = inboxDrafting
     }
 
     /// Default settings for a fresh install.
@@ -288,6 +303,7 @@ struct Settings: Codable, Equatable {
         case senderAllowlist, senderBlocklist, verboseDiagnosticLogging
         case transcriptWatchedFolderEnabled, transcriptWatchedFolderPath, transcriptWatchedFolderSeenSnapshots
         case hasRunPreGateDraftSweep
+        case inboxDrafting
     }
 
     init(from decoder: Decoder) throws {
@@ -331,6 +347,8 @@ struct Settings: Codable, Equatable {
             )
         hasRunPreGateDraftSweep =
             try container.decodeIfPresent(Bool.self, forKey: .hasRunPreGateDraftSweep) ?? false
+        inboxDrafting =
+            try container.decodeIfPresent(InboxDraftingSettings.self, forKey: .inboxDrafting) ?? InboxDraftingSettings()
     }
 
     /// Returns a copy with values clamped to sane ranges.
@@ -359,6 +377,7 @@ struct Settings: Codable, Equatable {
         copy.savedAccounts = Self.normalizedSavedAccounts(savedAccounts)
         copy.senderAllowlist = Self.dedupedRules(senderAllowlist)
         copy.senderBlocklist = Self.dedupedRules(senderBlocklist)
+        copy.inboxDrafting = inboxDrafting.normalized()
         copy.transcriptWatchedFolderPath = transcriptWatchedFolderPath.trimmingCharacters(in: .whitespacesAndNewlines)
         if copy.transcriptWatchedFolderPath.isEmpty || !copy.transcriptWatchedFolderEnabled {
             copy.transcriptWatchedFolderSeenSnapshots = nil

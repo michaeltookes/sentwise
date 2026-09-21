@@ -51,6 +51,13 @@ extension AppState {
             .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
             .store(in: &cancellables)
 
+        // Inbox-drafting policy (item 108): the auto-draft opt-in, sender list, and
+        // budget cap persist immediately so the very next poll honors the change.
+        $inboxDrafting
+            .dropFirst()
+            .sink { [weak self] _ in self?.saveSettingsAfterPublishedSet() }
+            .store(in: &cancellables)
+
         $llmModel
             .dropFirst()
             .sink { [weak self] model in
@@ -98,7 +105,8 @@ extension AppState {
             transcriptWatchedFolderEnabled: transcriptWatchedFolderEnabled,
             transcriptWatchedFolderPath: transcriptWatchedFolderPath,
             transcriptWatchedFolderSeenSnapshots: transcriptWatchedFolderSeenSnapshots,
-            hasRunPreGateDraftSweep: hasRunPreGateDraftSweep
+            hasRunPreGateDraftSweep: hasRunPreGateDraftSweep,
+            inboxDrafting: inboxDrafting
         )
     }
 
@@ -154,6 +162,7 @@ extension AppState {
         sendBehavior = SendBehavior(rawValue: settings.sendBehavior) ?? .default
         sendDelaySeconds = settings.sendDelaySeconds
         hasRunPreGateDraftSweep = settings.hasRunPreGateDraftSweep
+        inboxDrafting = settings.inboxDrafting
     }
 
     /// Restores persisted review/history state after launch fields are seeded.

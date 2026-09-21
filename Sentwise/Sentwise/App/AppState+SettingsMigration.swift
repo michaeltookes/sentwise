@@ -57,12 +57,48 @@ extension AppState {
             targetSchemaVersion: Settings.clerkProductionCutoverSchemaVersion - 1,
             shouldPersist: false
         )
-        return migratedClerkProductionCutoverSettings(
+        let clerkMigrated = migratedClerkProductionCutoverSettings(
             voiceMigrated,
             originalSchemaVersion: loaded.schemaVersion,
             secrets: secrets,
+            persistence: persistence,
+            targetSchemaVersion: Settings.inboxDraftingPolicySchemaVersion - 1,
+            shouldPersist: false
+        )
+        return migratedInboxDraftingPolicySettings(
+            clerkMigrated,
+            originalSchemaVersion: loaded.schemaVersion,
             persistence: persistence
         )
+    }
+
+    /// Terminal launch migration for the tier-gated inbox-drafting policy (item
+    /// 108). Purely additive and, deliberately, a *no-op on data*: an existing
+    /// install's decoded `inboxDrafting` already defaults to auto-drafting OFF, so
+    /// every watcher-tier install lands on **draft-on-click**, never silently on
+    /// the pre-108 auto-generate behavior it had before. Existing sender-allowlist
+    /// entries are **not** promoted into the auto-draft list — the two lists stay
+    /// separate so "always draft" (bypass the worthiness gate) never becomes
+    /// "always spend without asking". This step only advances the schema version,
+    /// preserving the single-terminal-persist pattern of the launch chain.
+    static func migratedInboxDraftingPolicySettings(
+        _ settings: Settings,
+        originalSchemaVersion: Int,
+        persistence: PersistenceProvider,
+        targetSchemaVersion: Int = Settings.inboxDraftingPolicySchemaVersion,
+        shouldPersist: Bool = true
+    ) -> Settings {
+        guard originalSchemaVersion < Settings.inboxDraftingPolicySchemaVersion else { return settings }
+        var migrated = settings
+        migrated.schemaVersion = targetSchemaVersion
+        if shouldPersist, migrated != settings {
+            do {
+                try persistence.saveSettingsSync(migrated)
+            } catch {
+                logger.error("Failed to persist inbox-drafting-policy migration: \(error.localizedDescription)")
+            }
+        }
+        return migrated
     }
 
     /// Terminal migration for per-account voice profiles (item 99). Attributes the

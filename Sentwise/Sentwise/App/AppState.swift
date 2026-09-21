@@ -39,8 +39,7 @@ final class AppState: ObservableObject {
     var mailHostExplicitlyEditedEmail: String?
     var mailHostExplicitlyEditedBeforeEmail = false
 
-    /// Remembered accounts the user can switch between without re-entry (item 48);
-    /// the active account matches `mailEmail`, each password in its own Keychain item.
+    /// Remembered accounts the user can switch between without re-entry (item 48).
     @Published var savedAccounts: [SavedMailAccount] = []
 
     /// Mailboxes connected concurrently alongside the focused account (item 99).
@@ -390,6 +389,8 @@ final class AppState: ObservableObject {
     let googleOAuthInterestClient: GoogleOAuthInterestRegistering
     /// Durable local "already registered" record so the button isn't re-offered.
     var googleOAuthInterestStore: GoogleOAuthInterestStoring = UserDefaultsGoogleOAuthInterestStore()
+    @Published var inboxDrafting = InboxDraftingSettings() // item 108; see AppState+InboxDraftingPolicy
+    var autoDraftBudgetStore: AutoDraftBudgetStoring = UserDefaultsAutoDraftBudgetStore() // item 108
     /// Set by the menu-bar controller so a notification "open" (or menu click)
     /// surfaces the review window.
     var openReviewHandler: (() -> Void)?

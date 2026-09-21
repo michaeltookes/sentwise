@@ -129,6 +129,18 @@ struct ProcessedMessages: Codable, Equatable {
         baselineUIDs = baselineUIDs.filter { !$0.key.hasPrefix("baseline:\(scopePrefix)") }
     }
 
+    /// Clears the watcher baseline (seed marker, start date, and UID cutoff) for
+    /// one account/mailbox scope, without touching processed-message dedup keys
+    /// (item 108). Used to re-baseline on managed sign-in/reauth so the resumed
+    /// watcher treats "now" as the new start and drops the accumulated backlog
+    /// instead of replaying it.
+    mutating func resetBaseline(account: String, mailbox: Mailbox) {
+        let key = Self.baselineKey(account: account, mailbox: mailbox)
+        baselines.removeAll { $0 == key }
+        baselineStarts.removeValue(forKey: key)
+        baselineUIDs.removeValue(forKey: key)
+    }
+
     /// A stable identity for a message: its Message-ID when present, else a
     /// scoped `UIDVALIDITY:UID` composite (stable within one account/mailbox).
     static func key(for message: MailMessage, account: String, mailbox: Mailbox) -> String {
