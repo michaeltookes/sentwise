@@ -212,6 +212,7 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
 
         XCTAssertEqual(app.watchStatus, .idle)
         XCTAssertEqual(background.watchStatus, .idle)
+        XCTAssertTrue(app.resumeWatchingAfterManagedReauth)
         XCTAssertEqual(app.pendingSendCountdowns[focusedDraft.identity], 30)
         XCTAssertEqual(app.pendingSendCountdowns[backgroundDraft.identity], 30)
 
@@ -326,6 +327,39 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
         XCTAssertEqual(provider.bodyFetchCallCount, 1)
         XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.hundred], "cap surfaces a usage alert once")
         XCTAssertTrue(app.isAutoDraftBudgetExhausted)
+    }
+
+    func testModelSkippedAutoDraftCountsAgainstBudget() async {
+        let modelSkipped = "\(DraftGenerator.notReplyWorthySentinel) This looks automated."
+        let (app, provider, _, _) = makeAppState(
+            plan: .pro,
+            fetch: .success([message(id: 1)]),
+            completion: .success(LLMResponse(text: modelSkipped))
+        )
+        app.managedQuota = ManagedQuota(limit: 100, resetsAt: Date().addingTimeInterval(86_400 * 10))
+        app.inboxDrafting.autoDraftEnabled = true
+        app.inboxDrafting.monthlyAutoDraftBudget = 1
+        app.watchStatus = .watching
+
+        await app.pollInboxOnce()
+
+        XCTAssertTrue(app.pendingDrafts.isEmpty)
+        XCTAssertEqual(app.skippedMessages.map(\.reason), [.notReplyWorthyPerModel])
+        XCTAssertEqual(provider.bodyFetchCallCount, 1)
+        XCTAssertEqual(app.autoDraftUsedThisWindow, 1)
+        XCTAssertTrue(app.isAutoDraftBudgetExhausted)
+    }
+
+    func testAutoDraftBudgetReservationRefusesSecondClaimAtCap() {
+        let (app, _, notifier, _) = makeAppState(plan: .pro)
+        app.managedQuota = ManagedQuota(limit: 100, resetsAt: Date().addingTimeInterval(86_400 * 10))
+        app.inboxDrafting.monthlyAutoDraftBudget = 1
+
+        XCTAssertTrue(app.reserveAutoDraftBudgetUsageIfAvailable())
+        XCTAssertFalse(app.reserveAutoDraftBudgetUsageIfAvailable())
+
+        XCTAssertEqual(app.autoDraftUsedThisWindow, 1)
+        XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.hundred])
     }
 
     func testBudgetCapDoesNotAffectManualDrafting() async {

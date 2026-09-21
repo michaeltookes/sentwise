@@ -46,7 +46,11 @@ extension AppState {
             return
         }
         policyLogger.info("Stopping inbox watchers; current tier does not permit inbox watching")
+        let shouldResumeFocusedWatcher = watchStatus == .watching || resumeWatchingAfterManagedReauth
         stopWatching(cancelCountdowns: false)
+        if shouldResumeFocusedWatcher {
+            resumeWatchingAfterManagedReauth = true
+        }
         stopAllBackgroundWatchers(cancelCountdowns: false)
     }
 
@@ -212,7 +216,8 @@ extension AppState {
         return resetsAt
     }
 
-    /// The count of auto-generated drafts recorded in the current window.
+    /// The count of automatic watcher draft-generation calls recorded in the
+    /// current window.
     var autoDraftUsedThisWindow: Int {
         guard let window = autoDraftBudgetWindow,
               let state = autoDraftBudgetStore.loadState(for: currentManagedUsageAccountKey),
@@ -221,19 +226,32 @@ extension AppState {
         return state.used
     }
 
-    /// Whether auto-drafting has reached its monthly budget and must fall back to
-    /// draft-on-click. `false` when no cap is set or the window is unknown.
+    /// Whether auto-drafting has reached its monthly call budget and must fall
+    /// back to draft-on-click. `false` when no cap is set or the window is unknown.
     var isAutoDraftBudgetExhausted: Bool {
         guard let cap = inboxDrafting.monthlyAutoDraftBudget, autoDraftBudgetWindow != nil else { return false }
         return autoDraftUsedThisWindow >= max(0, cap)
     }
 
-    /// Records one auto-generated draft against the monthly budget. No-op when no
-    /// cap is set or the window is unknown. Manual and transcript drafts never call
-    /// this, so the cap counts only auto-generated drafts.
-    func recordAutoDraftBudgetUsage() {
-        guard inboxDrafting.monthlyAutoDraftBudget != nil, let window = autoDraftBudgetWindow else { return }
-        autoDraftBudgetStore.save(bumpedAutoDraftBudgetState(window: window) { $0.used += 1 })
+    /// Atomically claims one automatic watcher draft-generation slot before the
+    /// LLM call begins. Returning `false` means another watcher already claimed the
+    /// final slot (or the cap was already exhausted), so the caller must fall back
+    /// to draft-on-click without spending.
+    func reserveAutoDraftBudgetUsageIfAvailable() -> Bool {
+        guard let cap = inboxDrafting.monthlyAutoDraftBudget,
+              let window = autoDraftBudgetWindow else {
+            return true
+        }
+        let normalizedCap = max(0, cap)
+        let key = currentManagedUsageAccountKey
+        var state = currentAutoDraftBudgetState(window: window, key: key)
+        guard state.used < normalizedCap else {
+            fireAutoDraftBudgetAlertIfNeeded()
+            return false
+        }
+        state.used += 1
+        autoDraftBudgetStore.save(state)
+        return true
     }
 
     private func fireAutoDraftBudgetAlertIfNeeded() {
@@ -247,15 +265,6 @@ extension AppState {
         fired.capAlertFired = true
         autoDraftBudgetStore.save(fired)
         notifier.notifyUsageAlert(Self.autoDraftBudgetAlert(cap: cap, window: window, accountKey: key))
-    }
-
-    private func bumpedAutoDraftBudgetState(
-        window: Date,
-        _ mutate: (inout AutoDraftBudgetState) -> Void
-    ) -> AutoDraftBudgetState {
-        var state = currentAutoDraftBudgetState(window: window, key: currentManagedUsageAccountKey)
-        mutate(&state)
-        return state
     }
 
     private func currentAutoDraftBudgetState(window: Date, key: String) -> AutoDraftBudgetState {

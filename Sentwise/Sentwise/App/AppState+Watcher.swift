@@ -333,10 +333,10 @@ extension AppState {
         )
     }
 
-    /// Today's auto-generate-on-reply-worthy path (item 108 opt-in): builds a
-    /// watcher draft, spending a managed credit, and counts an enqueued draft
-    /// against the monthly auto-draft budget. Reached only when the user has
-    /// opted into automatic drafting and the budget is not spent.
+    /// Today's auto-generate-on-reply-worthy path (item 108 opt-in): reserves one
+    /// monthly auto-draft budget slot, then builds a watcher draft, spending a
+    /// managed credit. Reached only when the user has opted into automatic drafting
+    /// and the budget is not spent.
     private func autoGenerateWatcherDraft(
         _ message: MailMessage,
         account: ConnectedMailAccount?,
@@ -344,6 +344,16 @@ extension AppState {
         mailbox: Mailbox,
         localDataGeneration: UInt64
     ) async {
+        guard reserveAutoDraftBudgetUsageIfAvailable() else {
+            enqueueAwaitingRequestWatcherEntry(
+                message,
+                account: account,
+                credentials: credentials,
+                mailbox: mailbox,
+                localDataGeneration: localDataGeneration
+            )
+            return
+        }
         let draftProvider = currentDraftLLMConfiguration?.provider
         do {
             // Retry transient fetch/LLM hiccups within the poll (item 27). On
@@ -363,11 +373,6 @@ extension AppState {
                 account: account
             ) else { return }
             handleWatcherDraftResult(result, for: message, credentials: credentials, mailbox: mailbox)
-            // Count only auto-generated drafts that entered the review queue against
-            // the monthly auto-draft budget (item 108).
-            if case .enqueued = result {
-                recordAutoDraftBudgetUsage()
-            }
         } catch {
             guard isCurrentWatcherPoll(
                 localDataGeneration: localDataGeneration,
