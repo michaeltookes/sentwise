@@ -45,9 +45,12 @@ extension AppState {
     /// account and a usable LLM provider must be ready (the LLM is app-global).
     func canWatch(account: ConnectedMailAccount?) -> Bool {
         guard let account else { return canWatch }
+        // Item 108: the tier gate is app-global (keyed off the subscription plan),
+        // so a background account never watches on a tier with no inbox watcher.
         return isConnectedAccount(account.credentials)
             && isLLMConnected
             && currentLLMProviderAllowsRequests
+            && inboxWatchingAllowedForTier
     }
 
     // MARK: - Lifecycle (background accounts delegate the focused case to AppState+Watcher)
@@ -120,6 +123,9 @@ extension AppState {
                 }
                 guard account.watchStatus == .paused || account.watchStatus == .idle,
                       canWatch(account: account) else { continue }
+                // Item 108: re-baseline before resuming so a sign-out-then-sign-in
+                // doesn't replay the accumulated backlog as a draft burst.
+                rebaselineInboxForManagedReauth(account: account)
                 startWatching(account: account)
             } else if account.watchStatus == .idle {
                 startWatchingIfReady(account: account)

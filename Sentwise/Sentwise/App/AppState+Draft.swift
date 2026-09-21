@@ -340,7 +340,11 @@ extension AppState {
             && currentDraftLLMConfiguration == llmConfiguration
     }
 
-    func enqueuePendingDraft(_ draft: Draft) throws {
+    /// Appends a draft to the pending queue, persists, and notifies. `recordActivity`
+    /// is `false` for a draft-on-click awaiting-request entry (item 108) — no reply
+    /// has been generated, so recording "draft created" would be misleading; the
+    /// notification is the signal.
+    func enqueuePendingDraft(_ draft: Draft, recordActivity: Bool = true) throws {
         pendingDrafts.append(draft)
         do {
             try persistence.savePendingDraftsSync(pendingDrafts)
@@ -351,7 +355,9 @@ extension AppState {
             throw error
         }
         notifier.notify(for: draft, sendBehavior: sendBehavior)
-        recordDraftActivity(.draftCreated, for: draft)
+        if recordActivity {
+            recordDraftActivity(.draftCreated, for: draft)
+        }
     }
 
     func isLatestDraftRequest(_ requestGeneration: Int) -> Bool {

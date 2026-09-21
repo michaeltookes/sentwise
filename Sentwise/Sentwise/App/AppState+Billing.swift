@@ -239,6 +239,9 @@ extension AppState {
             return
         }
         resumeWatchingAfterManagedReauth = false
+        // Item 108: re-baseline before resuming so a sign-out-then-sign-in doesn't
+        // replay the whole accumulated backlog as a draft burst.
+        rebaselineInboxForManagedReauth(account: nil)
         startWatching()
     }
 
