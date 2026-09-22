@@ -159,10 +159,13 @@ pass.
 
 ## 5. feedback@sentwise.ai
 
-- [ ] **[owner]** Create the mailbox (Google Workspace user or alias/group
+- [x] **[owner]** Create the mailbox (Google Workspace user or alias/group
       delivering to a monitored inbox) on the sentwise.ai domain.
-- [ ] **[owner]** Send a test from an outside account; confirm receipt +
-      SPF/DKIM pass.
+      *(2026-09-22: `feedback@sentwise.ai` added as an explicit alias on the
+      Support group — groups don't inherit domain-alias addresses
+      automatically, same pattern as `support@sentwise.ai`.)*
+- [x] **[owner]** Send a test from an outside account; confirm receipt +
+      SPF/DKIM pass. *(2026-09-22: outside test delivered to the group.)*
 - [x] **[agent]** Confirm the app's "Report a Problem" (item 36) sends to
       exactly this address. *(2026-09-22: `FeedbackMailComposer.feedbackAddress
       = "feedback@sentwise.ai"` — matches.)*
