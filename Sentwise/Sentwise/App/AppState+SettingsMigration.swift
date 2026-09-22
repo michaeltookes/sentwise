@@ -65,6 +65,11 @@ extension AppState {
             targetSchemaVersion: Settings.inboxDraftingPolicySchemaVersion - 1,
             shouldPersist: false
         )
+        // Keep pre-v22 installs retryable if the Clerk cutover could not durably
+        // clear or mark old credentials before later additive migrations advance.
+        guard clerkMigrated.schemaVersion >= Settings.clerkProductionCutoverSchemaVersion else {
+            return clerkMigrated
+        }
         return migratedInboxDraftingPolicySettings(
             clerkMigrated,
             originalSchemaVersion: loaded.schemaVersion,
