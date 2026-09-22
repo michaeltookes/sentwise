@@ -210,6 +210,7 @@ extension AppState {
     @discardableResult
     func eraseAllLocalData() async -> LocalDataEraseResult {
         invalidateLocalDataOperations()
+        settingsDebouncer.cancel()
         for draft in pendingDrafts {
             notifier.removeNotification(identity: draft.identity)
         }
@@ -306,6 +307,7 @@ extension AppState {
         signatureText = Settings.default.signatureText
         senderAllowlist = Settings.default.senderAllowlist
         senderBlocklist = Settings.default.senderBlocklist
+        inboxDrafting = Settings.default.inboxDrafting
         verboseDiagnosticLogging = Settings.default.verboseDiagnosticLogging
         let disabledLaunchAtLogin = setLaunchAtLogin(false)
         transcriptWatchedFolderEnabled = Settings.default.transcriptWatchedFolderEnabled
@@ -333,6 +335,7 @@ extension AppState {
         subscriptionCacheStore.clearAll()
         usageAlertStore.clearAll()
         googleOAuthInterestStore.clearAll()
+        autoDraftBudgetStore.clearAll()
         cachedSubscriptionSnapshot = nil
         googleOAuthInterestRegistered = false
         isRegisteringGoogleOAuthInterest = false

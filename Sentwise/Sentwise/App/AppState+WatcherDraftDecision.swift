@@ -145,7 +145,8 @@ extension AppState {
         credentials: MailAccountCredentials,
         mailbox: Mailbox,
         localDataGeneration: UInt64,
-        bypassModelSkip: Bool = false
+        bypassModelSkip: Bool = false,
+        reserveBeforeLLMCall: (() throws -> Void)? = nil
     ) async throws -> WatcherDraftResult {
         DiagnosticLog.verbose(
             "Inbox watcher drafting candidate; bypassModelSkip=\(bypassModelSkip)"
@@ -160,7 +161,8 @@ extension AppState {
                 for: message,
                 mailbox: mailbox,
                 credentials: credentials,
-                localDataGeneration: localDataGeneration
+                localDataGeneration: localDataGeneration,
+                reserveBeforeLLMCall: reserveBeforeLLMCall
             ) else {
                 try self.validateWatcherDraftContext(
                     credentials,

@@ -12,10 +12,18 @@ enum PendingDraftRowStatus: Equatable {
     case needsInfo
     /// An authored follow-up (item 51) still needs at least one recipient.
     case addRecipients
+    /// A reply-worthy message awaiting the user's draft request (item 108
+    /// draft-on-click): no reply generated yet, no credit spent.
+    case awaitingRequest
 
-    /// Maps a draft to its row status. Needs-info takes precedence over the
-    /// authored-recipients gate so a flagged authored draft reads as "Needs info".
+    /// Maps a draft to its row status. The awaiting-request state (item 108) takes
+    /// precedence — such an entry has no generated reply at all. Needs-info then
+    /// takes precedence over the authored-recipients gate so a flagged authored
+    /// draft reads as "Needs info".
     static func status(for draft: Draft) -> PendingDraftRowStatus {
+        if draft.isAwaitingDraftRequest {
+            return .awaitingRequest
+        }
         let bodyIsEmpty = draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if draft.needsInfo != nil || (draft.notReplyWorthy != nil && bodyIsEmpty) {
             return .needsInfo
@@ -31,6 +39,7 @@ enum PendingDraftRowStatus: Equatable {
         case .ready: return "Ready"
         case .needsInfo: return "Needs info"
         case .addRecipients: return "Add recipients"
+        case .awaitingRequest: return "Reply-worthy"
         }
     }
 
@@ -39,6 +48,7 @@ enum PendingDraftRowStatus: Equatable {
         case .ready: return "checkmark.circle.fill"
         case .needsInfo: return "exclamationmark.bubble.fill"
         case .addRecipients: return "person.crop.circle.badge.plus"
+        case .awaitingRequest: return "hand.tap.fill"
         }
     }
 
@@ -47,6 +57,7 @@ enum PendingDraftRowStatus: Equatable {
         case .ready: return .green
         case .needsInfo: return .orange
         case .addRecipients: return .accentColor
+        case .awaitingRequest: return .accentColor
         }
     }
 }

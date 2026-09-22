@@ -250,6 +250,8 @@ extension AppState {
         )
         supersedeInFlightManagedAccountStatusRefreshes()
         managedAccountStatus = status
+        enforceInboxWatchingTierGate()
+        resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
         managedAccountStatusIsFresh = false
         cancelScheduledManagedAccountStatusRefresh()
         recordSubscriptionSnapshot(from: status)

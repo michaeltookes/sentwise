@@ -159,10 +159,11 @@ final class SettingsTests: XCTestCase {
     }
 
     func testCurrentAndRecentSchemaVersions() {
-        XCTAssertEqual(Settings.currentSchemaVersion, 22)
+        XCTAssertEqual(Settings.currentSchemaVersion, 23)
         XCTAssertEqual(Settings.byokParkedSchemaVersion, 20)
         XCTAssertEqual(Settings.voicePerAccountSchemaVersion, 21)
         XCTAssertEqual(Settings.clerkProductionCutoverSchemaVersion, 22)
+        XCTAssertEqual(Settings.inboxDraftingPolicySchemaVersion, 23)
         XCTAssertEqual(Settings.preGateDraftSweepSchemaVersion, 18)
         XCTAssertEqual(Settings.managedAccountIDSchemaVersion, 19)
         XCTAssertEqual(Settings.signatureSchemaVersion, 16)

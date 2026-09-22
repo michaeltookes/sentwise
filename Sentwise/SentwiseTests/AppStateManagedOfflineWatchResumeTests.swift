@@ -56,6 +56,71 @@ final class AppStateManagedOfflineWatchResumeTests: XCTestCase {
         appState.stopWatching()
     }
 
+    func testInitialWatchStartPreservesIntentWhenStaleStarterSnapshotRefreshesToPro() async {
+        let llm = StatusLLM()
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+        let reachability = FakeReachabilityMonitor(isOnline: true, hasCurrentPath: true)
+        let appState = makeSignedInAppState(llm: llm, reachability: reachability)
+        appState.mailEmail = "me@gmail.com"
+        appState.mailAppPassword = "app-pw"
+        appState.isAccountConnected = true
+        appState.managedAccountStatus = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .starter, status: .active)
+        )
+
+        appState.startWatchingIfReady()
+
+        XCTAssertEqual(appState.watchStatus, .idle)
+        XCTAssertTrue(appState.resumeWatchingAfterManagedReauth)
+        for _ in 0..<1_000 where appState.watchStatus != .watching {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+
+        XCTAssertGreaterThanOrEqual(llm.fetchCount, 1)
+        XCTAssertEqual(appState.watchStatus, .watching)
+        XCTAssertFalse(appState.resumeWatchingAfterManagedReauth)
+        appState.stopWatching()
+    }
+
+    func testInitialWatchStartPreservesIntentWhenFreshBlockedStatusLaterRecovers() async {
+        let llm = StatusLLM()
+        let reachability = FakeReachabilityMonitor(isOnline: true, hasCurrentPath: true)
+        let appState = makeSignedInAppState(llm: llm, reachability: reachability)
+        appState.mailEmail = "me@gmail.com"
+        appState.mailAppPassword = "app-pw"
+        appState.isAccountConnected = true
+        let pastDue = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .pastDue)
+        )
+        appState.managedAccountStatus = pastDue
+        appState.markManagedAccountStatusFresh(from: pastDue)
+
+        appState.startWatchingIfReady()
+
+        XCTAssertEqual(appState.watchStatus, .idle)
+        XCTAssertTrue(appState.resumeWatchingAfterManagedReauth)
+        XCTAssertEqual(llm.fetchCount, 0)
+
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.watchStatus, .watching)
+        XCTAssertFalse(appState.resumeWatchingAfterManagedReauth)
+        appState.stopWatching()
+    }
+
     private func makeSignedInAppState(
         llm: LLMProviding,
         reachability: NetworkReachabilityMonitoring

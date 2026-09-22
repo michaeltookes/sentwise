@@ -6,15 +6,23 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "InboxWa
 /// Inbox-watcher lifecycle and poll policy on `AppState`. The `InboxWatcher`
 /// owns the timer and sleep/wake handling; this file owns *what a poll does*.
 extension AppState {
-    /// Whether watching can run: mail and a usable LLM provider must both be ready.
+    /// Whether watching can run: mail and a usable LLM provider must both be ready,
+    /// and the subscription tier must permit inbox watching (item 108 — Starter has
+    /// no inbox watcher at all).
     var canWatch: Bool {
-        isAccountConnected && isLLMConnected && currentLLMProviderAllowsRequests
+        isAccountConnected && isLLMConnected && currentLLMProviderAllowsRequests && inboxWatchingAllowedForTier
     }
 
     /// Starts watching if ready — used at launch to auto-resume. Also brings every
     /// background connected account's watcher up (item 99), so all connected
-    /// mailboxes resume together.
+    /// mailboxes resume together. On a tier with no inbox watcher (Starter, item
+    /// 108) this is a silent no-op unless a stale managed status can still refresh
+    /// into an entitled tier.
     func startWatchingIfReady() {
+        guard inboxWatchingAllowedForTier else {
+            waitToStartWatchingAfterManagedLicenseRefreshIfNeeded()
+            return
+        }
         startAllBackgroundWatchersIfReady()
         guard canWatch else {
             waitToStartWatchingAfterManagedLicenseRefreshIfNeeded()
@@ -26,6 +34,9 @@ extension AppState {
 
     /// Begins watching the inbox (schedules polling + an immediate poll).
     func startWatching() {
+        // Item 108: a tier with no inbox watcher (Starter) never starts one, and
+        // never shows the "connect an account/provider" error for a tier reason.
+        guard inboxWatchingAllowedForTier else { return }
         guard canWatch else {
             watchError = "Connect an email account and an AI provider before watching."
             return
@@ -299,8 +310,45 @@ extension AppState {
             credentials: credentials,
             account: account
         ) else { return }
-        let draftProvider = currentDraftLLMConfiguration?.provider
 
+        // Item 108: draft-on-click is the watcher tiers' default. A reply-worthy
+        // message is auto-generated (spending a credit) only when the user opted
+        // in — globally, or for this sender via the auto-draft list — and the
+        // monthly auto-draft budget is not spent. Otherwise it is enqueued as an
+        // undrafted "awaiting request" entry and costs nothing until the user
+        // clicks Draft. The reply-worthiness gate above still ran (tokens only).
+        guard shouldAutoGenerateWatcherDraft(for: message) else {
+            await enqueueAwaitingRequestWatcherEntry(
+                message,
+                account: account,
+                credentials: credentials,
+                mailbox: mailbox,
+                localDataGeneration: localDataGeneration
+            )
+            return
+        }
+
+        await autoGenerateWatcherDraft(
+            message,
+            account: account,
+            credentials: credentials,
+            mailbox: mailbox,
+            localDataGeneration: localDataGeneration
+        )
+    }
+
+    /// Today's auto-generate-on-reply-worthy path (item 108 opt-in): builds a
+    /// watcher draft, reserving one monthly auto-draft budget slot immediately
+    /// before each managed draft call attempt. Reached only when the user has opted
+    /// into automatic drafting and the budget is not spent.
+    private func autoGenerateWatcherDraft(
+        _ message: MailMessage,
+        account: ConnectedMailAccount?,
+        credentials: MailAccountCredentials,
+        mailbox: Mailbox,
+        localDataGeneration: UInt64
+    ) async {
+        let draftProvider = currentDraftLLMConfiguration?.provider
         do {
             // Retry transient fetch/LLM hiccups within the poll (item 27). On
             // exhaustion the message is left unprocessed, so the next poll retries
@@ -311,7 +359,12 @@ extension AppState {
                 credentials: credentials,
                 mailbox: mailbox,
                 localDataGeneration: localDataGeneration,
-                bypassModelSkip: senderRuleDecision(for: message) == .forceDraft
+                bypassModelSkip: senderRuleDecision(for: message) == .forceDraft,
+                reserveBeforeLLMCall: { [weak self] in
+                    guard self?.reserveAutoDraftBudgetUsageIfAvailable() == true else {
+                        throw AutoDraftBudgetReservationError.exhausted
+                    }
+                }
             )
             guard isCurrentWatcherPoll(
                 localDataGeneration: localDataGeneration,
@@ -319,6 +372,14 @@ extension AppState {
                 account: account
             ) else { return }
             handleWatcherDraftResult(result, for: message, credentials: credentials, mailbox: mailbox)
+        } catch let error as AutoDraftBudgetReservationError where error == .exhausted {
+            await enqueueAwaitingRequestWatcherEntry(
+                message,
+                account: account,
+                credentials: credentials,
+                mailbox: mailbox,
+                localDataGeneration: localDataGeneration
+            )
         } catch {
             guard isCurrentWatcherPoll(
                 localDataGeneration: localDataGeneration,

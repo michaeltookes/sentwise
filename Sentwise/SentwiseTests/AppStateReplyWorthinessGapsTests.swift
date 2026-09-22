@@ -62,6 +62,7 @@ final class AppStateReplyWorthinessGapsTests: XCTestCase {
         )
         let llm = FakeLLMProvider(result: .success(()), completion: completion)
         let appState = AppState(persistence: persistence, secrets: secrets, mailProvider: provider, llm: llm)
+        appState.inboxDrafting.autoDraftEnabled = true // item 108: exercise auto-generate pipeline
         return (appState, provider, persistence)
     }
 

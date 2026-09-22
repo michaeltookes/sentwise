@@ -247,6 +247,10 @@ extension AppState {
         // Mirror the full status for the Subscription pane (item 73), even when
         // `quota` is absent on an older Worker build.
         managedAccountStatus = status
+        // Item 108: a live downgrade to a tier with no inbox watcher (Starter)
+        // stops any running watchers. Watcher tiers are unaffected here; the resume
+        // below re-checks `canWatch`, which now includes the tier gate.
+        enforceInboxWatchingTierGate()
         let needsFreshQuota = options.requireQuotaForFreshStatus || statusConfirmsTrackedPlanChange(status)
         if needsFreshQuota && status.quota == nil {
             managedAccountStatusIsFresh = false
@@ -332,6 +336,7 @@ extension AppState {
         let newAccountKey = currentManagedUsageAccountKey
         managedQuotaAccountKeyAliases[previousAccountKey] = newAccountKey
         usageAlertStore.migrateState(from: previousAccountKey, to: newAccountKey)
+        autoDraftBudgetStore.migrateState(from: previousAccountKey, to: newAccountKey)
         googleOAuthInterestStore.migrateRegistration(from: previousAccountKey, to: newAccountKey)
         googleOAuthInterestRegistered = googleOAuthInterestStore.isRegistered(accountKey: newAccountKey)
         if managedQuotaAccountKey == previousAccountKey {

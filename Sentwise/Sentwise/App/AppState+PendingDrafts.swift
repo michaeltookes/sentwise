@@ -11,7 +11,7 @@ private enum RegenerationReplacementError: LocalizedError {
     }
 }
 
-private struct RegenerationSourceMessage {
+struct RegenerationSourceMessage {
     var message: MailMessage
     var mailbox: Mailbox
 }
@@ -59,6 +59,12 @@ extension AppState {
         guard pendingSendCountdowns[draft.identity] == nil else { return nil }
 
         approvalError = nil
+        // A draft-on-click awaiting-request entry (item 108) has no generated reply
+        // yet — the user must click Draft first. It is never dispatchable, even from
+        // a notification "Approve" action.
+        guard !draft.isAwaitingDraftRequest else {
+            throw DraftError.needsUserInput
+        }
         // A flagged draft needs the user's input first — never send or save it,
         // even via a notification "Approve" action in auto-send mode (item 13).
         guard !draft.isFlagged else {
@@ -315,7 +321,7 @@ extension AppState {
         return removalIndex
     }
 
-    private func regenerationSource(
+    func regenerationSource(
         for draft: Draft,
         mailbox: Mailbox,
         credentials: MailAccountCredentials

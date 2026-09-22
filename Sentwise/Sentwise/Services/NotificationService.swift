@@ -321,7 +321,12 @@ final class UserNotificationService: NSObject, DraftNotifying {
         // not `=?UTF-8?Q?…`. Display-only; the stored draft is untouched.
         let subject = MIMEEncodedWord.decode(draft.sourceSubject)
         content.subtitle = subject
-        if let needsInfo = draft.needsInfo {
+        if draft.isAwaitingDraftRequest {
+            // Item 108 draft-on-click: the banner is an offer, not a ready draft —
+            // nothing is generated until the user opens and clicks Draft.
+            content.title = "Reply-worthy: \(sender) — draft a reply?"
+            content.body = "Open Review Drafts to draft a reply on request."
+        } else if let needsInfo = draft.needsInfo {
             content.title = "Reply to \(sender) needs your input"
             content.body = snippet(needsInfo.summary)
         } else if draft.isFlagged, let notReplyWorthy = draft.notReplyWorthy {

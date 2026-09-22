@@ -56,6 +56,7 @@ final class AppStateWatcherReviewFeedbackTests: XCTestCase {
             reachability: reachability ?? FakeReachabilityMonitor()
         )
         appState.retryRunner = .immediate
+        appState.inboxDrafting.autoDraftEnabled = true // item 108: exercise auto-generate pipeline
         return (appState, provider, persistence)
     }
 
@@ -140,6 +141,7 @@ final class AppStateWatcherReviewFeedbackTests: XCTestCase {
             )
         )
         appState.retryRunner = .immediate
+        appState.inboxDrafting.autoDraftEnabled = true // item 108: exercise auto-generate pipeline
         provider.onFirstBodyFetch = {
             await MainActor.run {
                 appState.mailEmail = "new@gmail.com"

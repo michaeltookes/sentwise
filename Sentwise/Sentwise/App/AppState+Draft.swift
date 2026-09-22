@@ -134,7 +134,8 @@ extension AppState {
         requireWatching: Bool = true,
         credentials capturedCredentials: MailAccountCredentials? = nil,
         userSuppliedFacts: UserSuppliedFacts? = nil,
-        localDataGeneration: UInt64? = nil
+        localDataGeneration: UInt64? = nil,
+        reserveBeforeLLMCall: (() throws -> Void)? = nil
     ) async throws -> Draft? {
         guard mailbox.supportsReplyDrafting else {
             throw DraftError.unsupportedSourceMailbox
@@ -156,11 +157,10 @@ extension AppState {
         ) else { return nil }
         let incomingText = MailBodyText.plainText(from: data)
         let context = ReplyContext(
-            senderName: message.from?.name,
-            senderEmail: message.from?.email,
-            subject: message.subject,
-            body: incomingText
+            senderName: message.from?.name, senderEmail: message.from?.email,
+            subject: message.subject, body: incomingText
         )
+        try reserveBeforeLLMCall?()
         let outcome: DraftOutcome
         do {
             outcome = try await makeReplyOutcome(
@@ -340,7 +340,11 @@ extension AppState {
             && currentDraftLLMConfiguration == llmConfiguration
     }
 
-    func enqueuePendingDraft(_ draft: Draft) throws {
+    /// Appends a draft to the pending queue, persists, and notifies. `recordActivity`
+    /// is `false` for a draft-on-click awaiting-request entry (item 108) — no reply
+    /// has been generated, so recording "draft created" would be misleading; the
+    /// notification is the signal.
+    func enqueuePendingDraft(_ draft: Draft, recordActivity: Bool = true) throws {
         pendingDrafts.append(draft)
         do {
             try persistence.savePendingDraftsSync(pendingDrafts)
@@ -351,7 +355,9 @@ extension AppState {
             throw error
         }
         notifier.notify(for: draft, sendBehavior: sendBehavior)
-        recordDraftActivity(.draftCreated, for: draft)
+        if recordActivity {
+            recordDraftActivity(.draftCreated, for: draft)
+        }
     }
 
     func isLatestDraftRequest(_ requestGeneration: Int) -> Bool {

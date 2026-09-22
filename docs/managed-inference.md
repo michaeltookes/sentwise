@@ -231,6 +231,15 @@ once; the full launch chain lives in
 `App/AppState+SettingsMigration.swift` and persists exactly once at the terminal
 step.
 
+**Inbox-drafting policy (item 108):** the terminal step is now
+`AppState.migratedInboxDraftingPolicySettings`, which advances the file to schema
+**23**. It is intentionally a no-op on data — an existing install's decoded
+`inboxDrafting` already defaults to auto-drafting **off**, so every watcher-tier
+install lands on draft-on-click rather than silently continuing the pre-108
+auto-generate behavior, and no sender-allowlist entry is promoted into the
+auto-draft list. It only stamps the schema version, preserving the
+single-terminal-persist pattern.
+
 ## Metering (56b) — app side
 
 The Worker meters a **monthly draft allotment** over a calendar-month UTC window
@@ -240,6 +249,33 @@ with a per-request safety cap; the UI presents a friendly unit (**drafts**).
 Enforcement is **soft** while dogfooding — drafting is never blocked; the
 hard-block + real "buy more" ship with 56c. This repo implements only the
 app-side surfacing + alerts (service half lives in `sentwise-service`).
+
+### Spend semantics — what actually spends a draft (item 108)
+
+A managed draft credit is spent **on every `/v1/draft` call** (the LLM
+generation), regardless of whether the user later approves, edits, or denies the
+result — a denied draft cost the same as a sent one. That made *when the app
+chooses to call `/v1/draft`* a spend-intent decision, which item 108 moved under
+explicit user control (see `docs/tier-matrix.md` and `AppState+InboxDraftingPolicy`):
+
+- **Starter** never runs the inbox watcher, so it never spends a credit
+  unprompted. Its only spend paths are **manual on-demand drafting** (Browse →
+  "draft a reply", one credit per explicit ask) and **transcript follow-ups**.
+- **Pro / Unlimited / Trial** default to **draft-on-click**: a reply-worthy
+  message enqueues an *undrafted* awaiting-request entry and calls `/v1/draft`
+  only when the user clicks Draft. **Automatic drafting** (a `/v1/draft` call per
+  reply-worthy message, the pre-108 behavior) is an opt-in, off by default, with a
+  per-sender/domain auto-draft list and an optional monthly cap on how many of the
+  allotment auto-drafting may spend before it falls back to draft-on-click.
+- **Transcript follow-ups auto-draft on every tier** — dropping a transcript is
+  itself the spend intent.
+
+This is **client-side spend-intent policy**, not a security boundary (accepted
+A-L5 posture, same as the account-count gate): the Worker still meters and
+enforces the allotment on every `/v1/draft` regardless of the client's choice.
+The monthly auto-draft budget counter is app-side bookkeeping keyed to the
+managed allotment window (`ManagedQuota.resetsAt`); it counts only
+auto-generated drafts, never manual or transcript ones.
 
 ### Quota model (`ManagedQuota`, `Services/LLM/ManagedQuota.swift`)
 

@@ -88,6 +88,22 @@ struct OfflineQueuedDraftDispatch: Codable, Equatable {
     }
 }
 
+/// A reply-worthy inbox message the watcher enqueued for the user to draft on
+/// request (item 108 draft-on-click). No reply has been generated yet and no
+/// managed draft credit spent — generation (and the spend) happens only when the
+/// user clicks Draft. The source metadata already carried on the `Draft`
+/// (`id`, `sourceUIDValidity`, `sourceAccountEmail`, `sourceMailbox`,
+/// `sourceFrom`, `sourceReplyTo`, `sourceSubject`, `sourceMessageID`) is enough
+/// to re-fetch the message and generate on demand.
+struct DraftAwaitingRequest: Codable, Equatable {
+    /// When the watcher judged the source message reply-worthy.
+    var detectedAt: Date
+
+    init(detectedAt: Date = Date()) {
+        self.detectedAt = detectedAt
+    }
+}
+
 /// A generated reply draft, associated with the message it replies to so it can
 /// be threaded and sent correctly later (items 9 & 12).
 struct Draft: Codable, Identifiable, Equatable {
@@ -154,6 +170,13 @@ struct Draft: Codable, Identifiable, Equatable {
     /// Once dispatch starts, the intent is marked terminal so relaunch cannot
     /// automatically repeat a send whose post-send persistence failed.
     var offlineQueuedDispatch: OfflineQueuedDraftDispatch?
+
+    /// Set when this entry is a reply-worthy message awaiting the user's explicit
+    /// draft request (item 108 draft-on-click). While set, no reply has been
+    /// generated (`body` is empty) and the entry is never dispatchable — clicking
+    /// Draft replaces it with a generated draft. `nil` for a normally generated
+    /// draft. Optional so existing persisted drafts decode cleanly.
+    var awaitingRequest: DraftAwaitingRequest?
 
     /// Facts the user typed to answer a `NEEDS_INFO` draft (item 85). Carried on
     /// the draft so they persist through the pending queue and a relaunch, and are
@@ -284,7 +307,8 @@ struct Draft: Codable, Identifiable, Equatable {
         replyWorthinessOverrideSource: DraftReplyWorthinessOverrideSource? = nil,
         manualPreview: Bool = false,
         userSuppliedFacts: UserSuppliedFacts? = nil,
-        answeredRedraftCount: Int? = nil
+        answeredRedraftCount: Int? = nil,
+        awaitingRequest: DraftAwaitingRequest? = nil
     ) {
         self.id = id
         self.sourceUIDValidity = sourceUIDValidity
@@ -314,7 +338,13 @@ struct Draft: Codable, Identifiable, Equatable {
         self.followUpContext = followUpContext
         self.userSuppliedFacts = userSuppliedFacts
         self.answeredRedraftCount = answeredRedraftCount
+        self.awaitingRequest = awaitingRequest
     }
+
+    /// Whether this entry is a reply-worthy message awaiting the user's explicit
+    /// draft request (item 108). Such an entry has no generated reply and is never
+    /// dispatchable until the user clicks Draft.
+    var isAwaitingDraftRequest: Bool { awaitingRequest != nil }
 
     /// A stable identity across the pending queue and notifications, scoped by
     /// account/mailbox so the same UID in different mailboxes never collides.

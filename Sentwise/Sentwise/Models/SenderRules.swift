@@ -57,6 +57,15 @@ enum SenderRules {
         }
     }
 
+    /// Whether `senderEmail` matches any rule in `list` (item 108 auto-draft
+    /// list). Reuses the same address/domain specificity and subdomain-boundary
+    /// matching as the allow/blocklist, so `example.com` also matches
+    /// `mail.example.com` and never false-matches a look-alike domain.
+    static func matches(senderEmail: String?, in list: [SenderRule]) -> Bool {
+        guard let sender = SenderIdentity(senderEmail) else { return false }
+        return bestSpecificity(matching: sender, in: list) != nil
+    }
+
     /// The specificity of the strongest rule in `rules` that matches `sender`, or
     /// `nil` when none matches.
     private static func bestSpecificity(matching sender: SenderIdentity, in rules: [SenderRule]) -> Int? {

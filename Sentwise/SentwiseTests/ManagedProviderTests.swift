@@ -334,6 +334,40 @@ final class ManagedProviderTests: XCTestCase {
         XCTAssertEqual(persistence.savedSettingsHistory.map(\.schemaVersion), [Settings.currentSchemaVersion])
     }
 
+    func testFullLaunchMigrationRetriesClerkCutoverBeforeAdvancingInboxDraftingSchema() {
+        let secrets = ManagedProviderFailingRemoveSecretStore(seed: [
+            .managedClientToken: "dev-client",
+            .managedSessionID: "dev-session"
+        ])
+        secrets.failOnRemoveKeys = [.managedClientToken]
+        secrets.failOnSetKeys = [.managedCredentialsInvalidated]
+        let settings = Settings(
+            schemaVersion: Settings.clerkProductionCutoverSchemaVersion - 1,
+            pollIntervalSeconds: 300,
+            llmProvider: "managed",
+            llmModel: "stale-custom-model",
+            llmVerifiedModel: LLMProviderKind.managed.defaultModel,
+            managedAccountEmail: "marcus@example.com",
+            managedAccountID: "clerk-user:user_dev"
+        )
+        let persistence = AppStateMemoryPersistence(settings: settings)
+
+        let migrated = AppState.fullyMigratedSettings(
+            loaded: settings,
+            secrets: secrets,
+            persistence: persistence
+        )
+
+        XCTAssertEqual(migrated.schemaVersion, Settings.clerkProductionCutoverSchemaVersion - 1)
+        XCTAssertEqual(migrated.managedAccountEmail, "marcus@example.com")
+        XCTAssertEqual(migrated.managedAccountID, "clerk-user:user_dev")
+        XCTAssertEqual(migrated.llmModel, "stale-custom-model")
+        XCTAssertEqual(secrets.storedValueIgnoringFailures(for: .managedClientToken), "dev-client")
+        XCTAssertNil(secrets.storedValueIgnoringFailures(for: .managedCredentialsInvalidated))
+        XCTAssertNil(secrets.storedValueIgnoringFailures(for: .managedClerkFrontendAPIBaseURL))
+        XCTAssertEqual(persistence.settingsSaveCount, 0)
+    }
+
     // MARK: - LLMService routing + hunt-mode stub
 
     func testHuntModeReturnsCannedResponseWithoutNetwork() async throws {

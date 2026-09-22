@@ -106,6 +106,7 @@ final class AppStateLocalDataPurgeManagedDeleteTests: XCTestCase {
             llm: llm,
             notifier: notifier
         )
+        app.inboxDrafting.autoDraftEnabled = true // item 108: exercise in-flight watcher draft generation
         return (app, secrets)
     }
 
