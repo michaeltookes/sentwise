@@ -143,13 +143,19 @@ pass.
 
 - [ ] **[owner]** Confirm the private EdDSA key exists offline (password
       manager / offline backup), not only in the build Mac's Keychain.
-- [ ] **[agent]** Verify the shipped `SUPublicEDKey` in Info.plist matches the
+- [x] **[agent]** Verify the shipped `SUPublicEDKey` in Info.plist matches the
       real keypair: `generate_keys -p` (prints the public key for the private
       key in the Keychain) must equal the plist value; then remove the stale
-      "placeholder" doc comment.
+      "placeholder" doc comment. *(2026-09-22: `generate_keys -p` output equals
+      the plist value exactly. No stale comment exists — the Info.plist doc
+      comment already describes the real key (updated 2026-08-14 when it
+      landed); release.sh's "placeholder" references are the active guard that
+      aborts a release on the legacy all-zero key, kept intentionally.)*
 - [ ] **[agent]** Verify the appcast feed URL is HTTPS and signed updates
       validate on a previous-version install (folds into the §6 clean-Mac
-      Sparkle step).
+      Sparkle step). *(2026-09-22 partial: feed URL is HTTPS and resolves 200
+      via the latest-release redirect; signed-update validation deferred to
+      §6.)*
 
 ## 5. feedback@sentwise.ai
 
@@ -157,8 +163,9 @@ pass.
       delivering to a monitored inbox) on the sentwise.ai domain.
 - [ ] **[owner]** Send a test from an outside account; confirm receipt +
       SPF/DKIM pass.
-- [ ] **[agent]** Confirm the app's "Report a Problem" (item 36) sends to
-      exactly this address.
+- [x] **[agent]** Confirm the app's "Report a Problem" (item 36) sends to
+      exactly this address. *(2026-09-22: `FeedbackMailComposer.feedbackAddress
+      = "feedback@sentwise.ai"` — matches.)*
 
 ## 6. Clean-Mac verification run
 
