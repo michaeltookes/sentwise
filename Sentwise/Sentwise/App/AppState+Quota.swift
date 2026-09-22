@@ -336,6 +336,7 @@ extension AppState {
         let newAccountKey = currentManagedUsageAccountKey
         managedQuotaAccountKeyAliases[previousAccountKey] = newAccountKey
         usageAlertStore.migrateState(from: previousAccountKey, to: newAccountKey)
+        autoDraftBudgetStore.migrateState(from: previousAccountKey, to: newAccountKey)
         googleOAuthInterestStore.migrateRegistration(from: previousAccountKey, to: newAccountKey)
         googleOAuthInterestRegistered = googleOAuthInterestStore.isRegistered(accountKey: newAccountKey)
         if managedQuotaAccountKey == previousAccountKey {

@@ -45,10 +45,36 @@ struct AutoDraftBudgetState: Codable, Equatable, Sendable {
 protocol AutoDraftBudgetStoring: AnyObject, Sendable {
     func loadState(for accountKey: String) -> AutoDraftBudgetState?
     func save(_ state: AutoDraftBudgetState)
+    func removeState(for accountKey: String)
     func clearAll()
 }
 
 extension AutoDraftBudgetStoring {
+    /// Preserves auto-draft budget usage when an upgraded signed-in account moves
+    /// from a legacy session-scoped key to its stable Clerk-user key.
+    func migrateState(from oldAccountKey: String, to newAccountKey: String) {
+        guard oldAccountKey != newAccountKey,
+              var oldState = loadState(for: oldAccountKey)
+        else { return }
+
+        oldState.accountKey = newAccountKey
+        guard var existing = loadState(for: newAccountKey) else {
+            save(oldState)
+            removeState(for: oldAccountKey)
+            return
+        }
+
+        if existing.windowResetsAt == oldState.windowResetsAt {
+            existing.used += oldState.used
+            existing.capAlertFired = existing.capAlertFired || oldState.capAlertFired
+            save(existing)
+        } else if oldState.windowResetsAt > existing.windowResetsAt {
+            save(oldState)
+        }
+        removeState(for: oldAccountKey)
+    }
+
+    func removeState(for _: String) {}
     func clearAll() {}
 }
 
@@ -76,6 +102,14 @@ final class UserDefaultsAutoDraftBudgetStore: AutoDraftBudgetStoring, @unchecked
     func save(_ state: AutoDraftBudgetState) {
         var states = loadStates()
         states[state.accountKey] = state
+        let collection = AutoDraftBudgetStateCollection(statesByAccount: states)
+        guard let data = try? JSONEncoder().encode(collection) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    func removeState(for accountKey: String) {
+        var states = loadStates()
+        states.removeValue(forKey: accountKey)
         let collection = AutoDraftBudgetStateCollection(statesByAccount: states)
         guard let data = try? JSONEncoder().encode(collection) else { return }
         defaults.set(data, forKey: key)

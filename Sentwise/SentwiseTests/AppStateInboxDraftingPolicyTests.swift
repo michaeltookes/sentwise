@@ -485,5 +485,6 @@ final class InMemoryAutoDraftBudgetStore: AutoDraftBudgetStoring, @unchecked Sen
     private var states: [String: AutoDraftBudgetState] = [:]
     func loadState(for accountKey: String) -> AutoDraftBudgetState? { states[accountKey] }
     func save(_ state: AutoDraftBudgetState) { states[state.accountKey] = state }
+    func removeState(for accountKey: String) { states.removeValue(forKey: accountKey) }
     func clearAll() { states.removeAll() }
 }
