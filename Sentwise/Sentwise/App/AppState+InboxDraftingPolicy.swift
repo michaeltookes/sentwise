@@ -196,9 +196,11 @@ extension AppState {
         approvingDraftIDs.insert(draft.identity)
         defer { approvingDraftIDs.remove(draft.identity) }
         do {
+            let source = await awaitingDraftSource(for: draft, mailbox: mailbox, credentials: credentials)
+            _ = try draftDispatchCredentialsStillCurrent(credentials, for: draft)
             guard let generated = try await makePendingDraft(
-                for: Self.reconstructedSourceMessage(from: draft),
-                mailbox: mailbox,
+                for: source.message,
+                mailbox: source.mailbox,
                 requireWatching: false,
                 credentials: credentials
             ) else {
@@ -209,6 +211,21 @@ extension AppState {
             recordDraftActivity(.draftCreated, for: generated)
         } catch {
             approvalError = Self.draftMessage(for: error)
+        }
+    }
+
+    private func awaitingDraftSource(
+        for draft: Draft,
+        mailbox: Mailbox,
+        credentials: MailAccountCredentials
+    ) async -> RegenerationSourceMessage {
+        do {
+            return try await regenerationSource(for: draft, mailbox: mailbox, credentials: credentials)
+        } catch {
+            return RegenerationSourceMessage(
+                message: Self.reconstructedSourceMessage(from: draft),
+                mailbox: mailbox
+            )
         }
     }
 

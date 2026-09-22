@@ -11,7 +11,7 @@ private enum RegenerationReplacementError: LocalizedError {
     }
 }
 
-private struct RegenerationSourceMessage {
+struct RegenerationSourceMessage {
     var message: MailMessage
     var mailbox: Mailbox
 }
@@ -321,7 +321,7 @@ extension AppState {
         return removalIndex
     }
 
-    private func regenerationSource(
+    func regenerationSource(
         for draft: Draft,
         mailbox: Mailbox,
         credentials: MailAccountCredentials

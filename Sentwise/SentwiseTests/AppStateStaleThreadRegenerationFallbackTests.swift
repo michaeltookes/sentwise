@@ -105,4 +105,43 @@ final class StaleThreadRegenerationFallbackTests: XCTestCase {
             $0.mailbox == .named("Archive") && hasHeader($0.criteria, field: "Message-ID", value: "orig@x.com")
         })
     }
+
+    func testDraftAwaitingRequestFallsBackToArchiveWhenOriginalMailboxMoved() async {
+        var awaitingDraft = draft()
+        awaitingDraft.body = ""
+        awaitingDraft.awaitingRequest = DraftAwaitingRequest()
+        let movedSource = message(id: 50, subject: "Lunch?", uidValidity: 99, messageID: "<orig@x.com>")
+        let newerReply = message(
+            id: 55,
+            subject: "Updated plan",
+            uidValidity: 99,
+            inReplyTo: "<orig@x.com>",
+            messageID: "<new@x.com>"
+        )
+        let provider = SearchStubMailProvider()
+        provider.searchHandler = { [weak self] mailbox, criteria, _, _ in
+            guard let self else { return nil }
+            if mailbox == .inbox && criteria.subject == "lunch?" { return .empty(offset: 0) }
+            if mailbox == .named("INBOX") { return .empty(offset: 0) }
+            if mailbox == .named("Archive") && self.hasHeader(criteria, field: "Message-ID", value: "orig@x.com") {
+                return self.result([movedSource])
+            }
+            if mailbox == .named("Archive") && self.hasHeader(criteria, field: "In-Reply-To", value: "orig@x.com") {
+                return self.result([newerReply])
+            }
+            return .empty(offset: 0)
+        }
+        let appState = makeAppState(provider: provider, llmText: "Generated archive click reply.")
+        appState.pendingDrafts = [awaitingDraft]
+
+        await appState.draftAwaitingRequest(awaitingDraft)
+
+        XCTAssertEqual(appState.pendingDrafts.count, 1)
+        XCTAssertEqual(appState.pendingDrafts.first?.id, 55)
+        XCTAssertEqual(appState.pendingDrafts.first?.sourceMailbox, "Archive")
+        XCTAssertEqual(appState.pendingDrafts.first?.body, "Generated archive click reply.")
+        XCTAssertFalse(appState.pendingDrafts.first?.isAwaitingDraftRequest ?? true)
+        XCTAssertEqual(provider.lastBodyUID, 55)
+        XCTAssertEqual(provider.lastBodyMailbox, .named("Archive"))
+    }
 }

@@ -146,6 +146,38 @@ final class AppStatePlanManagementFeedbackTests: XCTestCase {
         XCTAssertTrue(background.resumeWatchingAfterManagedReauth)
     }
 
+    func testValidatedUpgradeResumesStoppedInboxWatchers() async {
+        let llm = FeedbackLLM()
+        let reachability = FakeReachabilityMonitor(isOnline: true, hasCurrentPath: false)
+        let appState = makeSignedInAppState(llm: llm, reachability: reachability)
+        let background = ConnectedMailAccount(
+            email: "side@work.com", host: "imap.work.com", port: 993, appPassword: "side-pw"
+        )
+        appState.mailEmail = "me@gmail.com"
+        appState.mailAppPassword = "app-pw"
+        appState.isAccountConnected = true
+        setStatus(appState, plan: .starter, status: .active)
+        appState.resumeWatchingAfterManagedReauth = true
+        appState.backgroundConnectedAccounts = [background]
+        background.resumeWatchingAfterManagedReauth = true
+        defer {
+            appState.stopWatching(account: background)
+            appState.stopWatching()
+            appState.cancelPlanChangeReconciliation()
+            appState.cancelScheduledManagedAccountStatusRefresh()
+        }
+        llm.changeResult = PaddlePlanChange(plan: .pro, status: .active)
+        llm.statusToReturn = status(plan: .starter, status: .active, quota: quota(limit: 30))
+
+        await appState.changePlan(to: .pro, reconcileRetryDelays: [], backgroundReconcileRetryDelays: [])
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
+        XCTAssertEqual(appState.watchStatus, .watching)
+        XCTAssertFalse(appState.resumeWatchingAfterManagedReauth)
+        XCTAssertEqual(background.watchStatus, .watching)
+        XCTAssertFalse(background.resumeWatchingAfterManagedReauth)
+    }
+
     func testAuthoritativeMatchingSubscriptionKeepsPlanChangeConfirmation() async {
         let llm = FeedbackLLM()
         let appState = makeSignedInAppState(llm: llm)
@@ -184,7 +216,11 @@ final class AppStatePlanManagementFeedbackTests: XCTestCase {
         ManagedQuota(used: 1, limit: limit, remaining: limit - 1, resetsAt: Date(), tokenLimit: limit * 10)
     }
 
-    private func makeSignedInAppState(llm: LLMProviding) -> AppState {
+    private func makeSignedInAppState(
+        llm: LLMProviding,
+        reachability: NetworkReachabilityMonitoring? = nil
+    ) -> AppState {
+        let reachability = reachability ?? FakeReachabilityMonitor()
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",
             .managedSessionID: "sess_X"
@@ -201,7 +237,8 @@ final class AppStatePlanManagementFeedbackTests: XCTestCase {
             secrets: secrets,
             mailProvider: FakeAppMailProvider(result: .success(())),
             llm: llm,
-            notifier: FakeDraftNotifier()
+            notifier: FakeDraftNotifier(),
+            reachability: reachability
         )
         appState.subscriptionCacheStore = InMemorySubscriptionCacheStore()
         return appState
