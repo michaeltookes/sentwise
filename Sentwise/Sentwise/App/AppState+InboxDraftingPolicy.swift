@@ -58,11 +58,15 @@ extension AppState {
         let backgroundAccountsToResume = backgroundConnectedAccounts.filter {
             $0.watchStatus == .watching || $0.resumeWatchingAfterManagedReauth
         }
-        stopWatching(cancelCountdowns: false)
+        if watchStatus == .watching {
+            stopWatching(cancelCountdowns: false)
+        }
         if shouldResumeFocusedWatcher {
             resumeWatchingAfterManagedReauth = true
         }
-        stopAllBackgroundWatchers(cancelCountdowns: false)
+        for account in backgroundConnectedAccounts where account.watchStatus == .watching {
+            stopWatching(account: account, cancelCountdowns: false)
+        }
         for account in backgroundAccountsToResume {
             account.resumeWatchingAfterManagedReauth = true
         }
@@ -222,26 +226,34 @@ extension AppState {
 
     // MARK: - Monthly auto-draft budget cap
 
-    /// The current budget window (the managed allotment reset instant), or nil when
-    /// unknown — in which case the cap is not enforced (lenient, like the offline
-    /// tier default), so an unknown window never wrongly strands auto-drafting.
+    /// The current budget window. Managed users share the managed allotment reset;
+    /// BYOK/local users use the local calendar month so the cap remains enforceable.
     private var autoDraftBudgetWindow: Date? {
-        guard let resetsAt = managedQuota?.resetsAt, resetsAt > .distantPast else { return nil }
-        return resetsAt
+        if let resetsAt = managedQuota?.resetsAt, resetsAt > .distantPast {
+            return resetsAt
+        }
+        return Self.localAutoDraftBudgetWindowResetDate()
+    }
+
+    private var autoDraftBudgetAccountKey: String {
+        guard isManagedSignedIn else {
+            return ManagedUsageAccountKey.make(from: "local-auto-draft-budget")
+        }
+        return currentManagedUsageAccountKey
     }
 
     /// The count of automatic watcher draft-generation calls recorded in the
     /// current window.
     var autoDraftUsedThisWindow: Int {
         guard let window = autoDraftBudgetWindow,
-              let state = autoDraftBudgetStore.loadState(for: currentManagedUsageAccountKey),
+              let state = autoDraftBudgetStore.loadState(for: autoDraftBudgetAccountKey),
               state.windowResetsAt == window,
-              state.accountKey == currentManagedUsageAccountKey else { return 0 }
+              state.accountKey == autoDraftBudgetAccountKey else { return 0 }
         return state.used
     }
 
     /// Whether auto-drafting has reached its monthly call budget and must fall
-    /// back to draft-on-click. `false` when no cap is set or the window is unknown.
+    /// back to draft-on-click. `false` when no cap is set.
     var isAutoDraftBudgetExhausted: Bool {
         guard let cap = inboxDrafting.monthlyAutoDraftBudget, autoDraftBudgetWindow != nil else { return false }
         return autoDraftUsedThisWindow >= max(0, cap)
@@ -257,7 +269,7 @@ extension AppState {
             return true
         }
         let normalizedCap = max(0, cap)
-        let key = currentManagedUsageAccountKey
+        let key = autoDraftBudgetAccountKey
         var state = currentAutoDraftBudgetState(window: window, key: key)
         guard state.used < normalizedCap else {
             fireAutoDraftBudgetAlertIfNeeded()
@@ -272,7 +284,7 @@ extension AppState {
         guard !ProwlHuntRuntime.current.isEnabled,
               let window = autoDraftBudgetWindow,
               let cap = inboxDrafting.monthlyAutoDraftBudget else { return }
-        let key = currentManagedUsageAccountKey
+        let key = autoDraftBudgetAccountKey
         let state = currentAutoDraftBudgetState(window: window, key: key)
         guard !state.capAlertFired else { return }
         var fired = state
@@ -288,6 +300,17 @@ extension AppState {
             return existing
         }
         return AutoDraftBudgetState(accountKey: key, windowResetsAt: window)
+    }
+
+    private static func localAutoDraftBudgetWindowResetDate(now: Date = Date()) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let components = calendar.dateComponents([.year, .month], from: now)
+        guard let monthStart = calendar.date(from: components),
+              let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthStart) else {
+            return now.addingTimeInterval(31 * 86_400)
+        }
+        return nextMonth
     }
 
     static func autoDraftBudgetAlert(cap: Int, window: Date, accountKey: String) -> UsageAlert {

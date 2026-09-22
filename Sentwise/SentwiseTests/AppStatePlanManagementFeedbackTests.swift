@@ -124,6 +124,28 @@ final class AppStatePlanManagementFeedbackTests: XCTestCase {
         XCTAssertNil(appState.pendingPlanChangeReconciliation)
     }
 
+    func testValidatedStarterPlanChangeEnforcesInboxTierGate() async {
+        let llm = FeedbackLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        let background = ConnectedMailAccount(
+            email: "side@work.com", host: "imap.work.com", port: 993, appPassword: "side-pw"
+        )
+        setStatus(appState, plan: .pro, status: .active)
+        appState.watchStatus = .watching
+        appState.backgroundConnectedAccounts = [background]
+        background.watchStatus = .watching
+        llm.changeResult = PaddlePlanChange(plan: .starter, status: .active)
+        llm.statusToReturn = status(plan: .pro, status: .active, quota: quota(limit: 120))
+
+        await appState.changePlan(to: .starter, reconcileRetryDelays: [], backgroundReconcileRetryDelays: [])
+
+        XCTAssertEqual(appState.currentSubscriptionPlanTier, .starter)
+        XCTAssertEqual(appState.watchStatus, .idle)
+        XCTAssertEqual(background.watchStatus, .idle)
+        XCTAssertTrue(appState.resumeWatchingAfterManagedReauth)
+        XCTAssertTrue(background.resumeWatchingAfterManagedReauth)
+    }
+
     func testAuthoritativeMatchingSubscriptionKeepsPlanChangeConfirmation() async {
         let llm = FeedbackLLM()
         let appState = makeSignedInAppState(llm: llm)
