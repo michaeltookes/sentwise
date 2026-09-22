@@ -77,10 +77,29 @@ final class InboxDraftingReviewFeedbackTests: XCTestCase {
         XCTAssertEqual(app.pendingDrafts.count, 2)
         XCTAssertEqual(app.pendingDrafts.filter { !$0.isAwaitingDraftRequest }.count, 1)
         XCTAssertEqual(app.pendingDrafts.filter(\.isAwaitingDraftRequest).count, 1)
-        XCTAssertEqual(provider.bodyFetchCallCount, 1)
+        XCTAssertEqual(app.pendingDrafts.first(where: \.isAwaitingDraftRequest)?.incomingBody, "Please advise.")
+        XCTAssertEqual(provider.bodyFetchCallCount, 2)
         XCTAssertEqual(app.autoDraftUsedThisWindow, 1)
         XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.hundred])
         XCTAssertTrue(app.isAutoDraftBudgetExhausted)
+    }
+
+    func testManagedQuotaWindowPreservesFallbackBudgetUsage() {
+        let (app, _, notifier) = makeAppState(plan: .pro)
+        app.isManagedSignedIn = true
+        app.managedAccountID = "user_marcus"
+        app.managedQuota = nil
+        app.inboxDrafting.monthlyAutoDraftBudget = 1
+
+        XCTAssertTrue(app.reserveAutoDraftBudgetUsageIfAvailable())
+        XCTAssertEqual(app.autoDraftUsedThisWindow, 1)
+
+        app.managedQuota = ManagedQuota(limit: 100, resetsAt: Date().addingTimeInterval(86_400 * 10))
+
+        XCTAssertEqual(app.autoDraftUsedThisWindow, 1)
+        XCTAssertTrue(app.isAutoDraftBudgetExhausted)
+        XCTAssertFalse(app.reserveAutoDraftBudgetUsageIfAvailable())
+        XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.hundred])
     }
 
     func testLiveDowngradeKeepsUserPausedBackgroundWatchersPaused() {

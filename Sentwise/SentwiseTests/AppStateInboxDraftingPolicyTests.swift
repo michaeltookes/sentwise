@@ -241,9 +241,9 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
 
         XCTAssertEqual(app.pendingDrafts.count, 1)
         XCTAssertTrue(app.pendingDrafts[0].isAwaitingDraftRequest)
+        XCTAssertEqual(app.pendingDrafts[0].incomingBody, "Please advise.")
         XCTAssertTrue(app.pendingDrafts[0].body.isEmpty)
-        // No generation happened — the credit is not spent until the user clicks.
-        XCTAssertEqual(provider.bodyFetchCallCount, 0)
+        XCTAssertEqual(provider.bodyFetchCallCount, 1, "body is fetched only for Review Drafts preview")
         // The notification is worded as an offer (an awaiting entry).
         XCTAssertEqual(notifier.notifiedDrafts.last?.isAwaitingDraftRequest, true)
     }
@@ -253,12 +253,12 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
         app.watchStatus = .watching
         await app.pollInboxOnce()
         let awaiting = try XCTUnwrap(app.pendingDrafts.first)
-        XCTAssertEqual(provider.bodyFetchCallCount, 0)
+        XCTAssertEqual(provider.bodyFetchCallCount, 1)
         XCTAssertTrue(app.activityEvents.isEmpty)
 
         await app.draftAwaitingRequest(awaiting)
 
-        XCTAssertEqual(provider.bodyFetchCallCount, 1, "clicking Draft generates exactly once")
+        XCTAssertEqual(provider.bodyFetchCallCount, 2, "clicking Draft performs one additional generation fetch")
         XCTAssertEqual(app.pendingDrafts.count, 1)
         XCTAssertFalse(app.pendingDrafts[0].isAwaitingDraftRequest)
         XCTAssertEqual(app.pendingDrafts[0].body, "On it.")
@@ -305,7 +305,8 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
 
         XCTAssertEqual(app.pendingDrafts.count, 1)
         XCTAssertTrue(app.pendingDrafts[0].isAwaitingDraftRequest, "unlisted sender stays draft-on-click")
-        XCTAssertEqual(provider.bodyFetchCallCount, 0)
+        XCTAssertEqual(app.pendingDrafts[0].incomingBody, "Please advise.")
+        XCTAssertEqual(provider.bodyFetchCallCount, 1)
     }
 
     // MARK: - Monthly budget cap
@@ -326,7 +327,8 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
         let awaiting = app.pendingDrafts.filter { $0.isAwaitingDraftRequest }
         XCTAssertEqual(generated.count, 1, "only the budget's worth auto-generates")
         XCTAssertEqual(awaiting.count, 1, "the rest fall back to draft-on-click")
-        XCTAssertEqual(provider.bodyFetchCallCount, 1)
+        XCTAssertEqual(awaiting.first?.incomingBody, "Please advise.")
+        XCTAssertEqual(provider.bodyFetchCallCount, 2)
         XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.hundred], "cap surfaces a usage alert once")
         XCTAssertTrue(app.isAutoDraftBudgetExhausted)
     }

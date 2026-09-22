@@ -314,7 +314,7 @@ extension AppState {
         // undrafted "awaiting request" entry and costs nothing until the user
         // clicks Draft. The reply-worthiness gate above still ran (tokens only).
         guard shouldAutoGenerateWatcherDraft(for: message) else {
-            enqueueAwaitingRequestWatcherEntry(
+            await enqueueAwaitingRequestWatcherEntry(
                 message,
                 account: account,
                 credentials: credentials,
@@ -369,7 +369,7 @@ extension AppState {
             ) else { return }
             handleWatcherDraftResult(result, for: message, credentials: credentials, mailbox: mailbox)
         } catch let error as AutoDraftBudgetReservationError where error == .exhausted {
-            enqueueAwaitingRequestWatcherEntry(
+            await enqueueAwaitingRequestWatcherEntry(
                 message,
                 account: account,
                 credentials: credentials,

@@ -102,7 +102,8 @@ extension AppState {
     func enqueueAwaitingRequestDraft(
         for message: MailMessage,
         credentials: MailAccountCredentials,
-        mailbox: Mailbox
+        mailbox: Mailbox,
+        incomingBody: String? = nil
     ) throws {
         let entry = Draft(
             id: message.id,
@@ -115,6 +116,7 @@ extension AppState {
             sourceFrom: message.from,
             sourceReplyTo: message.replyTo,
             sourceMessageID: message.messageID,
+            incomingBody: incomingBody,
             replySubject: Self.replySubject(for: message.subject),
             body: "",
             model: "",
@@ -136,14 +138,29 @@ extension AppState {
         credentials: MailAccountCredentials,
         mailbox: Mailbox,
         localDataGeneration: UInt64
-    ) {
+    ) async {
+        guard isCurrentWatcherPoll(
+            localDataGeneration: localDataGeneration,
+            credentials: credentials,
+            account: account
+        ) else { return }
+        let incomingBody = await awaitingRequestIncomingBody(
+            for: message,
+            credentials: credentials,
+            mailbox: mailbox
+        )
         guard isCurrentWatcherPoll(
             localDataGeneration: localDataGeneration,
             credentials: credentials,
             account: account
         ) else { return }
         do {
-            try enqueueAwaitingRequestDraft(for: message, credentials: credentials, mailbox: mailbox)
+            try enqueueAwaitingRequestDraft(
+                for: message,
+                credentials: credentials,
+                mailbox: mailbox,
+                incomingBody: incomingBody
+            )
             markProcessed(message, account: credentials.email, mailbox: mailbox)
             DiagnosticLog.verbose("Inbox watcher enqueued reply-worthy message for draft-on-click")
         } catch {
@@ -245,10 +262,8 @@ extension AppState {
     /// The count of automatic watcher draft-generation calls recorded in the
     /// current window.
     var autoDraftUsedThisWindow: Int {
-        guard let window = autoDraftBudgetWindow,
-              let state = autoDraftBudgetStore.loadState(for: autoDraftBudgetAccountKey),
-              state.windowResetsAt == window,
-              state.accountKey == autoDraftBudgetAccountKey else { return 0 }
+        guard let window = autoDraftBudgetWindow else { return 0 }
+        let state = currentAutoDraftBudgetState(window: window, key: autoDraftBudgetAccountKey)
         return state.used
     }
 
@@ -299,7 +314,30 @@ extension AppState {
            existing.accountKey == key {
             return existing
         }
+        if let migrated = managedAutoDraftBudgetStateMigratedToKnownWindow(window: window, key: key) {
+            autoDraftBudgetStore.save(migrated)
+            return migrated
+        }
         return AutoDraftBudgetState(accountKey: key, windowResetsAt: window)
+    }
+
+    private func managedAutoDraftBudgetStateMigratedToKnownWindow(
+        window: Date,
+        key: String
+    ) -> AutoDraftBudgetState? {
+        guard isManagedSignedIn,
+              managedQuota?.resetsAt == window,
+              let existing = autoDraftBudgetStore.loadState(for: key),
+              existing.accountKey == key,
+              existing.windowResetsAt == Self.localAutoDraftBudgetWindowResetDate() else {
+            return nil
+        }
+        return AutoDraftBudgetState(
+            accountKey: key,
+            windowResetsAt: window,
+            used: existing.used,
+            capAlertFired: existing.capAlertFired
+        )
     }
 
     private static func localAutoDraftBudgetWindowResetDate(now: Date = Date()) -> Date {
@@ -322,6 +360,25 @@ extension AppState {
                 + "you to click Draft until your allotment resets.",
             threshold: .hundred
         )
+    }
+
+    private func awaitingRequestIncomingBody(
+        for message: MailMessage,
+        credentials: MailAccountCredentials,
+        mailbox: Mailbox
+    ) async -> String? {
+        do {
+            let data = try await mailProvider.fetchBodyText(
+                credentials,
+                mailbox: mailbox,
+                uid: message.id,
+                expectedUIDValidity: message.uidValidity
+            )
+            return Self.truncatedIncomingBody(MailBodyText.plainText(from: data))
+        } catch {
+            policyLogger.error("Failed to fetch awaiting-request body: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     // MARK: - Reauth re-baseline
