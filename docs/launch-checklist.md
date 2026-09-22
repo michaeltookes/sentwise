@@ -114,16 +114,25 @@ pass.
 > verify afterwards by exercising the code path (e.g. webhook 401→200), not
 > just `wrangler secret list`.
 
-- [ ] **[owner]** Rotate/confirm `ADMIN_TOKEN` with real entropy (e.g.
-      `openssl rand -base64 32`).
-- [ ] **[owner]** Decide `ANALYTICS_HASH_KEY` (S-I2): setting it upgrades the
+- [x] **[owner]** Rotate/confirm `ADMIN_TOKEN` with real entropy (e.g.
+      `openssl rand -base64 32`). *(2026-09-22: rotated via
+      `openssl rand -base64 32 | npx wrangler secret put`.)*
+- [x] **[owner]** Decide `ANALYTICS_HASH_KEY` (S-I2): setting it upgrades the
       analytics pseudonym to keyed HMAC but breaks hash continuity with
       existing rows. Recommended: set it now, pre-launch, while history is
-      worthless.
-- [ ] **[owner]** Confirm `ANTHROPIC_API_KEY` is the production key under the
-      zero-data-retention agreement.
-- [ ] **[agent]** After all secrets: verify each path live (Clerk lookup,
-      draft call, webhook verify, `/admin/margin` auth).
+      worthless. *(2026-09-22: set, same method.)*
+- [x] **[owner]** Confirm `ANTHROPIC_API_KEY` is the production key under the
+      zero-data-retention agreement. *(2026-09-22: confirmed in console —
+      live key identified via per-key usage, ZDR org; app holds no Anthropic
+      key by design.)*
+- [x] **[agent]** After all secrets: verify each path live (Clerk lookup,
+      draft call, webhook verify, `/admin/margin` auth). *(2026-09-22:
+      `/admin/margin` 401 on missing/empty/garbage bearer — 401-not-404 proves
+      `ADMIN_TOKEN` set and non-empty; unsigned webhook POST 401 (signed
+      simulation 200 verified 2026-09-21); garbage JWT on `/v1/me` 401; Clerk
+      accept path proven by production sign-in, draft path + Anthropic key
+      proven by live draft traffic post-cutover. Owner 200-path check of
+      `/admin/margin` with the real token: pending, non-blocking.)*
 - [ ] **Decision recorded:** `ENFORCEMENT_MODE` stays `"soft"` for paid tiers;
       trials are hard-enforced in code regardless (S-M2 remediation). Flip to
       `"hard"` only by owner decision after 56b data.
