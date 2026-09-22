@@ -141,8 +141,10 @@ pass.
 
 ## 4. Sparkle update key (A-I3)
 
-- [ ] **[owner]** Confirm the private EdDSA key exists offline (password
+- [x] **[owner]** Confirm the private EdDSA key exists offline (password
       manager / offline backup), not only in the build Mac's Keychain.
+      *(2026-09-22: exported via `generate_keys -x`, stored in password
+      manager, file deleted.)*
 - [x] **[agent]** Verify the shipped `SUPublicEDKey` in Info.plist matches the
       real keypair: `generate_keys -p` (prints the public key for the private
       key in the Keychain) must equal the plist value; then remove the stale
