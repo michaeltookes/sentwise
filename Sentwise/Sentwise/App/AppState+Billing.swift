@@ -219,8 +219,7 @@ extension AppState {
 
     func waitToStartWatchingAfterManagedLicenseRefreshIfNeeded() {
         guard watchStatus == .idle,
-              shouldResumeWatchingAfterManagedLicenseRecovery,
-              !managedAccountStatusIsFresh else {
+              shouldResumeWatchingAfterManagedLicenseRecovery else {
             return
         }
         resumeWatchingAfterManagedReauth = true

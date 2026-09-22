@@ -88,6 +88,39 @@ final class AppStateManagedOfflineWatchResumeTests: XCTestCase {
         appState.stopWatching()
     }
 
+    func testInitialWatchStartPreservesIntentWhenFreshBlockedStatusLaterRecovers() async {
+        let llm = StatusLLM()
+        let reachability = FakeReachabilityMonitor(isOnline: true, hasCurrentPath: true)
+        let appState = makeSignedInAppState(llm: llm, reachability: reachability)
+        appState.mailEmail = "me@gmail.com"
+        appState.mailAppPassword = "app-pw"
+        appState.isAccountConnected = true
+        let pastDue = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .pastDue)
+        )
+        appState.managedAccountStatus = pastDue
+        appState.markManagedAccountStatusFresh(from: pastDue)
+
+        appState.startWatchingIfReady()
+
+        XCTAssertEqual(appState.watchStatus, .idle)
+        XCTAssertTrue(appState.resumeWatchingAfterManagedReauth)
+        XCTAssertEqual(llm.fetchCount, 0)
+
+        llm.statusToReturn = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .pro, status: .active)
+        )
+        await appState.refreshManagedQuota()
+
+        XCTAssertEqual(appState.watchStatus, .watching)
+        XCTAssertFalse(appState.resumeWatchingAfterManagedReauth)
+        appState.stopWatching()
+    }
+
     private func makeSignedInAppState(
         llm: LLMProviding,
         reachability: NetworkReachabilityMonitoring
