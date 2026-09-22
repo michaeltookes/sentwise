@@ -102,6 +102,30 @@ final class InboxDraftingReviewFeedbackTests: XCTestCase {
         XCTAssertEqual(notifier.usageAlerts.map(\.threshold), [.hundred])
     }
 
+    func testExpiredManagedQuotaWindowDoesNotKeepBudgetExhausted() {
+        let (app, _, notifier) = makeAppState(plan: .pro)
+        app.isManagedSignedIn = true
+        app.managedAccountID = "user_marcus"
+        let expiredWindow = Date().addingTimeInterval(-60)
+        let accountKey = app.currentManagedUsageAccountKey
+        app.managedQuota = ManagedQuota(limit: 100, resetsAt: expiredWindow)
+        app.inboxDrafting.monthlyAutoDraftBudget = 1
+        app.autoDraftBudgetStore.save(AutoDraftBudgetState(
+            accountKey: accountKey,
+            windowResetsAt: expiredWindow,
+            used: 1,
+            capAlertFired: true
+        ))
+
+        XCTAssertEqual(app.autoDraftUsedThisWindow, 0)
+        XCTAssertFalse(app.isAutoDraftBudgetExhausted)
+        XCTAssertTrue(app.reserveAutoDraftBudgetUsageIfAvailable())
+
+        XCTAssertEqual(app.autoDraftUsedThisWindow, 1)
+        XCTAssertTrue(app.isAutoDraftBudgetExhausted)
+        XCTAssertTrue(notifier.usageAlerts.isEmpty)
+    }
+
     func testLiveDowngradeKeepsUserPausedBackgroundWatchersPaused() {
         let (app, _, _) = makeAppState(plan: .pro)
         let pausedBackground = ConnectedMailAccount(

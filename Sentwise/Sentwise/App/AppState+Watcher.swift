@@ -16,9 +16,13 @@ extension AppState {
     /// Starts watching if ready — used at launch to auto-resume. Also brings every
     /// background connected account's watcher up (item 99), so all connected
     /// mailboxes resume together. On a tier with no inbox watcher (Starter, item
-    /// 108) this is a silent no-op — no watcher, no license-refresh wait.
+    /// 108) this is a silent no-op unless a stale managed status can still refresh
+    /// into an entitled tier.
     func startWatchingIfReady() {
-        guard inboxWatchingAllowedForTier else { return }
+        guard inboxWatchingAllowedForTier else {
+            waitToStartWatchingAfterManagedLicenseRefreshIfNeeded()
+            return
+        }
         startAllBackgroundWatchersIfReady()
         guard canWatch else {
             waitToStartWatchingAfterManagedLicenseRefreshIfNeeded()

@@ -22,7 +22,7 @@ private final class AutoDraftBudgetMigrationLLMProvider: LLMProviding, @unchecke
 
 @MainActor
 final class AppStateAutoDraftBudgetMigrationTests: XCTestCase {
-    private let window = ManagedQuotaDate.date(from: "2025-09-01T00:00:00Z")!
+    private let window = Date().addingTimeInterval(86_400 * 10)
 
     func testRefreshManagedQuotaBackfillsStableAccountIDAndMigratesAutoDraftBudgetState() async {
         let oldAccountKey = ManagedUsageAccountKey.make(from: "clerk-session:sess_legacy")

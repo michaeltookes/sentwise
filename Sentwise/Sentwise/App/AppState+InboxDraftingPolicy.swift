@@ -263,7 +263,7 @@ extension AppState {
     /// The current budget window. Managed users share the managed allotment reset;
     /// BYOK/local users use the local calendar month so the cap remains enforceable.
     private var autoDraftBudgetWindow: Date? {
-        if let resetsAt = managedQuota?.resetsAt, resetsAt > .distantPast {
+        if let resetsAt = managedQuota?.resetsAt, resetsAt > Date() {
             return resetsAt
         }
         return Self.localAutoDraftBudgetWindowResetDate()
