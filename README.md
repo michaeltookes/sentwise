@@ -43,15 +43,17 @@ built the opposite way:
 - **Post-call follow-ups** — ingest a call transcript (paste, file, or a watched
   folder that picks up new exports automatically) and draft the next-steps email
   in your voice, with recap, action items, and a proposed next step.
-- **Inbox reply drafting** — watches your Gmail inbox while your Mac is awake and
-  drafts replies to mail worth answering.
+- **Inbox reply drafting** — Trial, Pro, and Unlimited can watch your Gmail inbox
+  while your Mac is awake and offer drafts for mail worth answering. Starter
+  focuses on transcript follow-ups and on-demand drafting without background
+  inbox watching.
 - **Learns your voice** from your Gmail Sent folder, and re-learns on demand.
 - **Review and approve in the app** — a native macOS notification tells you a draft
   is ready; you open the Review Drafts window, read the full draft, and approve
   it deliberately. Approving either **saves it to your Gmail Drafts** or
   **sends it** (your choice), with an optional undo window on auto-send.
-- **Your signature**, applied automatically — set it yourself or let Sentwise
-  suggest one from your Sent mail.
+- **Optional signatures** — set one yourself or let Sentwise suggest one from
+  your Sent mail.
 - **Report a Problem** from the menu bar packages a redacted diagnostic log — no
   email content — so issues are fixable without you sending anything sensitive.
 
@@ -61,10 +63,11 @@ built the opposite way:
   managed inference request, including voice learning or drafting — no API key,
   no provider billing, drafting included. Sentwise AI is the only shipped
   inference path in 1.0.
-- **Subscribe when the trial ends.** Starter is $9/month for 30 follow-ups,
-  Pro is $19/month for 120 follow-ups, and Unlimited is $39/month for fair-use
-  unlimited follow-ups. Checkout, plan changes, billing management, and
-  cancellation live in **Settings → Subscription**.
+- **Subscribe when the trial ends.** Starter is $9/month for 30 follow-ups and
+  no background inbox watching, Pro is $19/month for 120 follow-ups, and
+  Unlimited is $39/month for fair-use unlimited follow-ups. Checkout, plan
+  changes, billing management, and cancellation live in **Settings →
+  Subscription**.
 - **Connect Gmail** by pasting your address and a 16-character Google **app
   password** (requires 2-Step Verification) — no Google Cloud console, no OAuth
   setup.
