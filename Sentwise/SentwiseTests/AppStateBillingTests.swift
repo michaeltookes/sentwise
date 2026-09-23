@@ -377,7 +377,10 @@ final class AppStateBillingTests: XCTestCase {
 
         appState.scheduleManagedAccountStatusRefreshBeforeExpiry()
 
-        for _ in 0..<100 where llm.fetchCount == 0 {
+        for _ in 0..<1_000
+            where llm.fetchCount == 0
+                || !appState.managedAccountStatusIsFresh
+                || appState.managedLicense != .entitled {
             try await Task.sleep(nanoseconds: 1_000_000)
         }
         XCTAssertEqual(llm.fetchCount, 1)

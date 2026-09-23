@@ -5,6 +5,80 @@ All notable changes to Sentwise are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-09-22
+
+Sentwise 1.0 — the first full release. Sign in, start a 14-day free trial, and
+Sentwise drafts email in your voice with nothing to configure: AI drafting is
+bundled into the subscription, and your mail, voice profile, and transcripts
+never leave your Mac except as stateless managed inference calls through
+Sentwise's no-body-logging proxy for voice learning and drafting.
+
+### Added
+
+- **Subscriptions with bundled AI drafting** — no API keys, ever. Start a
+  14-day free trial (no card required), then pick Starter, Pro, or Unlimited —
+  each with a monthly draft allotment. Checkout and plan changes start in
+  Settings → Subscription; active subscription management and cancellation open
+  Paddle's secure billing portal in your browser.
+- **Multiple mail accounts** (Pro & Unlimited) — connect more than one mailbox.
+  Review Drafts and Browse Mailbox get account pickers and per-account badges,
+  so every draft is clearly attributed to the mailbox it belongs to.
+- **Draft-on-click inbox watching** — when a reply-worthy email arrives,
+  Sentwise now *offers* a draft ("Reply-worthy: … — draft a reply?") instead of
+  spending a draft automatically. Click to generate. Automatic drafting is
+  still there as an opt-in — flip the toggle, or list specific senders and
+  domains that should always be auto-drafted, with an optional monthly budget cap
+  to limit how much of your allotment automation can use. Starter plans focus on
+  transcript follow-ups and on-demand drafting (no background watching).
+- **Usage insights** — a local Analytics pane in Settings: drafting activity,
+  approval rate, and your most common deny reasons. All of it stays on your
+  Mac.
+- **Answer "Needs your input" in place** — when a draft needs a detail only you
+  know, type the answer right in the card and Sentwise re-drafts.
+- **Report a Problem** — send feedback with an optional redacted diagnostics
+  log to feedback@sentwise.ai, straight from the app.
+- **Search & filter in Review Drafts**, plus a collapsible list — rows expand
+  into full drafts, and long lists finally scroll the way you expect.
+- **Optional email signatures** — set a signature yourself or ask Sentwise to
+  suggest one from your Sent mail.
+- **Google Workspace connection guidance** — when an administrator blocks app
+  passwords or IMAP, Sentwise explains the policy, offers copy-ready admin
+  guidance, and lets users ask to be notified when Sign in with Google ships.
+- **Native Settings window** — proper macOS toolbar tabs, including an About
+  pane.
+
+### Changed
+
+- **Mailbox-first onboarding** — setup is now: connect your mailbox, sign in to
+  Sentwise AI, choose approval behavior, learn your voice, go. Model and
+  provider choices are gone from onboarding.
+- **Approval always happens in the app** — the draft notification is now an
+  Open/Close alert; you approve in Review Drafts after reading the full draft,
+  never blind from a banner.
+- **Review Drafts redesigned**, and watcher drafts pass a relevance gate so
+  newsletters, receipts, and other transactional mail no longer produce drafts.
+- **Managed drafting is the only AI path** — the bring-your-own-key and
+  local-model options were removed from setup and Settings.
+- **Production services** — accounts now run on production auth
+  (clerk.sentwise.ai) and live billing.
+
+### Fixed
+
+- Switching pricing tiers no longer gets stuck after closing a checkout
+  overlay.
+- Usage copy correctly describes the monthly window and shows the real reset
+  date.
+- A watcher IMAP crash in rare fetch-failure cases.
+- Disabled notification permission is surfaced prominently instead of failing
+  silently (notifications are the primary approval channel).
+- Disconnecting an account (or "erase all local data") fully purges local mail
+  artifacts.
+
+### Security
+
+- Two hardening passes (app and service) from the September security audit,
+  covering the checkout flow, service auth, and local data handling.
+
 ## [0.1.2] - 2026-08-19
 
 ### Fixed
@@ -46,5 +120,7 @@ Initial release.
 - **Private by design** — local-first storage keeps settings, history, and secrets on your Mac. When you use a remote AI provider, Sentwise sends the relevant mail content, transcript text, and voice profile only to the provider you configure.
 - **Signed, notarized, auto-updating** — Developer ID–signed DMG with Sparkle auto-update and a Homebrew cask (`brew install --cask michaeltookes/tap/sentwise`).
 
+[1.0.0]: https://github.com/michaeltookes/sentwise/compare/v0.1.2...v1.0.0
+[0.1.2]: https://github.com/michaeltookes/sentwise/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/michaeltookes/sentwise/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/michaeltookes/sentwise/releases/tag/v0.1.0
