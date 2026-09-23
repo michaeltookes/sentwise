@@ -7,8 +7,8 @@ writing voice from your own Sent mail and drafts email on your behalf — then
 alerts you when a draft is ready so you can read it in full and approve it in
 the app. Sentwise does not store your mail, voice profile, or call transcripts
 on Sentwise servers. When Sentwise drafts or learns your voice, only the text
-needed for that request transits the managed, stateless, zero-retention
-inference proxy.
+needed for that request transits Sentwise's managed, stateless inference
+proxy. Sentwise does not log or retain request or response bodies.
 
 The flagship workflow is the **post-call follow-up**: when a call ends, drop in
 the transcript and Sentwise drafts the next-steps email in your voice, addressed
@@ -25,9 +25,9 @@ Most AI email tools are cloud services that read your mail on their servers,
 store your calls indefinitely, and train their models on your data. Sentwise is
 built the opposite way:
 
-- **No Sentwise storage, no Sentwise training.** Managed drafting runs through a
-  **stateless, zero-retention** inference proxy — request and response bodies are
-  held in memory only and never logged or kept by Sentwise.
+- **No Sentwise storage, no Sentwise training.** Managed drafting runs through
+  Sentwise's stateless inference proxy — request and response bodies are held
+  in memory only and never logged or kept by Sentwise.
 - **No bot in your meetings.** Sentwise never joins your calls. Transcripts
   arrive as a paste, file, or local watched folder (meeting-platform pickup and
   on-device capture are on the roadmap), not as a cloud meeting archive;
@@ -107,8 +107,8 @@ binary uses your Sentwise account to license managed drafting.
 
 4. **Learn your voice.** Sentwise samples your Sent mail to build a private voice
    profile. The profile is stored locally; the sampled text needed for profiling
-   transits the managed zero-retention inference proxy. This starts the trial
-   clock.
+   transits Sentwise's managed inference proxy without Sentwise logging or
+   retaining request or response bodies. This starts the trial clock.
 
 5. **Get your first draft.** Click **Finish** to complete onboarding and start
    the inbox watcher, then send a test email to the connected Gmail account from
@@ -127,8 +127,8 @@ binary uses your Sentwise account to license managed drafting.
 - **What leaves, and when:** Sentwise AI requests include only the content needed
   for the job — Sent-mail samples for voice learning, incoming email text for
   replies, or transcript text for follow-ups. That content moves through a
-  **stateless, zero-retention** proxy; request and response bodies are held in
-  memory only and are not logged or retained by Sentwise.
+  Sentwise's **stateless managed inference** proxy; request and response bodies
+  are held in memory only and are not logged or retained by Sentwise.
 - **What the account stores:** your account email, trial/subscription state,
   usage counters, and billing references — **never your email or call content.**
 - **What Sentwise never does:** your content is never logged or stored on

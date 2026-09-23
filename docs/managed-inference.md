@@ -11,9 +11,10 @@
 > record of the parked mechanics, not shipped behavior.
 
 Managed inference lets a signed-in Sentwise user draft email **without touching
-an API key**. Drafting requests go through a stateless, zero-retention proxy
-(`sentwise-service`) that authenticates the user's account and forwards to the
-model provider under zero-data-retention terms. This is the **only shipped**
+an API key**. Drafting requests go through Sentwise's stateless managed proxy
+(`sentwise-service`), which authenticates the user's account and forwards to the
+model provider without logging or retaining request/response bodies in Sentwise.
+This is the **only shipped**
 drafting path (item 100, 2026-09-16); it was the default from 56a alongside a
 parked bring-your-own-provider option (item 59).
 
