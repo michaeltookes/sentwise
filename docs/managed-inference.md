@@ -421,16 +421,16 @@ back to the cached `SubscriptionSnapshot` when offline; it consumes the existing
 payload with no wire change, and enforcement is client-side (accepted A-L5-style
 posture — a source-builder can bypass a client gate).
 
-### Derivation (pre-56c)
+### Subscription fallback / legacy derivation
 
-Until checkout (56c) ships, the Worker derives `subscription` from the trial
-(`plan: "trial"`, `status: "trialing"|"lapsed"`, `manageBillingUrl: null`). When
-the whole `subscription` block is absent (older Worker), the app derives an
-effective `(plan, status)` from the `trial` block in `SubscriptionPaneModel`
+Current Worker builds return `subscription` for both trial and paid accounts. When
+the whole `subscription` block is absent (older Worker or test double), the app
+derives an effective `(plan, status)` from the `trial` block in
+`SubscriptionPaneModel`
 (`Views/SubscriptionPresentation.swift`): an active trial → trialing, otherwise
 lapsed. `SubscriptionPaneModel` is the pure, testable mapping from status → the
 plan line, an optional detail/explanation line, and an `isProblemState` flag
-(past-due / canceled / lapsed) that surfaces the "use your own AI key" fallback.
+(past-due / canceled / lapsed) that surfaces subscription recovery guidance.
 Trial days remaining round up (any time left reads as ≥ "1 day left") and clamp
 at 0 ("Trial ended").
 
