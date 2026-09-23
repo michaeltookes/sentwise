@@ -17,8 +17,9 @@ for voice learning and drafting.
 
 - **Subscriptions with bundled AI drafting** — no API keys, ever. Start a
   14-day free trial (no card required), then pick Starter, Pro, or Unlimited —
-  each with a monthly draft allotment. Checkout, plan changes, and cancellation
-  all happen in Settings → Subscription.
+  each with a monthly draft allotment. Checkout and plan changes start in
+  Settings → Subscription; active subscription management and cancellation open
+  Paddle's secure billing portal in your browser.
 - **Multiple mail accounts** (Pro & Unlimited) — connect more than one mailbox.
   Review Drafts and Browse Mailbox get account pickers and per-account badges,
   so every draft is clearly attributed to the mailbox it belongs to.

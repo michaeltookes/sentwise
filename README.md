@@ -65,9 +65,9 @@ built the opposite way:
   inference path in 1.0.
 - **Subscribe when the trial ends.** Starter is $9/month for 30 follow-ups and
   no background inbox watching, Pro is $19/month for 120 follow-ups, and
-  Unlimited is $39/month for fair-use unlimited follow-ups. Checkout, plan
-  changes, billing management, and cancellation live in **Settings →
-  Subscription**.
+  Unlimited is $39/month for fair-use unlimited follow-ups. Checkout and plan
+  changes start in **Settings → Subscription**. Active subscription management
+  and cancellation open Paddle's secure billing portal in your browser.
 - **Connect Gmail** by pasting your address and a 16-character Google **app
   password** (requires 2-Step Verification) — no Google Cloud console, no OAuth
   setup.
