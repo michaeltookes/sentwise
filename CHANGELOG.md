@@ -39,8 +39,9 @@ never leave your Mac except as stateless, zero-retention drafting calls.
   into full drafts, and long lists finally scroll the way you expect.
 - **Email signatures** — drafts end with your real signature, learned from your
   sent mail.
-- **Managed sign-in for Google Workspace accounts** where app passwords are
-  disabled by the administrator.
+- **Google Workspace connection guidance** — when an administrator blocks app
+  passwords or IMAP, Sentwise explains the policy, offers copy-ready admin
+  guidance, and lets users ask to be notified when Sign in with Google ships.
 - **Native Settings window** — proper macOS toolbar tabs, including an About
   pane.
 
