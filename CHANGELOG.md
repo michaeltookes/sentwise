@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Sentwise 1.0 — the first full release. Sign in, start a 14-day free trial, and
 Sentwise drafts email in your voice with nothing to configure: AI drafting is
 bundled into the subscription, and your mail, voice profile, and transcripts
-never leave your Mac except as stateless, zero-retention drafting calls.
+never leave your Mac except as stateless, zero-retention managed inference calls
+for voice learning and drafting.
 
 ### Added
 
@@ -25,9 +26,9 @@ never leave your Mac except as stateless, zero-retention drafting calls.
   Sentwise now *offers* a draft ("Reply-worthy: … — draft a reply?") instead of
   spending a draft automatically. Click to generate. Automatic drafting is
   still there as an opt-in — flip the toggle, or list specific senders and
-  domains that should always be auto-drafted, with a monthly budget cap so
-  automation can never eat your allotment. Starter plans focus on transcript
-  follow-ups and on-demand drafting (no background watching).
+  domains that should always be auto-drafted, with an optional monthly budget cap
+  to limit how much of your allotment automation can use. Starter plans focus on
+  transcript follow-ups and on-demand drafting (no background watching).
 - **Usage insights** — a local Analytics pane in Settings: drafting activity,
   approval rate, and your most common deny reasons. All of it stays on your
   Mac.
