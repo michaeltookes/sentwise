@@ -38,8 +38,8 @@ for voice learning and drafting.
   log to feedback@sentwise.ai, straight from the app.
 - **Search & filter in Review Drafts**, plus a collapsible list — rows expand
   into full drafts, and long lists finally scroll the way you expect.
-- **Email signatures** — drafts end with your real signature, learned from your
-  sent mail.
+- **Optional email signatures** — set a signature yourself or ask Sentwise to
+  suggest one from your Sent mail.
 - **Google Workspace connection guidance** — when an administrator blocks app
   passwords or IMAP, Sentwise explains the policy, offers copy-ready admin
   guidance, and lets users ask to be notified when Sign in with Google ships.
@@ -48,8 +48,9 @@ for voice learning and drafting.
 
 ### Changed
 
-- **Sign-in-and-go onboarding** — setup is now: sign in, connect your mailbox,
-  learn your voice, go. Model and provider choices are gone from onboarding.
+- **Mailbox-first onboarding** — setup is now: connect your mailbox, sign in to
+  Sentwise AI, choose approval behavior, learn your voice, go. Model and
+  provider choices are gone from onboarding.
 - **Approval always happens in the app** — the draft notification is now an
   Open/Close alert; you approve in Review Drafts after reading the full draft,
   never blind from a banner.
