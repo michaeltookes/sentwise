@@ -185,9 +185,20 @@ pass.
 
 ## 7. 1.0.0 release
 
-- [ ] `/release-prep` 1.0.0; CHANGELOG written for humans.
-- [ ] Cask + appcast verified from a machine that isn't the maintainer's.
-- [ ] GitHub release notes link the quickstart (item 71).
+- [x] `/release-prep` 1.0.0; CHANGELOG written for humans. *(2026-09-24:
+      released via the CI tag pipeline — PR #92 + tag `v1.0.0`, run
+      35924008053. First release signed by the **Genkei Labs LLC** org account
+      (Team `DHBYJV7BC3`; all five signing secrets swapped from the personal
+      account; copyright string updated). Apple's first-ever scan for the new
+      org took ~5 h and timed out one attempt — one-time toll, subsequent
+      notarizations are minutes. Published DMG verified: app inside assesses
+      `accepted / Notarized Developer ID / Genkei Labs LLC`, app + DMG both
+      stapled, appcast serves build 4 with a valid EdDSA signature, cask
+      bumped to 1.0.0 with matching sha256.)*
+- [ ] Cask + appcast verified from a machine that isn't the maintainer's
+      (folds into §6).
+- [x] GitHub release notes link the quickstart (item 71). *(2026-09-24: notes
+      footer links the README Quickstart.)*
 - [ ] Public link goes out → close item 74.
 
 ---
