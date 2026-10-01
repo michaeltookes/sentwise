@@ -82,6 +82,21 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Send-test each customized template to a real inbox; check rendering in Gmail (light + dark) and Apple Mail, and confirm SPF/DKIM/DMARC pass on the received message.
     - Mostly dashboard work (owner) with agent-drafted template HTML/copy; no app code expected.
 
+109. **Misleading incomplete-credentials error when the IMAP host is the missing field** — *found 2026-10-01 during the §6-style QA run on Lucius (luciusfox@prowlqa.dev)*
+    On the connect screen, an unrecognized email domain leaves the auto-filled IMAP host empty (it lives under the collapsed "Advanced (IMAP server)" disclosure), and `testConnection`'s incompleteness guard then reports "Enter your email address and app password first." even when both are filled — pointing the user at the wrong fields entirely (`AppState+Connection.swift:52`, `MailAccountCredentials.isComplete`).
+    *As a user connecting a mailbox on my company's own domain, I want the error to tell me the IMAP server is what's missing, so that I don't re-type credentials that were never the problem.*
+    - When email + app password are present but host is empty, the error names the IMAP server and points at the Advanced (IMAP server) section (and expands it, if cheap).
+    - The generic both-fields message remains for the actually-empty-fields case.
+    - Unit tests cover both messages; the connect-screen copy change is mirrored in onboarding and Settings (both use the shared surface).
+
+110. **Auto-detect Google-hosted custom domains (MX lookup) and pre-fill the Gmail IMAP host** — *found 2026-10-01, same QA run; directly hits the "Marcus" ICP (corporate Gmail on a company domain)*
+    Google Workspace mailboxes on custom domains (e.g. `name@company.com`) are indistinguishable from unknown IMAP providers today, so the primary commercial ICP lands on an empty Advanced host field and a dead Test Connection. An MX lookup on the address's domain identifies Google-hosted mail (`*.google.com`/`*.googlemail.com` MX targets) and can pre-fill `imap.gmail.com` silently, making corporate-Gmail onboarding identical to gmail.com.
+    *As an AE whose company mail runs on Google Workspace, I want Sentwise to recognize my corporate address and connect like any Gmail account, so that I never have to know what an IMAP host is.*
+    - On email entry (connect screen + onboarding), when the domain is unrecognized, resolve its MX records off the main thread with a short timeout; on Google-pattern match, treat the account as `.gmail` for host suggestion and credential guidance (app-password instructions already exist via item 75's Workspace guidance).
+    - Non-Google or failed lookups fall back to today's behavior (item 109's clearer error).
+    - The lookup is DNS-only (no third-party service), cached per domain for the session, and never blocks typing or Test Connection.
+    - Unit-test the MX-pattern classifier; live-verify once with a real Workspace domain (prowlqa.dev).
+
 ## Medium Priority
 
 83. **Approval-signal learning loop (accept-as-is / edit / deny → better drafts + smarter filtering)** — *ongoing/strategic; phase 1 is a cheap early slice*
