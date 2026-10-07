@@ -97,6 +97,15 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - The lookup is DNS-only (no third-party service), cached per domain for the session, and never blocks typing or Test Connection.
     - Unit-test the MX-pattern classifier; live-verify once with a real Workspace domain (prowlqa.dev).
 
+111. **Comp entitlement: non-billable internal/QA accounts (admin grant route)** — *logged 2026-10-07 (owner request); needed before the Lucius QA account's trial lapses (~mid-October)*
+    The QA agent's account (`luciusfox@prowlqa.dev`) runs on the standard 14-day trial; when it expires there is no sanctioned way to keep an internal account working — a real Paddle purchase is forbidden by the standing billing guardrail, and paid-tier behavior (tier gates, caps, item 108 inbox-drafting policy) is currently untestable end-to-end for the same reason.
+    *As the maintainer, I want to grant my own QA/internal accounts a complimentary paid-equivalent plan server-side, so that agent-driven QA keeps running past the trial and can exercise paid-tier behavior without ever touching a checkout.*
+    - Worker: an `ADMIN_TOKEN`-guarded admin route to grant (and revoke) a comp entitlement for a named account — sets the account's plan to a chosen tier with a `comped` marker and an expiry; `/v1/me` reports it like any normal plan so the app needs no changes.
+    - Comped accounts bypass Paddle entirely: no checkout prompting, no portal-link expectations; metering/caps apply per the granted tier (so cap behavior is still testable).
+    - Grants are explicit per-account, emit an admin audit log line, and expire by default (e.g. 90 days) so stale comps don't accumulate; revoke returns the account to its natural state.
+    - Billing guardrail intact: QA automation still never opens checkout or enters card data — the comp route is the sanctioned path to paid-tier QA.
+    - Verify live: comp the Lucius QA account, confirm Settings → Subscription shows the granted plan past the former trial window and drafting still works.
+
 ## Medium Priority
 
 83. **Approval-signal learning loop (accept-as-is / edit / deny → better drafts + smarter filtering)** — *ongoing/strategic; phase 1 is a cheap early slice*
