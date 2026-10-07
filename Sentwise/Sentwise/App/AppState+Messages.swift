@@ -44,4 +44,23 @@ extension AppState {
     static func settingsMessage(action: String, error: Error) -> String {
         "Couldn't \(action) mailbox settings. \(message(for: error))"
     }
+
+    /// Guidance shown when Test Connection runs with incomplete credentials.
+    ///
+    /// When the email and app password are both present but the IMAP host is
+    /// empty — the case where an unrecognized provider domain couldn't be
+    /// auto-filled — the message names the IMAP server and the Advanced
+    /// section rather than the already-filled fields (item 109). Otherwise it
+    /// falls back to the generic prompt for when the email and/or app password
+    /// are the missing fields.
+    static func incompleteCredentialsMessage(for credentials: MailAccountCredentials) -> String {
+        let hasEmail = !credentials.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasPassword = !credentials.appPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasHost = !credentials.host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if hasEmail && hasPassword && !hasHost {
+            return "Enter your IMAP server under Advanced (IMAP server). "
+                + "Your email provider's domain wasn't recognized, so the server couldn't be filled in automatically."
+        }
+        return "Enter your email address and app password first."
+    }
 }

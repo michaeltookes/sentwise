@@ -50,7 +50,7 @@ extension AppState {
         let settingsMessageGeneration = settingsTransientMessageGeneration
         let credentials = normalizedConnectionCredentials(credentials)
         guard credentials.isComplete else {
-            setConnectionError("Enter your email address and app password first.", for: messageSurface)
+            setConnectionError(Self.incompleteCredentialsMessage(for: credentials), for: messageSurface)
             return false
         }
         // Load the persisted (actually-connected) account and apply the tier gate
