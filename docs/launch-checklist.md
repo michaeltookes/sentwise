@@ -194,7 +194,12 @@ pass.
       notarizations are minutes. Published DMG verified: app inside assesses
       `accepted / Notarized Developer ID / Genkei Labs LLC`, app + DMG both
       stapled, appcast serves build 4 with a valid EdDSA signature, cask
-      bumped to 1.0.0 with matching sha256.)*
+      bumped to 1.0.0 with matching sha256.)* **Re-cut (2026-10-07):** v1.0.0
+      was yanked before any announcement and re-released as **0.2.0** — owner
+      decision to launch as a paid beta under 0.x versioning. The v1.0.0
+      GitHub release/tag are deleted; the repo is re-badged to 0.2.0 with the
+      build number advanced to 5 so Sparkle update ordering is preserved
+      (appcast still serves build 4).
 - [ ] Cask + appcast verified from a machine that isn't the maintainer's
       (folds into §6).
 - [x] GitHub release notes link the quickstart (item 71). *(2026-09-24: notes
