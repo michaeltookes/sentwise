@@ -108,6 +108,13 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 ## Medium Priority
 
+112. **Expose the menu-bar status item to accessibility clients by name** — *found 2026-10-07 by the Peekaboo-based daily QA pass on Lucius*
+    On macOS 26, Control Center hosts third-party status items, and Sentwise's appears in the accessibility tree as an anonymous `Item-0` (Amphetamine, by contrast, shows its name). Only the `NSImage` carries an accessibility description (`MenuBarController.setupStatusItem`), which does not propagate to the hosted item. Automated QA and assistive technology therefore cannot find or open the Sentwise menu by name; the daily pass records "status menu: not locatable by name" until this ships.
+    *As a QA agent or screen-reader user, I want the Sentwise menu-bar item labeled "Sentwise", so that I can locate and open its menu without guessing at unnamed icons.*
+    - Set an accessibility identifier (`sentwise.statusItem`) and accessibility label ("Sentwise") on `statusItem.button`, and give the status item an `autosaveName`.
+    - Verify on the Lucius Mini: `peekaboo menubar list` shows an item titled "Sentwise" and `peekaboo menubar click` opens the menu.
+    - No visual change; unit-test that the button carries the identifier and label.
+
 83. **Approval-signal learning loop (accept-as-is / edit / deny → better drafts + smarter filtering)** — *ongoing/strategic; phase 1 is a cheap early slice*
     Treat the user's action on every draft — approved untouched, edited-then-approved, or denied — as durable feedback that (a) improves drafting in the user's voice and (b) tightens what gets drafted at all, so the assistant manages the inbox better the more it's used. Prompted by the owner seeing drafts generated for mail that shouldn't be drafted, and realizing a one-shot-accept vs edit vs deny signal is the raw material for learning the user over time.
     *As Priya/Marcus, I want Sentwise to learn from how I handle its drafts — what I accept as-is, what I rewrite, what I throw away — so that over time it drafts more of what I'd actually send and stops surfacing mail I never reply to.*
