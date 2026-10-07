@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] - 2026-10-07
 
-Sentwise 1.0 — the first full release. Sign in, start a 14-day free trial, and
+Sentwise 0.2.0 — the first public release. Sign in, start a 14-day free trial, and
 Sentwise drafts email in your voice with nothing to configure: AI drafting is
 bundled into the subscription, and your mail, voice profile, and transcripts
 never leave your Mac except as stateless managed inference calls through
