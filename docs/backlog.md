@@ -101,6 +101,14 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 ## Medium Priority
 
+113. **Launch at login reverts silently when the login item is disabled in System Settings** — *found 2026-10-08, wave 1 settings sweep on Lucius*
+    Turning on "Launch at login" calls `SMAppService.mainApp.register()`, which succeeds, but `backgroundtaskmanagementd` reports `registerLaunchItem: found existing item … disposition=[disabled, allowed, notified]`, so `status` stays `.requiresApproval`, `LoginItemManager.isEnabled` reads false, and the toggle snaps off within a second with no message and no log line (the manager only logs on a thrown error). The user cannot tell whether the click did anything. Reproduced on macOS 26.4.1 with the signed 0.2.0 (5) build in /Applications.
+    *As a user who once turned Sentwise off in Login Items, I want the toggle to tell me macOS needs my approval, so that I can enable it in System Settings instead of clicking a switch that keeps turning itself off.*
+    - Handle `.requiresApproval` explicitly: keep the toggle on, show a caption explaining that macOS disabled the item, with a button that opens `x-apple.systempreferences:com.apple.LoginItems-Settings.extension`.
+    - Log the resulting `SMAppService` status at info level after every register and unregister, not only on thrown errors.
+    - Mirror the same state and caption in the status-menu "Launch at Login" item.
+    - Unit-test the status-to-UI mapping for `.enabled`, `.requiresApproval`, `.notRegistered`, and `.notFound`.
+
 112. **Expose the menu-bar status item to accessibility clients by name** — *found 2026-10-07 by the Peekaboo-based daily QA pass on Lucius*
     On macOS 26, Control Center hosts third-party status items, and Sentwise's appears in the accessibility tree as an anonymous `Item-0` (Amphetamine, by contrast, shows its name). Only the `NSImage` carries an accessibility description (`MenuBarController.setupStatusItem`), which does not propagate to the hosted item. Automated QA and assistive technology therefore cannot find or open the Sentwise menu by name; the daily pass records "status menu: not locatable by name" until this ships.
     *As a QA agent or screen-reader user, I want the Sentwise menu-bar item labeled "Sentwise", so that I can locate and open its menu without guessing at unnamed icons.*
