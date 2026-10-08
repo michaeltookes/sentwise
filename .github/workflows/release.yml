@@ -341,7 +341,12 @@ jobs:
             exit 1
           fi
           IFS=. read -r tap_major tap_minor tap_patch <<< "$tap_version"
-          if (( tap_major > major
+          allow_tap_downgrade="false"
+          if [[ "$v" == "0.2.0" && "$tap_version" == "1.0.0" ]]; then
+            allow_tap_downgrade="true"
+            echo "Replacing yanked Homebrew cask $tap_version with re-cut $v."
+          fi
+          if [[ "$allow_tap_downgrade" != "true" ]] && (( tap_major > major
             || (tap_major == major && tap_minor > minor)
             || (tap_major == major && tap_minor == minor && tap_patch > patch) )); then
             echo "Skipping Homebrew tap update for $v because tap already has newer version $tap_version."

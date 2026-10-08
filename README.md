@@ -15,7 +15,7 @@ the transcript and Sentwise drafts the next-steps email in your voice, addressed
 and ready to send. It also watches your inbox and drafts replies to mail that
 deserves one. You stay in the loop — every draft waits for your approval.
 
-> **Release note:** This README describes Sentwise 1.0.0, the current signed DMG
+> **Release note:** This README describes Sentwise 0.2.0, the current signed DMG
 > and Homebrew package. Sentwise AI is included with subscriptions; no
 > user-managed API keys are required.
 
@@ -62,7 +62,7 @@ built the opposite way:
 - **Sign in and go.** Create an account; your 14-day trial starts on the first
   managed inference request, including voice learning or drafting — no API key,
   no provider billing, drafting included. Sentwise AI is the only shipped
-  inference path in 1.0.
+  inference path in this release.
 - **Subscribe when the trial ends.** Starter is $9/month for 30 follow-ups and
   no background inbox watching, Pro is $19/month for 120 follow-ups, and
   Unlimited is $39/month for fair-use unlimited follow-ups. Checkout and plan
@@ -82,7 +82,7 @@ binary uses your Sentwise account to license managed drafting.
    - Download the latest DMG from [Releases](https://github.com/michaeltookes/sentwise/releases/latest) and drag Sentwise to Applications, **or**
    - `brew install --cask michaeltookes/tap/sentwise`
 
-   The current package installs Sentwise 1.0.0. Sentwise lives in your menu bar
+   The current package installs Sentwise 0.2.0. Sentwise lives in your menu bar
    (no Dock icon) and keeps itself up to date.
 
 2. **Connect your Gmail.** You'll need a Google **app password** (Gmail's

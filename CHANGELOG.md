@@ -5,9 +5,9 @@ All notable changes to Sentwise are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-09-22
+## [0.2.0] - 2026-10-07
 
-Sentwise 1.0 — the first full release. Sign in, start a 14-day free trial, and
+Sentwise 0.2.0 — the first public release. Sign in, start a 14-day free trial, and
 Sentwise drafts email in your voice with nothing to configure: AI drafting is
 bundled into the subscription, and your mail, voice profile, and transcripts
 never leave your Mac except as stateless managed inference calls through
@@ -73,6 +73,9 @@ Sentwise's no-body-logging proxy for voice learning and drafting.
   silently (notifications are the primary approval channel).
 - Disconnecting an account (or "erase all local data") fully purges local mail
   artifacts.
+- Connecting a mailbox on an unrecognized domain now points you at the IMAP
+  server under Advanced when that's the only missing field, instead of asking
+  you to re-enter the email and app password you already filled in.
 
 ### Security
 
@@ -120,7 +123,7 @@ Initial release.
 - **Private by design** — local-first storage keeps settings, history, and secrets on your Mac. When you use a remote AI provider, Sentwise sends the relevant mail content, transcript text, and voice profile only to the provider you configure.
 - **Signed, notarized, auto-updating** — Developer ID–signed DMG with Sparkle auto-update and a Homebrew cask (`brew install --cask michaeltookes/tap/sentwise`).
 
-[1.0.0]: https://github.com/michaeltookes/sentwise/compare/v0.1.2...v1.0.0
+[0.2.0]: https://github.com/michaeltookes/sentwise/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/michaeltookes/sentwise/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/michaeltookes/sentwise/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/michaeltookes/sentwise/releases/tag/v0.1.0

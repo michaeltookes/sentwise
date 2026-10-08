@@ -130,7 +130,35 @@ final class AppStateTests: XCTestCase {
 
         XCTAssertFalse(appState.isAccountConnected)
         XCTAssertNil(provider.lastCredentials, "provider must not be called with incomplete credentials")
-        XCTAssertNotNil(appState.connectionError)
+        XCTAssertEqual(
+            appState.connectionError,
+            "Enter your email address and app password first.",
+            "the generic prompt stays for the actually-empty-fields case (item 109)"
+        )
+    }
+
+    func testTestConnectionWithEmptyHostPointsAtAdvancedSection() async {
+        // item 109: email + app password present but the IMAP host is empty (an
+        // unrecognized provider domain left it unfilled). The error must name the
+        // IMAP server / Advanced section, not the already-filled fields.
+        let provider = FakeAppMailProvider(result: .success(()))
+        let appState = makeAppState(provider: provider)
+        let credentials = MailAccountCredentials(
+            email: "marcus@customdomain.com",
+            appPassword: "app-pw-here",
+            host: "",
+            port: 993
+        )
+
+        await appState.testConnection(with: credentials)
+
+        XCTAssertFalse(appState.isAccountConnected)
+        XCTAssertNil(provider.lastCredentials, "provider must not be called with an empty IMAP host")
+        XCTAssertEqual(
+            appState.connectionError,
+            "Enter your IMAP server under Advanced (IMAP server). "
+                + "Your email provider's domain wasn't recognized, so the server couldn't be filled in automatically."
+        )
     }
 
     func testPreviewRecentMessagesPopulatesResults() async {
