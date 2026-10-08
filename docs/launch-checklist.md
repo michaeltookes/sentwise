@@ -199,7 +199,14 @@ pass.
       decision to launch as a paid beta under 0.x versioning. The v1.0.0
       GitHub release/tag are deleted; the repo is re-badged to 0.2.0 with the
       build number advanced to 5 so Sparkle update ordering is preserved
-      (appcast still serves build 4).
+      (appcast still serves build 4). **v0.2.0 shipped 2026-10-08** (PR #94 +
+      tag `v0.2.0`, run 37788809103; notarization took minutes, confirming the
+      first-scan toll was one-time). Published DMG verified: app assesses
+      `accepted / Notarized Developer ID / Genkei Labs LLC`, app + DMG both
+      stapled, build prints 0.2.0 (5), appcast serves build 5 / 0.2.0 with a
+      valid EdDSA signature, cask replaced the yanked 1.0.0 (one-time
+      downgrade exception in release.yml) with sha256 matching the DMG
+      (`5c25b758…`).
 - [ ] Cask + appcast verified from a machine that isn't the maintainer's
       (folds into §6).
 - [x] GitHub release notes link the quickstart (item 71). *(2026-09-24: notes
