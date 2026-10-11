@@ -292,8 +292,8 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 114. **Sparkle update dialog shows no release notes** — *found 2026-10-08 by the Lucius install-path QA run (0.1.2 → 0.2.0 update)*
     The update prompt ("Sentwise 0.2.0 is now available—you have 0.1.2") renders with an empty release-notes area: the appcast item carries no description or `releaseNotesLink`, even though every release has a human-written CHANGELOG section. Users deciding whether to update see a version number and nothing else.
     *As a user prompted to update, I want to see what changed, so that I can update confidently instead of clicking through a blank dialog.*
-    - Release pipeline (release.sh / `generate_appcast`): embed the release's CHANGELOG section (or a `releaseNotesLink` to the GitHub release) in each appcast item.
-    - Verify on the next release: the Sparkle dialog on a previous-version install renders the notes.
+    - ~~Release pipeline (release.sh / `generate_appcast`): embed the release's CHANGELOG section (or a `releaseNotesLink` to the GitHub release) in each appcast item.~~ **Done 2026-10-11 (branch `appcast-release-notes`):** `changelog-to-html.sh` renders the version's CHANGELOG section to an HTML fragment (fails if missing/empty); `write-appcast.sh` places it next to the DMG and runs Sparkle 2.9.5 `generate_appcast --embed-release-notes`, then fails unless the item's `<description>` is non-empty; `release.sh` pre-flights the section before archiving. Fixture test: `Distribution/scripts/tests/test-release-notes.sh`. Documented in `docs/releasing.md` / `docs/ci-release.md`.
+    - **Open:** verify on the next release that the Sparkle dialog on a previous-version install renders the notes (now a step in the release docs). Resolve the item once observed.
     - No app code change expected — this is appcast generation.
 
 ## Low Priority
