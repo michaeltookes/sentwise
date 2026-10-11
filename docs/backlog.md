@@ -92,6 +92,14 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 ## Medium Priority
 
+115. **Live tests on the QA Mac overwrite the installed app's Keychain items and freeze it behind a Keychain prompt** — *found 2026-10-11 by Claude Code on Lucius' Mini*
+    `live-tests.yml` runs on the self-hosted runner that is also the Sentwise QA desktop. On 2026-10-11 13:29 CDT its `xcodebuild test-without-building` run (a development-signed test build) rewrote `managed.clientToken` and `managed.clerkFrontendAPIBaseURL` under Keychain service `com.tookes.Sentwise` (mdat 18:29:20Z, the run's window) and killed the running Developer ID app. When the installed 0.2.0 (5) relaunched, `securityd` showed "Sentwise wants to access key 'com.tookes.Sentwise' in your keychain … enter the login keychain password" (ACL no longer trusts the Developer ID signature for the rewritten items), the status item never appeared, and the daily QA pass has been blind since. The test session may also have replaced the QA account's Clerk session with the live-test user's.
+    *As the person running QA on a machine that also runs CI, I want test runs to leave the installed app's credentials alone, so that a push to main cannot sign the QA app out or lock it behind a password prompt.*
+    - Live/integration tests use an isolated keychain: either a distinct service name (e.g. `com.tookes.Sentwise.tests`, injected via env or a test-only `KeychainStore` configuration) or an ephemeral `security create-keychain` set up and deleted by the workflow.
+    - The workflow must not terminate or launch the installed `/Applications/Sentwise.app`; if a running instance would conflict, fail the job with a clear message instead.
+    - Add a CI assertion that no Keychain item under `com.tookes.Sentwise` changes mdat during the test run.
+    - Document in `docs/launch-checklist.md` §6 that the QA desktop and live tests share a user account until this ships, and the Keychain-prompt symptom.
+
 113. **Launch at login reverts silently when the login item is disabled in System Settings** — *found 2026-10-08, wave 1 settings sweep on Lucius*
     Turning on "Launch at login" calls `SMAppService.mainApp.register()`, which succeeds, but `backgroundtaskmanagementd` reports `registerLaunchItem: found existing item … disposition=[disabled, allowed, notified]`, so `status` stays `.requiresApproval`, `LoginItemManager.isEnabled` reads false, and the toggle snaps off within a second with no message and no log line (the manager only logs on a thrown error). The user cannot tell whether the click did anything. Reproduced on macOS 26.4.1 with the signed 0.2.0 (5) build in /Applications.
     *As a user who once turned Sentwise off in Login Items, I want the toggle to tell me macOS needs my approval, so that I can enable it in System Settings instead of clicking a switch that keeps turning itself off.*
