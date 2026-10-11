@@ -158,11 +158,14 @@ pass.
       comment already describes the real key (updated 2026-08-14 when it
       landed); release.sh's "placeholder" references are the active guard that
       aborts a release on the legacy all-zero key, kept intentionally.)*
-- [ ] **[agent]** Verify the appcast feed URL is HTTPS and signed updates
+- [x] **[agent]** Verify the appcast feed URL is HTTPS and signed updates
       validate on a previous-version install (folds into the §6 clean-Mac
       Sparkle step). *(2026-09-22 partial: feed URL is HTTPS and resolves 200
-      via the latest-release redirect; signed-update validation deferred to
-      §6.)*
+      via the latest-release redirect. 2026-10-08: signed-update validation
+      CLOSED by the Lucius install-path run — a 0.1.2 install was offered and
+      updated to 0.2.0 (build 5) via Sparkle; the resulting app carries the
+      Genkei Labs LLC Developer ID signature and a stapled ticket. Evidence:
+      Lucius `artifacts/sentwise-qa/runs/2026-10-08-install-paths/report.md`.)*
 
 ## 5. feedback@sentwise.ai
 
@@ -179,14 +182,34 @@ pass.
 
 ## 6. Clean-Mac verification run
 
-- [ ] Fresh macOS user account or VM (never the maintainer's account).
-- [ ] Browser-download DMG → Gatekeeper/notarization path → install.
-- [ ] `brew install --cask` path.
+> §6 runs on the owner's QA agent machine (Lucius Mac mini, dedicated
+> `luciusfox` account — never the maintainer's). Install-path evidence:
+> Lucius `artifacts/sentwise-qa/runs/2026-10-08-install-paths/report.md`.
+
+- [x] Fresh macOS user account or VM (never the maintainer's account).
+      *(Lucius `luciusfox` account; first-ever run started from clean
+      onboarding 2026-10-01.)*
+- [x] Browser-download DMG → Gatekeeper/notarization path → install.
+      *(2026-10-08: quarantined 0.2.0 DMG → Gatekeeper "downloaded from the
+      Internet / Apple checked it for malicious software and none was
+      detected" → opened clean to onboarding. No block, no malware warning.)*
+- [x] `brew install --cask` path. *(2026-10-08: `brew install --cask
+      michaeltookes/tap/sentwise` → 0.2.0 build 5, no sha mismatch. Friction
+      logged: deprecated `depends_on macos:` string syntax — item 113.)*
 - [ ] First-run onboarding: trial sign-in (production Clerk), Gmail app
       password connect, voice learn, first inbox draft, first transcript
-      follow-up, approve via notification.
-- [ ] Sparkle update from the previous version.
-- [ ] Every friction point logged as a backlog item.
+      follow-up, approve via notification. *(Partial: mailbox connect +
+      Sentwise AI sign-in + trial done 2026-10-01 (friction → items 109/110);
+      Subscription verified again 2026-10-11 showing the comped Pro plan
+      (item 111). Remaining: finish onboarding (state sits at step 3/4),
+      voice learn, first drafts, approve-via-notification — currently gated
+      on the unnamed status item, item 112.)*
+- [x] Sparkle update from the previous version. *(2026-10-08: 0.1.2 → 0.2.0
+      across the personal→Genkei Labs signing change with no complaint from
+      Sparkle or macOS; EdDSA continuity held. Friction logged: update dialog
+      shows no release notes — item 114.)*
+- [ ] Every friction point logged as a backlog item. *(So far: 109, 110, 112,
+      113, 114; stays open until the onboarding/draft legs finish.)*
 
 ## 7. 1.0.0 release
 
@@ -212,8 +235,10 @@ pass.
       valid EdDSA signature, cask replaced the yanked 1.0.0 (one-time
       downgrade exception in release.yml) with sha256 matching the DMG
       (`5c25b758…`).
-- [ ] Cask + appcast verified from a machine that isn't the maintainer's
-      (folds into §6).
+- [x] Cask + appcast verified from a machine that isn't the maintainer's
+      (folds into §6). *(2026-10-08: both verified on Lucius — brew cask
+      installed 0.2.0 build 5 with matching sha256, and the appcast drove a
+      real 0.1.2 → 0.2.0 Sparkle update. See §6 evidence.)*
 - [x] GitHub release notes link the quickstart (item 71). *(2026-09-24: notes
       footer links the README Quickstart.)*
 - [ ] Public link goes out → close item 74.
