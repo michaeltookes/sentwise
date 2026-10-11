@@ -16,6 +16,17 @@
 # Trust: only workflow_dispatch (requires repo write access) and push-to-main
 # (trusted, post-merge) trigger this — never a fork PR — so no untrusted code
 # runs live against real credentials on the persistent runner.
+#
+# Keychain isolation (item 115): the runner is ALSO the Sentwise QA desktop,
+# sharing one login keychain with the installed Developer ID app. A dev-signed
+# test process rewriting items under the production service com.tookes.Sentwise
+# resets their ACLs and locks the installed app behind a login-keychain
+# password prompt (the 2026-10-11 incident). So this workflow (a) never
+# terminates or launches /Applications/Sentwise.app — it fails fast instead if
+# the installed app is running, (b) runs every test process with
+# SENTWISE_TEST_KEYCHAIN=1 so KeychainStore uses the isolated
+# com.tookes.Sentwise.tests service, and (c) snapshots the production items'
+# modification dates before the run and fails loudly if any changed after.
 
 name: Live tests
 
@@ -45,6 +56,18 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.sha }}
 
+      - name: Refuse to run beside the installed QA app
+        # This workflow must never terminate or launch /Applications/Sentwise.app
+        # (item 115). If the installed app is running, a same-bundle-id dev test
+        # host launching next to it risks the exact interference that blinded QA
+        # on 2026-10-11, so fail fast with instructions instead of touching it.
+        run: |
+          if pgrep -f "/Applications/Sentwise.app/Contents/MacOS/Sentwise" >/dev/null; then
+            echo "::error::The installed /Applications/Sentwise.app is running on this runner (the shared QA desktop). This workflow never terminates or launches it — quit Sentwise on the QA desktop (status menu > Quit), then re-dispatch this run."
+            exit 1
+          fi
+          echo "Installed QA app is not running; safe to proceed."
+
       - name: Build for testing
         run: |
           xcodebuild build-for-testing \
@@ -59,6 +82,9 @@ jobs:
         # their gated test skip cleanly (see Distribution/scripts/inject-live-env.sh).
         # The script logs variable NAMES only, so no secret reaches the CI log.
         env:
+          # Not a secret: redirects every KeychainStore in the test-host process
+          # to the isolated com.tookes.Sentwise.tests service (item 115).
+          SENTWISE_TEST_KEYCHAIN: "1"
           SENTWISE_LIVE_PADDLE_CHECKOUT: ${{ secrets.SENTWISE_LIVE_PADDLE_CHECKOUT }}
           SENTWISE_LIVE_CLERK_TEST: ${{ secrets.SENTWISE_LIVE_CLERK_TEST }}
           SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE: ${{ secrets.SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE }}
@@ -77,10 +103,22 @@ jobs:
           echo "Injecting live env into $XCTESTRUN"
           Distribution/scripts/inject-live-env.sh "$XCTESTRUN"
 
+      - name: Snapshot installed-app Keychain items (tripwire)
+        # Records presence + mdat of every known item under the production
+        # service BEFORE tests; the post-test verify fails the job if any
+        # changed, catching any regression of the test-keychain isolation.
+        # Attribute reads only — no secret values are read or logged.
+        run: Distribution/scripts/keychain-tripwire.sh snapshot build/keychain-tripwire-state.txt
+
       - name: Run live tests
         # -only-testing keeps this to the env-gated live classes so the full unit
         # suite is not re-run here (it runs in prowl-qa / normal CI). Each class
         # self-skips when its gate secret is absent.
+        # SENTWISE_TEST_KEYCHAIN reaches the test-host app via the .xctestrun
+        # injection above; it is exported here too so any non-hosted process in
+        # this step resolves the same isolated Keychain service (item 115).
+        env:
+          SENTWISE_TEST_KEYCHAIN: "1"
         run: |
           XCTESTRUN=$(find build/Build/Products -maxdepth 1 -name "*.xctestrun" | head -1)
           xcodebuild test-without-building \
@@ -93,6 +131,18 @@ jobs:
             -only-testing:SentwiseTests/GmailLiveSendTests \
             -only-testing:SentwiseTests/ReplyWorthinessLiveTests \
             -only-testing:SentwiseTests/AttNetLiveDraftTests
+
+      - name: Verify installed-app Keychain items unchanged (tripwire)
+        # Runs even when the tests fail — a failing test must not hide a
+        # Keychain-isolation regression. Skips only if the snapshot step never
+        # ran (e.g. the build failed first).
+        if: ${{ !cancelled() }}
+        run: |
+          if [[ ! -f build/keychain-tripwire-state.txt ]]; then
+            echo "No tripwire snapshot found (earlier step failed before tests); skipping verify."
+            exit 0
+          fi
+          Distribution/scripts/keychain-tripwire.sh verify build/keychain-tripwire-state.txt
 
       - name: Upload xcresult on failure
         if: failure()
