@@ -27,6 +27,31 @@ final class ProwlHuntRuntimeTests: XCTestCase {
         ))
     }
 
+    /// Newer xcodebuild test sessions (test-without-building under recent Xcode)
+    /// omit XCTestConfigurationFilePath and set these keys instead; each one on
+    /// its own must flip the host app into isolated hunt mode (item 115).
+    func testEnablesFromEveryXCTestSessionEnvironmentKey() {
+        for key in ProwlHuntRuntime.xctestSessionEnvironmentKeys {
+            XCTAssertTrue(ProwlHuntRuntime.isEnabled(
+                environment: [key: "some-non-empty-value"],
+                arguments: [],
+                bundlePath: "/Applications/Sentwise.app"
+            ), "expected \(key) alone to enable the isolated test runtime")
+        }
+    }
+
+    func testEmptyXCTestSessionEnvironmentValuesDoNotEnable() {
+        var environment: [String: String] = [:]
+        for key in ProwlHuntRuntime.xctestSessionEnvironmentKeys {
+            environment[key] = ""
+        }
+        XCTAssertFalse(ProwlHuntRuntime.isEnabled(
+            environment: environment,
+            arguments: [],
+            bundlePath: "/Applications/Sentwise.app"
+        ))
+    }
+
     func testEnablesFromDocumentedProwlDerivedDataBundlePath() {
         XCTAssertTrue(ProwlHuntRuntime.isEnabled(
             environment: [:],

@@ -8,6 +8,18 @@ struct ProwlHuntRuntime {
     static let environmentKey = "SENTWISE_PROWL_HUNT_MODE"
     static let launchArgument = "--sentwise-prowl-hunt-mode"
     static let xctestConfigurationEnvironmentKey = "XCTestConfigurationFilePath"
+    /// Additional environment keys that mark an XCTest-hosted launch. Newer
+    /// xcodebuild test sessions (notably `test-without-building` under recent
+    /// Xcode) pass the test configuration over testmanagerd IPC instead of
+    /// `XCTestConfigurationFilePath`, setting these keys instead. Missing them
+    /// let a dev-signed test host boot as the *real* app on the QA machine and
+    /// rewrite the installed app's Keychain items (item 115), so the detection
+    /// treats any of them as a test launch.
+    static let xctestSessionEnvironmentKeys = [
+        xctestConfigurationEnvironmentKey,
+        "XCTestSessionIdentifier",
+        "XCTestBundlePath"
+    ]
 
     let isEnabled: Bool
 
@@ -149,7 +161,7 @@ struct ProwlHuntRuntime {
         if arguments.contains(launchArgument) {
             return true
         }
-        if environment[xctestConfigurationEnvironmentKey]?.isEmpty == false {
+        if xctestSessionEnvironmentKeys.contains(where: { environment[$0]?.isEmpty == false }) {
             return true
         }
         return isProwlDerivedDataBundlePath(bundlePath)
