@@ -195,7 +195,7 @@ pass.
       detected" → opened clean to onboarding. No block, no malware warning.)*
 - [x] `brew install --cask` path. *(2026-10-08: `brew install --cask
       michaeltookes/tap/sentwise` → 0.2.0 build 5, no sha mismatch. Friction
-      logged: deprecated `depends_on macos:` string syntax — item 113.)*
+      logged: deprecated `depends_on macos:` string syntax — item 116.)*
 - [ ] First-run onboarding: trial sign-in (production Clerk), Gmail app
       password connect, voice learn, first inbox draft, first transcript
       follow-up, approve via notification. *(Partial: mailbox connect +
@@ -211,8 +211,8 @@ pass.
       across the personal→Genkei Labs signing change with no complaint from
       Sparkle or macOS; EdDSA continuity held. Friction logged: update dialog
       shows no release notes — item 114.)*
-- [ ] Every friction point logged as a backlog item. *(So far: 109, 110, 112,
-      113, 114; stays open until the onboarding/draft legs finish.)*
+- [ ] Every friction point logged as a backlog item. *(So far: 109, 110, 112, 113,
+      114, 115, 116; stays open until the onboarding/draft legs finish.)*
 
 ## 7. 1.0.0 release
 
