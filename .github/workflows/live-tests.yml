@@ -13,9 +13,9 @@
 # session, never over SSH/sudo (see docs/live-testing.md and .prowl/README.md).
 # GitHub-hosted macOS runners cannot provide this.
 #
-# Trust: only workflow_dispatch (requires repo write access) and push-to-main
-# (trusted, post-merge) trigger this — never a fork PR — so no untrusted code
-# runs live against real credentials on the persistent runner.
+# Trust: only workflow_dispatch (requires repo write access) triggers this —
+# never a push and never a fork PR — so no untrusted code runs live against real
+# credentials on the persistent runner.
 #
 # Keychain isolation (item 115): the runner is ALSO the Sentwise QA desktop,
 # sharing one login keychain with the installed Developer ID app. A dev-signed
@@ -42,8 +42,10 @@ on:
       correlation_id:
         description: Opaque ID used by /live-verify to find the dispatched run
         required: false
-  push:
-    branches: [main]
+  # push-to-main trigger removed 2026-10-11: this runner is also the Sentwise QA
+  # desktop, and the item-115 guard refuses to run while the installed app is
+  # up (always, there). Live tests run on demand via the orchestrator's
+  # pause-QA → dispatch → relaunch procedure, or /live-verify.
 
 jobs:
   live-tests:
