@@ -202,8 +202,11 @@ pass.
       Sentwise AI sign-in + trial done 2026-10-01 (friction → items 109/110);
       Subscription verified again 2026-10-11 showing the comped Pro plan
       (item 111). Remaining: finish onboarding (state sits at step 3/4),
-      voice learn, first drafts, approve-via-notification — currently gated
-      on the unnamed status item, item 112.)*
+      voice learn, first drafts, approve-via-notification — was gated on the
+      unnamed status item, item 112; fix landed on branch `status-item-access`
+      (AX identifier `sentwise.statusItem` + label "Sentwise" on the status
+      button), unblocks once it ships in the next released build and Peekaboo
+      verifies it on Lucius.)*
 - [x] Sparkle update from the previous version. *(2026-10-08: 0.1.2 → 0.2.0
       across the personal→Genkei Labs signing change with no complaint from
       Sparkle or macOS; EdDSA continuity held. Friction logged: update dialog
