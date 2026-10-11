@@ -9,7 +9,7 @@ import XCTest
 /// service so they never touch real app secrets, and clean up after themselves.
 final class KeychainStoreTests: XCTestCase {
 
-    private let store = KeychainStore(service: "com.tookes.Sentwise.tests")
+    private let store = KeychainStore(service: KeychainStore.testService)
     private let key = SecretKey(rawValue: "test.sample")
 
     override func setUpWithError() throws {
@@ -63,6 +63,51 @@ final class KeychainStoreTests: XCTestCase {
         try store.removeAll()
         XCTAssertNil(try store.value(for: SecretKey(rawValue: "test.a")))
         XCTAssertNil(try store.value(for: SecretKey(rawValue: "test.b")))
+    }
+}
+
+/// Pure tests for the default-service selection (item 115): the production
+/// service is the hard default; only an explicit truthy `SENTWISE_TEST_KEYCHAIN`
+/// flips to the fixed, compiled-in test service, so no environment value can
+/// ever redirect the store to the installed app's items — or to an arbitrary
+/// service.
+final class KeychainStoreServiceSelectionTests: XCTestCase {
+
+    func testDefaultServiceIsProductionWhenVariableAbsent() {
+        XCTAssertEqual(
+            KeychainStore.resolvedDefaultService(environment: [:]),
+            KeychainStore.productionService
+        )
+    }
+
+    func testTruthyVariableSelectsTestService() {
+        for value in ["1", "true", "yes", " TRUE ", "Yes"] {
+            XCTAssertEqual(
+                KeychainStore.resolvedDefaultService(
+                    environment: [KeychainStore.testKeychainEnvironmentKey: value]
+                ),
+                KeychainStore.testService,
+                "expected '\(value)' to select the test service"
+            )
+        }
+    }
+
+    func testEmptyOrGarbageVariableStaysOnProduction() {
+        for value in ["", "   ", "0", "false", "no", "2", "garbage", "com.evil.Service"] {
+            XCTAssertEqual(
+                KeychainStore.resolvedDefaultService(
+                    environment: [KeychainStore.testKeychainEnvironmentKey: value]
+                ),
+                KeychainStore.productionService,
+                "expected '\(value)' to stay on the production service"
+            )
+        }
+    }
+
+    func testTestServiceIsDistinctFromProduction() {
+        XCTAssertNotEqual(KeychainStore.testService, KeychainStore.productionService)
+        XCTAssertEqual(KeychainStore.productionService, "com.tookes.Sentwise")
+        XCTAssertEqual(KeychainStore.testService, "com.tookes.Sentwise.tests")
     }
 }
 

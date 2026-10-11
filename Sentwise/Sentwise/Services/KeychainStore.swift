@@ -15,12 +15,32 @@ enum KeychainError: Error, Equatable {
 /// Items are scoped by a `service` identifier and marked accessible after first
 /// unlock, this-device-only (never synced to iCloud). This uses the default
 /// keychain and the generic-password class, so it needs no special entitlement.
+///
+/// ## Test-run isolation (item 115)
+///
+/// The default `service` is resolved once per process: the production service
+/// unless the `SENTWISE_TEST_KEYCHAIN` environment variable is explicitly
+/// truthy (`1`/`true`/`yes`), in which case the fixed, isolated test service is
+/// used instead. The production name is the hard default — a missing, empty, or
+/// garbage variable can never redirect the real app — and the test value is a
+/// compiled-in constant, so no environment value can ever point the store at an
+/// arbitrary service. CI (`.github/workflows/live-tests.yml`) sets the variable
+/// for every test process so a dev-signed test host can never rewrite the
+/// installed app's items (which would reset their ACLs and lock the installed
+/// Developer ID app behind a login-keychain password prompt).
 final class KeychainStore: SecretStore {
 
     typealias AddItem = (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus
     typealias CopyMatching = (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus
     typealias DeleteItem = (CFDictionary) -> OSStatus
     typealias UpdateItem = (CFDictionary, CFDictionary) -> OSStatus
+
+    /// The installed app's Keychain service — the hard default.
+    static let productionService = "com.tookes.Sentwise"
+    /// The isolated service test runs read and write instead (item 115).
+    static let testService = "com.tookes.Sentwise.tests"
+    /// Environment variable that opts a process into `testService`.
+    static let testKeychainEnvironmentKey = "SENTWISE_TEST_KEYCHAIN"
 
     static let shared = KeychainStore()
 
@@ -30,8 +50,31 @@ final class KeychainStore: SecretStore {
     private let deleteItem: DeleteItem
     private let updateItem: UpdateItem
 
+    /// The service a store built with the default initializer uses: production
+    /// unless the environment explicitly opts into the isolated test service.
+    static func resolvedDefaultService(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String {
+        isTestKeychainRequested(environment: environment) ? testService : productionService
+    }
+
+    /// Whether the environment explicitly requests the isolated test service.
+    /// Only the exact truthy spellings flip; absent, empty, or any other value
+    /// stays on the production service, so a typo can never redirect the app.
+    static func isTestKeychainRequested(environment: [String: String]) -> Bool {
+        let normalized = environment[testKeychainEnvironmentKey]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        switch normalized {
+        case "1", "true", "yes":
+            return true
+        default:
+            return false
+        }
+    }
+
     init(
-        service: String = "com.tookes.Sentwise",
+        service: String = KeychainStore.resolvedDefaultService(),
         addItem: @escaping AddItem = SecItemAdd,
         copyMatching: @escaping CopyMatching = SecItemCopyMatching,
         deleteItem: @escaping DeleteItem = SecItemDelete,
