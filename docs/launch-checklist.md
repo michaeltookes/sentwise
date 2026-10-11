@@ -133,6 +133,11 @@ pass.
       accept path proven by production sign-in, draft path + Anthropic key
       proven by live draft traffic post-cutover. Owner 200-path check of
       `/admin/margin` with the real token: pending, non-blocking.)*
+      *(2026-10-11: owner 200-path check CLOSED — `ADMIN_TOKEN` re-rotated and
+      saved to the password manager, then exercised live: the item 111
+      `/admin/comp` grant succeeded with the real token through the same
+      `authorizeAdmin` gate `/admin/margin` uses; unauthenticated probes of
+      `/admin/comp` post-deploy returned 401 on missing/empty/garbage bearers.)*
 - [ ] **Decision recorded:** `ENFORCEMENT_MODE` stays `"soft"` for paid tiers;
       trials are hard-enforced in code regardless (S-M2 remediation). Flip to
       `"hard"` only by owner decision after 56b data.
