@@ -108,7 +108,8 @@ fi
 # Real CHANGELOG renders for every released version (guards format drift).
 repo_cl="$(cd "$SCRIPTS/../.." && pwd)/CHANGELOG.md"
 while IFS= read -r v; do
-  if "$TO_HTML" --changelog "$repo_cl" "$v" | grep -q '<li>'; then
+  # Capture first: piping into grep -q under pipefail flakes (SIGPIPE).
+  if rendered="$("$TO_HTML" --changelog "$repo_cl" "$v")" && has "$rendered" '<li>'; then
     ok "repo CHANGELOG $v renders"
   else
     bad "repo CHANGELOG $v renders"
