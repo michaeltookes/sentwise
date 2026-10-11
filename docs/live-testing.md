@@ -48,6 +48,48 @@ fetches portal links**. It **NEVER**:
 This is the 2026-09-10 billing-guardrail decision applied to automated testing.
 Never add a payload that would violate it.
 
+## Keychain isolation on the shared QA runner (item 115)
+
+The Lucius runner is **also the Sentwise QA desktop**: the installed Developer
+ID app runs in the same user account and login keychain the live tests execute
+in. A dev-signed test process that rewrites an item under the production
+Keychain service `com.tookes.Sentwise` resets that item's ACL to trust the dev
+certificate instead of the Developer ID signature — relaunching the installed
+app then hits a `securityd` "enter the login keychain password" prompt and QA
+goes blind (this happened on 2026-10-11: a `test-without-building` run rewrote
+`managed.clientToken` and `managed.clerkFrontendAPIBaseURL`). Three layers keep
+it from recurring:
+
+1. **Isolated test Keychain service.** `KeychainStore` resolves its default
+   service per process: production (`com.tookes.Sentwise`) unless the
+   `SENTWISE_TEST_KEYCHAIN` environment variable is explicitly truthy
+   (`1`/`true`/`yes`), which selects the compiled-in
+   `com.tookes.Sentwise.tests` service. The production name is the hard
+   default — a missing, empty, or garbage value can never redirect the real
+   app, and no env value can name an arbitrary service. The workflow sets the
+   variable on the test step **and** injects it into the `.xctestrun` (it rides
+   `inject-live-env.sh`'s `LIVE_VARS`), because only the xctestrun injection
+   reaches the host app's environment.
+2. **Isolated test-host launch.** The test host is the real `Sentwise.app`
+   binary, and newer xcodebuild sessions (notably `test-without-building`)
+   omit `XCTestConfigurationFilePath`, which used to be the only test-launch
+   signal. `ProwlHuntRuntime.isXCTestHostLaunch` now also recognizes
+   `XCTestSessionIdentifier` / `XCTestBundlePath`, and `AppDelegate` boots via
+   `ProwlHuntRuntime.launchRuntime()`, so any XCTest-hosted launch gets
+   in-memory stores and no startup side effects. (Deliberately separate from
+   hunt mode's `isEnabled`, which changes app behavior that unit tests encode.)
+3. **CI tripwire.** `Distribution/scripts/keychain-tripwire.sh` snapshots the
+   presence + `mdat` of every known account under `com.tookes.Sentwise` before
+   the tests and verifies them unchanged after (it runs even when tests fail).
+   Any drift fails the job loudly. It reads item attributes only — never
+   `-g`/`-w` — so no secret value is read, stored, or logged.
+
+The workflow also **never terminates or launches `/Applications/Sentwise.app`**.
+A guard step fails the run fast, with instructions, if the installed app is
+running when the job starts — quit Sentwise on the QA desktop, then
+re-dispatch. The QA desktop and live tests still share one user account; the
+isolation above is what makes that coexistence safe.
+
 ## The env-injection recipe
 
 App-hosted XCTest bundles do **not** inherit a plain shell `env`, so the
