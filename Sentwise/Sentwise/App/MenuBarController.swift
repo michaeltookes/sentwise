@@ -11,7 +11,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     // MARK: - Properties
 
-    private var statusItem: NSStatusItem!
+    private(set) var statusItem: NSStatusItem!
     private let appState: AppState
     private let updateManager: UpdateManager
 
@@ -81,12 +81,24 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
+        // Persist the item's position/identity across launches (item 112).
+        statusItem.autosaveName = "Sentwise"
+
         if let button = statusItem.button {
             button.image = NSImage(
                 systemSymbolName: "envelope.badge",
                 accessibilityDescription: "Sentwise"
             )
             button.image?.isTemplate = true  // Adapts to light/dark menu bar.
+
+            // Name the item for accessibility clients (item 112). On macOS 26,
+            // Control Center hosts third-party status items, and the NSImage's
+            // accessibility description does not propagate to the hosted item —
+            // without an explicit label/identifier on the button it appears in
+            // the accessibility tree as an anonymous "Item-0", so assistive
+            // tech and automated QA cannot locate the Sentwise menu by name.
+            button.setAccessibilityIdentifier("sentwise.statusItem")
+            button.setAccessibilityLabel("Sentwise")
         }
 
         let menu = NSMenu()

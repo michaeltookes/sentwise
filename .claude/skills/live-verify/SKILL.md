@@ -2,7 +2,7 @@
 name: live-verify
 description: Dispatch the live-verification suite to the Lucius self-hosted runner via the live-tests GitHub Actions workflow, poll for the result, and report pass/fail with failure excerpts. Use when the user says "/live-verify", "live-verify this branch", "run the live tests on Lucius", or after a /kickoff branch is pushed and needs live verification. NEVER runs tests on the invoking machine.
 allowed-tools: Bash
-model: claude-opus-4-8
+model: claude-opus-5-5
 ---
 
 # Live verify
