@@ -46,6 +46,12 @@ jobs:
           cd Packages/SentwiseMail
           swift test
 
+      - name: Test Keychain tripwire
+        working-directory: ${{ github.workspace }}
+        run: |
+          bash Distribution/scripts/tests/test-keychain-snapshot.sh
+          python3 Distribution/scripts/tests/test_keychain_tripwire.py
+
       - name: Build & Test
         run: |
           set -o pipefail

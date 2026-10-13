@@ -16,8 +16,10 @@ completes a purchase.
 
 > These tests are the **payloads** of the live-testing pipeline: they run on the
 > **Lucius** self-hosted runner via `.github/workflows/live-tests.yml`, dispatched
-> by the `/live-verify` skill or automatically on merge to `main`. This document
-> catalogs the tests and their credentials; the pipeline itself (workflow,
+> on demand through `workflow_dispatch`, directly or by the `/live-verify` skill.
+> Merges to `main` do not trigger live tests; the operator must explicitly
+> dispatch the merged SHA for post-merge verification. This document catalogs
+> the tests and their credentials; the pipeline itself (workflow,
 > triggers, repo-secret provisioning, runner hygiene) is documented in
 > [`docs/live-testing.md`](live-testing.md). **Live tests are never run on the
 > owner's Mac** — they run on Lucius.
@@ -94,9 +96,13 @@ The SMTP submission host and port are **derived** from the IMAP host: a leading
 
 Do **not** run these live tests locally on the owner's Mac. Use the Lucius
 pipeline documented in [`docs/live-testing.md`](live-testing.md): provision the
-repository secrets, dispatch `/live-verify` for branch verification, or rely on
-the automatic push-to-`main` workflow after merge. The workflow injects
-provisioned secrets into the `.xctestrun` via
+repository secrets, coordinate with the QA operator or orchestrator to pause QA
+and quit the installed app, then dispatch `/live-verify` for the exact pushed
+SHA. Post-merge verification requires an explicit dispatch of the merged SHA on
+`main`; there is no automatic post-merge run. Keep QA paused and the installed
+app closed until the run finishes (including queue time), then have the operator
+or orchestrator relaunch the installed app and resume QA, whether tests passed
+or failed. The workflow injects provisioned secrets into the `.xctestrun` via
 `Distribution/scripts/inject-live-env.sh` and keeps live execution on the
 self-hosted runner.
 
