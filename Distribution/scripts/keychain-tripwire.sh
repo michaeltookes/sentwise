@@ -74,23 +74,39 @@ fi
 # Prints "<account><TAB><state>" per account, where <state> is ABSENT or the
 # item's mdat timestamp (e.g. 20261011182920Z). Attributes only — no -g/-w, so
 # no secret value is ever read.
+#
+# Only errSecItemNotFound (exit 44) means ABSENT. Any other failure (locked or
+# unavailable keychain, errSecInteractionNotAllowed 36, a Security Server
+# error) aborts with exit 3: a tripwire that cannot read the items must fail
+# closed, or two failed passes would compare equal and certify isolation that
+# was never checked.
 capture_state() {
-  local account attrs mdat
+  local account attrs mdat rc
   for account in "${ACCOUNTS[@]}"; do
-    if attrs=$(security find-generic-password -s "$SERVICE" -a "$account" 2>/dev/null); then
+    rc=0
+    attrs=$(security find-generic-password -s "$SERVICE" -a "$account" 2>/dev/null) || rc=$?
+    if [[ $rc -eq 0 ]]; then
       # The mdat attribute line looks like:
       #     "mdat"<timedate>=0x... "20261011182920Z\000"
       mdat=$(printf '%s\n' "$attrs" | sed -nE 's/.*"mdat".*"([0-9]{14}Z).*/\1/p' | head -1)
       printf '%s\t%s\n' "$account" "${mdat:-PRESENT-NO-MDAT}"
-    else
+    elif [[ $rc -eq 44 ]]; then
       printf '%s\t%s\n' "$account" "ABSENT"
+    else
+      echo "error: Keychain lookup for account '$account' (service $SERVICE) failed with" >&2
+      echo "       security exit status $rc (not item-not-found). Refusing to record a" >&2
+      echo "       state the tripwire could not actually read." >&2
+      return 3
     fi
   done
 }
 
 case "$MODE" in
   snapshot)
-    capture_state > "$STATE_FILE"
+    if ! capture_state > "$STATE_FILE"; then
+      rm -f "$STATE_FILE"
+      exit 3
+    fi
     echo "Snapshotted ${#ACCOUNTS[@]} production Keychain item states (service $SERVICE) to $STATE_FILE"
     ;;
   verify)
@@ -98,7 +114,7 @@ case "$MODE" in
       echo "error: snapshot state file not found: $STATE_FILE" >&2
       exit 2
     fi
-    current=$(capture_state)
+    current=$(capture_state) || exit 3
     if diff_output=$(diff -u "$STATE_FILE" <(printf '%s\n' "$current")); then
       echo "Keychain tripwire OK: no item under service $SERVICE changed during the test run."
     else

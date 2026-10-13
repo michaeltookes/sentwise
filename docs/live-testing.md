@@ -82,7 +82,10 @@ it from recurring:
    presence + `mdat` of every known account under `com.tookes.Sentwise` before
    the tests and verifies them unchanged after (it runs even when tests fail).
    Any drift fails the job loudly. It reads item attributes only — never
-   `-g`/`-w` — so no secret value is read, stored, or logged.
+   `-g`/`-w` — so no secret value is read, stored, or logged. It fails closed:
+   only `errSecItemNotFound` counts as "absent"; any other `security` error
+   (locked keychain, `errSecInteractionNotAllowed`) aborts the step instead of
+   letting two unreadable passes compare equal.
 
 The workflow also **never terminates or launches `/Applications/Sentwise.app`**.
 A guard step fails the run fast, with instructions, if the installed app is
