@@ -59,6 +59,6 @@ The `/update-backlog` skill automates matching commits to items — keep the fil
 This repo is one lane of the Genkei Labs factory. Priorities across repos, decisions, and the cross-repo ledger live in the private `genkei-ops` repo at `~/Desktop/Current Projects/genkei-ops` (local only).
 
 - Unit of work: a backlog item ID in `docs/backlog.md` (a number such as `115`; resolved items move to `docs/resolved.md`). Work orders arrive from the orchestrator session (a peer message), from a builder prompt, or from Michael. QA findings from Lucius arrive as backlog items marked "found by".
-- Before proposing next steps, read `genkei-ops/docs/inbox.md` and `genkei-ops/docs/backlog.md`; never re-propose work that is done or assigned there.
-- When a work order finishes or blocks: append one line to `genkei-ops/docs/inbox.md` (format in that file) and, if a peer session named `genkei-ops…` exists, message it the same line.
+- Before proposing next steps, read `genkei-ops/docs/inbox.md` and `genkei-ops/docs/backlog.md` **when that repo is available on this machine** (Michael's MacBook, path above); never re-propose work that is done or assigned there. In a GitHub-hosted or other session without it, say so and propose from this repo's `docs/backlog.md` only.
+- When a work order finishes or blocks: **if the ledger is available**, append one line to `genkei-ops/docs/inbox.md` (format in that file) and, if a peer session named `genkei-ops…` exists, message it the same line. **Otherwise** report the same one line in the PR or issue comment you are responding in, and the orchestrator files it.
 - Never open PRs. Push the branch and report; Michael merges.
