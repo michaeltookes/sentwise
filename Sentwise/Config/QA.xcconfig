@@ -1,0 +1,43 @@
+// QA build configuration (sentwise item 123; docs/qa-build.md).
+//
+// Applied ONLY to the "QA" build configuration of the Sentwise target. Debug and
+// Release (every production build) never read this file, so their Info.plist
+// keys stay empty and BuildConfiguration resolves to the production values.
+//
+// A QA build is the production code pointed at the SANDBOX deployment of
+// sentwise-service (sentwise-inference-sandbox), the Clerk development instance,
+// and the Paddle sandbox. It installs beside the production app: its own bundle
+// id, name, Keychain service, Application Support folder, and URL scheme.
+//
+// Values that are not known yet are left EMPTY here. Fill them in either:
+//   1. locally: copy QA.local.xcconfig.example to QA.local.xcconfig
+//      (git-ignored) and fill it in, or
+//   2. in CI: .github/workflows/qa-build.yml passes them on the xcodebuild
+//      command line from repository variables (command-line settings win).
+// Until the Clerk URL and all Paddle values are set, the QA build runs but its
+// checkout is unavailable; it never falls back to production prices.
+// Nothing in this file is secret (client-side tokens and price ids are public).
+
+// --- Identity: coexist with the production install ---
+SENTWISE_BUNDLE_ID_SUFFIX = .qa
+SENTWISE_APP_DISPLAY_NAME = Sentwise QA
+SENTWISE_KEYCHAIN_SERVICE_SUFFIX = .qa
+SENTWISE_APP_SUPPORT_DIRECTORY = Sentwise QA
+SENTWISE_URL_SCHEME_SUFFIX = -qa
+
+// --- Service: the sandbox deployment of sentwise-service ---
+// "//" starts a comment in xcconfig, so the URL is assembled from $(SLASH).
+SLASH = /
+SENTWISE_SERVICE_BASE_URL = https:$(SLASH)$(SLASH)sentwise-inference-sandbox.sentwise-service.workers.dev
+
+// --- Clerk development instance (Frontend API URL, https://<name>.clerk.accounts.dev) ---
+SENTWISE_CLERK_FRONTEND_API_URL =
+
+// --- Paddle sandbox (client-side token test_..., three sandbox price ids) ---
+SENTWISE_PADDLE_ENVIRONMENT = sandbox
+SENTWISE_PADDLE_CLIENT_TOKEN =
+SENTWISE_PADDLE_STARTER_PRICE_ID =
+SENTWISE_PADDLE_PRO_PRICE_ID =
+SENTWISE_PADDLE_UNLIMITED_PRICE_ID =
+
+#include? "QA.local.xcconfig"

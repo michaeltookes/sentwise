@@ -25,3 +25,6 @@ dist/
 .env
 .env.*
 build-dl/
+
+# Per-developer QA build values (item 123) — never committed
+Sentwise/Config/QA.local.xcconfig
