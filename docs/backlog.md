@@ -24,6 +24,20 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 > **Item format:** every item has a bold title, a one-line summary, a user story (*As a … I want … so that …*), and acceptance criteria. See `CLAUDE.md` for backlog conventions.
 
+## Milestones (pipeline, 2026-10-12)
+
+> Added by the pipeline replan (`docs/plan.md`, test cases in `docs/qa/test-cases.md`). Ordered by distance to the first paid subscription. This section only groups items by milestone; it does not move, renumber, or reword anything below. Items from other repos are filed there by the orchestrator. New items for this plan are 117–122, appended at the end of the file.
+
+| Milestone | Demo | sentwise items | Elsewhere |
+|---|---|---|---|
+| **M1 v0.2.1 ships** | Sparkle offers 0.2.1 with release notes; status item found by name; first approved follow-up on the clean onboarding path | 113, 116, 117; in flight: 112, 114, 115; QA leg of 74 (§6) | PR #99 (live tests dispatch-only); genkei-ops P1-3 |
+| **M2 Funnel is measurable** | `sentwise.ai/changelog` live; pricing cards per tier; `GET /admin/funnel` returns trials, checkouts, paid by tier | 88, 118 | sentwise-landing-page 10, 14; genkei-ops P1-2, 6c-1, 6c-2 |
+| **M3 Trial to paid verified** | Fresh account: reminders → "Trial ended" → checkout → "You're on Starter" → cancel shows "Cancels on <date>" | 119, 87, 92, 120 | — |
+| **M4 First-run friction cut** | Workspace domain auto-detected; "Continue with Google"; branded verification email | 110, 105, 106, 121, 122 | Clerk dashboard (owner): 74 §1 callback allowlist, 106 templates |
+| **M5 Public link and 30-day push** | Public post → site → download → trial on a clean browser; support drill answered within SLA | 74 (close) | genkei-ops P1-1, P1-4, 6c-3/4/5; launch kit; sentwise-landing-page 9 |
+
+After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
+
 ---
 
 ## High Priority
@@ -378,3 +392,56 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Uses the user's own CRM credentials; calls go directly Mac → CRM, keeping the local-first promise.
     - Off by default, per-call opt-out; failures never block the email send itself.
     - Positioned as the **Unlimited-tier** feature in the item 56/98 pricing model — the follow-up email sells to the rep, CRM hygiene sells to the manager who holds budget.
+
+## Pipeline milestone items (2026-10-12)
+
+> New items from the pipeline replan (`docs/plan.md`). Each is tagged with its milestone and its priority tier, and names the test cases that verify it (`docs/qa/test-cases.md`). Items that change `sentwise-service` are tracked here because that repo has no backlog and shared work uses sentwise numbers.
+
+117. **Release v0.2.1** — *(M1, High)*
+    Cut the patch release that ships items 112, 114 (appcast release notes), 115, 113, and 116, so the QA Mac and early users get the fixes and the update dialog finally shows notes.
+    *As a 0.2.0 user, I want a 0.2.1 update that tells me what changed, so that I update with confidence.*
+    - `/release-prep` 0.2.1: CHANGELOG `## [0.2.1]` written for humans (fixes listed by user-visible effect); build number above 5; tag pipeline green; DMG notarized and stapled; appcast item carries the 0.2.1 notes (item 114's generator); cask bumped with a matching sha256 and the item 116 syntax.
+    - GitHub release notes link the README quickstart; `sentwise.ai/download` resolves to the 0.2.1 DMG.
+    - Item 114 resolves when TC-M1-01 shows notes in the dialog on a 0.2.0 install.
+    - **Verified by:** TC-M1-01, TC-M1-02, TC-M1-10.
+
+118. **Checkout-intent counter on the Worker (`sentwise-service`)** — *(M2, High)*
+    Count when a signed-in account opens checkout or a plan change, so the funnel has a stage between "trial started" and "paid".
+    *As the maintainer, I want to see how many trial users open checkout, so that I can tell a pricing problem from a product problem.*
+    - `/v1/paddle/checkout` and `/v1/paddle/change-plan` write one Analytics Engine datapoint per call: HMAC-hashed account id (same scheme as `analytics.ts`), action, requested tier, trial/paid state. No email, no payment data.
+    - The counts surface in item 88's `GET /admin/funnel` as `checkoutsOpened` (both actions, by tier).
+    - Comp accounts (item 111) and calls that fail auth are not counted.
+    - Vitest: datapoint written once per successful call, never on 401, never for comp.
+    - **Verified by:** TC-M2-05, TC-M2-07, TC-M2-08.
+
+119. **QA trial override: admin route to set a test account's trial start (`sentwise-service`)** — *(M3, High)*
+    Let QA put a throwaway account at any point of the 14-day trial, so trial reminders and the trial-ended path can be tested in minutes instead of two weeks.
+    *As QA, I want to set a test account's trial start date, so that I can verify the 7-day, 1-day, and trial-ended states on production builds.*
+    - `POST /admin/trial` with `{email, startedAt}` behind the existing `authorizeAdmin` gate (`ADMIN_TOKEN`; invisible 404 when unset, 401 otherwise).
+    - Only emails whose domain is in a Worker var `QA_EMAIL_DOMAINS` (initially `prowlqa.dev`) can be changed; anything else returns 403 `trial_override_forbidden` and writes nothing.
+    - Writes only `privateMetadata.trialStartedAt`; returns the computed trial state; an audit datapoint like item 111's `admin_comp_*` (hashed id, action).
+    - Never alters an account with a real Paddle subscription or an active comp (409).
+    - README documents the curl with a `$ADMIN_TOKEN` placeholder. Production deploy is Michael's.
+    - **Verified by:** TC-M3-01, TC-M3-02, TC-M3-04.
+
+120. **Release v0.2.2 (trial reminders and scheduled cancellation)** — *(M3, High)*
+    Ship items 87 and 92 in a signed release so the trial-to-paid path can be verified on production.
+    *As a trial user, I want the release that warns me before my trial ends and shows my cancellation date, so that billing never surprises me.*
+    - `/release-prep` 0.2.2 after 87, 92, and 119 (deployed) are merged; CHANGELOG section written; appcast notes present; cask bumped.
+    - Item 87's notification copy follows TC-M3-02/03 ("Your Sentwise trial ends in 7 days", "Your Sentwise trial ends tomorrow"); item 92 shows "Cancels on <date>".
+    - **Verified by:** TC-M3-05, TC-M3-06.
+
+121. **Re-enable "Continue with Google" for the Sentwise account on production** — *(M4, High)*
+    Turn managed Google sign-in back on once the owner has allowlisted the Worker callback in the production Clerk instance (`docs/launch-checklist.md` §1), removing the email-code round trip for most new users.
+    *As a new user, I want to sign in to Sentwise with my Google account, so that I don't wait for and paste an emailed code.*
+    - Precondition (owner): the `/auth/callback` redirect is allowlisted in production Clerk; until then this item stays blocked.
+    - Flip `AppState.isManagedGoogleSignInEnabled` to true; verify the browser hand-back on a production build; tick the two open §1 boxes in the launch checklist.
+    - Unit tests: the option shows when enabled, and stays hidden in Prowl hunt mode unless the fake is active (existing behavior).
+    - **Verified by:** TC-M4-03.
+
+122. **Release v0.2.3 (first-run friction)** — *(M4, High)*
+    Ship items 110, 105, and 121 in a signed release before the public link goes out.
+    *As a first-time user from the public link, I want onboarding to recognize my company mailbox and let me sign in with Google, so that I reach my first draft without help.*
+    - `/release-prep` 0.2.3; CHANGELOG section; appcast notes; cask bumped.
+    - Item 106's Clerk email branding is live before the release is announced (dashboard work, no app code).
+    - **Verified by:** TC-M4-06 (and TC-M4-01 to TC-M4-05 on this build).
