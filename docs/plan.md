@@ -32,7 +32,7 @@ Ordered by distance to the first paid subscription. Each app-side milestone ends
 |---|---|---|---|
 | M1 | v0.2.1 ships | On Lucius' Mini, Sparkle offers 0.2.1 over 0.2.0 with release notes in the dialog; Peekaboo opens the "Sentwise" status menu by name; the onboarding leg finishes with a first approved follow-up | v0.2.1 released; TC-M1-* pass; 74 §6 onboarding box ticked |
 | M2 | Funnel is measurable | `sentwise.ai/changelog` lists 0.2.1 and 0.2.0; pricing cards show per-tier features; `GET /admin/funnel` returns the week's trials, checkouts opened and paid by tier | Site and Worker deployed; TC-M2-* pass; first funnel row in `genkei-ops/docs/metrics.md` |
-| M3 | Trial → paid verified | A fresh QA account goes trial → 7-day and 1-day reminders → "Trial ended" → Subscribe → Paddle checkout → "You're on Starter" → drafts again → cancels and sees "Cancels on <date>" | v0.2.2 released; TC-M3-* pass on production |
+| M3 | Trial → paid verified | A fresh QA account goes trial → 7-day and 1-day reminders → "Trial ended" → Subscribe → Paddle checkout → "You're on Starter" → drafts again → cancels and sees "Cancels on <date>" | Item 123 sandbox lane deployed (Worker `PADDLE_ENV`, app routes `@prowlqa.dev` accounts to sandbox checkout); v0.2.2 released; TC-M3-* pass, with the purchase made on the Paddle sandbox and a production account shown to still get live prices |
 | M4 | First-run friction cut | A Workspace custom-domain mailbox connects with the IMAP host pre-filled; "Continue with Google" signs in; the verification email arrives branded as Sentwise | v0.2.3 released; TC-M4-* pass |
 | M5 | Public link and 30-day push | Following the public post's link on a clean browser: sentwise.ai → Download for macOS → install → trial started; a support drill ticket is answered within the stated SLA | Item 74 closed; distribution plan live; TC-M5-* pass; funnel reported weekly |
 
@@ -43,12 +43,12 @@ Ordered by distance to the first paid subscription. Each app-side milestone ends
 |---|---|---|
 | M1 | 113, 116, 117; in flight: 112, 114, 115; QA leg of 74 (§6 onboarding) | genkei-ops P1-3 (QA waves 2–3), PR #99 |
 | M2 | 88, 118 | sentwise-landing-page 10 (changelog page = genkei-ops 6c-1), 14 (pricing cards = 6c-2); genkei-ops P1-2 (funnel instrumentation, weekly pull into `metrics.md`) |
-| M3 | 119, 87, 92, 120 | sentwise-service work is carried by 88/118/119/92 (that repo has no backlog; shared items use sentwise numbers) |
+| M3 | 123 (prerequisite), 119, 87, 92, 120 | sentwise-service work is carried by 88/118/119/92/123 (branch `paddle-sandbox-lane` in both repos) (that repo has no backlog; shared items use sentwise numbers) |
 | M4 | 110, 105, 106, 121, 122 | Clerk dashboard steps (owner): callback allowlist (74 §1), email branding (106) |
 | M5 | 74 (close) | genkei-ops P1-1 (distribution plan), P1-4 (support path drill), 6c-3/6c-4/6c-5 (social handles, update email, founder voice), Stage 5 launch kit (`/launch-kit sentwise v0.2.3`); sentwise-landing-page 9 (demo video) |
 
 ## Risks
-- **Testing a real purchase costs money.** Comp makes the QA account skip checkout, and production has no test mode. Open question 1; until answered, TC-M3-05 is blocked at the payment step.
+- **The purchase test runs on the Paddle sandbox (item 123).** QA buys on a `@prowlqa.dev` account with no active comp, routed to sandbox prices and verified with the sandbox webhook secret only; the risk is the lane leaking to real customers, so TC-M3-05 also proves a production account still gets live prices. If the lane slips, the fallbacks are a single-use 100%-off live discount code, then a real $9 Starter purchase refunded the same day.
 - **Clerk may block plus-addressed emails** (a dashboard restriction). The trial fixtures use `luciusfox+trial-<date>@prowlqa.dev`; if blocked, they need the wave-2 test mailbox (Michael's one-time Workspace step, genkei-ops P1-3).
 - **Signing the QA Mac into a trial account disturbs Lucius' daily pass.** Every M2/M3 case that switches accounts ends by signing back in as the comped account and deleting the throwaway account.
 - **Free Vercel Analytics has no custom events**, so the site funnel stage is page views plus GitHub release download counts, not click-level. Open question 2.
@@ -68,6 +68,6 @@ Ordered by distance to the first paid subscription. Each app-side milestone ends
 7. Item 104 (bundled Google OAuth, CASA $500–1,000/yr) stays after the first paid subscription (open question 3).
 
 ## Open questions for Michael
-1. **Production purchase test (money).** M3 needs one real checkout on production, since comp bypasses Paddle. Options: (a) a single-use 100%-off Paddle discount code for the QA account, if Paddle accepts it without a card; (b) one real $9 Starter purchase on your card, refunded the same day (Paddle keeps its fee, under $1); (c) a staging Worker on the Paddle sandbox, about 2–3 builder days and no money. **Proceeding on (a), falling back to (b)**, with you entering any payment details at the marked step; (c) is not planned.
+1. **Production purchase test (money). Resolved 2026-10-12:** Michael chose to build the Paddle sandbox lane now (item 123, an M3 prerequisite). The 100%-off live discount code and a refunded $9 purchase remain fallbacks only.
 2. **Click-level funnel (money).** Free Vercel Analytics gives page views and referrers but no custom events (download clicks, pricing CTA clicks); Vercel Pro is about $20/month, Plausible about $9/month. **Proceeding with no new spend:** page views + GitHub release download counts + Worker counters.
 3. **Item 104 timing (money and direction).** Is bundled "Sign in with Google" for Gmail (the app-password replacement, CASA assessment $500–1,000/yr and a 2–6 week Google review) wanted before the public push, or after the first paid subscription? **Proceeding on after.** M4 cuts friction with MX auto-detect (110) and Google account sign-in (121) instead.

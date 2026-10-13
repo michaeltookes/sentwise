@@ -190,17 +190,19 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 - **Asset:** screenshot (responses)
 
 ### TC-M2-06 A new trial is counted
-- **Executor:** uat (steps 1 and 6) and lucius (steps 2–5)
+- **Executor:** uat (steps 1 and 8) and lucius (steps 2–7)
 - **Verifies:** item 88
-- **Preconditions:** Sentwise running as F1; `uat` has the admin token.
+- **Preconditions:** Sentwise running as F1; `uat` has the admin token. The trial starts on the account's first authenticated draft, not at sign-in (`docs/managed-inference.md`); `/v1/me` only reads trial state.
 - **Steps:**
   1. uat: `GET {base}/admin/funnel?from=<today>&to=<today>` with the token; note `trialsStarted`.
   2. lucius: **Settings…** → **Subscription** → **Sign out**.
   3. Click **Sign in or create your account**, enter F2 in **Email address**, continue.
   4. Read the code from F1's Gmail inbox, enter it in **6-digit code**, verify.
-  5. Confirm the Subscription tab shows "Trial — 14 days left" (or 13 if the day rolled over in UTC).
-  6. uat: repeat step 1.
-- **Expected:** `trialsStarted` in step 6 is at least one higher than in step 1. Keep F2 signed in for TC-M2-07.
+  5. From the status menu open **New Follow-up from Transcript…**, enter recipient `luciusfox@prowlqa.dev`, paste T1, click **Draft follow-up**, and wait for the draft (this first draft starts the trial).
+  6. In Review Drafts, click **Discard** on that draft and pick any reason.
+  7. Close the Settings window, reopen **Settings…** → **Subscription** (this refreshes status), and read the plan line.
+  8. uat: repeat step 1.
+- **Expected:** step 7 shows "Trial — 14 days left", and `trialsStarted` in step 8 is at least one higher than in step 1. Keep F2 signed in for TC-M2-07.
 - **Asset:** video
 
 ### TC-M2-07 Opening checkout is counted
@@ -227,7 +229,7 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 
 ## M3 Trial to paid verified
 
-All M3 app cases use a fresh F2 created at the start of the run (sign out of F1, sign in as F2, as in TC-M2-06 steps 2–4), with exactly one mailbox (F1's) connected. Trial dates are set with item 119's admin route by the `uat` executor.
+All M3 app cases use a fresh F2 created at the start of the run (sign out of F1, sign in as F2, generate and discard one T1 draft to start the trial, and refresh status, as in TC-M2-06 steps 2–7), with exactly one mailbox (F1's) connected. The pane rounds trial days up, so each reminder fixture sets the trial end one hour inside its threshold. Trial dates are set with item 119's admin route by the `uat` executor.
 
 ### TC-M3-01 Trial override is limited to QA accounts
 - **Executor:** uat
@@ -244,7 +246,7 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 - **Verifies:** items 87, 119
 - **Preconditions:** F2 signed in on trial; macOS notifications allowed for Sentwise.
 - **Steps:**
-  1. uat: `POST {base}/admin/trial` for F2 with `startedAt` = now minus 7 days plus 1 hour.
+  1. uat: `POST {base}/admin/trial` for F2 with `startedAt` = now minus 7 days minus 1 hour (the trial now ends in 6 days 23 hours, one hour inside the 7-day threshold).
   2. lucius: quit Sentwise from the status menu (**Quit Sentwise**) and relaunch it from `/Applications`.
   3. Wait up to 2 minutes for a notification.
   4. Click the notification.
@@ -256,12 +258,12 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 - **Verifies:** item 87
 - **Preconditions:** TC-M3-02 done.
 - **Steps:**
-  1. uat: set F2's `startedAt` to now minus 13 days plus 1 hour.
+  1. uat: set F2's `startedAt` to now minus 13 days minus 1 hour (the trial now ends in 23 hours, one hour inside the 1-day threshold).
   2. lucius: quit and relaunch Sentwise; wait up to 2 minutes.
   3. Note the notification.
   4. Quit and relaunch Sentwise again; wait 2 minutes.
   5. Open Notification Center.
-- **Expected:** exactly one notification titled "Your Sentwise trial ends tomorrow" appears across both launches; the 7-day reminder does not fire again.
+- **Expected:** exactly one notification titled "Your Sentwise trial ends tomorrow" appears across both launches, the Subscription tab shows "Trial — 1 day left", and the 7-day reminder does not fire again.
 - **Asset:** video
 
 ### TC-M3-04 Trial ended pauses drafting
@@ -277,18 +279,38 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 - **Expected:** the Subscription tab shows plan "Trial ended" with "Your free trial has ended, so drafting is paused until you choose a plan." and a **Subscribe** button; step 4 produces no draft and shows a message that the trial has ended with a way to choose a plan.
 - **Asset:** video
 
-### TC-M3-05 Checkout to a paid plan on production
-- **Executor:** lucius; Michael completes step 4 if payment details are required (open question 1 in `docs/plan.md`)
-- **Verifies:** production Paddle checkout (items 56c/90 regression), item 120
-- **Preconditions:** TC-M3-04 state on v0.2.2; the test purchase method approved by Michael (100%-off discount code, or a real card refunded the same day).
+### TC-M3-05 Checkout to a paid plan on the Paddle sandbox; production unaffected
+- **Executor:** lucius (steps 1–11) and uat (steps 1 and 12)
+- **Verifies:** item 123, item 120, checkout regression (items 56c/90)
+- **Preconditions:**
+  - v0.2.2 installed; item 123 deployed (Worker `PADDLE_ENV` lane with the sandbox catalog mirroring the tier matrix, see `docs/billing-qa.md`).
+  - The purchaser is a `@prowlqa.dev` account with **no active comp**: F2 in TC-M3-04's "Trial ended" state.
+  - If the run uses F1 instead, uat first revokes its comp (`DELETE {base}/admin/comp` for F1) and re-grants Pro in teardown.
+  - **P1**, a production account on a non-QA domain (the wave-2 test mailbox, genkei-ops P1-3), exists. If it does not exist yet, Michael signs in with his own account for steps 8–11.
+  - Paddle sandbox test card numbers are in `docs/billing-qa.md`, not here.
 - **Steps:**
-  1. **Settings…** → **Subscription** → **Subscribe**.
-  2. In "Choose your plan", click the Starter card.
-  3. In the Paddle form, enter F2's email if asked and the approved discount code.
-  4. Complete payment.
-  5. Wait for the confirmation.
-  6. Click **Done**.
-- **Expected:** the sheet shows "You're on Starter — you're all set."; after **Done**, the Account section shows Current plan Starter with "Renews <date about one month out>".
+  1. uat: `GET {base}/admin/comp?email=<purchaser>` with the token.
+  2. lucius, as the purchaser: **Settings…** → **Subscription** → **Subscribe**.
+  3. In "Choose your plan", click the Starter card and wait for "Secure checkout by Paddle".
+  4. Pay with the Paddle sandbox success test card from `docs/billing-qa.md`.
+  5. Wait for the confirmation, then click **Done**.
+  6. Close and reopen **Settings…** → **Subscription**.
+  7. Sign out; sign in as P1 (its code comes from P1's mailbox).
+  8. **Subscription** → **Subscribe** (or **Manage plan**), then click the Starter card.
+  9. Read the price in the checkout form.
+  10. Enter the same sandbox test card and attempt payment.
+  11. Click **Close**; sign out; sign back in as the purchaser for TC-M3-06 to TC-M3-08 (TC-M3-09 teardown returns the app to F1).
+  12. uat: `GET {base}/admin/funnel?from=<today>&to=<today>`.
+- **Expected:**
+  - Step 1 returns 404 (no comp).
+  - Step 5 shows "You're on Starter — you're all set."
+  - Step 6 shows Current plan Starter with "Renews <date about one month out>".
+  - For P1, step 9 shows the live price ($9.00/month plus any tax) and step 10 declines the test card. No sandbox price or sandbox checkout ever appears for P1.
+  - Step 12 counts the purchase as `subscriptionsActivated.starter` with sandbox purchases reported separately, never mixed into the live numbers.
+- **Alternate paths (only if item 123 is unavailable, in this order):**
+  - (a) A single-use 100%-off live Paddle discount code, entered at step 4.
+  - (b) A real $9 Starter purchase. Michael enters the card at step 4 and the orchestrator refunds it the same day.
+  - Record in the report which path ran.
 - **Asset:** video
 
 ### TC-M3-06 Paid account drafts again
@@ -400,13 +422,21 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 ### TC-M5-01 Stranger path from the public post
 - **Executor:** lucius
 - **Verifies:** item 74 (public link), genkei-ops P1-1
-- **Preconditions:** the public post URL from the distribution plan; Sentwise removed from `/Applications` on the Mini (drag to Trash; app data kept); a browser profile with no sentwise.ai cookies.
+- **Preconditions:**
+  - The public post URL from the distribution plan.
+  - Run inside a **separate standard macOS user on Lucius' Mini** (`sentwise-stranger`, created once by `homelab-it`), so the stranger has no Sentwise app data, no Keychain items, and no onboarding-completed flag. Keeping F1's user would skip fresh onboarding, because `reconcileOnboardingState()` honors F1's session.
+  - Before each run, the stranger user's home folder is reset (Application Support, Preferences, and login keychain removed by `homelab-it`).
+  - F1's user, app, and Keychain are not touched.
+  - The browser in the stranger user has no sentwise.ai cookies.
 - **Steps:**
-  1. Open the post URL and click its link to sentwise.ai.
+  1. Log in to the stranger user. Open the post URL and click its link to sentwise.ai.
   2. On sentwise.ai click **Download for macOS**.
-  3. Open the downloaded DMG and drag Sentwise to Applications; open it and accept the Gatekeeper prompt.
-  4. In Setup Assistant, sign in to Sentwise AI as a new F2.
-- **Expected:** Gatekeeper reports the app was checked for malicious software with none detected; the installed version is the latest release; after step 4 the Subscription tab shows "Trial — 14 days left". Teardown: sign back in as F1.
+  3. Open the downloaded DMG and drag Sentwise to Applications. Open it and accept the Gatekeeper prompt.
+  4. In Setup Assistant ("Welcome to Sentwise"), connect F1's mailbox (`luciusfox@prowlqa.dev`) with its app password. Then sign in to Sentwise AI as a new F2.
+  5. Finish the Setup Assistant with **Save as draft**.
+  6. From the status menu open **New Follow-up from Transcript…**, enter recipient `luciusfox@prowlqa.dev`, paste T1, click **Draft follow-up**, then **Discard** the draft (the first draft starts the trial).
+  7. Close and reopen **Settings…** → **Subscription**.
+- **Expected:** Gatekeeper reports the app was checked for malicious software with none detected; the installed version is the latest release; step 3 opens to the Setup Assistant (not straight to the menu bar); step 7 shows "Trial — 14 days left". Teardown: in the stranger user, Settings → Account → disconnect the mailbox with **Disconnect & Erase Local Data**; log out of the stranger user.
 - **Asset:** video
 
 ### TC-M5-02 Support mail gets a reply within the stated SLA

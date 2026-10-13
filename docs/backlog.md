@@ -32,7 +32,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 |---|---|---|---|
 | **M1 v0.2.1 ships** | Sparkle offers 0.2.1 with release notes; status item found by name; first approved follow-up on the clean onboarding path | 113, 116, 117; in flight: 112, 114, 115; QA leg of 74 (§6) | PR #99 (live tests dispatch-only); genkei-ops P1-3 |
 | **M2 Funnel is measurable** | `sentwise.ai/changelog` live; pricing cards per tier; `GET /admin/funnel` returns trials, checkouts, paid by tier | 88, 118 | sentwise-landing-page 10, 14; genkei-ops P1-2, 6c-1, 6c-2 |
-| **M3 Trial to paid verified** | Fresh account: reminders → "Trial ended" → checkout → "You're on Starter" → cancel shows "Cancels on <date>" | 119, 87, 92, 120 | — |
+| **M3 Trial to paid verified** | Fresh account: reminders → "Trial ended" → checkout → "You're on Starter" → cancel shows "Cancels on <date>" | 123 (prerequisite), 119, 87, 92, 120 | sentwise-service: 123 (branch `paddle-sandbox-lane`) |
 | **M4 First-run friction cut** | Workspace domain auto-detected; "Continue with Google"; branded verification email | 110, 105, 106, 121, 122 | Clerk dashboard (owner): 74 §1 callback allowlist, 106 templates |
 | **M5 Public link and 30-day push** | Public post → site → download → trial on a clean browser; support drill answered within SLA | 74 (close) | genkei-ops P1-1, P1-4, 6c-3/4/5; launch kit; sentwise-landing-page 9 |
 
@@ -427,9 +427,9 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
 120. **Release v0.2.2 (trial reminders and scheduled cancellation)** — *(M3, High)*
     Ship items 87 and 92 in a signed release so the trial-to-paid path can be verified on production.
     *As a trial user, I want the release that warns me before my trial ends and shows my cancellation date, so that billing never surprises me.*
-    - `/release-prep` 0.2.2 after 87, 92, and 119 (deployed) are merged; CHANGELOG section written; appcast notes present; cask bumped.
+    - `/release-prep` 0.2.2 after 87, 92, 119 (deployed), and 123 (Worker sandbox lane deployed, app routing merged) are in; CHANGELOG section written; appcast notes present; cask bumped.
     - Item 87's notification copy follows TC-M3-02/03 ("Your Sentwise trial ends in 7 days", "Your Sentwise trial ends tomorrow"); item 92 shows "Cancels on <date>".
-    - **Verified by:** TC-M3-05, TC-M3-06.
+    - **Verified by:** TC-M3-05, TC-M3-06 (purchase on the Paddle sandbox via item 123).
 
 121. **Re-enable "Continue with Google" for the Sentwise account on production** — *(M4, High)*
     Turn managed Google sign-in back on once the owner has allowlisted the Worker callback in the production Clerk instance (`docs/launch-checklist.md` §1), removing the email-code round trip for most new users.
