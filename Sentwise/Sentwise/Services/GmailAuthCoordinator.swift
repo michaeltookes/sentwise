@@ -55,6 +55,8 @@ final class GmailAuthCoordinator {
     private let makeListener: () -> RedirectListener
     private let browser: BrowserOpening
     private let redirectTimeout: TimeInterval
+    private let revocationWaitTimeout: TimeInterval
+    private let revocations = GoogleRevocationTracker()
     private let now: () -> Date
     private let makeState: () -> String
 
@@ -92,6 +94,7 @@ final class GmailAuthCoordinator {
         makeListener: @escaping () -> RedirectListener = { LoopbackRedirectListener() },
         browser: BrowserOpening = NSWorkspaceBrowserOpener(),
         redirectTimeout: TimeInterval = 300,
+        revocationWaitTimeout: TimeInterval = 10,
         now: @escaping () -> Date = Date.init,
         makeState: @escaping () -> String = { PKCEGenerator.randomURLSafeString(byteCount: 16) }
     ) {
@@ -101,6 +104,7 @@ final class GmailAuthCoordinator {
         self.makeListener = makeListener
         self.browser = browser
         self.redirectTimeout = redirectTimeout
+        self.revocationWaitTimeout = revocationWaitTimeout
         self.now = now
         self.makeState = makeState
     }
@@ -131,6 +135,12 @@ final class GmailAuthCoordinator {
     }
 
     private func runAuthorization(loginHint: String?, requireHintMatch: Bool) async throws -> GmailAuthorization {
+        // Google revokes the whole grant for a revoked refresh token, so a revoke
+        // that lands after the new consent would invalidate the new grant too.
+        if !(await revocations.waitForPending(timeout: revocationWaitTimeout)) {
+            logger.info("A pending Google revocation didn't finish in time; continuing with sign-in")
+        }
+        try Task.checkCancellation()
         let pkce = PKCEGenerator.generate()
         let state = makeState()
         let listener = makeListener()
@@ -267,10 +277,13 @@ final class GmailAuthCoordinator {
             logger.error("Couldn't remove a Google token from the Keychain: \(error.localizedDescription)")
         }
         guard let revocable = token?.refreshToken ?? token?.accessToken else { return }
-        do {
-            try await tokenService.revoke(token: revocable)
-        } catch {
-            logger.info("Google token revocation failed (ignored): \(error.localizedDescription)")
+        let tokenService = tokenService
+        await revocations.run {
+            do {
+                try await tokenService.revoke(token: revocable)
+            } catch {
+                logger.info("Google token revocation failed (ignored): \(error.localizedDescription)")
+            }
         }
     }
 

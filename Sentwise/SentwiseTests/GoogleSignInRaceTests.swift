@@ -313,6 +313,61 @@ final class GoogleSignInRaceTests: XCTestCase {
         XCTAssertEqual(transport.lastGatedFields["token"], "old-rt", "only the old grant was revoked")
     }
 
+    private func makeRevokeRaceCoordinator(
+        revocationWaitTimeout: TimeInterval = 10
+    ) throws -> (GmailAuthCoordinator, GmailAuthStore, GatedRefreshTransport, SpyBrowser) {
+        let store = GmailAuthStore(secrets: InMemorySecretStore())
+        try store.saveToken(OAuthToken(
+            accessToken: "old-at", refreshToken: "old-rt", expiresAt: .distantFuture,
+            scope: GoogleOAuth.mailScope, tokenType: "Bearer"
+        ), for: "me@gmail.com")
+        let transport = GatedRefreshTransport(
+            gatedURL: GoogleOAuth.revocationEndpoint,
+            otherResponse: HTTPResponse(statusCode: 200, body: Data(exchangeJSON.utf8))
+        )
+        let browser = SpyBrowser()
+        let coordinator = GmailAuthCoordinator(
+            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            store: store,
+            tokenService: OAuthTokenService(transport: transport),
+            makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
+            browser: browser,
+            revocationWaitTimeout: revocationWaitTimeout,
+            makeState: { self.state }
+        )
+        return (coordinator, store, transport, browser)
+    }
+
+    func testAuthorizationWaitsForAPendingRevokeBeforeOpeningConsent() async throws {
+        let (coordinator, store, transport, browser) = try makeRevokeRaceCoordinator()
+
+        let disconnect = Task { await coordinator.disconnect("me@gmail.com") }
+        await fulfillment(of: [transport.didStartRefresh], timeout: 2)
+        let authorize = Task { try await coordinator.authorize(loginHint: "me@gmail.com") }
+        try await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertNil(browser.openedURL, "no new consent while the old grant's revoke is still out")
+
+        transport.completeRefresh(HTTPResponse(statusCode: 200, body: Data()))
+        await disconnect.value
+        let authorization = try await authorize.value
+
+        XCTAssertNotNil(browser.openedURL)
+        XCTAssertEqual(authorization.email, "me@gmail.com")
+        XCTAssertEqual(try store.loadToken(for: "me@gmail.com")?.accessToken, "fresh-at")
+    }
+
+    func testAuthorizationProceedsWhenAPendingRevokeTimesOut() async throws {
+        let (coordinator, _, transport, browser) = try makeRevokeRaceCoordinator(revocationWaitTimeout: 0.05)
+
+        let disconnect = Task { await coordinator.disconnect("me@gmail.com") }
+        await fulfillment(of: [transport.didStartRefresh], timeout: 2)
+        _ = try await coordinator.authorize(loginHint: "me@gmail.com")
+        XCTAssertNotNil(browser.openedURL, "a stuck revoke delays sign-in only up to the timeout")
+
+        transport.completeRefresh(HTTPResponse(statusCode: 200, body: Data()))
+        await disconnect.value
+    }
+
     // MARK: - Builds without a bundled client
 
     func testDisconnectWithoutAClientStillDeletesTheLocalToken() async throws {
@@ -395,79 +450,5 @@ final class GoogleSignInRaceTests: XCTestCase {
             }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
-    }
-}
-
-// MARK: - Gated fakes
-
-/// A redirect listener that waits until the test hands it the redirect.
-final class GatedRedirectListener: RedirectListener, @unchecked Sendable {
-    let didStartWaiting = XCTestExpectation(description: "waiting for the browser redirect")
-    private let redirectURI: String
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<[String: String], Error>?
-
-    init(redirectURI: String) {
-        self.redirectURI = redirectURI
-    }
-
-    func start() async throws -> String { redirectURI }
-
-    func waitForRedirect(timeout: TimeInterval) async throws -> [String: String] {
-        try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            self.continuation = continuation
-            lock.unlock()
-            didStartWaiting.fulfill()
-        }
-    }
-
-    func release(_ params: [String: String]) {
-        lock.lock()
-        let continuation = continuation
-        self.continuation = nil
-        lock.unlock()
-        continuation?.resume(returning: params)
-    }
-
-    func stop() {}
-}
-
-/// A transport whose refresh requests (or, with `gatedURL`, requests to that
-/// URL) wait until the test answers them; every other request answers
-/// `otherResponse` immediately.
-final class GatedRefreshTransport: HTTPTransport, @unchecked Sendable {
-    let didStartRefresh = XCTestExpectation(description: "gated request started")
-    private let gatedURL: URL?
-    private let otherResponse: HTTPResponse
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<HTTPResponse, Error>?
-    private(set) var refreshCount = 0
-    private(set) var lastGatedFields: [String: String] = [:]
-
-    init(gatedURL: URL? = nil, otherResponse: HTTPResponse = HTTPResponse(statusCode: 200, body: Data())) {
-        self.gatedURL = gatedURL
-        self.otherResponse = otherResponse
-    }
-
-    func postForm(_ url: URL, fields: [String: String]) async throws -> HTTPResponse {
-        let isGated = gatedURL.map { $0 == url } ?? (fields["grant_type"] == "refresh_token")
-        guard isGated else { return otherResponse }
-        return try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            refreshCount += 1
-            lastGatedFields = fields
-            self.continuation = continuation
-            lock.unlock()
-            didStartRefresh.fulfill()
-        }
-    }
-
-    func completeRefresh(_ response: HTTPResponse) {
-        lock.lock()
-        let continuation = continuation
-        self.continuation = nil
-        lock.unlock()
-        continuation?.resume(returning: response)
     }
 }
