@@ -9,9 +9,18 @@ struct SecretKey: RawRepresentable, Hashable {
 
     // MARK: Well-known keys
 
-    /// The Gmail OAuth token set (access + refresh + expiry), stored as JSON.
-    /// (OAuth path is parked; kept for a future bundled-client revival.)
+    /// The legacy single-account BYO-client Gmail OAuth token (parked item 3).
+    /// Only read by the launch cleanup that removes it; the bundled-client
+    /// "Sign in with Google" path (item 104) uses `gmailOAuthToken(email:)`.
     static let gmailToken = SecretKey(rawValue: "gmail.token")
+
+    /// The Google OAuth token set (access + refresh + expiry, JSON) for one
+    /// "Sign in with Google" mailbox (item 104), keyed like
+    /// `mailAppPassword(email:)` so it lines up with `SavedMailAccount.id`.
+    static func gmailOAuthToken(email: String) -> SecretKey {
+        let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return SecretKey(rawValue: "gmail.oauthToken.\(normalized)")
+    }
     /// The legacy single-account mailbox app password slot. Superseded by the
     /// per-account key below (item 48); kept only so the v10→v11 migration can
     /// read the old secret before moving it, and as a read-fallback until every
@@ -26,9 +35,11 @@ struct SecretKey: RawRepresentable, Hashable {
         let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return SecretKey(rawValue: "mail.appPassword.\(normalized)")
     }
-    /// The user-supplied Google Cloud OAuth client ID (BYO credentials).
+    /// The legacy user-supplied Google Cloud OAuth client ID (parked BYO path,
+    /// cleanup only).
     static let googleClientID = SecretKey(rawValue: "google.clientID")
-    /// The user-supplied Google Cloud OAuth client secret (BYO credentials).
+    /// The legacy user-supplied Google Cloud OAuth client secret (parked BYO
+    /// path, cleanup only).
     static let googleClientSecret = SecretKey(rawValue: "google.clientSecret")
 
     /// The API key for a specific LLM provider (e.g. `"anthropic"`, `"openai"`).

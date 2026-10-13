@@ -4,7 +4,7 @@ import XCTest
 final class OAuthTokenServiceTests: XCTestCase {
 
     private let now = Date(timeIntervalSince1970: 1_000_000)
-    private let credentials = GmailCredentials(clientID: "cid", clientSecret: "secret")
+    private let client = GoogleOAuthClientConfiguration(clientID: "cid.apps.googleusercontent.com", clientSecret: "secret")
 
     private func service(_ response: HTTPResponse) -> (OAuthTokenService, FakeTransport) {
         let transport = FakeTransport(response: response)
@@ -24,7 +24,7 @@ final class OAuthTokenServiceTests: XCTestCase {
         let token = try await service.exchange(
             code: "auth-code",
             verifier: "verifier",
-            credentials: credentials,
+            client: client,
             redirectURI: "http://127.0.0.1:9000",
             now: now
         )
@@ -38,6 +38,30 @@ final class OAuthTokenServiceTests: XCTestCase {
         XCTAssertEqual(transport.lastFields["code_verifier"], "verifier")
         XCTAssertEqual(transport.lastFields["redirect_uri"], "http://127.0.0.1:9000")
         XCTAssertEqual(transport.lastFields["client_secret"], "secret")
+        XCTAssertEqual(transport.lastFields["client_id"], "cid.apps.googleusercontent.com")
+    }
+
+    func testExchangeKeepsIDTokenAndOmitsSecretWhenClientHasNone() async throws {
+        let (service, transport) = service(json("""
+        {"access_token":"at","refresh_token":"rt","expires_in":3599,
+         "scope":"https://mail.google.com/ openid","token_type":"Bearer","id_token":"a.b.c"}
+        """))
+
+        let token = try await service.exchange(
+            code: "c", verifier: "v",
+            client: GoogleOAuthClientConfiguration(clientID: "cid.apps.googleusercontent.com", clientSecret: "  "),
+            redirectURI: "http://127.0.0.1:9000", now: now
+        )
+
+        XCTAssertEqual(token.idToken, "a.b.c")
+        XCTAssertNil(transport.lastFields["client_secret"], "an empty secret is never sent")
+    }
+
+    func testRevokePostsTokenToRevocationEndpoint() async throws {
+        let (service, transport) = service(json("", status: 200))
+        try await service.revoke(token: "rt")
+        XCTAssertEqual(transport.lastURL, GoogleOAuth.revocationEndpoint)
+        XCTAssertEqual(transport.lastFields, ["token": "rt"])
     }
 
     func testRefreshCarriesForwardExistingRefreshToken() async throws {
@@ -48,7 +72,7 @@ final class OAuthTokenServiceTests: XCTestCase {
 
         let token = try await service.refresh(
             refreshToken: "existing-rt",
-            credentials: credentials,
+            client: client,
             now: now
         )
 
@@ -64,7 +88,7 @@ final class OAuthTokenServiceTests: XCTestCase {
         """, status: 400))
 
         do {
-            _ = try await service.refresh(refreshToken: "rt", credentials: credentials, now: now)
+            _ = try await service.refresh(refreshToken: "rt", client: client, now: now)
             XCTFail("expected an error")
         } catch {
             XCTAssertEqual(
@@ -78,7 +102,7 @@ final class OAuthTokenServiceTests: XCTestCase {
         let (service, _) = service(json("{not json", status: 200))
         do {
             _ = try await service.exchange(
-                code: "c", verifier: "v", credentials: credentials,
+                code: "c", verifier: "v", client: client,
                 redirectURI: "uri", now: now
             )
             XCTFail("expected an error")
@@ -89,10 +113,14 @@ final class OAuthTokenServiceTests: XCTestCase {
 }
 
 /// A fake `HTTPTransport` returning a canned response and recording the request.
+/// Queued `responses` are served first (in order), then `response` repeats.
 final class FakeTransport: HTTPTransport {
     var response: HTTPResponse
+    var responses: [HTTPResponse] = []
+    var error: Error?
     private(set) var lastURL: URL?
     private(set) var lastFields: [String: String] = [:]
+    private(set) var requests: [(url: URL, fields: [String: String])] = []
 
     init(response: HTTPResponse) {
         self.response = response
@@ -101,6 +129,8 @@ final class FakeTransport: HTTPTransport {
     func postForm(_ url: URL, fields: [String: String]) async throws -> HTTPResponse {
         lastURL = url
         lastFields = fields
-        return response
+        requests.append((url, fields))
+        if let error { throw error }
+        return responses.isEmpty ? response : responses.removeFirst()
     }
 }

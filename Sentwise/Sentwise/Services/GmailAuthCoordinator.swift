@@ -3,18 +3,53 @@ import os
 
 private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "GmailAuth")
 
-/// Errors specific to the Gmail auth coordinator.
+/// Errors specific to the Gmail "Sign in with Google" flow (item 104).
 enum GmailAuthError: Error, Equatable {
-    case missingCredentials
+    /// This build ships without a Google OAuth client (feature switched off).
+    case notConfigured
+    /// No token is stored for the mailbox.
     case notConnected
+    /// The stored grant is no longer valid (revoked, expired, password
+    /// change); the user must sign in with Google again.
+    case reauthorizationRequired
+    /// Google did not tell us which address was authorized.
+    case missingAccountEmail
+    /// Google authorized a different address than the one the user asked for.
+    case accountMismatch(expected: String, actual: String)
+    /// A sign-in is already waiting in the browser.
+    case alreadyInProgress
 }
 
-/// Orchestrates connecting, refreshing, and disconnecting a Gmail account via
-/// the PKCE desktop/loopback flow. All I/O (browser, loopback, network, clock)
-/// is injected, so the orchestration is fully unit-testable.
+/// The result of a completed browser authorization.
+struct GmailAuthorization: Equatable {
+    let email: String
+    let token: OAuthToken
+}
+
+/// The "Sign in with Google" phases, published for the UI (item 104).
+///
+/// `idle → awaitingBrowser → exchangingCode → idle` on success; any failure
+/// lands in `failed(message)` and the next attempt starts again from there.
+enum GmailAuthPhase: Equatable {
+    case idle
+    case awaitingBrowser
+    case exchangingCode
+    case failed(String)
+
+    var isInProgress: Bool {
+        self == .awaitingBrowser || self == .exchangingCode
+    }
+}
+
+/// Orchestrates connecting, refreshing, and disconnecting Gmail mailboxes via
+/// the PKCE desktop/loopback flow against the one bundled Sentwise client
+/// (item 104; revives the parked item-3 engine). All I/O (browser, loopback,
+/// network, clock, secrets) is injected, so the state machine is fully
+/// unit-testable.
 @MainActor
 final class GmailAuthCoordinator {
 
+    private let client: GoogleOAuthClientConfiguration
     private let store: GmailAuthStore
     private let tokenService: OAuthTokenService
     private let makeListener: () -> RedirectListener
@@ -23,15 +58,27 @@ final class GmailAuthCoordinator {
     private let now: () -> Date
     private let makeState: () -> String
 
+    private(set) var phase: GmailAuthPhase = .idle {
+        didSet { onPhaseChange?(phase) }
+    }
+    /// Observer hook so an `ObservableObject` façade can republish `phase`.
+    var onPhaseChange: ((GmailAuthPhase) -> Void)?
+
+    /// One refresh per mailbox at a time: concurrent pollers share it, so a
+    /// burst of IMAP sessions never fires parallel refresh requests.
+    private var refreshTasks: [String: Task<String, Error>] = [:]
+
     init(
+        client: GoogleOAuthClientConfiguration,
         store: GmailAuthStore,
         tokenService: OAuthTokenService,
-        makeListener: @escaping () -> RedirectListener,
-        browser: BrowserOpening,
+        makeListener: @escaping () -> RedirectListener = { LoopbackRedirectListener() },
+        browser: BrowserOpening = NSWorkspaceBrowserOpener(),
         redirectTimeout: TimeInterval = 300,
         now: @escaping () -> Date = Date.init,
         makeState: @escaping () -> String = { PKCEGenerator.randomURLSafeString(byteCount: 16) }
     ) {
+        self.client = client
         self.store = store
         self.tokenService = tokenService
         self.makeListener = makeListener
@@ -41,91 +88,188 @@ final class GmailAuthCoordinator {
         self.makeState = makeState
     }
 
-    var isConnected: Bool { store.isConnected }
+    var clientID: String { client.clientID }
 
-    /// Runs the full connect flow: authorize in the browser, capture the
-    /// redirect, exchange the code, and store the token.
-    @discardableResult
-    func connect() async throws -> OAuthToken {
-        guard let credentials = try store.loadCredentials() else {
-            throw GmailAuthError.missingCredentials
+    // MARK: - Authorize
+
+    /// Runs the browser flow: open Google's consent screen, capture the
+    /// loopback redirect, exchange the code, and store the token under the
+    /// authorized address (read from the ID token).
+    ///
+    /// - Parameter loginHint: an address to pre-select on Google's account
+    ///   chooser. When `requireHintMatch` is set the authorized address must be
+    ///   that one (used when re-authorizing a specific saved mailbox).
+    func authorize(loginHint: String? = nil, requireHintMatch: Bool = false) async throws -> GmailAuthorization {
+        guard !phase.isInProgress else { throw GmailAuthError.alreadyInProgress }
+        phase = .awaitingBrowser
+        do {
+            let authorization = try await runAuthorization(loginHint: loginHint, requireHintMatch: requireHintMatch)
+            phase = .idle
+            logger.info("Gmail account authorized with Google")
+            return authorization
+        } catch {
+            phase = (error is CancellationError) ? .idle : .failed(Self.message(for: error))
+            throw error
         }
+    }
 
+    private func runAuthorization(loginHint: String?, requireHintMatch: Bool) async throws -> GmailAuthorization {
         let pkce = PKCEGenerator.generate()
         let state = makeState()
         let listener = makeListener()
         defer { listener.stop() }
 
         let redirectURI = try await listener.start()
+        let hint = loginHint?.trimmingCharacters(in: .whitespacesAndNewlines)
         let authURL = OAuthAuthorizationURL.make(
-            clientID: credentials.clientID,
+            clientID: client.clientID,
             redirectURI: redirectURI,
             scopes: GoogleOAuth.scopes,
             pkce: pkce,
-            state: state
+            state: state,
+            loginHint: (hint?.isEmpty ?? true) ? nil : hint
         )
         browser.open(authURL)
 
         let params = try await listener.waitForRedirect(timeout: redirectTimeout)
-        guard params["state"] == state else {
-            throw OAuthError.stateMismatch
-        }
-        if let error = params["error"] {
-            throw OAuthError.authorizationDenied(error)
-        }
-        guard let code = params["code"] else {
-            throw OAuthError.invalidResponse
-        }
+        try Task.checkCancellation()
+        guard params["state"] == state else { throw OAuthError.stateMismatch }
+        if let error = params["error"] { throw OAuthError.authorizationDenied(error) }
+        guard let code = params["code"] else { throw OAuthError.invalidResponse }
 
+        phase = .exchangingCode
         let token = try await tokenService.exchange(
             code: code,
             verifier: pkce.verifier,
-            credentials: credentials,
+            client: client,
             redirectURI: redirectURI,
             now: now()
         )
-        try saveFullyScopedToken(token)
-        logger.info("Gmail account connected")
-        return token
+        try Task.checkCancellation()
+        let email = try Self.authorizedEmail(token: token, loginHint: hint, requireHintMatch: requireHintMatch)
+        try requireFullScope(token)
+        guard token.refreshToken != nil else { throw OAuthError.missingRefreshToken }
+        // Only the access/refresh material is kept; the ID token was read once.
+        var stored = token
+        stored.idToken = nil
+        try store.saveToken(stored, for: email)
+        return GmailAuthorization(email: email, token: stored)
     }
 
-    /// Returns a valid access token, refreshing it first if the stored one has
-    /// expired.
-    func validAccessToken() async throws -> String {
-        guard let token = try store.loadToken() else {
+    static func authorizedEmail(token: OAuthToken, loginHint: String?, requireHintMatch: Bool) throws -> String {
+        guard let email = token.idToken.flatMap(GoogleIDToken.email(fromIDToken:)) else {
+            throw GmailAuthError.missingAccountEmail
+        }
+        if requireHintMatch, let loginHint, !loginHint.isEmpty,
+           loginHint.caseInsensitiveCompare(email) != .orderedSame {
+            throw GmailAuthError.accountMismatch(expected: loginHint, actual: email)
+        }
+        return email
+    }
+
+    // MARK: - Tokens
+
+    /// Whether `email` has a stored Google token.
+    func isConnected(_ email: String) -> Bool { store.hasToken(for: email) }
+
+    /// Returns a valid access token for `email`, refreshing it first when the
+    /// stored one has expired. Concurrent callers share one refresh.
+    func validAccessToken(for email: String) async throws -> String {
+        let key = SavedMailAccount.normalizedEmail(email)
+        if let inFlight = refreshTasks[key] {
+            return try await inFlight.value
+        }
+        guard let token = try store.loadToken(for: email) else {
             throw GmailAuthError.notConnected
         }
         guard token.isExpired(now: now()) else {
             return token.accessToken
         }
         guard let refreshToken = token.refreshToken else {
-            throw OAuthError.missingRefreshToken
-        }
-        guard let credentials = try store.loadCredentials() else {
-            throw GmailAuthError.missingCredentials
+            throw GmailAuthError.reauthorizationRequired
         }
 
-        let refreshed = try await tokenService.refresh(
-            refreshToken: refreshToken,
-            credentials: credentials,
-            now: now()
-        )
-        try saveFullyScopedToken(refreshed)
-        return refreshed.accessToken
+        let task = Task { () throws -> String in
+            do {
+                let refreshed = try await tokenService.refresh(refreshToken: refreshToken, client: client, now: now())
+                try requireFullScope(refreshed)
+                try store.saveToken(refreshed, for: email)
+                return refreshed.accessToken
+            } catch OAuthError.server(let code, _) where code == "invalid_grant" {
+                // Revoked, expired (7-day Testing-mode grants), or the user
+                // changed their password: only a fresh sign-in fixes it.
+                logger.info("Google grant no longer valid; re-authorization required")
+                throw GmailAuthError.reauthorizationRequired
+            }
+        }
+        refreshTasks[key] = task
+        defer { refreshTasks[key] = nil }
+        return try await task.value
     }
 
-    /// Disconnects the account by clearing the stored token (BYO credentials are
-    /// kept so the user can reconnect without re-entering them).
-    func disconnect() throws {
-        try store.deleteToken()
-        logger.info("Gmail account disconnected")
+    /// Forgets `email`'s token locally and, best effort, revokes the grant at
+    /// Google so the app no longer appears in the user's third-party access
+    /// list. A revocation network failure never blocks the local removal.
+    func disconnect(_ email: String) async {
+        let token = (try? store.loadToken(for: email)) ?? nil
+        do {
+            try store.deleteToken(for: email)
+        } catch {
+            logger.error("Couldn't remove a Google token from the Keychain: \(error.localizedDescription)")
+        }
+        guard let revocable = token?.refreshToken ?? token?.accessToken else { return }
+        do {
+            try await tokenService.revoke(token: revocable)
+        } catch {
+            logger.info("Google token revocation failed (ignored): \(error.localizedDescription)")
+        }
     }
 
-    private func saveFullyScopedToken(_ token: OAuthToken) throws {
-        let missingScopes = token.missingScopes(from: GoogleOAuth.scopes)
-        guard missingScopes.isEmpty else {
-            throw OAuthError.missingRequiredScopes(missingScopes)
+    private func requireFullScope(_ token: OAuthToken) throws {
+        let missing = token.missingScopes(from: GoogleOAuth.requiredScopes)
+        guard missing.isEmpty else { throw OAuthError.missingRequiredScopes(missing) }
+    }
+
+    // MARK: - Messages
+
+    /// User-facing copy for a failed sign-in.
+    static func message(for error: Error) -> String {
+        if let error = error as? GmailAuthError { return message(for: error) }
+        if let error = error as? OAuthError { return message(for: error) }
+        return "Google sign-in failed. \(error.localizedDescription)"
+    }
+
+    private static func message(for error: GmailAuthError) -> String {
+        switch error {
+        case .notConfigured:
+            return "Sign in with Google isn't available in this build. Use an app password instead."
+        case .reauthorizationRequired, .notConnected:
+            return "Your Google sign-in has expired or was revoked. Sign in with Google again."
+        case .missingAccountEmail:
+            return "Google didn't share which address you signed in with. Please try again."
+        case .accountMismatch(let expected, let actual):
+            return "You signed in as \(actual), but this account is \(expected). Choose \(expected) on Google's screen."
+        case .alreadyInProgress:
+            return "A Google sign-in is already open in your browser."
         }
-        try store.saveToken(token)
+    }
+
+    private static func message(for error: OAuthError) -> String {
+        switch error {
+        case .authorizationDenied(let reason):
+            return reason == "access_denied" ? "Google sign-in was canceled." : "Google sign-in failed (\(reason))."
+        case .redirectTimedOut:
+            return "Google sign-in timed out. Try again and finish in your browser."
+        case .missingRequiredScopes:
+            return "Sentwise needs permission to read and send your mail. Sign in again and allow Gmail access."
+        case .missingRefreshToken:
+            return "Google didn't grant offline access. Sign in again and approve all requested access."
+        case .stateMismatch:
+            return "The Google sign-in response didn't match this request. Please try again."
+        case .server(let code, let description):
+            return "Google sign-in failed: \(description ?? code)."
+        case .invalidResponse:
+            return "Google sign-in returned an unexpected response. Please try again."
+        }
     }
 }

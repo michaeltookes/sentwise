@@ -9,18 +9,16 @@ struct OAuthTokenService {
     func exchange(
         code: String,
         verifier: String,
-        credentials: GmailCredentials,
+        client: GoogleOAuthClientConfiguration,
         redirectURI: String,
         now: Date
     ) async throws -> OAuthToken {
-        let response = try await transport.postForm(GoogleOAuth.tokenEndpoint, fields: [
+        let response = try await transport.postForm(GoogleOAuth.tokenEndpoint, fields: Self.withClient(client, [
             "grant_type": "authorization_code",
             "code": code,
             "code_verifier": verifier,
-            "client_id": credentials.clientID,
-            "client_secret": credentials.clientSecret,
             "redirect_uri": redirectURI
-        ])
+        ]))
         return try token(from: response, now: now, fallbackRefreshToken: nil)
     }
 
@@ -28,16 +26,35 @@ struct OAuthTokenService {
     /// new refresh token on refresh, so the existing one is carried forward.
     func refresh(
         refreshToken: String,
-        credentials: GmailCredentials,
+        client: GoogleOAuthClientConfiguration,
         now: Date
     ) async throws -> OAuthToken {
-        let response = try await transport.postForm(GoogleOAuth.tokenEndpoint, fields: [
+        let response = try await transport.postForm(GoogleOAuth.tokenEndpoint, fields: Self.withClient(client, [
             "grant_type": "refresh_token",
-            "refresh_token": refreshToken,
-            "client_id": credentials.clientID,
-            "client_secret": credentials.clientSecret
-        ])
+            "refresh_token": refreshToken
+        ]))
         return try token(from: response, now: now, fallbackRefreshToken: refreshToken)
+    }
+
+    /// Revokes a token at Google (refresh tokens revoke the whole grant).
+    /// Google answers 200 on success and 400 for an already-invalid token; both
+    /// leave nothing to clean up, so only transport errors throw.
+    func revoke(token: String) async throws {
+        _ = try await transport.postForm(GoogleOAuth.revocationEndpoint, fields: ["token": token])
+    }
+
+    /// Adds the client identity. The secret is sent only when the build has
+    /// one (Google "Desktop app" clients require it at the token endpoint).
+    static func withClient(
+        _ client: GoogleOAuthClientConfiguration,
+        _ fields: [String: String]
+    ) -> [String: String] {
+        var fields = fields
+        fields["client_id"] = client.clientID
+        if let secret = client.clientSecret {
+            fields["client_secret"] = secret
+        }
+        return fields
     }
 
     // MARK: - Response parsing
@@ -63,7 +80,8 @@ struct OAuthTokenService {
             refreshToken: decoded.refreshToken ?? fallbackRefreshToken,
             expiresAt: now.addingTimeInterval(TimeInterval(decoded.expiresIn)),
             scope: decoded.scope ?? "",
-            tokenType: decoded.tokenType ?? "Bearer"
+            tokenType: decoded.tokenType ?? "Bearer",
+            idToken: decoded.idToken
         )
     }
 
@@ -73,6 +91,7 @@ struct OAuthTokenService {
         let refreshToken: String?
         let scope: String?
         let tokenType: String?
+        let idToken: String?
 
         enum CodingKeys: String, CodingKey {
             case accessToken = "access_token"
@@ -80,6 +99,7 @@ struct OAuthTokenService {
             case refreshToken = "refresh_token"
             case scope
             case tokenType = "token_type"
+            case idToken = "id_token"
         }
     }
 
