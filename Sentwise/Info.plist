@@ -55,6 +55,17 @@
 	  Do not replace this public key for normal releases: installed clients
 	  verify future appcasts against the key that shipped in their current app.
 	-->
+	<!--
+	  "Sign in with Google" OAuth client (item 104). Expanded at build time from
+	  Config/GoogleOAuth.xcconfig (empty in the repo, so the feature is off) or
+	  its git-ignored local override / xcodebuild command-line settings. An empty
+	  or placeholder value switches the feature off. See docs/gmail-oauth.md.
+	-->
+	<key>SentwiseGoogleOAuthClientID</key>
+	<string>$(SENTWISE_GOOGLE_CLIENT_ID)</string>
+	<key>SentwiseGoogleOAuthClientSecret</key>
+	<string>$(SENTWISE_GOOGLE_CLIENT_SECRET)</string>
+
 	<key>SUFeedURL</key>
 	<string>https://github.com/michaeltookes/sentwise/releases/latest/download/appcast.xml</string>
 	<key>SUEnableAutomaticChecks</key>

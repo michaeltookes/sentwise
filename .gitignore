@@ -25,3 +25,6 @@ dist/
 .env
 .env.*
 build-dl/
+
+# Per-build Google OAuth client (item 104) — never committed
+Sentwise/Config/GoogleOAuth.local.xcconfig

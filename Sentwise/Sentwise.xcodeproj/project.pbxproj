@@ -25,6 +25,7 @@
 /* Begin PBXFileReference section */
 		AA00000000000000000000A0 /* Sentwise.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sentwise.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB0000000000000000000003 /* SentwiseTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SentwiseTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		EE0000000000000000000001 /* GoogleOAuth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = GoogleOAuth.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -58,8 +59,17 @@
 			children = (
 				AA0000000000000000000004 /* Sentwise */,
 				BB0000000000000000000001 /* SentwiseTests */,
+				EE0000000000000000000002 /* Config */,
 				AA0000000000000000000003 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		EE0000000000000000000002 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				EE0000000000000000000001 /* GoogleOAuth.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		AA0000000000000000000003 /* Products */ = {
@@ -328,6 +338,7 @@
 		};
 		AA000000000000000000000E /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = EE0000000000000000000001 /* GoogleOAuth.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -352,6 +363,7 @@
 		};
 		AA000000000000000000000F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = EE0000000000000000000001 /* GoogleOAuth.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

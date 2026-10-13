@@ -1,0 +1,6 @@
+// Copy to GoogleOAuth.local.xcconfig (git-ignored) to switch on
+// "Sign in with Google" in local builds. See docs/gmail-oauth.md.
+// Placeholders only — the app treats these values as "not configured".
+
+SENTWISE_GOOGLE_CLIENT_ID = YOUR_CLIENT_ID.apps.googleusercontent.com
+SENTWISE_GOOGLE_CLIENT_SECRET = YOUR_CLIENT_SECRET
