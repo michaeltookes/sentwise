@@ -24,6 +24,7 @@ final class BuildConfigurationTests: XCTestCase {
             Key.paddleUnlimitedPriceID: "pri_qa_unlimited",
             Key.keychainServiceSuffix: ".qa",
             Key.appSupportDirectoryName: "Sentwise QA",
+            Key.displayName: "Sentwise QA",
             Key.urlTypes: urlTypes("sentwise-qa")
         ]
         for (key, value) in overrides { info[key] = value }
@@ -40,6 +41,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(config.keychainServiceSuffix, "", file: file, line: line)
         XCTAssertEqual(config.appSupportDirectoryName, "Sentwise", file: file, line: line)
         XCTAssertEqual(config.urlScheme, "sentwise", file: file, line: line)
+        XCTAssertEqual(config.appDisplayName, "Sentwise", file: file, line: line)
         XCTAssertEqual(config.paddle, .production, file: file, line: line)
         XCTAssertTrue(config.allowsAutomaticUpdates, file: file, line: line)
     }
@@ -80,6 +82,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(config.appSupportDirectoryName, "Sentwise QA")
         XCTAssertNotEqual(config.appSupportDirectoryName, BuildConfiguration.Production.appSupportDirectoryName)
         XCTAssertEqual(config.urlScheme, "sentwise-qa")
+        XCTAssertEqual(config.appDisplayName, "Sentwise QA")
         XCTAssertFalse(config.allowsAutomaticUpdates)
 
         let paddle = try XCTUnwrap(config.paddle)

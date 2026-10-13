@@ -29,6 +29,7 @@ struct BuildConfiguration: Equatable, Sendable {
         static let paddleUnlimitedPriceID = "SentwisePaddleUnlimitedPriceID" // SENTWISE_PADDLE_UNLIMITED_PRICE_ID
         static let keychainServiceSuffix = "SentwiseKeychainServiceSuffix" // SENTWISE_KEYCHAIN_SERVICE_SUFFIX
         static let appSupportDirectoryName = "SentwiseAppSupportDirectoryName" // SENTWISE_APP_SUPPORT_DIRECTORY
+        static let displayName = "CFBundleDisplayName"
         static let urlTypes = "CFBundleURLTypes"
         static let urlSchemes = "CFBundleURLSchemes"
 
@@ -46,6 +47,7 @@ struct BuildConfiguration: Equatable, Sendable {
         static let clerkFrontendAPIURLString = "https://clerk.sentwise.ai"
         static let appSupportDirectoryName = "Sentwise"
         static let urlScheme = "sentwise"
+        static let appDisplayName = "Sentwise"
     }
 
     /// What a non-production build falls back to when its own value is missing
@@ -53,6 +55,7 @@ struct BuildConfiguration: Equatable, Sendable {
     enum NonProductionFallback {
         static let keychainServiceSuffix = ".qa"
         static let appSupportDirectoryName = "Sentwise QA"
+        static let appDisplayName = "Sentwise QA"
         /// Used when a non-production build's Clerk URL is missing, malformed, or
         /// the production instance: `.invalid` never resolves (RFC 2606) and
         /// `ClerkClient` refuses it before any request, so sign-in is unavailable
@@ -75,6 +78,9 @@ struct BuildConfiguration: Equatable, Sendable {
     let keychainServiceSuffix: String
     /// Folder under `~/Library/Application Support`. `Sentwise` in production.
     let appSupportDirectoryName: String
+    /// The name the status item and menu show: `Sentwise`, or the QA build's
+    /// display name so the two installs are told apart.
+    let appDisplayName: String
     /// The custom URL scheme this build registers (`CFBundleURLSchemes`).
     let urlScheme: String
     /// The Paddle checkout config, or nil when checkout is unavailable in this
@@ -103,6 +109,7 @@ struct BuildConfiguration: Equatable, Sendable {
                 clerkFrontendAPIBaseURL: URL(string: Production.clerkFrontendAPIURLString)!,
                 keychainServiceSuffix: "",
                 appSupportDirectoryName: Production.appSupportDirectoryName,
+                appDisplayName: Production.appDisplayName,
                 urlScheme: declaredScheme,
                 paddle: .production
             )
@@ -124,6 +131,7 @@ struct BuildConfiguration: Equatable, Sendable {
             clerkFrontendAPIBaseURL: clerkURL ?? NonProductionFallback.clerkFrontendAPIURL,
             keychainServiceSuffix: keychainSuffix(string(info, InfoKey.keychainServiceSuffix)),
             appSupportDirectoryName: directoryName(string(info, InfoKey.appSupportDirectoryName)),
+            appDisplayName: displayName(string(info, InfoKey.displayName)),
             urlScheme: declaredScheme,
             paddle: pointsAwayFromProduction ? sandboxPaddleConfig(info) : nil
         )
@@ -181,6 +189,11 @@ struct BuildConfiguration: Equatable, Sendable {
               url.host?.lowercased() != URL(string: production)?.host?.lowercased()
         else { return nil }
         return url
+    }
+
+    private static func displayName(_ value: String?) -> String {
+        guard let value, value != Production.appDisplayName else { return NonProductionFallback.appDisplayName }
+        return value
     }
 
     private static func keychainSuffix(_ value: String?) -> String {
