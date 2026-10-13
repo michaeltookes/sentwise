@@ -111,6 +111,55 @@ final class AppStateBillingPortalTests: XCTestCase {
         XCTAssertNil(appState.planChangeMessage)
     }
 
+    // MARK: - Item 123: plan cards need a Paddle config
+
+    func testPlanSwitchingEnabledForProductionAccountWithConfig() {
+        let appState = makeSignedInAppState(llm: StatusLLM())
+        appState.managedAccountStatus = status(plan: .starter, statusValue: .active, billingURL: nil)
+
+        XCTAssertTrue(appState.canChangeManagedPlan)
+        XCTAssertNil(appState.planChangeUnavailableMessage)
+    }
+
+    func testPlanSwitchingDisabledWhileQAAccountStatusLoads() async {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(plan: .starter, status: .active, capturedAt: Date())
+        // Snapshot-only (no /v1/me yet): an ordinary account may switch...
+        XCTAssertNil(appState.managedAccountStatus)
+        XCTAssertTrue(appState.canChangeManagedPlan)
+
+        // ...a QA account waits for /v1/me.
+        appState.managedAccountEmail = "qa-buyer@prowlqa.dev"
+        XCTAssertFalse(appState.canChangeManagedPlan)
+        XCTAssertEqual(appState.planChangeUnavailableMessage, "Loading your account…")
+
+        await appState.changePlan(to: .pro)
+        XCTAssertEqual(llm.changePlanCount, 0)
+    }
+
+    func testPlanSwitchingDisabledWhenQASandboxLaneUnavailable() async {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountEmail = "qa-buyer@prowlqa.dev"
+        appState.managedAccountStatus = ManagedAccountStatus(
+            userID: "user_qa",
+            email: "qa-buyer@prowlqa.dev",
+            subscription: ManagedSubscription(plan: .starter, status: .active),
+            billing: ManagedBillingLane(environment: "sandbox", checkoutAvailable: false)
+        )
+
+        XCTAssertTrue(appState.showsPlanManagement)
+        XCTAssertFalse(appState.canChangeManagedPlan)
+        XCTAssertEqual(
+            appState.planChangeUnavailableMessage,
+            "Plan changes aren't available for this account right now."
+        )
+
+        await appState.changePlan(to: .pro)
+        XCTAssertEqual(llm.changePlanCount, 0)
+    }
+
     private func makeSignedInAppState(llm: LLMProviding) -> AppState {
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",

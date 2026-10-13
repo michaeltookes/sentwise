@@ -30,6 +30,13 @@ struct PlanManagementView: View {
                 }
             }
 
+            if let message = appState.planChangeUnavailableMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("planChangeUnavailableNote")
+            }
+
             if let message = appState.planChangeMessage {
                 Text(message)
                     .font(.caption)

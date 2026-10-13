@@ -91,6 +91,18 @@ extension AppState {
             && !isChangingPlan
             && !isManagingBilling
             && hasPlanChangeablePaidSubscription
+            && planChangePaddleConfig != nil
+    }
+
+    /// Billing-only caption shown under the plan cards when switching is
+    /// otherwise possible but no Paddle config is available yet (item 123):
+    /// `/v1/me` still loading for a QA account, or its sandbox lane unavailable.
+    var planChangeUnavailableMessage: String? {
+        guard isManagedSignedIn, hasPlanChangeablePaidSubscription,
+              planChangePaddleConfig == nil else { return nil }
+        return managedAccountStatus == nil
+            ? "Loading your account…"
+            : "Plan changes aren't available for this account right now."
     }
 
     /// Switches the subscription to `tier` (item 90). No-op when not signed in,
