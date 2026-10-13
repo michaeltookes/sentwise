@@ -5,9 +5,16 @@ talks to the **sandbox deployment** of `sentwise-service` (`sentwise-inference-s
 for the Paddle sandbox and a Clerk development instance), so QA can buy a plan with a Paddle test
 card. It installs **beside** the production app on the QA Mini and shares nothing with it.
 
-Production builds (the Debug and Release configurations) are unchanged and never read the QA
-settings. With none of the `Sentwise…` Info.plist keys set, `BuildConfiguration` resolves every value
-to the compiled-in production default, so nothing moves for existing installs.
+Production builds (the Debug and Release configurations) never read the QA settings. Two guards
+make sure of it:
+
+- Debug and Release define every `SENTWISE_*` build setting as empty in the project, so a shell
+  variable exported for a QA build (for example before running `qa-build.sh`) cannot expand into a
+  production Info.plist. Only the QA configuration takes them, from `QA.xcconfig`, or from explicit
+  `xcodebuild` command-line settings.
+- `BuildConfiguration` honors the `Sentwise…` keys only in a bundle whose identifier is
+  `com.tookes.Sentwise.<suffix>`. With the production bundle id, every value resolves to the
+  compiled-in production default whatever the plist holds, so nothing moves for existing installs.
 
 ## What differs from production
 

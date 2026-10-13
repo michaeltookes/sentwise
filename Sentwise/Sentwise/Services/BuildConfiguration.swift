@@ -14,7 +14,12 @@ import Foundation
 /// scheme, letting it run beside the production app on the same Mac.
 ///
 /// Values come from a signed bundle's Info.plist, so nothing at runtime (no
-/// environment variable, no defaults write) can redirect a shipped build.
+/// environment variable, no defaults write) can redirect a shipped build. Two
+/// guards keep a stray value out of a production bundle: Debug and Release define
+/// every `SENTWISE_*` build setting as empty (so a shell variable exported for a
+/// QA build cannot expand into them), and the keys are honored only in a bundle
+/// whose identifier is `com.tookes.Sentwise.<suffix>`; the production bundle id
+/// always resolves to production.
 struct BuildConfiguration: Equatable, Sendable {
 
     /// Info.plist keys, expanded at build time from the xcconfig settings named
@@ -108,7 +113,11 @@ struct BuildConfiguration: Equatable, Sendable {
     static func resolve(infoDictionary: [String: Any]?) -> BuildConfiguration {
         let info = infoDictionary ?? [:]
         let declaredScheme = declaredURLScheme(info) ?? Production.urlScheme
-        let isProduction = InfoKey.overrides.allSatisfy { string(info, $0) == nil }
+        // Only a QA-identified bundle may use the override keys; with the
+        // production bundle id (or none) any leaked value is ignored.
+        let qaBundleIdentifier = qaBundleIdentifier(string(info, InfoKey.bundleIdentifier))
+        let isProduction = qaBundleIdentifier == nil
+            || InfoKey.overrides.allSatisfy { string(info, $0) == nil }
 
         if isProduction {
             return BuildConfiguration(
@@ -140,7 +149,7 @@ struct BuildConfiguration: Equatable, Sendable {
             clerkFrontendAPIBaseURL: clerkURL ?? NonProductionFallback.clerkFrontendAPIURL,
             keychainServiceSuffix: keychainSuffix(string(info, InfoKey.keychainServiceSuffix)),
             appSupportDirectoryName: directoryName(string(info, InfoKey.appSupportDirectoryName)),
-            bundleIdentifier: nonProductionBundleIdentifier(string(info, InfoKey.bundleIdentifier)),
+            bundleIdentifier: qaBundleIdentifier ?? NonProductionFallback.bundleIdentifier,
             appDisplayName: displayName(string(info, InfoKey.displayName)),
             urlScheme: declaredScheme,
             paddle: pointsAwayFromProduction ? sandboxPaddleConfig(info) : nil
@@ -201,12 +210,12 @@ struct BuildConfiguration: Equatable, Sendable {
         return url
     }
 
-    /// A suffixed `com.tookes.Sentwise.<suffix>` id, or the QA fallback; never the
-    /// production id in a non-production build.
-    private static func nonProductionBundleIdentifier(_ value: String?) -> String {
+    /// A suffixed `com.tookes.Sentwise.<suffix>` bundle id, or nil (production or
+    /// anything else).
+    private static func qaBundleIdentifier(_ value: String?) -> String? {
         guard let value,
               value.range(of: #"^com\.tookes\.Sentwise\.[A-Za-z0-9-]{1,32}$"#, options: .regularExpression) != nil
-        else { return NonProductionFallback.bundleIdentifier }
+        else { return nil }
         return value
     }
 

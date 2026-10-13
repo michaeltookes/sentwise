@@ -126,6 +126,7 @@ final class BuildConfigurationTests: XCTestCase {
 
     func testOnlyPaddleKeysPresentStillNeverUsesProductionPrices() {
         let config = BuildConfiguration.resolve(infoDictionary: [
+            Key.bundleIdentifier: "com.tookes.Sentwise.qa",
             Key.paddleEnvironment: "sandbox",
             Key.paddleClientToken: "test_qa_token"
         ])
@@ -133,6 +134,20 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertNil(config.paddle)
         XCTAssertEqual(config.keychainServiceSuffix, ".qa")
         XCTAssertEqual(config.appSupportDirectoryName, "Sentwise QA")
+    }
+
+    /// A Release build made in a shell that still exports the QA variables: the
+    /// bundle carries the production id (and, if the project guard were bypassed,
+    /// every stray key). It must resolve to production all the same.
+    func testProductionBundleWithLeakedQAKeysResolvesToProduction() {
+        var leaked = qaInfo([Key.bundleIdentifier: "com.tookes.Sentwise", Key.urlTypes: urlTypes("sentwise")])
+        assertProduction(BuildConfiguration.resolve(infoDictionary: leaked))
+        leaked[Key.bundleIdentifier] = nil
+        assertProduction(BuildConfiguration.resolve(infoDictionary: leaked))
+        for other in ["com.tookes.SentwiseX", "com.example.Sentwise.qa", "com.tookes.Sentwise.", "com.tookes.Sentwise.a b"] {
+            leaked[Key.bundleIdentifier] = other
+            assertProduction(BuildConfiguration.resolve(infoDictionary: leaked))
+        }
     }
 
     func testMalformedQAKeychainSuffixAndDirectoryNeverFallBackToProduction() {
@@ -181,11 +196,10 @@ final class BuildConfigurationTests: XCTestCase {
         }
     }
 
-    func testQABundleIdentifierNeverResolvesToProduction() {
-        for value in ["", "com.tookes.Sentwise", "com.example.Other", "com.tookes.Sentwise.a b"] {
-            let config = BuildConfiguration.resolve(infoDictionary: qaInfo([Key.bundleIdentifier: value]))
-            XCTAssertEqual(config.bundleIdentifier, "com.tookes.Sentwise.qa", value)
-        }
+    func testQABundleIdentifierIsTheBuildsSuffixedID() {
+        let config = BuildConfiguration.resolve(infoDictionary: qaInfo([Key.bundleIdentifier: "com.tookes.Sentwise.beta"]))
+        XCTAssertFalse(config.isProduction)
+        XCTAssertEqual(config.bundleIdentifier, "com.tookes.Sentwise.beta")
         XCTAssertEqual(DiagnosticLog.subsystem, "com.tookes.Sentwise")
     }
 
