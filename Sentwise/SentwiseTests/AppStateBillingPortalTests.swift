@@ -111,6 +111,60 @@ final class AppStateBillingPortalTests: XCTestCase {
         XCTAssertNil(appState.planChangeMessage)
     }
 
+    // MARK: - Item 124: plan changes wait for /v1/me
+
+    func testPlanSwitchingDisabledWithLoadingCaptionUntilAccountStatusLoads() {
+        let appState = makeSignedInAppState(llm: StatusLLM())
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(plan: .starter, status: .active, capturedAt: Date())
+
+        // The cached snapshot shows the plan cards, but switching waits for /v1/me.
+        XCTAssertNil(appState.managedAccountStatus)
+        XCTAssertTrue(appState.showsPlanManagement)
+        XCTAssertFalse(appState.isManagedAccountStatusLoaded)
+        XCTAssertFalse(appState.canChangeManagedPlan)
+        XCTAssertEqual(appState.planChangeUnavailableMessage, "Loading your account…")
+
+        appState.managedAccountStatus = status(plan: .starter, statusValue: .active, billingURL: nil)
+
+        XCTAssertTrue(appState.canChangeManagedPlan)
+        XCTAssertNil(appState.planChangeUnavailableMessage)
+    }
+
+    func testPlanSwitchingOfflineShowsNoLoadingCaption() {
+        let appState = makeSignedInAppState(llm: StatusLLM())
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(plan: .starter, status: .active, capturedAt: Date())
+        appState.isOnline = false
+
+        XCTAssertFalse(appState.canChangeManagedPlan)
+        XCTAssertNil(appState.planChangeUnavailableMessage)
+    }
+
+    func testConfirmedPlanChangeBeforeAccountStatusLoadsReportsAnError() async {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.cachedSubscriptionSnapshot = SubscriptionSnapshot(plan: .starter, status: .active, capturedAt: Date())
+
+        await appState.changePlan(to: .pro)
+
+        XCTAssertEqual(llm.changePlanCount, 0)
+        XCTAssertFalse(appState.isChangingPlan)
+        XCTAssertTrue(appState.planChangeFailed)
+        XCTAssertEqual(appState.planChangeMessage, AppState.planChangeAccountLoadingMessage)
+        XCTAssertNil(appState.planChangeConfirmationTier)
+    }
+
+    func testConfirmedPlanChangeToTheCurrentTierStaysSilent() async {
+        let llm = StatusLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountStatus = status(plan: .starter, statusValue: .active, billingURL: nil)
+
+        await appState.changePlan(to: .starter)
+
+        XCTAssertEqual(llm.changePlanCount, 0)
+        XCTAssertNil(appState.planChangeMessage)
+        XCTAssertFalse(appState.planChangeFailed)
+    }
+
     private func makeSignedInAppState(llm: LLMProviding) -> AppState {
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",
