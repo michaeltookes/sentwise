@@ -262,7 +262,8 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 M3 runs on two deployments of the same release tag.
 - **TC-M3-01 to TC-M3-04 and TC-M3-05's production check** run in the production build against `{base}` with a fresh F2 created at the start of the run (sign out of F1, sign in as F2, generate one T1 draft to start the trial and throw it away with **Deny** (preamble, "Throwing a draft away"), and refresh status, as in TC-M2-06 steps 2–7), with exactly one mailbox (F1's) connected.
 - **TC-M3-05's purchase through TC-M3-10** run in the **Sentwise QA** build against `{sandbox}` as F3, set up the same way in the QA build (sign in as F3, connect F1's mailbox, one T1 draft thrown away with **Deny**, refresh status). Nothing in these cases touches the production Worker or live Paddle.
-- **Run order:** TC-M3-01 to TC-M3-07, then TC-M3-10, then TC-M3-08 and TC-M3-09 (pausing needs a subscription with no scheduled cancellation).
+- **Run order:** TC-M3-01 to TC-M3-04; TC-M3-05 steps 1–5; TC-M3-11 step 1; TC-M3-05 steps 6–15; TC-M3-06, TC-M3-07, TC-M3-10 (pausing needs a subscription with no scheduled cancellation), TC-M3-08, TC-M3-09; then TC-M3-11 steps 2–3 before the TC-M3-09 teardown launches **Sentwise**. Lucius' daily pass is paused for the run so nothing launches **Sentwise** in between.
+- **If the sandbox deployment slips**, M3 runs the production fallback sequence under TC-M3-05 instead.
 - The pane rounds trial days up, so each reminder fixture sets the trial end one hour inside its threshold. Trial dates are set with item 119's admin route by the `uat` executor, on `{base}` for F2 and on `{sandbox}` for F3.
 
 ### TC-M3-01 Trial override is limited to QA accounts
@@ -327,7 +328,7 @@ M3 runs on two deployments of the same release tag.
   3. In "Choose your plan", click the Starter card and wait for "Secure checkout by Paddle".
   4. Read the price in the checkout form. Do not enter any card.
   5. Click **Close**; **Sign out**; sign back in as F1 and confirm the Subscription tab reads Pro.
-  6. Quit Sentwise with **Quit Sentwise** and launch **Sentwise QA** from `/Applications`; sign in as F3 and set it up as in the M3 setup above.
+  6. Quit Sentwise with **Quit Sentwise**, run TC-M3-11 step 1, then launch **Sentwise QA** from `/Applications`; sign in as F3 and set it up as in the M3 setup above.
   7. uat: `POST {sandbox}/admin/trial` for F3 with `startedAt` = now minus 15 days (sandbox token). Then `GET {sandbox}/admin/comp?email=<F3>` and `GET {sandbox}/admin/funnel?from=<today>&to=<today>`; record the sandbox `qa.subscriptionsActivated.starter` and `qa.subscriptionsCanceled`.
   8. lucius, in **Sentwise QA** as F3: close and reopen **Settings…** → **Subscription**; confirm "Trial ended" and a **Subscribe** button.
   9. Click **Subscribe**; in "Choose your plan", click the Starter card and wait for "Secure checkout by Paddle".
@@ -344,11 +345,14 @@ M3 runs on two deployments of the same release tag.
   - Step 12 shows "You're on Starter — you're all set."
   - Step 13 shows Current plan Starter with "Renews <date about one month out>".
   - Step 15: sandbox `qa.subscriptionsActivated.starter` is at least its step 7 value + 1. The production funnel is checked in TC-M3-09.
-- **Alternate paths (only if the sandbox deployment slips, in this order).** These run in the production build with F2 as the purchaser, at steps 9–11 instead of in Sentwise QA:
-  - (a) A single-use 100%-off live Paddle discount code, entered at step 11.
-  - (b) A real $9 Starter purchase. Michael enters the card at step 11 and the orchestrator refunds it the same day.
-  - On an alternate path, step 15 reads `{base}` instead: production `qa.subscriptionsActivated.starter` is at least baseline + 1 and every live counter from step 1 is unchanged. Record in the report which path ran.
 - **Asset:** video
+
+#### Production fallback sequence (only if the sandbox deployment slips)
+Payment method, in order: (a) a single-use 100%-off live Paddle discount code; (b) a real $9 Starter purchase, card entered by Michael. Record in the report which ran.
+- **Setup:** no Sentwise QA build, no F3, no `{sandbox}`. The purchaser is the production F2 from TC-M3-04 ("Trial ended"), in **Sentwise** against `{base}`.
+- **TC-M3-05:** run steps 1–4 as written, then skip steps 5–8 (F2 stays signed in). Step 7's comp read uses `{base}` for F2. Steps 9–13 run in **Sentwise** as F2; at step 11 enter the discount code (a) or Michael's card (b). Expected at step 10 is the live $9.00 price. Step 15 reads `{base}`: production `qa.subscriptionsActivated.starter` is at least the step 1 baseline + 1 and every live counter is unchanged.
+- **Downstream:** TC-M3-06, TC-M3-07 (live Paddle portal), and TC-M3-08 run in **Sentwise** as F2. TC-M3-09 uses its alternate-path expectation. **TC-M3-10 is blocked** (no live subscription is paused for a test; item 124's paused status rests on its Vitest until the sandbox exists). **TC-M3-11 is not applicable.** Item 123 stays open.
+- **Teardown:** lucius signs out of F2, signs in as F1, and confirms Pro. The orchestrator then has F2's live subscription **canceled immediately** in Paddle (not at period end; TC-M3-08's scheduled cancel is not enough), refunds a (b) charge the same day, and deletes F2 once Paddle shows it canceled.
 
 ### TC-M3-06 Paid account drafts again
 - **Executor:** lucius
@@ -392,7 +396,7 @@ M3 runs on two deployments of the same release tag.
   - Step 2: production `qa.subscriptionsActivated.*` and `qa.subscriptionsCanceled` equal the TC-M3-05 step 1 baseline (the purchase and cancellation happened on the sandbox, which never reaches the production Worker), and the live `subscriptionsActivated.starter`, `.pro`, `.unlimited`, and `subscriptionsCanceled` equal the baseline too. A live counter that moved fails the case unless the orchestrator confirms in the live Paddle dashboard that the same number of real customer subscriptions changed between the two reads.
   - On an alternate path (TC-M3-05 (a) or (b)), step 2 instead shows production `qa.subscriptionsActivated.starter` and `qa.subscriptionsCanceled` at least baseline + 1 and qa `trialToPaidRate` above 0, with live counters unchanged.
 - **Asset:** screenshot
-- **Teardown:** lucius quits **Sentwise QA**, launches **Sentwise**, and confirms it is signed in as F1 with the Subscription tab reading Pro. The orchestrator deletes F2 from production and F3 from the Clerk development instance. On an alternate path, the orchestrator refunds the purchase if one was charged and deletes F2 once its cancellation takes effect.
+- **Teardown:** lucius quits **Sentwise QA**, launches **Sentwise**, and confirms it is signed in as F1 with the Subscription tab reading Pro. The orchestrator deletes F2 from production and F3 from the Clerk development instance. On the production fallback sequence, follow that sequence's teardown instead.
 
 ### TC-M3-10 A paused subscription stays in force
 - **Executor:** uat (steps 1 and 4) and lucius (steps 2–3 and 5)
@@ -406,6 +410,16 @@ M3 runs on two deployments of the same release tag.
   5. lucius: wait 60 seconds, close and reopen **Settings…** → **Subscription**.
 - **Expected:** step 2 shows Current plan Starter marked "Paused", never "Canceled", "Trial ended", or a **Subscribe** button; step 3 produces a draft (paused counts as in force); step 5 shows Starter with "Renews <date>" again.
 - **Asset:** video
+### TC-M3-11 The QA build leaves the production install's data alone
+- **Executor:** lucius
+- **Verifies:** item 123 (local data isolation)
+- **Preconditions:** **Sentwise** has been quit at TC-M3-05 step 6 and nothing relaunches it until step 3 here (daily pass paused). Steps run in Terminal on the Mini; they read files only.
+- **Steps:**
+  1. Before launching **Sentwise QA** (TC-M3-05 step 6, after quitting Sentwise): run `cd "$HOME/Library/Application Support/Sentwise" && find . -type f -print0 | sort -z | xargs -0 shasum -a 256 > /tmp/sentwise-prod-before.txt; defaults export com.tookes.Sentwise - | shasum -a 256 >> /tmp/sentwise-prod-before.txt`.
+  2. After TC-M3-09's steps and before its teardown, quit **Sentwise QA** and run the same commands into `/tmp/sentwise-prod-after.txt`.
+  3. Run `diff /tmp/sentwise-prod-before.txt /tmp/sentwise-prod-after.txt` and `ls "$HOME/Library/Application Support/Sentwise QA"`.
+- **Expected:** `diff` prints nothing: every production store file (`Settings.json`, drafts, voice profile, activity, and the rest) and the production defaults domain are byte-identical across the QA run. The `ls` lists the QA build's own store files, proving it wrote somewhere else.
+- **Asset:** screenshot (Terminal with both commands' output; the file lists contain only names and hashes, no content)
 
 ## M4 First-run friction cut
 
@@ -432,14 +446,16 @@ M3 runs on two deployments of the same release tag.
 
 ### TC-M4-03 Continue with Google
 - **Executor:** lucius
-- **Verifies:** item 121
-- **Preconditions:** owner step done (Clerk callback allowlist, `docs/launch-checklist.md` §1); Sentwise v0.2.3 as F1.
+- **Verifies:** item 121, item 123 (URL scheme isolation)
+- **Preconditions:**
+  - Owner step done (Clerk callback allowlist, `docs/launch-checklist.md` §1); Sentwise v0.2.3 running as F1.
+  - **Sentwise QA** is installed (if it exists yet) and **not running**, and it declares only `sentwise-qa`: `defaults read "/Applications/Sentwise QA.app/Contents/Info" CFBundleURLTypes` lists `sentwise-qa` and no `sentwise` entry. A `sentwise` entry there fails the case before step 1.
 - **Steps:**
   1. **Settings…** → **Subscription** → **Sign out**.
   2. Click **Sign in or create your account**, then **Continue with Google**.
   3. In the browser, choose `luciusfox@prowlqa.dev` and approve.
   4. Return to Sentwise when the browser hands back.
-- **Expected:** the Subscription tab shows F1 signed in with plan Pro; no 404 or error page appeared in the browser.
+- **Expected:** the hand-back in step 4 brings **Sentwise** (not Sentwise QA) to the front and the Subscription tab shows F1 signed in with plan Pro; Sentwise QA did not launch; no 404 or error page appeared in the browser.
 - **Asset:** video
 
 ### TC-M4-04 Verification email is branded
