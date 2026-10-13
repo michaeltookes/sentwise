@@ -197,6 +197,29 @@ final class GoogleMailAuthService: ObservableObject {
         }
     }
 
+    /// Deletes `email`'s local token and returns it for rollback; throws when
+    /// the Keychain delete fails. Works without a bundled client.
+    func removeLocalToken(_ email: String) throws -> OAuthToken? {
+        if let coordinator { return try coordinator.removeLocalToken(for: email) }
+        guard let tokenStore, let token = try tokenStore.loadToken(for: email) else { return nil }
+        try tokenStore.deleteToken(for: email)
+        return token
+    }
+
+    /// Puts back a token taken by `removeLocalToken(_:)`.
+    func restoreLocalToken(_ token: OAuthToken, for email: String) throws {
+        if let coordinator {
+            try coordinator.restoreLocalToken(token, for: email)
+        } else {
+            try tokenStore?.saveToken(token, for: email)
+        }
+    }
+
+    /// Best-effort remote revoke of a removed token (skipped without a client).
+    func revokeRemovedToken(_ token: OAuthToken) async {
+        await coordinator?.revokeRemovedToken(token)
+    }
+
     /// Clears a failed attempt's message (e.g. when the user edits the form).
     func clearFailure() {
         if case .failed = phase { phase = .idle }

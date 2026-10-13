@@ -269,14 +269,35 @@ final class GmailAuthCoordinator {
     /// Google so the app no longer appears in the user's third-party access
     /// list. A revocation network failure never blocks the local removal.
     func disconnect(_ email: String) async {
-        invalidate(SavedMailAccount.normalizedEmail(email))
         let token = (try? store.loadToken(for: email)) ?? nil
         do {
-            try store.deleteToken(for: email)
+            _ = try removeLocalToken(for: email)
         } catch {
             logger.error("Couldn't remove a Google token from the Keychain: \(error.localizedDescription)")
         }
-        guard let revocable = token?.refreshToken ?? token?.accessToken else { return }
+        if let token { await revokeRemovedToken(token) }
+    }
+
+    /// Deletes `email`'s stored token (invalidating any refresh in flight) and
+    /// returns it, so a caller whose larger operation fails can put it back
+    /// with `restoreLocalToken(_:for:)`. Throws when the Keychain delete fails.
+    func removeLocalToken(for email: String) throws -> OAuthToken? {
+        invalidate(SavedMailAccount.normalizedEmail(email))
+        guard let token = try store.loadToken(for: email) else { return nil }
+        try store.deleteToken(for: email)
+        return token
+    }
+
+    /// Puts back a token taken by `removeLocalToken(for:)` (rollback).
+    func restoreLocalToken(_ token: OAuthToken, for email: String) throws {
+        try store.saveToken(token, for: email)
+    }
+
+    /// Revokes a removed token's grant at Google, best effort and tracked so
+    /// a new sign-in waits for it (see `GoogleRevocationTracker`).
+    func revokeRemovedToken(_ token: OAuthToken) async {
+        let revocable = token.refreshToken ?? token.accessToken
+        guard !revocable.isEmpty else { return }
         let tokenService = tokenService
         await revocations.run {
             do {

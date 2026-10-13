@@ -121,6 +121,30 @@ extension AppState {
         googleMailAuth.invalidateAllTokenOperations()
     }
 
+    /// Deletes a mailbox's Google token as a rollbackable step of removing the
+    /// mailbox: done before the account record goes, so a Keychain failure
+    /// aborts the removal instead of orphaning the refresh token.
+    func removeGoogleTokenForAccountRemoval(_ email: String) throws -> OAuthToken? {
+        try googleMailAuth.removeLocalToken(email)
+    }
+
+    /// Rolls back `removeGoogleTokenForAccountRemoval` when a later step fails.
+    func restoreGoogleTokenAfterFailedRemoval(_ token: OAuthToken?, email: String) {
+        guard let token else { return }
+        do {
+            try googleMailAuth.restoreLocalToken(token, for: email)
+        } catch {
+            logger.error("Couldn't restore a Google token after a failed removal: \(error.localizedDescription)")
+        }
+    }
+
+    /// Revokes a removed mailbox's grant at Google (best effort, tracked).
+    func revokeRemovedGoogleToken(_ token: OAuthToken?) {
+        guard let token else { return }
+        let auth = googleMailAuth
+        Task { await auth.revokeRemovedToken(token) }
+    }
+
     /// A saved mailbox was removed: cancel/invalidate any Google sign-in that
     /// could otherwise restore it when the browser comes back.
     func noteGoogleAccountRemoved(_ email: String) {
