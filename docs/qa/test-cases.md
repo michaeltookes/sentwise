@@ -302,16 +302,15 @@ M3 runs on two deployments of the same release tag.
 - **Asset:** video
 
 ### TC-M3-04 Trial ended pauses drafting
-- **Executor:** uat (step 1) and lucius (steps 2–5)
+- **Executor:** uat (step 1) and lucius (steps 2–4)
 - **Verifies:** item 87 (end state), item 119
 - **Preconditions:** F2 signed in.
 - **Steps:**
   1. uat: set F2's `startedAt` to now minus 15 days.
   2. lucius: quit and relaunch Sentwise; open **Settings…** → **Subscription**.
   3. From the status menu open **New Follow-up from Transcript…**, enter recipient `luciusfox@prowlqa.dev`, paste T1.
-  4. Click **Draft follow-up**.
-  5. Read the result.
-- **Expected:** the Subscription tab shows plan "Trial ended" with "Your free trial has ended, so drafting is paused until you choose a plan." and a **Subscribe** button; step 4 produces no draft and shows a message that the trial has ended with a way to choose a plan.
+  4. Read the state of the **Draft follow-up** button (do not try to force it), then close the composer.
+- **Expected:** the Subscription tab shows plan "Trial ended" with "Your free trial has ended, so drafting is paused until you choose a plan." and a **Subscribe** button; in step 4 **Draft follow-up** is disabled (the app's `canCreateFollowUp` is false once the trial has ended), so no draft can be requested and none appears in Review Drafts. Item 87 does not change the composer.
 - **Asset:** video
 
 ### TC-M3-05 Checkout to a paid plan on the sandbox deployment; production unaffected
@@ -496,18 +495,20 @@ Payment method, in order: (a) a single-use 100%-off live Paddle discount code; (
 - **Preconditions:**
   - The public post URL from the distribution plan.
   - Run inside a **separate standard macOS user on Lucius' Mini** (`sentwise-stranger`, created once by `homelab-it`), so the stranger has no Sentwise app data, no Keychain items, and no onboarding-completed flag. Keeping F1's user would skip fresh onboarding, because `reconcileOnboardingState()` honors F1's session.
-  - Before each run, the stranger user's home folder is reset (Application Support, Preferences, and login keychain removed by `homelab-it`).
-  - F1's user, app, and Keychain are not touched.
+  - Before each run, the stranger user's home folder is reset (`~/Applications/Sentwise.app`, Application Support, Preferences, and login keychain removed by `homelab-it`), and `~/Applications` exists in the stranger user.
+  - F1's user, app, and Keychain are not touched. The stranger installs **per user** in `~/Applications/Sentwise.app`, never in the shared `/Applications`, where F1's production app lives. Sparkle updates and launch at login behave the same from `~/Applications`.
+  - Before step 1, record the shared app's fingerprint in Terminal: `find /Applications/Sentwise.app -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 > /tmp/stranger-shared-app-before.txt`.
   - The browser in the stranger user has no sentwise.ai cookies.
 - **Steps:**
   1. Log in to the stranger user. Open the post URL and click its link to sentwise.ai.
   2. On sentwise.ai click **Download for macOS**.
-  3. Open the downloaded DMG and drag Sentwise to Applications. Open it and accept the Gatekeeper prompt.
+  3. Open the downloaded DMG. In Finder choose **Go** → **Go to Folder…**, enter `~/Applications`, and drag Sentwise from the DMG window into that folder (not onto the DMG's **Applications** link, which points at the shared `/Applications`). Open `~/Applications/Sentwise.app` and accept the Gatekeeper prompt.
   4. In Setup Assistant ("Welcome to Sentwise"), connect F1's mailbox (`luciusfox@prowlqa.dev`) with its app password. Then sign in to Sentwise AI as a new F2.
   5. Finish the Setup Assistant with **Save as draft**.
   6. From the status menu open **New Follow-up from Transcript…**, enter recipient `luciusfox@prowlqa.dev`, paste T1, click **Draft follow-up**, and when the draft appears in Review Drafts throw it away with **Deny**: select **Not worth replying** and click **Deny** in the sheet (the first draft starts the trial).
   7. Close and reopen **Settings…** → **Subscription**.
-- **Expected:** Gatekeeper reports the app was checked for malicious software with none detected; the installed version is the latest release; step 3 opens to the Setup Assistant (not straight to the menu bar); step 7 shows "Trial — 14 days left". Teardown: in the stranger user, Settings → Account → disconnect the mailbox with **Disconnect & Erase Local Data**; log out of the stranger user.
+  8. In Terminal, rerun the fingerprint command into `/tmp/stranger-shared-app-after.txt` and run `diff /tmp/stranger-shared-app-before.txt /tmp/stranger-shared-app-after.txt`.
+- **Expected:** Gatekeeper reports the app was checked for malicious software with none detected; the installed version is the latest release; step 3 opens to the Setup Assistant (not straight to the menu bar); step 7 shows "Trial — 14 days left"; step 8's `diff` prints nothing (the shared `/Applications/Sentwise.app` is unchanged) and the running app's path is `~/Applications/Sentwise.app`. Teardown: in the stranger user, Settings → Account → disconnect the mailbox with **Disconnect & Erase Local Data**; log out of the stranger user.
 - **Asset:** video
 
 ### TC-M5-02 Support mail gets a reply within the stated SLA
