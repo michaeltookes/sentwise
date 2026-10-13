@@ -183,6 +183,54 @@ extension AppState {
         }
     }
 
+    /// Takes the Google token of `email` as the first, rollbackable step of
+    /// disconnecting it (only when it signed in with Google). Returns nil, with
+    /// a Keychain error shown, when the delete fails and the caller must stop.
+    func takeGoogleTokenForDisconnect(
+        email: String,
+        messageSurface: TransientMessageSurface
+    ) -> GoogleTokenRemoval? {
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, savedAccountUsesGoogleSignIn(trimmed) else {
+            return GoogleTokenRemoval(email: trimmed, token: nil)
+        }
+        return takeGoogleToken(email: trimmed, messageSurface: messageSurface)
+    }
+
+    /// Takes the Google token when `newSecret` replaces a Google sign-in with
+    /// an app password; same contract as `takeGoogleTokenForDisconnect`.
+    func takeGoogleTokenForSwitch(
+        email: String,
+        previousSecret: String?,
+        newSecret: String,
+        messageSurface: TransientMessageSurface
+    ) -> GoogleTokenRemoval? {
+        guard let previousSecret, GoogleMailCredential.isMarker(previousSecret),
+              !GoogleMailCredential.isMarker(newSecret) else {
+            return GoogleTokenRemoval(email: email, token: nil)
+        }
+        return takeGoogleToken(email: email, messageSurface: messageSurface)
+    }
+
+    private func takeGoogleToken(email: String, messageSurface: TransientMessageSurface) -> GoogleTokenRemoval? {
+        do {
+            return GoogleTokenRemoval(email: email, token: try removeGoogleTokenForAccountRemoval(email))
+        } catch {
+            setConnectionError(Self.keychainMessage(action: "remove", error: error), for: messageSurface)
+            return nil
+        }
+    }
+
+    /// Puts a taken token back after a later step of the operation failed.
+    func rollBack(_ removal: GoogleTokenRemoval) {
+        restoreGoogleTokenAfterFailedRemoval(removal.token, email: removal.email)
+    }
+
+    /// Finishes a successful operation: revokes the taken token's grant.
+    func complete(_ removal: GoogleTokenRemoval) {
+        revokeRemovedGoogleToken(removal.token)
+    }
+
     /// Revokes a removed mailbox's grant at Google (best effort, tracked).
     func revokeRemovedGoogleToken(_ token: OAuthToken?) {
         guard let token else { return }
@@ -195,14 +243,10 @@ extension AppState {
     func noteGoogleAccountRemoved(_ email: String) {
         googleMailAuth.noteAccountRemoved(email)
     }
+}
 
-    /// Deletes `email`'s Google token and revokes the grant (best effort) once
-    /// its credential slot no longer holds the Google marker — after a
-    /// disconnect, a removal, or a switch of that mailbox to an app password.
-    func forgetGoogleSignInIfReplaced(email: String, previousSecret: String?) {
-        guard let previousSecret, GoogleMailCredential.isMarker(previousSecret) else { return }
-        guard !savedAccountUsesGoogleSignIn(email) else { return }
-        let auth = googleMailAuth
-        Task { await auth.disconnect(email) }
-    }
+/// A Google token taken out of the Keychain as a rollbackable step (item 104).
+struct GoogleTokenRemoval {
+    let email: String
+    let token: OAuthToken?
 }

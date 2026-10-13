@@ -83,3 +83,78 @@ final class TokenRemovalFailingSecretStore: SecretStore {
     }
     func removeAll() throws { try base.removeAll() }
 }
+
+/// Disconnecting a Google mailbox, or switching it to an app password, takes
+/// the token as a rollbackable first step too (item 104).
+@MainActor
+final class GoogleSignInDisconnectRollbackTests: XCTestCase {
+
+    private func connected() async throws -> (AppState, GmailAuthStore, TokenRemovalFailingSecretStore, FakeTransport) {
+        let secrets = TokenRemovalFailingSecretStore()
+        let appState = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: secrets,
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: FakeLLMProvider(result: .success(()))
+        )
+        let store = GmailAuthStore(secrets: secrets)
+        let exchange = """
+        {"access_token":"fresh-at","refresh_token":"rt","expires_in":3600,"token_type":"Bearer",\
+        "scope":"https://mail.google.com/ openid","id_token":"\(GmailAuthCoordinatorTests.idToken(email: "me@gmail.com"))"}
+        """
+        let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data(exchange.utf8)))
+        appState.googleMailAuth.install(GmailAuthCoordinator(
+            client: GoogleOAuthClientConfiguration(clientID: "1234-abc.apps.googleusercontent.com"),
+            store: store,
+            tokenService: OAuthTokenService(transport: transport),
+            makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": "S"]) },
+            browser: SpyBrowser(),
+            makeState: { "S" }
+        ))
+        let didConnect = await appState.connectWithGoogle()
+        XCTAssertTrue(didConnect)
+        return (appState, store, secrets, transport)
+    }
+
+    func testDisconnectAbortsAndStaysConnectedWhenTheTokenDeleteFails() async throws {
+        let (appState, store, secrets, transport) = try await connected()
+        let requestsBefore = transport.requests.count
+
+        secrets.failTokenRemoval = true
+        appState.disconnectMail()
+
+        XCTAssertNotNil(appState.connectionError)
+        XCTAssertTrue(appState.isAccountConnected, "the disconnect didn't happen, so cleanup stays retryable")
+        XCTAssertEqual(try secrets.value(for: .mailAppPassword(email: "me@gmail.com")), GoogleMailCredential.marker)
+        XCTAssertTrue(store.hasToken(for: "me@gmail.com"))
+        XCTAssertEqual(transport.requests.count, requestsBefore)
+
+        secrets.failTokenRemoval = false
+        appState.disconnectMail()
+        XCTAssertFalse(appState.isAccountConnected)
+        XCTAssertFalse(store.hasToken(for: "me@gmail.com"))
+        XCTAssertNil(try secrets.value(for: .mailAppPassword(email: "me@gmail.com")))
+    }
+
+    func testSwitchToAnAppPasswordAbortsWhenTheTokenDeleteFails() async throws {
+        let (appState, store, secrets, _) = try await connected()
+        let appPassword = MailAccountCredentials(
+            email: "me@gmail.com", appPassword: "abcdefghijklmnop", host: "imap.gmail.com", port: 993
+        )
+
+        secrets.failTokenRemoval = true
+        let switched = await appState.testConnection(with: appPassword)
+
+        XCTAssertFalse(switched)
+        XCTAssertNotNil(appState.connectionError)
+        XCTAssertTrue(appState.activeAccountUsesGoogleSignIn, "still a Google mailbox, marker intact")
+        XCTAssertEqual(try secrets.value(for: .mailAppPassword(email: "me@gmail.com")), GoogleMailCredential.marker)
+        XCTAssertTrue(store.hasToken(for: "me@gmail.com"))
+
+        secrets.failTokenRemoval = false
+        let retried = await appState.testConnection(with: appPassword)
+        XCTAssertTrue(retried)
+        XCTAssertFalse(appState.activeAccountUsesGoogleSignIn)
+        XCTAssertFalse(store.hasToken(for: "me@gmail.com"))
+    }
+}

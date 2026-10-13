@@ -242,7 +242,15 @@ extension AppState {
                 return
             }
         }
+        // The Google token goes first and is rolled back with the rest (item 104).
+        guard let googleRemoval = takeGoogleTokenForDisconnect(
+            email: disconnectedAccountEmail, messageSurface: messageSurface
+        ) else {
+            restoreWatchingAfterPreservedDisconnectIfNeeded(purgeLocalData && wasWatching)
+            return
+        }
         guard let removedPassword = removeActiveMailPasswordForDisconnect(messageSurface: messageSurface) else {
+            rollBack(googleRemoval)
             restoreWatchingAfterPreservedDisconnectIfNeeded(purgeLocalData && wasWatching)
             return
         }
@@ -257,11 +265,12 @@ extension AppState {
                 restoreActiveMailPasswordRemovalMessage(removedPassword),
                 messageSurface: messageSurface
             )
+            rollBack(googleRemoval)
             restoreWatchingAfterPreservedDisconnectIfNeeded(purgeLocalData && wasWatching)
             return
         }
         mailAppPassword = ""
-        forgetGoogleSignInIfReplaced(email: removedPassword.accountEmail, previousSecret: removedPassword.accountPassword)
+        complete(googleRemoval)
         markMailHostVerifiedForGuidance()
         isAccountConnected = false
         stopWatching()
@@ -319,10 +328,17 @@ extension AppState {
             return false
         }
 
+        // Switching this mailbox from Google sign-in to an app password (item 104):
+        // the token goes first and is rolled back if any later step fails.
+        guard let googleRemoval = takeGoogleTokenForSwitch(
+            email: credentials.email, previousSecret: previousAppPassword,
+            newSecret: credentials.appPassword, messageSurface: messageSurface
+        ) else { return false }
         do {
             try secrets.set(credentials.appPassword, for: accountKey)
         } catch {
             setConnectionError(Self.keychainMessage(action: "save", error: error), for: messageSurface)
+            rollBack(googleRemoval)
             return false
         }
 
@@ -338,6 +354,7 @@ extension AppState {
                 ),
                 for: messageSurface
             )
+            rollBack(googleRemoval)
             return false
         }
 
@@ -353,13 +370,13 @@ extension AppState {
                 ),
                 messageSurface: messageSurface
             )
+            rollBack(googleRemoval)
             return false
         }
         if accountIdentityChanged {
             clearSignatureForAccountChange()
         }
-        // Switching this mailbox from Google sign-in to an app password (item 104).
-        forgetGoogleSignInIfReplaced(email: credentials.email, previousSecret: previousAppPassword)
+        complete(googleRemoval)
         return true
     }
 
