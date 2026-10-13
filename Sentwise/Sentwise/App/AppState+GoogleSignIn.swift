@@ -94,7 +94,7 @@ extension AppState {
         }
 
         return await adoptGoogleAuthorization(
-            email: authorization.email,
+            authorization,
             attempt: attempt,
             isStale: isStale,
             messageSurface: messageSurface,
@@ -105,14 +105,17 @@ extension AppState {
     /// Verifies and adopts the mailbox a finished browser flow authorized,
     /// unless the flow went stale (erase, removal, or a newer attempt).
     private func adoptGoogleAuthorization(
-        email: String,
+        _ authorization: GmailAuthorization,
         attempt: UInt64,
         isStale: @escaping @MainActor (String) -> Bool,
         messageSurface: TransientMessageSurface,
         shouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool
     ) async -> Bool {
+        let email = authorization.email
+        // Cleanup touches only this flow's own grant, never one a newer attempt stored.
+        let dropThisGrant = { await self.googleMailAuth.disconnect(email, ifStoredTokenIs: authorization.token) }
         guard !isStale(email) else {
-            await googleMailAuth.disconnect(email)
+            await dropThisGrant()
             return false
         }
         let wasGoogleConnected = savedAccountUsesGoogleSignIn(email)
@@ -120,7 +123,7 @@ extension AppState {
         guard isCurrentMailConnectionAttempt(attempt), shouldApplyResult(credentials) else {
             // Another connection attempt or Settings session started meanwhile
             // (or the caller no longer wants it): don't adopt this one.
-            if !wasGoogleConnected { await googleMailAuth.disconnect(email) }
+            if !wasGoogleConnected { await dropThisGrant() }
             return false
         }
         let connected = await testConnection(
@@ -128,12 +131,12 @@ extension AppState {
         ) { !isStale(email) && shouldApplyResult($0) }
         guard !isStale(email) else {
             // Erased or removed mid-verification: whatever the outcome, keep no grant.
-            await googleMailAuth.disconnect(email)
+            await dropThisGrant()
             return false
         }
         if !connected && !wasGoogleConnected {
             // Never leave an orphaned grant behind for a mailbox that didn't connect.
-            await googleMailAuth.disconnect(email)
+            await dropThisGrant()
         }
         if connected {
             logger.info("Mailbox connected with Google sign-in")

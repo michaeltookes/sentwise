@@ -322,6 +322,27 @@ final class GmailAuthCoordinator {
         if let token { await revokeRemovedToken(token) }
     }
 
+    /// Cleanup for one specific authorization: deletes and revokes `token`
+    /// only while it is still the stored grant for `email`. When a newer
+    /// sign-in has replaced it, nothing is deleted or revoked (revoking the old
+    /// grant would also kill the new one at Google).
+    func disconnect(_ email: String, ifStoredTokenIs token: OAuthToken) async {
+        guard let stored = (try? store.loadToken(for: email)) ?? nil,
+              Self.isSameGrant(stored, token) else { return }
+        do {
+            _ = try removeLocalToken(for: email)
+        } catch {
+            logger.error("Couldn't remove a Google token from the Keychain: \(error.localizedDescription)")
+            return
+        }
+        await revokeRemovedToken(token)
+    }
+
+    static func isSameGrant(_ lhs: OAuthToken, _ rhs: OAuthToken) -> Bool {
+        if let left = lhs.refreshToken, let right = rhs.refreshToken { return left == right }
+        return lhs.accessToken == rhs.accessToken
+    }
+
     /// Deletes `email`'s stored token (invalidating any refresh in flight) and
     /// returns it, so a caller whose larger operation fails can put it back
     /// with `restoreLocalToken(_:for:)`. Throws when the Keychain delete fails.
