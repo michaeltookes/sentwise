@@ -243,6 +243,7 @@ extension AppState {
             keychainError = error.localizedDescription
             logger.error("Failed to clear Keychain during erase-all: \(error.localizedDescription)")
         }
+        resumeGoogleOperationsAfterErase()
 
         clearUserDefaultsBackedStores()
         resetInMemoryAccountArtifacts()

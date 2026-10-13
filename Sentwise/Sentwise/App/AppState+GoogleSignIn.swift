@@ -173,6 +173,11 @@ extension AppState {
         googleMailAuth.invalidateAllTokenOperations()
     }
 
+    /// Lifts the erase-time suspension once the Keychain has been wiped.
+    func resumeGoogleOperationsAfterErase() {
+        googleMailAuth.resumeTokenOperations()
+    }
+
     /// Deletes a mailbox's Google token as a rollbackable step of removing the
     /// mailbox: done before the account record goes, so a Keychain failure
     /// aborts the removal instead of orphaning the refresh token.

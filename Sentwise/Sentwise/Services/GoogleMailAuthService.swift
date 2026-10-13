@@ -192,9 +192,15 @@ final class GoogleMailAuthService: ObservableObject {
         return try await coordinator.validAccessToken(for: email)
     }
 
-    /// Invalidates every in-flight token refresh (before an erase).
+    /// Invalidates every in-flight token refresh and suspends token
+    /// operations (before an erase) until `resumeTokenOperations()`.
     func invalidateAllTokenOperations() {
         coordinator?.invalidateAll()
+    }
+
+    /// Resumes token operations once an erase has wiped the Keychain.
+    func resumeTokenOperations() {
+        coordinator?.resumeTokenOperations()
     }
 
     /// Removes `email`'s token and revokes it at Google (best effort). Without
