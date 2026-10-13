@@ -260,6 +260,10 @@ struct GoogleOAuthMailProvider: MailProvider {
         let token: String
         do {
             token = try await auth.accessToken(for: credentials.email)
+        } catch GmailAuthError.superseded {
+            // The grant changed mid-refresh twice over: retry on the next poll,
+            // never pause the mailbox as an auth failure.
+            throw MailError.connectionFailed("Google sign-in changed while refreshing; will retry.")
         } catch let error as GmailAuthError {
             throw MailError.authenticationFailed(Self.detail(for: error))
         } catch OAuthError.temporarilyUnavailable(let status) {

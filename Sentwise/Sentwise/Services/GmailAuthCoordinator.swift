@@ -18,6 +18,9 @@ enum GmailAuthError: Error, Equatable {
     case accountMismatch(expected: String, actual: String)
     /// A sign-in is already waiting in the browser.
     case alreadyInProgress
+    /// A token refresh was made obsolete (re-authorization, disconnect, erase)
+    /// while in flight. Transient: retry against the current grant.
+    case superseded
 }
 
 /// The result of a completed browser authorization.
@@ -205,7 +208,19 @@ final class GmailAuthCoordinator {
 
     /// Returns a valid access token for `email`, refreshing it first when the
     /// stored one has expired. Concurrent callers share one refresh.
+    ///
+    /// A refresh that a re-authorization, disconnect, or erase made obsolete
+    /// ends `superseded` (never an auth failure); the call then retries once
+    /// against the current state: the new grant's token, or `notConnected`.
     func validAccessToken(for email: String) async throws -> String {
+        do {
+            return try await currentAccessToken(for: email)
+        } catch GmailAuthError.superseded {
+            return try await currentAccessToken(for: email)
+        }
+    }
+
+    private func currentAccessToken(for email: String) async throws -> String {
         let key = SavedMailAccount.normalizedEmail(email)
         let startGeneration = generation(for: key)
         if let inFlight = refreshTasks[key] {
@@ -224,19 +239,26 @@ final class GmailAuthCoordinator {
         }
 
         let task = Task { () throws -> String in
+            let refreshed: OAuthToken
             do {
-                let refreshed = try await tokenService.refresh(refreshToken: refreshToken, client: client, now: now())
-                // Disconnected (or erased) while the request was out: drop it.
+                refreshed = try await tokenService.refresh(refreshToken: refreshToken, client: client, now: now())
+            } catch {
+                // The old grant's failure (invalid_grant, cancellation) says
+                // nothing about the grant that replaced it.
                 try requireCurrent(startGeneration, for: key)
-                try requireFullScope(refreshed)
-                try store.saveToken(refreshed, for: email)
-                return refreshed.accessToken
-            } catch OAuthError.server(let code, _) where code == "invalid_grant" {
-                // Revoked, expired (7-day Testing-mode grants), or the user
-                // changed their password: only a fresh sign-in fixes it.
-                logger.info("Google grant no longer valid; re-authorization required")
-                throw GmailAuthError.reauthorizationRequired
+                if case OAuthError.server(let code, _) = error, code == "invalid_grant" {
+                    // Revoked, expired (7-day Testing-mode grants), or the user
+                    // changed their password: only a fresh sign-in fixes it.
+                    logger.info("Google grant no longer valid; re-authorization required")
+                    throw GmailAuthError.reauthorizationRequired
+                }
+                throw error
             }
+            // Re-authorized, disconnected, or erased while the request was out: drop it.
+            try requireCurrent(startGeneration, for: key)
+            try requireFullScope(refreshed)
+            try store.saveToken(refreshed, for: email)
+            return refreshed.accessToken
         }
         let taskID = UUID()
         refreshTasks[key] = (taskID, task)
@@ -249,7 +271,7 @@ final class GmailAuthCoordinator {
     }
 
     private func requireCurrent(_ startGeneration: TokenGeneration, for key: String) throws {
-        guard generation(for: key) == startGeneration else { throw GmailAuthError.notConnected }
+        guard generation(for: key) == startGeneration else { throw GmailAuthError.superseded }
     }
 
     /// Invalidates every outstanding token refresh, for all mailboxes, so none
@@ -334,6 +356,8 @@ final class GmailAuthCoordinator {
             return "You signed in as \(actual), but this account is \(expected). Choose \(expected) on Google's screen."
         case .alreadyInProgress:
             return "A Google sign-in is already open in your browser."
+        case .superseded:
+            return "Your Google sign-in changed while Sentwise was refreshing it. Please try again."
         }
     }
 

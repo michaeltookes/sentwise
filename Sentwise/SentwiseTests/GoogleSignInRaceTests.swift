@@ -267,14 +267,11 @@ final class GoogleSignInRaceTests: XCTestCase {
         let verified = try await coordinator.validAccessToken(for: "me@gmail.com")
         XCTAssertEqual(verified, "new-at", "verification uses the new grant instead of joining the old refresh")
 
-        // The old refresh finally answers; it must neither overwrite nor reject the new grant.
+        // The old refresh finally answers; it must neither overwrite nor reject the new grant,
+        // and its caller is served from the new grant instead.
         transport.completeRefresh(HTTPResponse(statusCode: 200, body: Data(refreshedJSON.utf8)))
-        do {
-            _ = try await oldRefresh.value
-            XCTFail("the retired refresh must not hand out a token")
-        } catch {
-            XCTAssertEqual(error as? GmailAuthError, .notConnected)
-        }
+        let oldCallerToken = try await oldRefresh.value
+        XCTAssertEqual(oldCallerToken, "new-at")
         XCTAssertEqual(try store.loadToken(for: "me@gmail.com")?.accessToken, "new-at")
         XCTAssertEqual(transport.refreshCount, 1)
     }
