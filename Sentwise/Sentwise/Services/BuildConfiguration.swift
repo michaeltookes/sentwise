@@ -39,7 +39,7 @@ struct BuildConfiguration: Equatable, Sendable {
         static let urlTypes = "CFBundleURLTypes"
         static let urlSchemes = "CFBundleURLSchemes"
 
-        /// The keys whose presence marks a build as non-production.
+        /// The keys a QA bundle reads (ignored in any other bundle).
         static let overrides = [
             serviceBaseURL, clerkFrontendAPIURL, paddleEnvironment, paddleClientToken,
             paddleStarterPriceID, paddleProPriceID, paddleUnlimitedPriceID,
@@ -58,12 +58,10 @@ struct BuildConfiguration: Equatable, Sendable {
     }
 
     /// What a non-production build falls back to when its own value is missing
-    /// or malformed: never the production Keychain service or data directory.
+    /// or malformed. Identity values (Keychain suffix, data folder, name, URL
+    /// scheme) are derived from the bundle id's suffix instead, so they are never
+    /// the production ones.
     enum NonProductionFallback {
-        static let keychainServiceSuffix = ".qa"
-        static let appSupportDirectoryName = "Sentwise QA"
-        static let appDisplayName = "Sentwise QA"
-        static let bundleIdentifier = "com.tookes.Sentwise.qa"
         /// Used when a non-production build's Clerk URL is missing, malformed, or
         /// the production instance: `.invalid` never resolves (RFC 2606) and
         /// `ClerkClient` refuses it before any request, so sign-in is unavailable
@@ -113,13 +111,11 @@ struct BuildConfiguration: Equatable, Sendable {
     static func resolve(infoDictionary: [String: Any]?) -> BuildConfiguration {
         let info = infoDictionary ?? [:]
         let declaredScheme = declaredURLScheme(info) ?? Production.urlScheme
-        // Only a QA-identified bundle may use the override keys; with the
-        // production bundle id (or none) any leaked value is ignored.
-        let qaBundleIdentifier = qaBundleIdentifier(string(info, InfoKey.bundleIdentifier))
-        let isProduction = qaBundleIdentifier == nil
-            || InfoKey.overrides.allSatisfy { string(info, $0) == nil }
-
-        if isProduction {
+        // The bundle id alone decides: a `com.tookes.Sentwise.<suffix>` bundle is
+        // always non-production, even with every override key missing (its
+        // identity is derived from the suffix and its services fail closed); any
+        // other id is production, and leaked override keys are ignored.
+        guard let qaBundleIdentifier = qaBundleIdentifier(string(info, InfoKey.bundleIdentifier)) else {
             return BuildConfiguration(
                 isProduction: true,
                 serviceBaseURL: URL(string: Production.serviceBaseURLString)!,
@@ -132,6 +128,8 @@ struct BuildConfiguration: Equatable, Sendable {
                 paddle: .production
             )
         }
+        let suffix = String(qaBundleIdentifier.dropFirst(Production.bundleIdentifier.count + 1))
+        let derivedName = "\(Production.appDisplayName) \(suffix.uppercased())"
 
         // A non-production build never talks to the production service or Clerk
         // instance: a missing, malformed, or production URL becomes unavailable.
@@ -147,11 +145,13 @@ struct BuildConfiguration: Equatable, Sendable {
             isProduction: false,
             serviceBaseURL: serviceURL ?? NonProductionFallback.serviceBaseURL,
             clerkFrontendAPIBaseURL: clerkURL ?? NonProductionFallback.clerkFrontendAPIURL,
-            keychainServiceSuffix: keychainSuffix(string(info, InfoKey.keychainServiceSuffix)),
-            appSupportDirectoryName: directoryName(string(info, InfoKey.appSupportDirectoryName)),
-            bundleIdentifier: qaBundleIdentifier ?? NonProductionFallback.bundleIdentifier,
-            appDisplayName: displayName(string(info, InfoKey.displayName)),
-            urlScheme: declaredScheme,
+            keychainServiceSuffix: keychainSuffix(string(info, InfoKey.keychainServiceSuffix), derived: "." + suffix),
+            appSupportDirectoryName: directoryName(string(info, InfoKey.appSupportDirectoryName), derived: derivedName),
+            bundleIdentifier: qaBundleIdentifier,
+            appDisplayName: displayName(string(info, InfoKey.displayName), derived: derivedName),
+            urlScheme: declaredScheme != Production.urlScheme
+                ? declaredScheme
+                : "\(Production.urlScheme)-\(suffix.lowercased())",
             paddle: pointsAwayFromProduction ? sandboxPaddleConfig(info) : nil
         )
     }
@@ -219,24 +219,24 @@ struct BuildConfiguration: Equatable, Sendable {
         return value
     }
 
-    private static func displayName(_ value: String?) -> String {
-        guard let value, value != Production.appDisplayName else { return NonProductionFallback.appDisplayName }
+    private static func displayName(_ value: String?, derived: String) -> String {
+        guard let value, value != Production.appDisplayName else { return derived }
         return value
     }
 
-    private static func keychainSuffix(_ value: String?) -> String {
+    private static func keychainSuffix(_ value: String?, derived: String) -> String {
         guard let value,
               value.range(of: #"^\.[A-Za-z0-9-]{1,32}$"#, options: .regularExpression) != nil
-        else { return NonProductionFallback.keychainServiceSuffix }
+        else { return derived }
         return value
     }
 
-    private static func directoryName(_ value: String?) -> String {
+    private static func directoryName(_ value: String?, derived: String) -> String {
         guard let value,
               value.range(of: #"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$"#, options: .regularExpression) != nil,
               !value.contains(".."),
               value.lowercased() != Production.appSupportDirectoryName.lowercased()
-        else { return NonProductionFallback.appSupportDirectoryName }
+        else { return derived }
         return value
     }
 

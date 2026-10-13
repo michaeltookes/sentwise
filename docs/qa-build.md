@@ -39,7 +39,10 @@ Item 115 (`docs/live-testing.md`) is the history: a differently signed process t
 under `com.tookes.Sentwise` resets its ACL and locks the Developer ID app behind a login-keychain
 prompt. The QA build never reads or writes that service.
 
-**Fail closed, never production.** In a QA build, a missing, malformed, or production Clerk URL makes
+**Fail closed, never production.** The bundle id alone decides what a build is: a
+`com.tookes.Sentwise.<suffix>` bundle is always a QA build, even if every `Sentwise…` key is missing.
+Its Keychain suffix, data folder, name, and URL scheme then come from the suffix (`.qa`,
+`Sentwise QA`, `sentwise-qa`), Sparkle stays off, and the services below are unavailable. In a QA build, a missing, malformed, or production Clerk URL makes
 sign-in unavailable (the Clerk client refuses the reserved `clerk-unavailable.invalid` host before
 any request). A missing or malformed service URL does the same for drafting. An incomplete or
 inconsistent Paddle config makes checkout unavailable: Subscribe, Upgrade, and plan changes are

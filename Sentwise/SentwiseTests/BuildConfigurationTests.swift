@@ -196,6 +196,42 @@ final class BuildConfigurationTests: XCTestCase {
         }
     }
 
+    /// A misconfigured QA build (every override key absent, empty, or unexpanded)
+    /// is still a QA bundle: its own storage, Keychain, name, and scheme, updates
+    /// off, and services unavailable. Never production state.
+    func testQABundleWithNoOverrideKeysIsQAWithServicesUnavailable() {
+        var dictionaries: [[String: Any]] = [[Key.bundleIdentifier: "com.tookes.Sentwise.qa"]]
+        var empty: [String: Any] = [Key.bundleIdentifier: "com.tookes.Sentwise.qa", Key.urlTypes: urlTypes("sentwise")]
+        for key in Key.overrides { empty[key] = "" }
+        dictionaries.append(empty)
+        var unexpanded = empty
+        for key in Key.overrides { unexpanded[key] = "$(\(key))" }
+        dictionaries.append(unexpanded)
+
+        for info in dictionaries {
+            let config = BuildConfiguration.resolve(infoDictionary: info)
+            XCTAssertFalse(config.isProduction)
+            XCTAssertEqual(config.bundleIdentifier, "com.tookes.Sentwise.qa")
+            XCTAssertEqual(config.keychainServiceSuffix, ".qa")
+            XCTAssertEqual(config.appSupportDirectoryName, "Sentwise QA")
+            XCTAssertEqual(config.appDisplayName, "Sentwise QA")
+            XCTAssertEqual(config.urlScheme, "sentwise-qa")
+            XCTAssertFalse(config.allowsAutomaticUpdates)
+            XCTAssertEqual(config.serviceBaseURL, BuildConfiguration.NonProductionFallback.serviceBaseURL)
+            XCTAssertEqual(config.clerkFrontendAPIBaseURL, BuildConfiguration.NonProductionFallback.clerkFrontendAPIURL)
+            XCTAssertFalse(config.isSignInAvailable)
+            XCTAssertNil(config.paddle)
+        }
+    }
+
+    func testOtherQASuffixesDeriveTheirOwnIdentity() {
+        let config = BuildConfiguration.resolve(infoDictionary: [Key.bundleIdentifier: "com.tookes.Sentwise.beta"])
+        XCTAssertFalse(config.isProduction)
+        XCTAssertEqual(config.keychainServiceSuffix, ".beta")
+        XCTAssertEqual(config.appSupportDirectoryName, "Sentwise BETA")
+        XCTAssertEqual(config.urlScheme, "sentwise-beta")
+    }
+
     func testQABundleIdentifierIsTheBuildsSuffixedID() {
         let config = BuildConfiguration.resolve(infoDictionary: qaInfo([Key.bundleIdentifier: "com.tookes.Sentwise.beta"]))
         XCTAssertFalse(config.isProduction)
@@ -205,8 +241,11 @@ final class BuildConfigurationTests: XCTestCase {
 
     func testURLSchemeIsTheOneTheBuildDeclares() {
         XCTAssertEqual(BuildConfiguration.resolve(infoDictionary: qaInfo()).urlScheme, "sentwise-qa")
+        // A QA bundle never claims the production scheme, even if it declares it.
         let malformed = qaInfo([Key.urlTypes: urlTypes("1 bad")])
-        XCTAssertEqual(BuildConfiguration.resolve(infoDictionary: malformed).urlScheme, "sentwise")
+        XCTAssertEqual(BuildConfiguration.resolve(infoDictionary: malformed).urlScheme, "sentwise-qa")
+        let productionScheme = qaInfo([Key.urlTypes: urlTypes("sentwise")])
+        XCTAssertEqual(BuildConfiguration.resolve(infoDictionary: productionScheme).urlScheme, "sentwise-qa")
     }
 
     // MARK: - Consumers
