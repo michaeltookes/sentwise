@@ -478,6 +478,12 @@ alone.
   Nothing in the UI hardcodes credentials. The sandbox client-side token is public
   by design (frontend-scoped) so embedding it is safe. `priceID(for: PaddlePlan)`
   maps `starter`/`pro`/`unlimited` to their price ids.
+- **Sandbox QA lane (item 123)** — checkout and plan changes use
+  `AppState.activePaddleConfig`, which is `PaddleConfig.active` (production) for
+  every account except a `@prowlqa.dev` account whose `/v1/me` `billing` object
+  says `sandbox`; that account gets a sandbox config built from the token and
+  price ids the Worker returns (`PaddleConfig.resolved(billing:accountEmail:)`).
+  Setup and the TC-M3-05 procedure: `docs/billing-qa.md`.
 - **Authed transaction mint** — when the user picks a tier, the app calls the
   authenticated `POST /v1/paddle/checkout` with `{ priceId, quantity:1 }` under the
   **same Clerk session bearer** as `/v1/me` and `/v1/draft`
