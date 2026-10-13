@@ -17,7 +17,7 @@
 # ### / #### headings, "- " / "* " bullets with indented continuation lines,
 # paragraphs, **bold**, *italic*, `code` (contents rendered literally), and
 # [text](url) links. Link reference definitions ("[0.2.0]: https://…") are
-# dropped. Text is HTML-escaped. No
+# dropped. Text and link URLs are HTML-escaped (& < > "). No
 # external dependencies (POSIX awk only), so it runs the same locally and on CI.
 #
 set -euo pipefail
@@ -47,6 +47,7 @@ fi
 html="$(awk -v ver="$VERSION" '
 function esc(s) {
   gsub(/&/, "\\&amp;", s); gsub(/</, "\\&lt;", s); gsub(/>/, "\\&gt;", s)
+  gsub(/"/, "\\&quot;", s)   # links() puts the escaped url inside href="..."
   return s
 }
 # Replace every delimited span matched by re. lt/rt = delimiter lengths.

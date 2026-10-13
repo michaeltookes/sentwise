@@ -49,6 +49,7 @@ Intro paragraph with a [link](https://example.com/a?b=1&c=2) & an <angle>.
 - **Bold lead** — first bullet with `inline code`
   continued on an indented line.
 - An *emphasized* word.
+- See [open issues](https://example.com/?q="bug"&x=1) for "known" gaps.
 - Accepts `*.vtt` and `*.srt` files, plus `**not bold**`, `[not](a-link)` and `a & b`.
 
 ### Fixed
@@ -88,6 +89,8 @@ has "$out" '<li>An <em>emphasized</em> word.</li>' \
   && ok "bullet: *emphasis*" || bad "bullet: *emphasis*" "$out"
 has "$out" '<li>Accepts <code>*.vtt</code> and <code>*.srt</code> files, plus <code>**not bold**</code>, <code>[not](a-link)</code> and <code>a &amp; b</code>.</li>' \
   && ok "bullet: markdown inside code spans stays literal" || bad "bullet: markdown inside code spans stays literal" "$out"
+has "$out" '<li>See <a href="https://example.com/?q=&quot;bug&quot;&amp;x=1">open issues</a> for &quot;known&quot; gaps.</li>' \
+  && ok "bullet: quotes in link url escaped in href, link text intact" || bad "bullet: quotes in link url escaped in href, link text intact" "$out"
 [[ "$(grep -c '<ul>' <<< "$out")" -eq 2 && "$(grep -c '</ul>' <<< "$out")" -eq 2 ]] \
   && ok "lists opened and closed per section" || bad "lists opened and closed per section" "$out"
 ! has "$out" 'Older release only' && ! has "$out" 'Not shipped yet' \
