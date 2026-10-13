@@ -59,12 +59,7 @@ struct EmailAccountSettingsView: View {
             .accessibilityIdentifier("removeAccountOnly")
             Button("Cancel", role: .cancel) { accountPendingRemoval = nil }
         } message: { account in
-            Text("This forgets \(account.email) and deletes its saved password from your Keychain. "
-                 + "Your mailbox on the server is never touched.\n\n"
-                 + "\"Remove & erase local data\" also deletes this Mac's cached mail for the "
-                 + "account — pending drafts, activity history, and the skipped-message log. "
-                 + "If it is the active account, the learned voice profile is cleared too. "
-                 + "\"Remove only\" keeps that local data.")
+            Text(EmailAccountSettingsCopy.removeAccountMessage(account.email))
         }
         .confirmationDialog(
             "Disconnect \(appState.mailEmail)?",
@@ -81,17 +76,12 @@ struct EmailAccountSettingsView: View {
             .accessibilityIdentifier("disconnectOnly")
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Erasing local data deletes this Mac's cached mail for this account — pending "
-                 + "drafts, activity history, learned voice profile, and the skipped-message log. "
-                 + "Your mailbox on the server is never touched. \"Disconnect only\" keeps that "
-                 + "local data so you can reconnect without re-learning your voice.")
+            Text(EmailAccountSettingsCopy.disconnectMessage)
         }
         .onDisappear {
             abandonAddingAccountIfNeeded()
         }
     }
-
-    // MARK: - Saved accounts
 
     // MARK: - Connection / add form
 
@@ -103,7 +93,8 @@ struct EmailAccountSettingsView: View {
                     Text("Connected").foregroundStyle(.green)
                 }
                 LabeledContent("Account") {
-                    Text(appState.mailEmail).foregroundStyle(.secondary)
+                    Text(appState.mailEmail + (appState.activeAccountUsesGoogleSignIn ? " · Signed in with Google" : ""))
+                        .foregroundStyle(.secondary)
                 }
                 Button("Disconnect", role: .destructive) {
                     showDisconnectConfirmation = true
@@ -132,8 +123,20 @@ struct EmailAccountSettingsView: View {
         }
     }
 
-    @ViewBuilder
     private var connectForm: some View {
+        GoogleOrAppPasswordConnect(
+            auth: appState.googleMailAuth,
+            email: guidanceEmail,
+            host: isAddingAccount ? newAccountForm.host : appState.mailHost,
+            messageSurface: .settings,
+            shouldApplyResult: { [isAddingAccount] _ in isAddingAccount == self.isAddingAccount },
+            onConnected: { isAddingAccount = false; newAccountForm.resetForNewAccount() },
+            appPasswordForm: { appPasswordForm }
+        )
+    }
+
+    @ViewBuilder
+    private var appPasswordForm: some View {
         TextField("Email address", text: mailEmailBinding)
             .textContentType(.username)
             .focused($isMailEmailFocused)

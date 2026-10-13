@@ -344,3 +344,27 @@ final class GoogleSignInTests: XCTestCase {
         }
     }
 }
+
+@MainActor
+final class GoogleSignInOnboardingTests: XCTestCase {
+    func testContinueHintMentionsGoogleOnlyWhenAvailable() {
+        let appState = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: InMemorySecretStore(),
+            mailProvider: FakeAppMailProvider(result: .success(())),
+            llm: FakeLLMProvider(result: .success(()))
+        )
+        appState.googleMailAuth.install(nil)
+        XCTAssertEqual(appState.onboardingContinueBlockedReason(for: .connectAccount), "Run Test Connection to continue.")
+
+        appState.googleMailAuth.install(GmailAuthCoordinator(
+            client: GoogleOAuthClientConfiguration(clientID: "1-a.apps.googleusercontent.com"),
+            store: GmailAuthStore(secrets: InMemorySecretStore()),
+            tokenService: OAuthTokenService(transport: FakeTransport(response: HTTPResponse(statusCode: 200, body: Data())))
+        ))
+        XCTAssertEqual(
+            appState.onboardingContinueBlockedReason(for: .connectAccount),
+            "Sign in with Google or run Test Connection to continue."
+        )
+    }
+}

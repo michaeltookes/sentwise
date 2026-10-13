@@ -176,49 +176,24 @@ private struct OnboardingAccountStep: View {
         VStack(alignment: .leading, spacing: 12) {
             StepHeading(
                 title: "Connect your inbox",
-                subtitle: "Sentwise reads your inbox and Sent mail over IMAP using an app password."
+                subtitle: appState.isGoogleSignInAvailable
+                    ? "Sign in with Google to connect Gmail in one click. Other providers connect with an app password."
+                    : "Sentwise reads your inbox and Sent mail over IMAP using an app password."
             )
 
             if appState.isAccountConnected {
-                ConnectedBadge(text: "Connected as \(appState.mailEmail)")
+                ConnectedBadge(text: appState.activeAccountUsesGoogleSignIn
+                    ? "Connected as \(appState.mailEmail) with Google"
+                    : "Connected as \(appState.mailEmail)")
                 Button("Disconnect", role: .destructive) { appState.disconnectMail() }
                     .disabled(appState.isConnecting)
             } else {
-                TextField("Email address", text: mailEmailBinding)
-                    .textContentType(.username)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($isMailEmailFocused)
-                    .onSubmit { appState.commitMailEmailEditFromUser() }
-                    .onChange(of: isMailEmailFocused) { _, isFocused in
-                        if !isFocused {
-                            appState.commitMailEmailEditFromUser()
-                        }
-                    }
-                SecureField("App password", text: mailAppPasswordBinding)
-                    .textFieldStyle(.roundedBorder)
-
-                Button {
-                    Task { await appState.testConnection() }
-                } label: {
-                    if appState.isConnecting {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Text("Test Connection")
-                    }
-                }
-                .disabled(appState.isConnecting)
-
-                AppPasswordGuidanceView(
+                GoogleOrAppPasswordConnect(
+                    auth: appState.googleMailAuth,
                     email: appState.mailEmail,
-                    explicitHostFallback: appState.credentialGuidanceHostFallback
+                    host: appState.mailHost,
+                    appPasswordForm: { appPasswordForm }
                 )
-
-                DisclosureGroup("Advanced (IMAP server)") {
-                    TextField("IMAP host", text: mailHostBinding)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Port", value: mailPortBinding, format: .number)
-                        .textFieldStyle(.roundedBorder)
-                }
             }
 
             if let error = appState.connectionError {
@@ -231,6 +206,45 @@ private struct OnboardingAccountStep: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
+        }
+    }
+
+    @ViewBuilder
+    private var appPasswordForm: some View {
+        TextField("Email address", text: mailEmailBinding)
+            .textContentType(.username)
+            .textFieldStyle(.roundedBorder)
+            .focused($isMailEmailFocused)
+            .onSubmit { appState.commitMailEmailEditFromUser() }
+            .onChange(of: isMailEmailFocused) { _, isFocused in
+                if !isFocused {
+                    appState.commitMailEmailEditFromUser()
+                }
+            }
+        SecureField("App password", text: mailAppPasswordBinding)
+            .textFieldStyle(.roundedBorder)
+
+        Button {
+            Task { await appState.testConnection() }
+        } label: {
+            if appState.isConnecting {
+                ProgressView().controlSize(.small)
+            } else {
+                Text("Test Connection")
+            }
+        }
+        .disabled(appState.isConnecting)
+
+        AppPasswordGuidanceView(
+            email: appState.mailEmail,
+            explicitHostFallback: appState.credentialGuidanceHostFallback
+        )
+
+        DisclosureGroup("Advanced (IMAP server)") {
+            TextField("IMAP host", text: mailHostBinding)
+                .textFieldStyle(.roundedBorder)
+            TextField("Port", value: mailPortBinding, format: .number)
+                .textFieldStyle(.roundedBorder)
         }
     }
 
