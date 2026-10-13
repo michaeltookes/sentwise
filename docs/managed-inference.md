@@ -627,6 +627,9 @@ fail with a message users read as "Sentwise is broken". `WorkspaceAuthFailure`
 extends the item-43 `CredentialGuidance` pattern rather than forking it:
 `CredentialGuidance` explains how to *get* the credential; `WorkspaceAuthFailure`
 explains why a correct-looking credential is being *rejected by policy*.
+It applies only to app-password connections: a "Sign in with Google" mailbox
+(item 104, `docs/gmail-oauth.md`) never gets this guidance, because its failures
+carry their own Google-specific copy.
 
 Classification (case-insensitive, **Google host only** — detected via
 `EmailProviderKind.forHost == .gmail`; any other host → `.none`):
@@ -662,7 +665,10 @@ launch users hit it while dogfooding. **AX ids** for Prowl: `workspaceGuidance`,
 When an IMAP connect fails on a Google host because a Workspace admin has disabled
 app passwords or IMAP (see [Workspace app-password guidance](#workspace-app-password-guidance-item-75)),
 the guidance block offers **"Notify me when Sign in with Google is available"** — a
-demand signal for reviving the parked bundled-OAuth + CASA path (item 3).
+demand signal for the bundled-OAuth + CASA path (item 3). That path is now built
+(item 104, `docs/gmail-oauth.md`) and ships switched off until a build carries
+the Sentwise Google client; the capture stays in place as the demand signal
+until it is switched on for everyone.
 
 - **Client:** `Services/GoogleOAuthInterest.swift` → `GoogleOAuthInterestClient`
   calls `POST /v1/interest` with body `{"topic":"google-oauth"}` under a fresh
