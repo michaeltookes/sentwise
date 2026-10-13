@@ -289,24 +289,30 @@ struct ManagedAccountStatus: Codable, Sendable, Equatable {
     let trial: ManagedTrial?
     let quota: ManagedQuota?
     let subscription: ManagedSubscription?
+    /// Which Paddle checkout this account must open (item 123). Absent on older
+    /// Worker builds and for every production account it is `production`; see
+    /// `PaddleConfig.resolved(billing:accountEmail:)` for the client-side gate.
+    let billing: ManagedBillingLane?
 
     init(
         userID: String? = nil,
         email: String? = nil,
         trial: ManagedTrial? = nil,
         quota: ManagedQuota? = nil,
-        subscription: ManagedSubscription? = nil
+        subscription: ManagedSubscription? = nil,
+        billing: ManagedBillingLane? = nil
     ) {
         self.userID = Self.normalized(userID)
         self.email = Self.normalized(email)
         self.trial = trial
         self.quota = quota
         self.subscription = subscription
+        self.billing = billing
     }
 
     private enum CodingKeys: String, CodingKey {
         case userID = "userId"
-        case email, trial, quota, subscription
+        case email, trial, quota, subscription, billing
     }
 
     init(from decoder: Decoder) throws {
@@ -319,6 +325,9 @@ struct ManagedAccountStatus: Codable, Sendable, Equatable {
         trial = try container.decodeIfPresent(ManagedTrial.self, forKey: .trial)
         quota = try container.decodeIfPresent(ManagedQuota.self, forKey: .quota)
         subscription = try container.decodeIfPresent(ManagedSubscription.self, forKey: .subscription)
+        // `try?`: a malformed billing lane must never break account status — it
+        // simply decodes to nil, which the checkout gate treats as production.
+        billing = (try? container.decodeIfPresent(ManagedBillingLane.self, forKey: .billing)) ?? nil
     }
 
     private static func normalized(_ value: String?) -> String? {
@@ -330,6 +339,28 @@ struct ManagedAccountStatus: Codable, Sendable, Equatable {
     var stableAccountIdentifier: String? {
         guard let userID else { return nil }
         return "clerk-user:\(userID)"
+    }
+}
+
+/// The `billing` object on `GET /v1/me` (item 123): which Paddle environment the
+/// Worker routes this account's checkout through. Production carries only
+/// `environment`; the sandbox lane (QA accounts only) also carries the sandbox
+/// Paddle.js token and the three sandbox price ids, so none are embedded here.
+struct ManagedBillingLane: Codable, Sendable, Equatable {
+    struct Prices: Codable, Sendable, Equatable {
+        let starter: String
+        let pro: String
+        let unlimited: String
+    }
+
+    let environment: String
+    let clientSideToken: String?
+    let prices: Prices?
+
+    init(environment: String, clientSideToken: String? = nil, prices: Prices? = nil) {
+        self.environment = environment
+        self.clientSideToken = clientSideToken
+        self.prices = prices
     }
 }
 

@@ -123,7 +123,7 @@ extension AppState {
             }
         }
 
-        let priceID = PaddleConfig.active.priceID(for: tier)
+        let priceID = activePaddleConfig.priceID(for: tier)
         let change: PaddlePlanChange
         let sessionAccountKey = currentManagedSessionAccountKey ?? accountKey
         do {
@@ -246,7 +246,8 @@ extension AppState {
             email: previousStatus?.email ?? managedAccountEmail,
             trial: previousStatus?.trial,
             quota: previousStatus?.quota ?? managedQuota,
-            subscription: subscription
+            subscription: subscription,
+            billing: previousStatus?.billing
         )
         supersedeInFlightManagedAccountStatusRefreshes()
         managedAccountStatus = status

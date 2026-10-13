@@ -97,6 +97,50 @@ final class AppStateCheckoutModelTests: XCTestCase {
         XCTAssertEqual(model.priceID, PaddleConfig.active.priceID(for: .starter))
     }
 
+    // MARK: - Item 123: sandbox QA lane
+
+    private let sandboxLane = ManagedBillingLane(
+        environment: "sandbox",
+        clientSideToken: "test_sandbox_token",
+        prices: .init(starter: "pri_sbx_starter", pro: "pri_sbx_pro", unlimited: "pri_sbx_unlimited")
+    )
+
+    func testQAAccountInSandboxLaneMintsCheckoutWithSandboxPrice() async {
+        let llm = CheckoutLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountStatus = ManagedAccountStatus(
+            userID: "user_qa",
+            email: "qa-buyer@prowlqa.dev",
+            subscription: ManagedSubscription(plan: .trial, status: .trialing),
+            billing: sandboxLane
+        )
+
+        let model = appState.makeCheckoutModel(for: .pro)
+        XCTAssertEqual(model.config.environment, .sandbox)
+        XCTAssertEqual(model.config.clientSideToken, "test_sandbox_token")
+        await model.prepare()
+
+        XCTAssertEqual(llm.checkoutPriceIDs, ["pri_sbx_pro"])
+    }
+
+    func testProductionAccountStaysOnLivePricesWhenServiceReportsSandbox() async {
+        let llm = CheckoutLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountStatus = ManagedAccountStatus(
+            userID: "user_marcus",
+            email: "marcus@example.com",
+            subscription: ManagedSubscription(plan: .trial, status: .trialing),
+            billing: sandboxLane
+        )
+
+        let model = appState.makeCheckoutModel(for: .pro)
+        XCTAssertEqual(model.config, PaddleConfig.production)
+        await model.prepare()
+
+        XCTAssertEqual(llm.checkoutPriceIDs, [PaddleConfig.production.priceID(for: .pro)])
+        XCTAssertEqual(appState.activePaddleConfig, PaddleConfig.production)
+    }
+
     func testReconcileAfterCheckoutPollsWithoutDismissingTheSheet() async {
         let llm = CheckoutLLM()
         llm.statusesToReturn = [

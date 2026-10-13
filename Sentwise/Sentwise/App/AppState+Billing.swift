@@ -54,6 +54,18 @@ extension AppState {
         return id.isEmpty ? nil : id
     }
 
+    // MARK: - Paddle lane (item 123)
+
+    /// The Paddle config this account's checkout and plan changes use: the
+    /// sandbox only for a `@prowlqa.dev` account the Worker has put in the
+    /// sandbox lane, production for everyone else.
+    var activePaddleConfig: PaddleConfig {
+        PaddleConfig.resolved(
+            billing: managedAccountStatus?.billing,
+            accountEmail: managedAccountStatus?.email
+        )
+    }
+
     // MARK: - Checkout entry points
 
     /// Opens the checkout sheet (item 56c). Pass a `plan` to jump straight to that
@@ -78,7 +90,7 @@ extension AppState {
         // Sendable and runs off the main actor for the network call.
         let llm = self.llm
         return PaddleCheckoutModel(
-            config: .active,
+            config: activePaddleConfig,
             plan: plan,
             createTransaction: { priceID in
                 do {

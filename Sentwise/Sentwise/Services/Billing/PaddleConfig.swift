@@ -186,4 +186,59 @@ struct PaddleConfig: Sendable, Equatable {
     /// on the live API base with live tier price vars). Point back at `sandbox`
     /// only for local checkout testing against a sandbox-configured worker.
     static let active: PaddleConfig = production
+
+    // MARK: - Sandbox QA lane (item 123)
+
+    /// QA accounts live on exactly this domain (no subdomains, no look-alikes).
+    static let qaAccountEmailDomain = "prowlqa.dev"
+
+    /// Whether `email` is a QA account (exactly `@prowlqa.dev`).
+    static func isQAAccountEmail(_ email: String?) -> Bool {
+        guard let email = email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              let at = email.firstIndex(of: "@"),
+              at != email.startIndex,
+              email.lastIndex(of: "@") == at else { return false }
+        return email[email.index(after: at)...] == qaAccountEmailDomain
+    }
+
+    /// The checkout config for the signed-in account (item 123). Returns a
+    /// sandbox config only when ALL hold: the Worker reports the sandbox lane for
+    /// this account, the account email is a QA address, and the Worker supplied a
+    /// sandbox (`test_…`) client token plus three distinct sandbox price ids.
+    /// Anything else — a production account, an older Worker, a malformed or
+    /// partial lane — is the production config, so a production account can never
+    /// see sandbox prices.
+    static func resolved(billing: ManagedBillingLane?, accountEmail: String?) -> PaddleConfig {
+        guard let billing,
+              billing.environment == PaddleEnvironment.sandbox.rawValue,
+              isQAAccountEmail(accountEmail),
+              let token = nonEmpty(billing.clientSideToken),
+              token.hasPrefix("test_"),
+              let prices = billing.prices,
+              let starter = nonEmpty(prices.starter),
+              let pro = nonEmpty(prices.pro),
+              let unlimited = nonEmpty(prices.unlimited),
+              Set([starter, pro, unlimited]).count == 3,
+              Set([starter, pro, unlimited]).isDisjoint(with: productionPriceIDs) else {
+            return active
+        }
+        return PaddleConfig(
+            environment: .sandbox,
+            clientSideToken: token,
+            starterPriceID: starter,
+            proPriceID: pro,
+            unlimitedPriceID: unlimited,
+            checkoutOrigin: active.checkoutOrigin
+        )
+    }
+
+    private static var productionPriceIDs: Set<String> {
+        Set(PaddlePlan.allCases.map { production.priceID(for: $0) })
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
 }
