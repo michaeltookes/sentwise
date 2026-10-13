@@ -45,6 +45,23 @@ extension AppState {
         messageSurface: TransientMessageSurface = .shared,
         shouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool = { _ in true }
     ) async -> Bool {
+        await testConnection(
+            with: credentials,
+            messageSurface: messageSurface,
+            attempt: beginMailConnectionAttempt(),
+            shouldApplyResult: shouldApplyResult
+        )
+    }
+
+    /// The verification itself, under an attempt from `beginMailConnectionAttempt()`
+    /// (the Google path passes the attempt it began before opening the browser).
+    func testConnection(
+        with credentials: MailAccountCredentials,
+        messageSurface: TransientMessageSurface,
+        attempt: UInt64,
+        shouldApplyResult callerShouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool
+    ) async -> Bool {
+        let shouldApplyResult = guardedByMailConnectionAttempt(attempt, callerShouldApplyResult)
         setConnectionError(nil, for: messageSurface)
         clearWorkspaceAuthGuidance(for: messageSurface)
         let settingsMessageGeneration = settingsTransientMessageGeneration
@@ -61,7 +78,8 @@ extension AppState {
         ) else { return false }
 
         isConnecting = true
-        defer { isConnecting = false }
+        // A superseded attempt leaves the busy flag to the attempt that replaced it.
+        defer { if isCurrentMailConnectionAttempt(attempt) { isConnecting = false } }
         // The previously focused account, so a switch keeps it connected in the
         // background rather than disconnecting it (item 99).
         let previousFocused = previousFocusedSnapshot(from: previousSettings)

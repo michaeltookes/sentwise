@@ -142,6 +142,25 @@ final class GoogleMailAuthService: ObservableObject {
         return try await task.value
     }
 
+    /// Whether a browser sign-in is pending.
+    var isSignInPending: Bool { signInTask != nil }
+
+    /// One generation shared by every mailbox connection attempt, app password
+    /// and Google alike: starting an attempt supersedes (and, for a pending
+    /// Google sign-in, cancels) the previous one, and each path checks its
+    /// generation before it commits a result.
+    private(set) var connectionAttempt: UInt64 = 0
+
+    func beginConnectionAttempt() -> UInt64 {
+        connectionAttempt &+= 1
+        cancelSignIn()
+        return connectionAttempt
+    }
+
+    func isCurrentConnectionAttempt(_ attempt: UInt64) -> Bool {
+        connectionAttempt == attempt
+    }
+
     /// A mark to compare against later with `wasAccountRemoved(_:since:)`.
     func accountRemovalMark() -> UInt64 { accountRemovalSequence }
 

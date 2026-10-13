@@ -62,7 +62,9 @@ extension AppState {
             setConnectionError(GmailAuthCoordinator.message(for: GmailAuthError.notConfigured), for: messageSurface)
             return false
         }
-        guard !isConnecting else { return false }
+        guard !googleMailAuth.isSignInPending else { return false }
+        // Supersedes an app-password test in flight; a later one supersedes this.
+        let attempt = beginMailConnectionAttempt()
         // "Erase all local data" may run while the browser is open; a flow
         // started before the erase must never recreate tokens or reconnect.
         let localDataGeneration = localDataEraseGeneration
@@ -79,21 +81,44 @@ extension AppState {
         } catch is CancellationError {
             return false
         } catch {
-            guard isCurrentLocalDataGeneration(localDataGeneration) else { return false }
+            guard isCurrentLocalDataGeneration(localDataGeneration),
+                  isCurrentMailConnectionAttempt(attempt) else { return false }
             setConnectionError(GmailAuthCoordinator.message(for: error), for: messageSurface)
             return false
         }
 
-        let email = authorization.email
+        return await adoptGoogleAuthorization(
+            email: authorization.email,
+            attempt: attempt,
+            isStale: isStale,
+            messageSurface: messageSurface,
+            shouldApplyResult: shouldApplyResult
+        )
+    }
+
+    /// Verifies and adopts the mailbox a finished browser flow authorized,
+    /// unless the flow went stale (erase, removal, or a newer attempt).
+    private func adoptGoogleAuthorization(
+        email: String,
+        attempt: UInt64,
+        isStale: @escaping @MainActor (String) -> Bool,
+        messageSurface: TransientMessageSurface,
+        shouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool
+    ) async -> Bool {
         guard !isStale(email) else {
             await googleMailAuth.disconnect(email)
             return false
         }
         let wasGoogleConnected = savedAccountUsesGoogleSignIn(email)
-        let credentials = GoogleMailCredential.credentials(email: email)
-        let connected = await testConnection(with: credentials, messageSurface: messageSurface) {
-            !isStale(email) && shouldApplyResult($0)
+        guard isCurrentMailConnectionAttempt(attempt) else {
+            // Another connection attempt started meanwhile: don't adopt this one.
+            if !wasGoogleConnected { await googleMailAuth.disconnect(email) }
+            return false
         }
+        let credentials = GoogleMailCredential.credentials(email: email)
+        let connected = await testConnection(
+            with: credentials, messageSurface: messageSurface, attempt: attempt
+        ) { !isStale(email) && shouldApplyResult($0) }
         guard !isStale(email) else {
             // Erased or removed mid-verification: whatever the outcome, keep no grant.
             await googleMailAuth.disconnect(email)
@@ -107,6 +132,26 @@ extension AppState {
             logger.info("Mailbox connected with Google sign-in")
         }
         return connected
+    }
+
+    /// Starts a mailbox connection attempt (app password or Google),
+    /// superseding the previous one: its result won't be committed, a pending
+    /// Google sign-in is canceled, and the busy flag passes to the new attempt.
+    func beginMailConnectionAttempt() -> UInt64 {
+        isConnecting = false
+        return googleMailAuth.beginConnectionAttempt()
+    }
+
+    func isCurrentMailConnectionAttempt(_ attempt: UInt64) -> Bool {
+        googleMailAuth.isCurrentConnectionAttempt(attempt)
+    }
+
+    /// `shouldApplyResult`, but false once `attempt` has been superseded.
+    func guardedByMailConnectionAttempt(
+        _ attempt: UInt64,
+        _ shouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool
+    ) -> @MainActor (MailAccountCredentials) -> Bool {
+        { self.isCurrentMailConnectionAttempt(attempt) && shouldApplyResult($0) }
     }
 
     /// Abandons a Google sign-in that is waiting on the browser.
