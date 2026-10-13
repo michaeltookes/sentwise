@@ -1,6 +1,6 @@
 # Sentwise — test cases
 
-Predetermined cases for the milestones in `docs/plan.md`, written before the code. QA runs them verbatim; IDs `TC-M<n>-<nn>` never change once published. A case that a build cannot pass is a defect or a backlog item, never an edited case. Where a case quotes UI text or an endpoint for work not yet built (items 87, 88, 92, 113, 118, 119), the quoted text is the spec the builder implements.
+Predetermined cases for the milestones in `docs/plan.md`, written before the code. QA runs them verbatim; IDs `TC-M<n>-<nn>` never change once published. A case that a build cannot pass is a defect or a backlog item, never an edited case. Where a case quotes UI text or an endpoint for work not yet built (items 87, 88, 92, 113, 118, 119, 123, 124), the quoted text is the spec the builder implements.
 
 ## Preamble
 
@@ -15,6 +15,7 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 **Fixtures** (no seed database; these are the fixtures):
 - **F1, the standing QA account:** `luciusfox@prowlqa.dev`. The same address is the connected Gmail (Google Workspace on the `prowlqa.dev` domain) and the Sentwise account, which carries a comped **Pro** plan (item 111), so the Subscription pane reads Pro, active. Credentials live in Lucius' workspace secrets and the password manager, never in this repo. Every case that signs the app into another account ends by signing back in as F1.
 - **F2, a throwaway trial account:** `luciusfox+trial-<RUNID>@prowlqa.dev`, where `<RUNID>` is unique per run: the run's date and time, `YYYYMMDD-HHMM` (for example `20261020-1430`), never the date alone. Same-day reruns must not collide, because a purchaser from TC-M3-05 is kept until its cancellation takes effect. Sentwise sign-in codes for F2 arrive in F1's Gmail inbox (plus addressing). F2 is created inside the case by signing in, and removed in teardown. Record the RUNID in the run report.
+- **F3, the sandbox purchaser:** `luciusfox+sbx-<RUNID>@prowlqa.dev`, same RUNID rule as F2. F3 exists only in the Clerk **development instance** behind the sandbox deployment (item 123); it is created by signing in to the **Sentwise QA** build, and its sign-in codes also arrive in F1's Gmail inbox. It never exists on production. Remove it from the Clerk development instance in teardown; nothing about it needs a refund.
 - **S1, an outside sender:** a mailbox QA controls on a domain other than `prowlqa.dev` (the wave-2 test mailbox, genkei-ops P1-3). Until it exists, the orchestrator asks Michael to send the message from his own address at the marked step. S1 only sends the fixture question below; it never receives anything from Sentwise.
 - **Q1, the fixture inbound question** (subject `Pilot kickoff`, body `Hi Lucius, can you confirm Thursday at 10am works for the pilot kickoff? Thanks, Dana`).
 - **A1, the fixture availability** that answers Q1: `Yes, Thursday at 10am works for me.` Nothing in the mailbox tells Sentwise this, so a correct build may ask for it (a **Needs your input** card with no **Approve** button) instead of guessing.
@@ -27,10 +28,12 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
   Dana (Acme): Great. Let's meet again on November 9 to review results.
   ```
 - **Mail safety:** every draft is addressed only to `luciusfox@prowlqa.dev`, and send behavior is **Save as draft**. No case sends mail to anyone else.
-- **Admin endpoints:** `uat` reads `SENTWISE_ADMIN_TOKEN` from its run environment on the Mini (provisioned by Michael). The token never appears in a step, a log, or an asset; screenshots of requests show the header as `Bearer ***`. Worker base URL: `https://sentwise-inference.sentwise-service.workers.dev`.
+- **Admin endpoints:** `uat` reads `SENTWISE_ADMIN_TOKEN` from its run environment on the Mini (provisioned by Michael). The token never appears in a step, a log, or an asset; screenshots of requests show the header as `Bearer ***`. Worker base URL (`{base}`): `https://sentwise-inference.sentwise-service.workers.dev`.
+- **Sandbox deployment (item 123):** the Worker `sentwise-inference-sandbox`; its hostname (`{sandbox}`) is recorded in `docs/billing-qa.md`. Admin calls to it use `SENTWISE_SANDBOX_ADMIN_TOKEN`, and the sandbox Paddle API calls in TC-M3-10 use `PADDLE_SANDBOX_API_KEY`, both from `uat`'s run environment on the Mini, with the same redaction rule. It runs the same release tag as production; the run report records the tag `docs/billing-qa.md` lists for it, and a mismatch with the release under test stops the M3 run.
+- **The two apps:** the production build is **Sentwise** in `/Applications/Sentwise.app` (status item "Sentwise"); the QA build is **Sentwise QA** in `/Applications/Sentwise QA.app` (status item "Sentwise QA"), built from the same release tag and pointed at `{sandbox}`. Only one runs at a time: quit one with its **Quit** menu item before launching the other. A step that says "Sentwise QA" means the QA build; every other step means the production build.
 - **Opening the status menu:** on 0.2.1 and later, click the menu-bar status item whose accessibility label is "Sentwise" (identifier `sentwise.statusItem`, item 112). Settings opens from the status menu item **Settings…**; its tabs are General, Account, AI, Subscription, Analytics, Rules, About.
 - **Opening the status menu on 0.2.0 (old-build fallback):** 0.2.0 labels only the menu-bar image, so on macOS 26 its item has no name in the accessibility tree and Peekaboo cannot find it by "Sentwise" (`docs/resolved.md`, item 112). On 0.2.0, use the coordinate-click status-menu recipe from `SENTWISE_QA.md` in Lucius' workspace: locate the `envelope.badge` icon in a menu-bar screenshot and click its coordinates. Before acting on the menu, confirm it contains **Check for Updates…** and **Quit Sentwise**. If it does not, press Escape and do not click anything in it, because a neighboring unnamed icon was opened. If the recipe fails twice, the orchestrator asks Michael for one human-assisted click on the Mini (screen sharing) to open the menu, and the report records that the first click was assisted. This fallback is only for 0.2.0; on 0.2.1+ a coordinate click is a TC-M1-03 failure.
-- **Funnel populations:** `GET /admin/funnel` splits every counter by account population (items 88, 118). The top-level counters are the **live** population: accounts whose email domain is not in the Worker's `QA_EMAIL_DOMAINS` (initially `prowlqa.dev`). The `qa` object holds the same counters for QA-domain accounts, plus any Paddle sandbox event. Every fixture account here (F1, F2) is in the QA population, so its trials, checkouts, purchases, and cancellations land only in `qa.*`, whichever Paddle environment it used. A funnel assertion always compares numerator and denominator within one population.
+- **Funnel populations:** `GET /admin/funnel` splits every counter by account population (items 88, 118). The top-level counters are the **live** population: accounts whose email domain is not in the Worker's `QA_EMAIL_DOMAINS` (initially `prowlqa.dev`). The `qa` object holds the same counters for QA-domain accounts on production. Every fixture account on production (F1, F2) is in the QA population, so its trials, checkouts, and cancellations land only in `qa.*`. Sandbox events never reach the production funnel, because they never reach the production Worker: the sandbox deployment writes to its own dataset, read at `{sandbox}/admin/funnel` with the same shape (F3 lands in its `qa.*`). A funnel assertion always compares numerator and denominator within one population.
 - **Throwing a draft away:** a normally generated draft in Review Drafts has **Deny** and **Approve** (**Discard** appears only in exceptional states such as a dispatch queued offline). To throw a draft away, click **Deny**; in the "Why deny this draft?" sheet select **Not worth replying** and click **Deny** in the sheet. If "Don't ask again this session" was ticked earlier in this app run, the sheet does not appear and the draft is removed directly; either way the draft leaves the list.
 
 ## M1 v0.2.1 ships
@@ -242,7 +245,7 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
   3. Wait until the Paddle checkout form ("Secure checkout by Paddle") renders.
   4. Click **Close**. Then **Sign out**, and sign back in as F1.
   5. uat: `GET {base}/admin/funnel?from=<today>&to=<today>`.
-- **Expected:** `qa.checkoutsOpened` is at least one higher than before step 1, and `qa.subscriptionsActivated.starter` is unchanged; no purchase was made. This holds whether F2's checkout opened on live Paddle (before item 123) or on the sandbox (after it).
+- **Expected:** `qa.checkoutsOpened` is at least one higher than before step 1, and `qa.subscriptionsActivated.starter` is unchanged; no purchase was made. The production build always opens the live Paddle checkout; checkouts opened from the Sentwise QA build reach only the sandbox deployment and never appear in this endpoint.
 - **Asset:** video
 
 ### TC-M2-08 Funnel response shape
@@ -256,7 +259,11 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 
 ## M3 Trial to paid verified
 
-All M3 app cases use a fresh F2 created at the start of the run (sign out of F1, sign in as F2, generate one T1 draft to start the trial and throw it away with **Deny** (preamble, "Throwing a draft away"), and refresh status, as in TC-M2-06 steps 2–7), with exactly one mailbox (F1's) connected. The pane rounds trial days up, so each reminder fixture sets the trial end one hour inside its threshold. Trial dates are set with item 119's admin route by the `uat` executor.
+M3 runs on two deployments of the same release tag.
+- **TC-M3-01 to TC-M3-04 and TC-M3-05's production check** run in the production build against `{base}` with a fresh F2 created at the start of the run (sign out of F1, sign in as F2, generate one T1 draft to start the trial and throw it away with **Deny** (preamble, "Throwing a draft away"), and refresh status, as in TC-M2-06 steps 2–7), with exactly one mailbox (F1's) connected.
+- **TC-M3-05's purchase through TC-M3-10** run in the **Sentwise QA** build against `{sandbox}` as F3, set up the same way in the QA build (sign in as F3, connect F1's mailbox, one T1 draft thrown away with **Deny**, refresh status). Nothing in these cases touches the production Worker or live Paddle.
+- **Run order:** TC-M3-01 to TC-M3-07, then TC-M3-10, then TC-M3-08 and TC-M3-09 (pausing needs a subscription with no scheduled cancellation).
+- The pane rounds trial days up, so each reminder fixture sets the trial end one hour inside its threshold. Trial dates are set with item 119's admin route by the `uat` executor, on `{base}` for F2 and on `{sandbox}` for F3.
 
 ### TC-M3-01 Trial override is limited to QA accounts
 - **Executor:** uat
@@ -306,50 +313,47 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 - **Expected:** the Subscription tab shows plan "Trial ended" with "Your free trial has ended, so drafting is paused until you choose a plan." and a **Subscribe** button; step 4 produces no draft and shows a message that the trial has ended with a way to choose a plan.
 - **Asset:** video
 
-### TC-M3-05 Checkout to a paid plan on the Paddle sandbox; production unaffected
-- **Executor:** lucius (steps 1–11) and uat (steps 1 and 12)
-- **Verifies:** item 123, item 120, item 88 (QA population kept separate), checkout regression (items 56c/90)
+### TC-M3-05 Checkout to a paid plan on the sandbox deployment; production unaffected
+- **Executor:** lucius (steps 2–6 and 8–14) and uat (steps 1, 7 and 15)
+- **Verifies:** item 123, item 120, item 124 (plan buttons open a working checkout), checkout regression (items 56c/90)
 - **Preconditions:**
-  - v0.2.2 installed; item 123 deployed (Worker `PADDLE_ENV` lane with the sandbox catalog mirroring the tier matrix, see `docs/billing-qa.md`).
-  - **The purchaser is always a throwaway F2** (a `@prowlqa.dev` account with no comp), here in TC-M3-04's "Trial ended" state. This applies to every path, alternates included.
-  - **Never purchase on F1.** An active Paddle subscription takes precedence over a comp (item 111's layering), and TC-M3-08 only schedules cancellation at period end. A purchase on F1 would leave it on Starter, breaking the daily Pro fixture and M4's second-account cases.
-    - If F1 is ever bought on by mistake, the orchestrator has the subscription **terminated immediately** (not scheduled) in Paddle.
-    - Only after that is the Pro comp re-granted, and the Subscription pane is confirmed to read Pro.
-  - **P1**, a production account on a domain outside `prowlqa.dev`, exists with **no active subscription and no comp**: on trial, or "Trial ended", with a **Subscribe** button in the Subscription tab.
-    - Use the wave-2 test mailbox account (genkei-ops P1-3).
-    - If it does not exist yet, Michael signs in for steps 8–11 with an account of his own that meets the same condition.
-    - An account with a paid plan is not valid. **Manage plan** would show the current plan or a prorated plan change, never the card form.
+  - v0.2.2 installed as **Sentwise**; the **Sentwise QA** build of the v0.2.2 tag installed; `{sandbox}` deployed at the v0.2.2 tag (`docs/billing-qa.md`), with the sandbox catalog mirroring the tier matrix.
+  - F2 on production in TC-M3-04's "Trial ended" state, signed in to **Sentwise**.
+  - **The purchaser is always F3** in the Sentwise QA build. **Never purchase on F1**, on any build or path: an active Paddle subscription takes precedence over a comp (item 111's layering), so a purchase on F1 would leave the daily Pro fixture on Starter. If F1 is ever bought on by mistake, the orchestrator has the subscription **terminated immediately** (not scheduled) in Paddle, then re-grants the Pro comp and confirms the Subscription pane reads Pro.
   - Paddle sandbox test card numbers are in `docs/billing-qa.md`, not here.
 - **Steps:**
-  1. uat: `GET {base}/admin/comp?email=<purchaser>` and `GET {base}/admin/comp?email=<P1>` with the token. Then `GET {base}/admin/funnel?from=<today>&to=<today>` and record the baseline: live `subscriptionsActivated.starter`, `.pro`, `.unlimited`, `subscriptionsCanceled`, and `qa.subscriptionsActivated.starter`, `qa.subscriptionsCanceled`.
-  2. lucius, as the purchaser: **Settings…** → **Subscription** → **Subscribe**.
+  1. uat: `GET {base}/admin/funnel?from=<today>&to=<today>` with the token and record the production baseline: live `subscriptionsActivated.starter`, `.pro`, `.unlimited`, `subscriptionsCanceled`, and `qa.subscriptionsActivated.starter`, `qa.subscriptionsCanceled`.
+  2. lucius, production check, in **Sentwise** as F2: **Settings…** → **Subscription** → **Subscribe**.
   3. In "Choose your plan", click the Starter card and wait for "Secure checkout by Paddle".
-  4. Pay with the Paddle sandbox success test card from `docs/billing-qa.md`.
-  5. Wait for the confirmation, then click **Done**.
-  6. Close and reopen **Settings…** → **Subscription**.
-  7. Sign out; sign in as P1 (its code comes from P1's mailbox).
-  8. Confirm the Subscription tab shows a **Subscribe** button and no current paid plan. Click **Subscribe**, then click the Starter card.
-  9. Read the price in the checkout form.
-  10. Enter the same sandbox test card and attempt payment.
-  11. Click **Close**; sign out; sign back in as the purchaser for TC-M3-06 to TC-M3-08 (TC-M3-09 teardown returns the app to F1).
-  12. uat: `GET {base}/admin/funnel?from=<today>&to=<today>`.
+  4. Read the price in the checkout form. Do not enter any card.
+  5. Click **Close**; **Sign out**; sign back in as F1 and confirm the Subscription tab reads Pro.
+  6. Quit Sentwise with **Quit Sentwise** and launch **Sentwise QA** from `/Applications`; sign in as F3 and set it up as in the M3 setup above.
+  7. uat: `POST {sandbox}/admin/trial` for F3 with `startedAt` = now minus 15 days (sandbox token). Then `GET {sandbox}/admin/comp?email=<F3>` and `GET {sandbox}/admin/funnel?from=<today>&to=<today>`; record the sandbox `qa.subscriptionsActivated.starter` and `qa.subscriptionsCanceled`.
+  8. lucius, in **Sentwise QA** as F3: close and reopen **Settings…** → **Subscription**; confirm "Trial ended" and a **Subscribe** button.
+  9. Click **Subscribe**; in "Choose your plan", click the Starter card and wait for "Secure checkout by Paddle".
+  10. Read the price in the checkout form.
+  11. Pay with the Paddle sandbox success test card from `docs/billing-qa.md`.
+  12. Wait for the confirmation, then click **Done**.
+  13. Close and reopen **Settings…** → **Subscription**.
+  14. Keep F3 signed in to Sentwise QA for TC-M3-06, TC-M3-07, TC-M3-10, TC-M3-08.
+  15. uat: `GET {sandbox}/admin/funnel?from=<today>&to=<today>`.
 - **Expected:**
-  - Step 1 returns 200 for both accounts with `"comp": null` and `"active": false`. A missing comp is not a 404; any `"active": true` stops the case.
-  - Step 5 shows "You're on Starter — you're all set."
-  - Step 6 shows Current plan Starter with "Renews <date about one month out>".
-  - For P1, step 9 shows the live price ($9.00/month plus any tax) and step 10 declines the test card. No sandbox price or sandbox checkout ever appears for P1.
-  - Step 12, on every path (sandbox, or alternates (a) and (b)): `qa.subscriptionsActivated.starter` is at least baseline + 1, and every live counter recorded in step 1 is unchanged. The purchaser is a QA-domain account, so its purchase never counts as a live conversion, just as its trial never counted as a live trial.
-  - A live counter that moved fails the case, unless the orchestrator confirms in the live Paddle dashboard that the same number of real customer subscriptions were created between steps 1 and 12.
-- **Alternate paths (only if item 123 is unavailable, in this order):**
-  - (a) A single-use 100%-off live Paddle discount code, entered at step 4.
-  - (b) A real $9 Starter purchase. Michael enters the card at step 4 and the orchestrator refunds it the same day.
-  - Record in the report which path ran.
+  - Step 4 (production check, read-only): the checkout shows the live Starter price ($9.00/month plus any tax), with no Paddle test-mode or sandbox marking, and step 5 shows Pro for F1. The production build has no sandbox configuration, so this is a single confirmation, not a routing test; no card is entered on production.
+  - Step 7: the comp read returns 200 with `"comp": null` and `"active": false` for F3 (a missing comp is not a 404; any `"active": true` stops the case).
+  - Step 8 shows "Trial ended" with **Subscribe**; steps 9–10 open the sandbox checkout with the sandbox Starter price.
+  - Step 12 shows "You're on Starter — you're all set."
+  - Step 13 shows Current plan Starter with "Renews <date about one month out>".
+  - Step 15: sandbox `qa.subscriptionsActivated.starter` is at least its step 7 value + 1. The production funnel is checked in TC-M3-09.
+- **Alternate paths (only if the sandbox deployment slips, in this order).** These run in the production build with F2 as the purchaser, at steps 9–11 instead of in Sentwise QA:
+  - (a) A single-use 100%-off live Paddle discount code, entered at step 11.
+  - (b) A real $9 Starter purchase. Michael enters the card at step 11 and the orchestrator refunds it the same day.
+  - On an alternate path, step 15 reads `{base}` instead: production `qa.subscriptionsActivated.starter` is at least baseline + 1 and every live counter from step 1 is unchanged. Record in the report which path ran.
 - **Asset:** video
 
 ### TC-M3-06 Paid account drafts again
 - **Executor:** lucius
 - **Verifies:** item 120 (paid entitlement on the release)
-- **Preconditions:** TC-M3-05 passed.
+- **Preconditions:** TC-M3-05 passed; **Sentwise QA** running as F3.
 - **Steps:**
   1. Open **Settings…** → **Subscription**; record the Usage count as the baseline N. Drafts made during setup on trial count toward the month; denying does not refund one, and buying Starter does not reset the counter.
   2. Status menu → **New Follow-up from Transcript…**; recipient `luciusfox@prowlqa.dev`, subject `Pilot next steps (paid)`; paste T1; click **Draft follow-up**.
@@ -359,17 +363,17 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 
 ### TC-M3-07 Manage billing opens the portal without a sign-in
 - **Executor:** lucius
-- **Verifies:** items 90/91 regression on production
-- **Preconditions:** TC-M3-05 passed.
+- **Verifies:** items 90/91 regression (same code as production, on the sandbox deployment)
+- **Preconditions:** TC-M3-05 passed; **Sentwise QA** running as F3.
 - **Steps:**
   1. **Settings…** → **Subscription** → **Manage billing**.
-- **Expected:** the browser opens a Paddle customer-portal page showing the Starter subscription for F2 directly, without asking for an email sign-in.
+- **Expected:** the browser opens a Paddle customer-portal page (Paddle sandbox) showing the Starter subscription for F3 directly, without asking for an email sign-in.
 - **Asset:** screenshot
 
 ### TC-M3-08 Scheduled cancellation shows in the app
 - **Executor:** lucius
 - **Verifies:** item 92
-- **Preconditions:** TC-M3-07 portal page open.
+- **Preconditions:** TC-M3-10 done (F3's subscription active again); **Sentwise QA** running as F3; open the portal with **Settings…** → **Subscription** → **Manage billing**.
 - **Steps:**
   1. In the portal, cancel the subscription (end of billing period) and confirm.
   2. Return to Sentwise, open **Settings…** → **Subscription**, and wait up to 60 seconds (close and reopen Settings once if needed).
@@ -378,13 +382,30 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 
 ### TC-M3-09 Conversion is counted
 - **Executor:** uat
-- **Verifies:** item 88
-- **Preconditions:** TC-M3-05 and TC-M3-08 done today; the step 1 baseline from TC-M3-05 is in the run notes.
+- **Verifies:** item 88, item 123 (sandbox events stay off the production funnel)
+- **Preconditions:** TC-M3-05 and TC-M3-08 done today; the step 1 (production) and step 7 (sandbox) baselines from TC-M3-05 are in the run notes.
 - **Steps:**
-  1. `GET {base}/admin/funnel?from=<today>&to=<today>` with the token.
-- **Expected (every path):** `qa.subscriptionsActivated.starter` and `qa.subscriptionsCanceled` are each at least their TC-M3-05 baseline + 1, and `qa.trialToPaidRate` is greater than 0. The live `subscriptionsActivated.starter`, `.pro`, `.unlimited`, and `subscriptionsCanceled` equal the TC-M3-05 baseline: the QA purchase and its cancellation never reach the live numbers, just as F2's trial never reached live `trialsStarted`. The same live-dashboard exception as TC-M3-05 applies.
+  1. `GET {sandbox}/admin/funnel?from=<today>&to=<today>` with the sandbox token.
+  2. `GET {base}/admin/funnel?from=<today>&to=<today>` with the production token.
+- **Expected:**
+  - Step 1: sandbox `qa.subscriptionsActivated.starter` and `qa.subscriptionsCanceled` are each at least their TC-M3-05 step 7 value + 1, and sandbox `qa.trialToPaidRate` is greater than 0.
+  - Step 2: production `qa.subscriptionsActivated.*` and `qa.subscriptionsCanceled` equal the TC-M3-05 step 1 baseline (the purchase and cancellation happened on the sandbox, which never reaches the production Worker), and the live `subscriptionsActivated.starter`, `.pro`, `.unlimited`, and `subscriptionsCanceled` equal the baseline too. A live counter that moved fails the case unless the orchestrator confirms in the live Paddle dashboard that the same number of real customer subscriptions changed between the two reads.
+  - On an alternate path (TC-M3-05 (a) or (b)), step 2 instead shows production `qa.subscriptionsActivated.starter` and `qa.subscriptionsCanceled` at least baseline + 1 and qa `trialToPaidRate` above 0, with live counters unchanged.
 - **Asset:** screenshot
-- **Teardown:** lucius signs out of F2 and back in as F1, then confirms the Subscription tab reads Pro. The orchestrator refunds the purchase if one was charged and deletes F2 once its cancellation takes effect.
+- **Teardown:** lucius quits **Sentwise QA**, launches **Sentwise**, and confirms it is signed in as F1 with the Subscription tab reading Pro. The orchestrator deletes F2 from production and F3 from the Clerk development instance. On an alternate path, the orchestrator refunds the purchase if one was charged and deletes F2 once its cancellation takes effect.
+
+### TC-M3-10 A paused subscription stays in force
+- **Executor:** uat (steps 1 and 4) and lucius (steps 2–3 and 5)
+- **Verifies:** item 124 (paused is stored as paused, not canceled)
+- **Preconditions:** TC-M3-07 done, before TC-M3-08 (no scheduled cancellation on F3's subscription); **Sentwise QA** running as F3 on Starter; `uat` has `PADDLE_SANDBOX_API_KEY` and F3's sandbox subscription id from the Paddle sandbox dashboard or the TC-M3-07 portal page.
+- **Steps:**
+  1. uat: `POST https://sandbox-api.paddle.com/subscriptions/<id>/pause` with body `{"effective_from":"immediately"}` and the sandbox API key; expect 200 with `"status": "paused"`.
+  2. lucius: wait 60 seconds, close and reopen **Settings…** → **Subscription**, and read the plan line.
+  3. Status menu → **New Follow-up from Transcript…**; recipient `luciusfox@prowlqa.dev`; paste T1; click **Draft follow-up**. Throw the draft away with **Deny**.
+  4. uat: `POST https://sandbox-api.paddle.com/subscriptions/<id>/resume` with body `{"effective_from":"immediately"}`; expect 200 with `"status": "active"`.
+  5. lucius: wait 60 seconds, close and reopen **Settings…** → **Subscription**.
+- **Expected:** step 2 shows Current plan Starter marked "Paused", never "Canceled", "Trial ended", or a **Subscribe** button; step 3 produces a draft (paused counts as in force); step 5 shows Starter with "Renews <date>" again.
+- **Asset:** video
 
 ## M4 First-run friction cut
 
