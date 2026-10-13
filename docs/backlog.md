@@ -106,14 +106,6 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
 
 ## Medium Priority
 
-113. **Launch at login reverts silently when the login item is disabled in System Settings** — *found 2026-10-08, wave 1 settings sweep on Lucius*
-    Turning on "Launch at login" calls `SMAppService.mainApp.register()`, which succeeds, but `backgroundtaskmanagementd` reports `registerLaunchItem: found existing item … disposition=[disabled, allowed, notified]`, so `status` stays `.requiresApproval`, `LoginItemManager.isEnabled` reads false, and the toggle snaps off within a second with no message and no log line (the manager only logs on a thrown error). The user cannot tell whether the click did anything. Reproduced on macOS 26.4.1 with the signed 0.2.0 (5) build in /Applications.
-    *As a user who once turned Sentwise off in Login Items, I want the toggle to tell me macOS needs my approval, so that I can enable it in System Settings instead of clicking a switch that keeps turning itself off.*
-    - Handle `.requiresApproval` explicitly: keep the toggle on, show a caption explaining that macOS disabled the item, with a button that opens `x-apple.systempreferences:com.apple.LoginItems-Settings.extension`.
-    - Log the resulting `SMAppService` status at info level after every register and unregister, not only on thrown errors.
-    - Mirror the same state and caption in the status-menu "Launch at Login" item.
-    - Unit-test the status-to-UI mapping for `.enabled`, `.requiresApproval`, `.notRegistered`, and `.notFound`.
-
 83. **Approval-signal learning loop (accept-as-is / edit / deny → better drafts + smarter filtering)** — *ongoing/strategic; phase 1 is a cheap early slice*
     Treat the user's action on every draft — approved untouched, edited-then-approved, or denied — as durable feedback that (a) improves drafting in the user's voice and (b) tightens what gets drafted at all, so the assistant manages the inbox better the more it's used. Prompted by the owner seeing drafts generated for mail that shouldn't be drafted, and realizing a one-shot-accept vs edit vs deny signal is the raw material for learning the user over time.
     *As Priya/Marcus, I want Sentwise to learn from how I handle its drafts — what I accept as-is, what I rewrite, what I throw away — so that over time it drafts more of what I'd actually send and stops surfacing mail I never reply to.*
