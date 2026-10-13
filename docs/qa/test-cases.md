@@ -29,7 +29,7 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
   ```
 - **Mail safety:** every draft is addressed only to `luciusfox@prowlqa.dev`, and send behavior is **Save as draft**. No case sends mail to anyone else.
 - **Admin endpoints:** `uat` reads `SENTWISE_ADMIN_TOKEN` from its run environment on the Mini (provisioned by Michael). The token never appears in a step, a log, or an asset; screenshots of requests show the header as `Bearer ***`. Worker base URL (`{base}`): `https://sentwise-inference.sentwise-service.workers.dev`.
-- **Sandbox deployment (item 123):** the Worker `sentwise-inference-sandbox`; its hostname (`{sandbox}`) is recorded in `docs/billing-qa.md`. Admin calls to it use `SENTWISE_SANDBOX_ADMIN_TOKEN`, and the sandbox Paddle API calls in TC-M3-10 use `PADDLE_SANDBOX_API_KEY`, both from `uat`'s run environment on the Mini, with the same redaction rule. It runs the same release tag as production; the run report records the tag `docs/billing-qa.md` lists for it, and a mismatch with the release under test stops the M3 run.
+- **Sandbox deployment (item 123):** the Worker `sentwise-inference-sandbox`; its hostname (`{sandbox}`) is recorded in `docs/billing-qa.md`. Admin calls to it use `SENTWISE_SANDBOX_ADMIN_TOKEN`, and the sandbox Paddle API calls in TC-M3-10 use `PADDLE_SANDBOX_API_KEY`, both from `uat`'s run environment on the Mini, with the same redaction rule. It runs the same sentwise-service revision as production; the run report records the deployed-revision fields in TC-M3-05's preconditions (plan.md, Risks, lockstep rule), and a mismatch with the commit under test stops the M3 run.
 - **The two apps:** the production build is **Sentwise** in `/Applications/Sentwise.app` (status item "Sentwise"); the QA build is **Sentwise QA** in `/Applications/Sentwise QA.app` (status item "Sentwise QA"), built from the same release tag and pointed at `{sandbox}`. Only one runs at a time: quit one with its **Quit** menu item before launching the other. Every step runs in the app the case's preconditions name; a case that names neither means the production build. The production fallback sequence under TC-M3-05 overrides this to **Sentwise** for the cases it lists.
 - **Opening the status menu:** on 0.2.1 and later, click the menu-bar status item whose accessibility label is "Sentwise" (identifier `sentwise.statusItem`, item 112). Settings opens from the status menu item **Settings…**; its tabs are General, Account, AI, Subscription, Analytics, Rules, About.
 - **Opening the status menu on 0.2.0 (old-build fallback):** 0.2.0 labels only the menu-bar image, so on macOS 26 its item has no name in the accessibility tree and Peekaboo cannot find it by "Sentwise" (`docs/resolved.md`, item 112). On 0.2.0, use the coordinate-click status-menu recipe from `SENTWISE_QA.md` in Lucius' workspace: locate the `envelope.badge` icon in a menu-bar screenshot and click its coordinates. Before acting on the menu, confirm it contains **Check for Updates…** and **Quit Sentwise**. If it does not, press Escape and do not click anything in it, because a neighboring unnamed icon was opened. If the recipe fails twice, the orchestrator asks Michael for one human-assisted click on the Mini (screen sharing) to open the menu, and the report records that the first click was assisted. This fallback is only for 0.2.0; on 0.2.1+ a coordinate click is a TC-M1-03 failure.
@@ -324,6 +324,12 @@ M3 runs on two deployments of the same release tag.
   - F2 on production in TC-M3-04's "Trial ended" state, signed in to **Sentwise**.
   - **The purchaser is always F3** in the Sentwise QA build. **Never purchase on F1**, on any build or path: an active Paddle subscription takes precedence over a comp (item 111's layering), so a purchase on F1 would leave the daily Pro fixture on Starter. If F1 is ever bought on by mistake, the orchestrator has the subscription **terminated immediately** (not scheduled) in Paddle, then re-grants the Pro comp and confirms the Subscription pane reads Pro.
   - Paddle sandbox test card numbers are in `docs/billing-qa.md`, not here.
+  - **Deployed revisions (recorded in the run report before step 1; the orchestrator fills them, since `wrangler deployments list` reads Cloudflare with Michael's login):**
+    - `service_commit`: the sentwise-service commit SHA this run verifies.
+    - `sandbox_deploy_run`: the `deploy-sandbox.yml` run id, and `sandbox_commit` / `sandbox_tag`: the commit SHA and tag that run deployed.
+    - `prod_version_id` and `prod_created`: the latest deployment's version id and created time from `npx wrangler deployments list` for the `sentwise-inference` Worker.
+    - `prod_deploy_run` and `prod_commit`: the Deploy workflow run id and its commit SHA when that deployment came from the workflow; for a manual `wrangler deploy`, `prod_deploy_run` is `manual` and `prod_commit` is the commit the orchestrator maps it to.
+    - `sandbox_commit` and `prod_commit` must both equal `service_commit`. If production is on a different commit, M3 is not accepted: production is redeployed at `service_commit` (and these fields re-read) or the run is repeated against the commit production runs.
 - **Steps:**
   1. uat: `GET {base}/admin/funnel?from=<today>&to=<today>` with the token and record the production baseline: live `subscriptionsActivated.starter`, `.pro`, `.unlimited`, `subscriptionsCanceled`, and `qa.subscriptionsActivated.starter`, `.pro`, `.unlimited`, and `qa.subscriptionsCanceled`.
   2. lucius, production check, in **Sentwise** as F2: **Settings…** → **Subscription** → **Subscribe**.
@@ -421,17 +427,20 @@ Payment method, in order: (a) a single-use 100%-off live Paddle discount code; (
 ### TC-M3-11 The QA build leaves the production install's data alone
 - **Executor:** lucius
 - **Verifies:** item 123 (local data isolation)
-- **Preconditions:** **Sentwise** has been quit at TC-M3-05 step 6 and nothing relaunches it until step 3 here (daily pass paused). Steps run in Terminal on the Mini; they read file names, hashes, and Keychain attributes only, never file contents or secret values.
+- **Preconditions:** **Sentwise** has been quit at TC-M3-05 step 6 and nothing relaunches it until step 3 here (daily pass paused). Steps run in Terminal on the Mini; they record file names, sizes, modification times, and SHA-256 hashes, and Keychain attributes only; they never print file contents or secret values.
 - **Steps:**
-  1. Before launching **Sentwise QA** (TC-M3-05 step 6, after quitting Sentwise): save this script as `/tmp/sentwise-prod-snapshot.sh`. It covers every production location item 123 requires the QA build to leave alone: the Application Support store, caches, the WebKit and HTTP storage the Paddle checkout and URLSession use, a `Logs` folder (the app logs through the unified log, so this folder should not exist; it is listed so a stray file write fails), saved window state, the defaults domain, `Sentwise*` names in the per-user temporary directory, and the production Keychain service `com.tookes.Sentwise` (generic-password attributes only; `dump-keychain` without `-d` never decrypts a secret). The exact-match pattern on the service excludes `com.tookes.Sentwise.qa` and `com.tookes.Sentwise.tests`.
+  1. Before launching **Sentwise QA** (TC-M3-05 step 6, after quitting Sentwise): save this script as `/tmp/sentwise-prod-snapshot.sh`. It covers every production location item 123 requires the QA build to leave alone: the Application Support store, caches, the WebKit and HTTP storage the Paddle checkout and URLSession use, a `Logs` folder (the app logs through the unified log, so this folder should not exist; it is listed so a stray file write fails), saved window state, the defaults domain, every `Sentwise*` entry in the per-user temporary directory (recursively), and the production Keychain service `com.tookes.Sentwise` (generic-password attributes only; `dump-keychain` without `-d` never decrypts a secret). The exact-match pattern on the service excludes `com.tookes.Sentwise.qa` and `com.tookes.Sentwise.tests`.
      ```
+     # name, size in bytes, modification time (epoch seconds), then SHA-256, for every file
+     snap() { find "$@" -type f -print0 | sort -z | xargs -0 stat -f '%N %z %m'
+              find "$@" -type f -print0 | sort -z | xargs -0 shasum -a 256; }
      for d in "Application Support/Sentwise" "Caches/com.tookes.Sentwise" "WebKit/com.tookes.Sentwise" \
               "HTTPStorages/com.tookes.Sentwise" "Logs/Sentwise" "Saved Application State/com.tookes.Sentwise.savedState"; do
        echo "## $d"
-       [ -d "$HOME/Library/$d" ] && (cd "$HOME/Library/$d" && find . -type f -print0 | sort -z | xargs -0 shasum -a 256)
+       [ -d "$HOME/Library/$d" ] && (cd "$HOME/Library/$d" && snap .)
      done
      echo "## defaults"; defaults export com.tookes.Sentwise - | shasum -a 256
-     echo "## tmp"; find "$TMPDIR" -maxdepth 1 -name 'Sentwise*' | sort
+     echo "## tmp"; (cd "$TMPDIR" && find . -maxdepth 1 -name 'Sentwise*' | sort && snap . -path './Sentwise*')
      echo "## keychain"; security dump-keychain "$HOME/Library/Keychains/login.keychain-db" \
        | perl -0777 -ne 'for (split /^keychain: /m) { print if /"svce"<blob>="com\.tookes\.Sentwise"$/m }' \
        | grep -E '"(svce|acct|cdat|mdat)"'
@@ -440,10 +449,10 @@ Payment method, in order: (a) a single-use 100%-off live Paddle discount code; (
   2. After TC-M3-09's steps and before its teardown, quit **Sentwise QA** and run `zsh /tmp/sentwise-prod-snapshot.sh > /tmp/sentwise-prod-after.txt`.
   3. Run `diff /tmp/sentwise-prod-before.txt /tmp/sentwise-prod-after.txt`; `log show --start "$(cat /tmp/sentwise-qa-start.txt)" --predicate 'subsystem == "com.tookes.Sentwise"' --info --style compact | tail -n +2`; `ls "$HOME/Library/Application Support/Sentwise QA"`; and `security dump-keychain "$HOME/Library/Keychains/login.keychain-db" | grep -c '"svce"<blob>="com.tookes.Sentwise.qa"'`.
 - **Expected:**
-  - `diff` prints nothing: every production store file (`Settings.json`, drafts, voice profile, activity, and the rest), the production caches, WebKit and HTTP storage, logs folder, saved state, defaults domain, and temporary-directory names are unchanged across the QA run, and every `com.tookes.Sentwise` Keychain item has the same account and modification date (no production secret was overwritten, added, or deleted).
+  - `diff` prints nothing: every production store file (`Settings.json`, drafts, voice profile, activity, and the rest), the production caches, WebKit and HTTP storage, logs folder, saved state, and `Sentwise*` temporary files keep the same names, sizes, modification times, and SHA-256 hashes across the QA run (a file overwritten in place, even with the same name, changes its mtime or hash and fails the case), the defaults domain hashes the same, and every `com.tookes.Sentwise` Keychain item has the same account and modification date (no production secret was overwritten, added, or deleted).
   - The `log show` prints no entries: nothing logged under the production subsystem while only Sentwise QA ran (its `Logger` subsystem is `com.tookes.Sentwise.qa`).
   - The `ls` lists the QA build's own store files, and the Keychain count is at least 1 (the QA build stored its mailbox and session secrets under `com.tookes.Sentwise.qa`), proving it wrote somewhere else.
-- **Asset:** screenshot (Terminal with the step 3 output; the snapshots contain only names, hashes, and Keychain attributes, no content or secrets)
+- **Asset:** screenshot (Terminal with the step 3 output; the snapshots contain only names, sizes, modification times, hashes, and Keychain attributes, no content or secrets)
 
 ## M4 First-run friction cut
 
