@@ -445,3 +445,11 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - `/release-prep` 0.2.3; CHANGELOG section; appcast notes; cask bumped.
     - Item 106's Clerk email branding is live before the release is announced (dashboard work, no app code).
     - **Verified by:** TC-M4-06 (and TC-M4-01 to TC-M4-05 on this build).
+
+123. **QA purchase path: verify trial → checkout → paid on a test account without a real charge** — *(M3, High; Michael 2026-10-12: build it now)*
+    The comp entitlement (111) skips checkout, so nothing proves the paid path end to end. TC-M3-05 is blocked at the payment step until a test method exists.
+    *As the owner, I want QA to complete a real checkout on a test account every release, so that the one flow that makes money is never the one flow nobody tests.*
+    - Build the **Paddle sandbox lane**: `sentwise-service` reads `PADDLE_ENV=sandbox|production` (sandbox API base, sandbox webhook secret, sandbox price IDs) and the app's checkout opens the sandbox checkout when the account is a QA account (`@prowlqa.dev`) and the service says sandbox; production accounts never see sandbox prices. Webhooks from the sandbox must be verified with the sandbox secret only.
+    - Document the Paddle sandbox setup (account, products mirroring the tier matrix, test card numbers) in `docs/billing-qa.md`; secrets stay in the Worker's env, never in docs.
+    - Fallback test methods, in order, if the sandbox lane slips: a single-use 100%-off Paddle discount code on production; a real $9 Starter purchase refunded the same day.
+    - Done when TC-M3-05 runs green on the QA account against the sandbox and a production account is shown to be unaffected.
