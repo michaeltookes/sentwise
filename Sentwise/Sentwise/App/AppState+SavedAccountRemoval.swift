@@ -55,6 +55,7 @@ extension AppState {
         }
 
         applyRemovedSavedAccountState(context, messageSurface: messageSurface)
+        noteGoogleAccountRemoved(account.email)
         forgetGoogleSignInIfReplaced(email: account.email, previousSecret: context.previousAccountPassword)
         // Multi-account (item 99): if the removed account was connected in the
         // background, stop its watcher and drop its runtime too.

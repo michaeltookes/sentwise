@@ -95,6 +95,76 @@ final class GoogleSignInRaceTests: XCTestCase {
         XCTAssertTrue(appState.savedAccounts.isEmpty)
     }
 
+    // MARK: - Removing a saved mailbox during sign-in
+
+    private func connectedGoogleAppState(
+        listener: RedirectListener
+    ) async throws -> (AppState, GmailAuthStore, InMemorySecretStore, GmailAuthCoordinator) {
+        let secrets = InMemorySecretStore()
+        let appState = makeAppState(secrets: secrets)
+        let store = GmailAuthStore(secrets: secrets)
+        let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data(exchangeJSON.utf8)))
+        let first = GmailAuthCoordinator(
+            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            store: store,
+            tokenService: OAuthTokenService(transport: transport),
+            makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
+            browser: SpyBrowser(),
+            makeState: { self.state }
+        )
+        appState.googleMailAuth.install(first)
+        let connected = await appState.connectWithGoogle()
+        XCTAssertTrue(connected)
+        let reconnecting = GmailAuthCoordinator(
+            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            store: store,
+            tokenService: OAuthTokenService(transport: transport),
+            makeListener: { listener },
+            browser: SpyBrowser(),
+            makeState: { self.state }
+        )
+        appState.googleMailAuth.install(reconnecting)
+        return (appState, store, secrets, reconnecting)
+    }
+
+    func testRemovingTheMailboxWhileTheBrowserIsOpenKeepsItRemoved() async throws {
+        let listener = GatedRedirectListener(redirectURI: "http://127.0.0.1:9999")
+        let (appState, store, secrets, _) = try await connectedGoogleAppState(listener: listener)
+        let account = try XCTUnwrap(appState.savedAccounts.first)
+
+        // No login hint, so only the removal mark (not the hint cancel) can stop it.
+        let reconnect = Task { await appState.connectWithGoogle() }
+        await fulfillment(of: [listener.didStartWaiting], timeout: 2)
+        XCTAssertFalse(appState.isConnecting, "removal is allowed while the browser is open")
+
+        appState.removeSavedAccount(account)
+        listener.release(["code": "code", "state": state])
+        let connected = await reconnect.value
+
+        XCTAssertFalse(connected)
+        XCTAssertTrue(appState.savedAccounts.isEmpty, "a late callback never restores the removed mailbox")
+        XCTAssertFalse(appState.isAccountConnected)
+        XCTAssertNil(try secrets.value(for: .mailAppPassword(email: "me@gmail.com")))
+        try await waitUntil { !store.hasToken(for: "me@gmail.com") }
+    }
+
+    func testRemovingTheMailboxCancelsASignInStartedForIt() async throws {
+        let listener = GatedRedirectListener(redirectURI: "http://127.0.0.1:9999")
+        let (appState, store, _, _) = try await connectedGoogleAppState(listener: listener)
+        let account = try XCTUnwrap(appState.savedAccounts.first)
+
+        let reconnect = Task { await appState.connectWithGoogle(loginHint: "Me@gmail.com") }
+        await fulfillment(of: [listener.didStartWaiting], timeout: 2)
+        appState.removeSavedAccount(account)
+        listener.release(["code": "code", "state": state])
+        let connected = await reconnect.value
+
+        XCTAssertFalse(connected)
+        XCTAssertNil(appState.connectionError, "a canceled sign-in is quiet")
+        XCTAssertTrue(appState.savedAccounts.isEmpty)
+        try await waitUntil { !store.hasToken(for: "me@gmail.com") }
+    }
+
     // MARK: - Disconnect during a token refresh
 
     private func makeRefreshHarness() throws -> (GmailAuthCoordinator, GmailAuthStore, GatedRefreshTransport) {

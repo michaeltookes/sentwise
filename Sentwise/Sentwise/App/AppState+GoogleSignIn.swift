@@ -66,6 +66,12 @@ extension AppState {
         // "Erase all local data" may run while the browser is open; a flow
         // started before the erase must never recreate tokens or reconnect.
         let localDataGeneration = localDataEraseGeneration
+        // Likewise a saved mailbox removed while the browser is open stays removed.
+        let removalMark = googleMailAuth.accountRemovalMark()
+        let isStale: @MainActor (String) -> Bool = { email in
+            !self.isCurrentLocalDataGeneration(localDataGeneration)
+                || self.googleMailAuth.wasAccountRemoved(email, since: removalMark)
+        }
 
         let authorization: GmailAuthorization
         do {
@@ -79,17 +85,17 @@ extension AppState {
         }
 
         let email = authorization.email
-        guard isCurrentLocalDataGeneration(localDataGeneration) else {
+        guard !isStale(email) else {
             await googleMailAuth.disconnect(email)
             return false
         }
         let wasGoogleConnected = savedAccountUsesGoogleSignIn(email)
         let credentials = GoogleMailCredential.credentials(email: email)
         let connected = await testConnection(with: credentials, messageSurface: messageSurface) {
-            self.isCurrentLocalDataGeneration(localDataGeneration) && shouldApplyResult($0)
+            !isStale(email) && shouldApplyResult($0)
         }
-        guard isCurrentLocalDataGeneration(localDataGeneration) else {
-            // Erased mid-verification: whatever the outcome, keep no grant.
+        guard !isStale(email) else {
+            // Erased or removed mid-verification: whatever the outcome, keep no grant.
             await googleMailAuth.disconnect(email)
             return false
         }
@@ -113,6 +119,12 @@ extension AppState {
     func cancelGoogleOperationsForErase() {
         googleMailAuth.cancelSignIn()
         googleMailAuth.invalidateAllTokenOperations()
+    }
+
+    /// A saved mailbox was removed: cancel/invalidate any Google sign-in that
+    /// could otherwise restore it when the browser comes back.
+    func noteGoogleAccountRemoved(_ email: String) {
+        googleMailAuth.noteAccountRemoved(email)
     }
 
     /// Deletes `email`'s Google token and revokes the grant (best effort) once

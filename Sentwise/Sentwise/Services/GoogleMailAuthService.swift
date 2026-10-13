@@ -92,6 +92,12 @@ final class GoogleMailAuthService: ObservableObject {
     /// Independent of `coordinator` (and of client availability).
     private let tokenStore: GmailAuthStore?
     private var signInTask: Task<GmailAuthorization, Error>?
+    /// The normalized address the pending sign-in was started for, if any.
+    private var pendingLoginHint: String?
+    /// Saved-mailbox removals, so a sign-in that started before a mailbox was
+    /// removed can't restore it when the browser finally comes back.
+    private var accountRemovalSequence: UInt64 = 0
+    private var lastAccountRemoval: [String: UInt64] = [:]
 
     init(coordinator: GmailAuthCoordinator?, tokenStore: GmailAuthStore? = nil) {
         self.tokenStore = tokenStore
@@ -128,8 +134,29 @@ final class GoogleMailAuthService: ObservableObject {
         guard signInTask == nil else { throw GmailAuthError.alreadyInProgress }
         let task = Task { try await coordinator.authorize(loginHint: loginHint, requireHintMatch: requireHintMatch) }
         signInTask = task
-        defer { signInTask = nil }
+        pendingLoginHint = loginHint.map(SavedMailAccount.normalizedEmail)
+        defer {
+            signInTask = nil
+            pendingLoginHint = nil
+        }
         return try await task.value
+    }
+
+    /// A mark to compare against later with `wasAccountRemoved(_:since:)`.
+    func accountRemovalMark() -> UInt64 { accountRemovalSequence }
+
+    /// Records that the saved mailbox `email` was removed, and cancels a
+    /// pending sign-in that was started for it.
+    func noteAccountRemoved(_ email: String) {
+        let key = SavedMailAccount.normalizedEmail(email)
+        accountRemovalSequence &+= 1
+        lastAccountRemoval[key] = accountRemovalSequence
+        if pendingLoginHint == key { cancelSignIn() }
+    }
+
+    /// Whether `email` was removed after `mark` was taken.
+    func wasAccountRemoved(_ email: String, since mark: UInt64) -> Bool {
+        (lastAccountRemoval[SavedMailAccount.normalizedEmail(email)] ?? 0) > mark
     }
 
     /// Abandons a sign-in that is waiting on the browser.
