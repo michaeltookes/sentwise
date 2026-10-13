@@ -11,7 +11,7 @@ extension AppState {
         case MailError.incompleteCredentials:
             return "Enter your email address and app password first."
         case MailError.authenticationFailed(let detail):
-            return "Sign-in failed — check your email and app password. (\(detail))"
+            return authenticationFailureMessage(detail)
         case MailError.connectionFailed(let detail):
             return "Couldn't reach the mail server. (\(detail))"
         case MailError.commandFailed(let detail):
@@ -31,6 +31,15 @@ extension AppState {
         default:
             return error.localizedDescription
         }
+    }
+
+    /// A Google sign-in failure (item 104) already carries its own copy; only
+    /// the app-password path gets the "check your app password" hint.
+    private static func authenticationFailureMessage(_ detail: String) -> String {
+        if GoogleMailCredential.isGoogleSignInFailureDetail(detail) {
+            return detail
+        }
+        return "Sign-in failed — check your email and app password. (\(detail))"
     }
 
     static func keychainMessage(action: String, error: Error) -> String {

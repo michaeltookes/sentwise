@@ -371,6 +371,7 @@ final class AppState: ObservableObject {
     let secrets: SecretStore
     /// Internal (not private) so the `AppState+Voice` extension can reach it.
     let mailProvider: MailProvider
+    let googleMailAuth: GoogleMailAuthService // item 104; wraps mailProvider (see AppState+GoogleSignIn)
     let llm: LLMProviding
     /// The managed-inference account (item 56a): Clerk sign-in + session-token
     /// minting. Also the `ManagedSessionProviding` behind the production LLM
@@ -426,7 +427,7 @@ final class AppState: ObservableObject {
     ) {
         self.persistence = persistence
         self.secrets = secrets
-        self.mailProvider = mailProvider ?? LiveMailProvider.imap()
+        (self.googleMailAuth, self.mailProvider) = Self.makeMailStack(base: mailProvider, secrets: secrets)
         // Run launch migrations before constructing services that cache secret state.
         let loadedSettings = persistence.loadSettings()
         let settings = Self.fullyMigratedSettings(loaded: loadedSettings, secrets: secrets, persistence: persistence)
@@ -495,5 +496,4 @@ final class AppState: ObservableObject {
         )
         installExternalActionHandlers()
     }
-
 }

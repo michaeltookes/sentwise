@@ -243,6 +243,7 @@ extension AppState {
             return
         }
         mailAppPassword = ""
+        forgetGoogleSignInIfReplaced(email: removedPassword.accountEmail, previousSecret: removedPassword.accountPassword)
         markMailHostVerifiedForGuidance()
         isAccountConnected = false
         stopWatching()
@@ -339,6 +340,8 @@ extension AppState {
         if accountIdentityChanged {
             clearSignatureForAccountChange()
         }
+        // Switching this mailbox from Google sign-in to an app password (item 104).
+        forgetGoogleSignInIfReplaced(email: credentials.email, previousSecret: previousAppPassword)
         return true
     }
 
