@@ -354,11 +354,21 @@ struct ManagedBillingLane: Codable, Sendable, Equatable {
     }
 
     let environment: String
+    /// False when the Worker put this account in the sandbox lane but the lane
+    /// is not fully configured: checkout is unavailable (never production).
+    /// Absent on Worker builds before the review fix; treated as available.
+    let checkoutAvailable: Bool?
     let clientSideToken: String?
     let prices: Prices?
 
-    init(environment: String, clientSideToken: String? = nil, prices: Prices? = nil) {
+    init(
+        environment: String,
+        checkoutAvailable: Bool? = nil,
+        clientSideToken: String? = nil,
+        prices: Prices? = nil
+    ) {
         self.environment = environment
+        self.checkoutAvailable = checkoutAvailable
         self.clientSideToken = clientSideToken
         self.prices = prices
     }

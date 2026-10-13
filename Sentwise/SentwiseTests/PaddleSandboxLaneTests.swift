@@ -37,7 +37,9 @@ final class PaddleSandboxLaneTests: XCTestCase {
     // MARK: - Gate
 
     func testQAAccountInSandboxLaneGetsTheServiceSuppliedSandboxConfig() {
-        let config = PaddleConfig.resolved(billing: sandboxLane(), accountEmail: "qa@prowlqa.dev")
+        guard let config = PaddleConfig.resolved(billing: sandboxLane(), accountEmail: "qa@prowlqa.dev") else {
+            return XCTFail("a complete sandbox lane must resolve")
+        }
         XCTAssertEqual(config.environment, .sandbox)
         XCTAssertEqual(config.paddleJSEnvironment, "sandbox")
         XCTAssertEqual(config.clientSideToken, "test_sandbox_token")
@@ -49,6 +51,7 @@ final class PaddleSandboxLaneTests: XCTestCase {
 
     func testProductionAccountNeverSeesSandboxPricesEvenIfTheServiceSaysSandbox() {
         let config = PaddleConfig.resolved(billing: sandboxLane(), accountEmail: "marcus@example.com")
+            ?? PaddleConfig.sandbox
         XCTAssertEqual(config, PaddleConfig.production)
         for plan in PaddlePlan.allCases {
             XCTAssertFalse(config.priceID(for: plan).hasPrefix("pri_sbx_"))
@@ -77,38 +80,53 @@ final class PaddleSandboxLaneTests: XCTestCase {
         )
     }
 
-    func testIncompleteOrSuspiciousSandboxLaneFallsBackToProduction() {
-        let qa = "qa@prowlqa.dev"
-        // No token / empty token / a live token.
-        XCTAssertEqual(PaddleConfig.resolved(billing: sandboxLane(token: nil), accountEmail: qa), .production)
-        XCTAssertEqual(PaddleConfig.resolved(billing: sandboxLane(token: " "), accountEmail: qa), .production)
+    func testUnavailableSandboxLaneIsNilNotProduction() {
+        let unavailable = ManagedBillingLane(environment: "sandbox", checkoutAvailable: false)
+        XCTAssertNil(PaddleConfig.resolved(billing: unavailable, accountEmail: "qa@prowlqa.dev"))
+        // A production account told "sandbox, unavailable" still just gets production.
         XCTAssertEqual(
-            PaddleConfig.resolved(billing: sandboxLane(token: "live_abc"), accountEmail: qa),
+            PaddleConfig.resolved(billing: unavailable, accountEmail: "marcus@example.com"),
             .production
         )
-        // Missing prices, empty price, duplicate prices, or a live price id.
+        // An explicit available flag with a complete lane is sandbox.
+        let available = ManagedBillingLane(
+            environment: "sandbox",
+            checkoutAvailable: true,
+            clientSideToken: "test_x",
+            prices: sandboxPrices
+        )
         XCTAssertEqual(
+            PaddleConfig.resolved(billing: available, accountEmail: "qa@prowlqa.dev")?.environment,
+            .sandbox
+        )
+    }
+
+    func testIncompleteOrSuspiciousSandboxLaneIsUnavailable() {
+        let qa = "qa@prowlqa.dev"
+        // No token / empty token / a live token.
+        XCTAssertNil(PaddleConfig.resolved(billing: sandboxLane(token: nil), accountEmail: qa))
+        XCTAssertNil(PaddleConfig.resolved(billing: sandboxLane(token: " "), accountEmail: qa))
+        XCTAssertNil(PaddleConfig.resolved(billing: sandboxLane(token: "live_abc"), accountEmail: qa))
+        // Missing prices, empty price, duplicate prices, or a live price id.
+        XCTAssertNil(
             PaddleConfig.resolved(
                 billing: ManagedBillingLane(environment: "sandbox", clientSideToken: "test_x"),
                 accountEmail: qa
-            ),
-            .production
+            )
         )
-        XCTAssertEqual(
+        XCTAssertNil(
             PaddleConfig.resolved(
                 billing: sandboxLane(prices: .init(starter: "", pro: "pri_b", unlimited: "pri_c")),
                 accountEmail: qa
-            ),
-            .production
+            )
         )
-        XCTAssertEqual(
+        XCTAssertNil(
             PaddleConfig.resolved(
                 billing: sandboxLane(prices: .init(starter: "pri_a", pro: "pri_a", unlimited: "pri_c")),
                 accountEmail: qa
-            ),
-            .production
+            )
         )
-        XCTAssertEqual(
+        XCTAssertNil(
             PaddleConfig.resolved(
                 billing: sandboxLane(prices: .init(
                     starter: PaddleConfig.production.priceID(for: .starter),
@@ -116,8 +134,7 @@ final class PaddleSandboxLaneTests: XCTestCase {
                     unlimited: "pri_c"
                 )),
                 accountEmail: qa
-            ),
-            .production
+            )
         )
     }
 
@@ -126,7 +143,7 @@ final class PaddleSandboxLaneTests: XCTestCase {
     func testDecodesSandboxBillingLaneFromAccountStatus() throws {
         let json = """
         {"userId":"user_qa","email":"qa@prowlqa.dev",
-         "billing":{"environment":"sandbox","clientSideToken":"test_tok",
+         "billing":{"environment":"sandbox","checkoutAvailable":true,"clientSideToken":"test_tok",
                     "prices":{"starter":"pri_s","pro":"pri_p","unlimited":"pri_u"}}}
         """
         let status = try JSONDecoder().decode(ManagedAccountStatus.self, from: Data(json.utf8))
@@ -134,6 +151,7 @@ final class PaddleSandboxLaneTests: XCTestCase {
             status.billing,
             ManagedBillingLane(
                 environment: "sandbox",
+                checkoutAvailable: true,
                 clientSideToken: "test_tok",
                 prices: .init(starter: "pri_s", pro: "pri_p", unlimited: "pri_u")
             )

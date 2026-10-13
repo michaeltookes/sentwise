@@ -105,7 +105,8 @@ extension AppState {
         backgroundReconcileRetryDelays: [UInt64] = planChangeBackgroundReconcileRetryDelays
     ) async {
         guard canChangeManagedPlan,
-              let current = currentSubscriptionPlanTier, current != tier else {
+              let current = currentSubscriptionPlanTier, current != tier,
+              let paddleConfig = planChangePaddleConfig else {
             return
         }
         let settingsMessageGeneration = settingsTransientMessageGeneration
@@ -123,7 +124,7 @@ extension AppState {
             }
         }
 
-        let priceID = activePaddleConfig.priceID(for: tier)
+        let priceID = paddleConfig.priceID(for: tier)
         let change: PaddlePlanChange
         let sessionAccountKey = currentManagedSessionAccountKey ?? accountKey
         do {

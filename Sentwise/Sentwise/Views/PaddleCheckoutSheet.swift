@@ -20,7 +20,7 @@ struct PaddleCheckoutSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             if let plan = activePlan {
-                PaddleCheckoutRunner(model: appState.makeCheckoutModel(for: plan))
+                PaddleCheckoutRunner(model: appState.makeCheckoutModel(for: plan, config: request.config))
             } else {
                 planPicker
             }

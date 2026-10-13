@@ -88,7 +88,7 @@ final class AppStateCheckoutModelTests: XCTestCase {
         let appState = makeSignedInAppState(llm: llm)
         appState.managedAccountStatus = status(userID: "user_abc", plan: .trial, statusValue: .trialing)
 
-        let model = appState.makeCheckoutModel(for: .starter)
+        let model = appState.makeCheckoutModel(for: .starter, config: .active)
 
         // The Clerk id + email are no longer threaded client-side (item 56c): the
         // server-minted transaction carries the signed binding. The model just
@@ -105,18 +105,25 @@ final class AppStateCheckoutModelTests: XCTestCase {
         prices: .init(starter: "pri_sbx_starter", pro: "pri_sbx_pro", unlimited: "pri_sbx_unlimited")
     )
 
-    func testQAAccountInSandboxLaneMintsCheckoutWithSandboxPrice() async {
-        let llm = CheckoutLLM()
-        let appState = makeSignedInAppState(llm: llm)
-        appState.managedAccountStatus = ManagedAccountStatus(
+    private func qaStatus(billing: ManagedBillingLane?) -> ManagedAccountStatus {
+        ManagedAccountStatus(
             userID: "user_qa",
             email: "qa-buyer@prowlqa.dev",
             subscription: ManagedSubscription(plan: .trial, status: .trialing),
-            billing: sandboxLane
+            billing: billing
         )
+    }
 
-        let model = appState.makeCheckoutModel(for: .pro)
-        XCTAssertEqual(model.config.environment, .sandbox)
+    func testQAAccountInSandboxLaneMintsCheckoutWithSandboxPrice() async {
+        let llm = CheckoutLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountStatus = qaStatus(billing: sandboxLane)
+
+        appState.presentBillingCheckout(plan: .pro)
+        let request = try? XCTUnwrap(appState.billingCheckout)
+        XCTAssertEqual(request?.config.environment, .sandbox)
+
+        let model = appState.makeCheckoutModel(for: .pro, config: request?.config ?? .active)
         XCTAssertEqual(model.config.clientSideToken, "test_sandbox_token")
         await model.prepare()
 
@@ -133,12 +140,86 @@ final class AppStateCheckoutModelTests: XCTestCase {
             billing: sandboxLane
         )
 
-        let model = appState.makeCheckoutModel(for: .pro)
-        XCTAssertEqual(model.config, PaddleConfig.production)
-        await model.prepare()
+        appState.presentBillingCheckout(plan: .pro)
+        XCTAssertEqual(appState.billingCheckout?.config, PaddleConfig.production)
+        XCTAssertEqual(appState.checkoutPaddleConfig, PaddleConfig.production)
+    }
 
-        XCTAssertEqual(llm.checkoutPriceIDs, [PaddleConfig.production.priceID(for: .pro)])
-        XCTAssertEqual(appState.activePaddleConfig, PaddleConfig.production)
+    // MARK: - Item 123 review: checkout waits for /v1/me
+
+    func testCheckoutCannotStartBeforeAccountStatusLoads() {
+        let llm = CheckoutLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        XCTAssertNil(appState.managedAccountStatus)
+
+        XCTAssertNil(appState.checkoutPaddleConfig)
+        XCTAssertFalse(appState.canStartCheckout)
+        appState.presentBillingCheckout(plan: .pro)
+        XCTAssertNil(appState.billingCheckout, "no config may be captured before /v1/me loads")
+        XCTAssertNotNil(appState.checkoutUnavailableMessage)
+    }
+
+    func testCheckoutCapturesSandboxConfigOnceStatusArrives() async {
+        let llm = CheckoutLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.presentBillingCheckout(plan: .pro)
+        XCTAssertNil(appState.billingCheckout)
+
+        appState.managedAccountStatus = qaStatus(billing: sandboxLane)
+        XCTAssertTrue(appState.canStartCheckout)
+        XCTAssertNil(appState.checkoutUnavailableMessage)
+        appState.presentBillingCheckout(plan: .pro)
+        guard let request = appState.billingCheckout else {
+            return XCTFail("checkout should open once status is loaded")
+        }
+
+        // The request keeps the config it was opened with, even if status is
+        // cleared afterwards (e.g. a refresh in flight).
+        appState.managedAccountStatus = nil
+        let model = appState.makeCheckoutModel(for: .pro, config: request.config)
+        await model.prepare()
+        XCTAssertEqual(model.config.environment, .sandbox)
+        XCTAssertEqual(llm.checkoutPriceIDs, ["pri_sbx_pro"])
+    }
+
+    func testOlderWorkerWithoutBillingBlockFallsBackToProduction() {
+        let llm = CheckoutLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountStatus = qaStatus(billing: nil)
+
+        XCTAssertEqual(appState.checkoutPaddleConfig, PaddleConfig.production)
+        appState.presentBillingCheckout()
+        XCTAssertEqual(appState.billingCheckout?.config, PaddleConfig.production)
+    }
+
+    func testUnavailableSandboxLaneBlocksCheckoutForQAAccount() {
+        let llm = CheckoutLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.managedAccountStatus = qaStatus(
+            billing: ManagedBillingLane(environment: "sandbox", checkoutAvailable: false)
+        )
+
+        XCTAssertNil(appState.checkoutPaddleConfig)
+        XCTAssertFalse(appState.canStartCheckout)
+        appState.presentBillingCheckout()
+        XCTAssertNil(appState.billingCheckout)
+        XCTAssertEqual(
+            appState.checkoutUnavailableMessage,
+            "Checkout isn't available for this account right now."
+        )
+    }
+
+    func testPlanChangeConfigWaitsForStatusOnlyForQAAccounts() {
+        let llm = CheckoutLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        // Persisted email marcus@example.com: snapshot-driven plan change stays production.
+        XCTAssertEqual(appState.planChangePaddleConfig, PaddleConfig.production)
+
+        appState.managedAccountEmail = "qa-buyer@prowlqa.dev"
+        XCTAssertNil(appState.planChangePaddleConfig, "a QA account waits for /v1/me")
+
+        appState.managedAccountStatus = qaStatus(billing: sandboxLane)
+        XCTAssertEqual(appState.planChangePaddleConfig?.environment, .sandbox)
     }
 
     func testReconcileAfterCheckoutPollsWithoutDismissingTheSheet() async {
@@ -162,7 +243,7 @@ final class AppStateCheckoutModelTests: XCTestCase {
         llm.checkoutTransactionToReturn = PaddleCheckoutTransaction(transactionID: "txn_from_worker")
         let appState = makeSignedInAppState(llm: llm)
 
-        let model = appState.makeCheckoutModel(for: .pro)
+        let model = appState.makeCheckoutModel(for: .pro, config: .active)
         XCTAssertTrue(model.canOpenCheckout)
 
         await model.prepare()
@@ -177,7 +258,7 @@ final class AppStateCheckoutModelTests: XCTestCase {
         llm.checkoutError = LLMError.managedCheckoutFailed("Checkout is not configured.")
         let appState = makeSignedInAppState(llm: llm)
 
-        let model = appState.makeCheckoutModel(for: .pro)
+        let model = appState.makeCheckoutModel(for: .pro, config: .active)
         await model.prepare()
 
         XCTAssertEqual(model.phase, .failed("Checkout is not configured."))
@@ -193,7 +274,7 @@ final class AppStateCheckoutModelTests: XCTestCase {
         XCTAssertNoThrow(try fixture.secrets.remove(.managedClientToken))
         XCTAssertNoThrow(try fixture.secrets.remove(.managedSessionID))
 
-        let model = appState.makeCheckoutModel(for: .pro)
+        let model = appState.makeCheckoutModel(for: .pro, config: .active)
         await model.prepare()
 
         XCTAssertEqual(model.phase, .failed("Sign in to Sentwise AI before subscribing."))

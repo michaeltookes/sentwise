@@ -201,17 +201,24 @@ struct PaddleConfig: Sendable, Equatable {
         return email[email.index(after: at)...] == qaAccountEmailDomain
     }
 
-    /// The checkout config for the signed-in account (item 123). Returns a
-    /// sandbox config only when ALL hold: the Worker reports the sandbox lane for
-    /// this account, the account email is a QA address, and the Worker supplied a
-    /// sandbox (`test_…`) client token plus three distinct sandbox price ids.
-    /// Anything else — a production account, an older Worker, a malformed or
-    /// partial lane — is the production config, so a production account can never
-    /// see sandbox prices.
-    static func resolved(billing: ManagedBillingLane?, accountEmail: String?) -> PaddleConfig {
+    /// The checkout config for the signed-in account (item 123), or nil when
+    /// checkout is unavailable for it.
+    ///
+    /// - A production account, an older Worker (no `billing`), or any lane other
+    ///   than `sandbox` gets the production config, so a production account can
+    ///   never see sandbox prices.
+    /// - A QA (`@prowlqa.dev`) account the Worker put in the sandbox lane gets a
+    ///   sandbox config only when the Worker says checkout is available and
+    ///   supplied a `test_…` token plus three distinct, non-live price ids.
+    ///   Otherwise nil: the Worker routes that account's checkout to the sandbox,
+    ///   so falling back to live prices would only produce a server rejection.
+    static func resolved(billing: ManagedBillingLane?, accountEmail: String?) -> PaddleConfig? {
         guard let billing,
               billing.environment == PaddleEnvironment.sandbox.rawValue,
-              isQAAccountEmail(accountEmail),
+              isQAAccountEmail(accountEmail) else {
+            return active
+        }
+        guard billing.checkoutAvailable != false,
               let token = nonEmpty(billing.clientSideToken),
               token.hasPrefix("test_"),
               let prices = billing.prices,
@@ -220,7 +227,7 @@ struct PaddleConfig: Sendable, Equatable {
               let unlimited = nonEmpty(prices.unlimited),
               Set([starter, pro, unlimited]).count == 3,
               Set([starter, pro, unlimited]).isDisjoint(with: productionPriceIDs) else {
-            return active
+            return nil
         }
         return PaddleConfig(
             environment: .sandbox,

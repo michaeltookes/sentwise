@@ -23,9 +23,13 @@ struct BillingCheckoutRequest: Identifiable, Equatable {
     let id = UUID()
     /// The tier to purchase, or nil to let the user pick first.
     let plan: PaddlePlan?
+    /// The Paddle config captured when checkout was requested (item 123), so the
+    /// sheet can never fall back to a config resolved before `/v1/me` loaded.
+    let config: PaddleConfig
 
-    init(plan: PaddlePlan? = nil) {
+    init(plan: PaddlePlan? = nil, config: PaddleConfig = .active) {
         self.plan = plan
+        self.config = config
     }
 }
 
@@ -54,18 +58,6 @@ extension AppState {
         return id.isEmpty ? nil : id
     }
 
-    // MARK: - Paddle lane (item 123)
-
-    /// The Paddle config this account's checkout and plan changes use: the
-    /// sandbox only for a `@prowlqa.dev` account the Worker has put in the
-    /// sandbox lane, production for everyone else.
-    var activePaddleConfig: PaddleConfig {
-        PaddleConfig.resolved(
-            billing: managedAccountStatus?.billing,
-            accountEmail: managedAccountStatus?.email
-        )
-    }
-
     // MARK: - Checkout entry points
 
     /// Opens the checkout sheet (item 56c). Pass a `plan` to jump straight to that
@@ -75,8 +67,9 @@ extension AppState {
     /// Paddle's billing portal so they modify the current subscription rather than
     /// opening a second recurring checkout.
     func presentBillingCheckout(plan: PaddlePlan? = nil) {
-        guard isManagedSignedIn, !hasManageablePaidSubscription else { return }
-        billingCheckout = BillingCheckoutRequest(plan: plan)
+        guard isManagedSignedIn, !hasManageablePaidSubscription,
+              let config = checkoutPaddleConfig else { return }
+        billingCheckout = BillingCheckoutRequest(plan: plan, config: config)
     }
 
     /// Builds the checkout model for a chosen tier (item 56c). Injects the authed
@@ -85,12 +78,12 @@ extension AppState {
     /// as `/v1/me`), then opens the overlay with the returned transaction id. The
     /// Worker binds the account to the transaction with a signed `custom_data`, so
     /// the purchase is attributed reliably — no client-side `customData`/`clerkUserId`.
-    func makeCheckoutModel(for plan: PaddlePlan) -> PaddleCheckoutModel {
+    func makeCheckoutModel(for plan: PaddlePlan, config: PaddleConfig) -> PaddleCheckoutModel {
         // Capture the Sendable `LLMProviding` (not `self`) so the mint closure is
         // Sendable and runs off the main actor for the network call.
         let llm = self.llm
         return PaddleCheckoutModel(
-            config: activePaddleConfig,
+            config: config,
             plan: plan,
             createTransaction: { priceID in
                 do {
