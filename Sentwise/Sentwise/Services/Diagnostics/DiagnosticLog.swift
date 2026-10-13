@@ -21,8 +21,10 @@ enum DiagnosticLog {
 
     /// The subsystem every Sentwise `Logger` uses; the diagnostics reader scopes
     /// the log store to exactly this so unrelated system noise never enters a
-    /// bundle.
-    static let subsystem = "com.tookes.Sentwise"
+    /// bundle. It is the build's bundle identifier (`com.tookes.Sentwise` in
+    /// production), so a QA build's report never collects the production app's
+    /// entries or the reverse (item 123).
+    static let subsystem = BuildConfiguration.current.bundleIdentifier
 
     /// Shared logger for the diagnostics/feedback surface itself.
     static let logger = Logger(subsystem: subsystem, category: "Diagnostics")

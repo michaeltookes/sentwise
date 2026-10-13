@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "Connection")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "Connection")
 
 /// Mail-account connect/disconnect on `AppState`. Split out of `AppState` so that
 /// file stays within length limits; the verify → persist → adopt flow and its

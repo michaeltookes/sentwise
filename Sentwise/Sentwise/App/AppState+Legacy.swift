@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let legacyLogger = Logger(subsystem: "com.tookes.Sentwise", category: "AppState.Legacy")
+private let legacyLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "AppState.Legacy")
 
 /// Cleanup of the parked Gmail-OAuth credentials. Kept in a separate file so
 /// `AppState` stays within the file/type length limits.

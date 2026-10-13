@@ -2,7 +2,7 @@ import Combine
 import SentwiseMail
 import os
 import SwiftUI
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "AppState")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "AppState")
 /// Central application state container and single source of truth for observed app state.
 @MainActor
 final class AppState: ObservableObject {

@@ -23,6 +23,8 @@ to the compiled-in production default, so nothing moves for existing installs.
 | Data folder | `~/Library/Application Support/Sentwise` | `~/Library/Application Support/Sentwise QA` |
 | URL scheme (sign-in callbacks) | `sentwise://` | `sentwise-qa://` |
 | Sparkle auto-update | on | off (the appcast serves the production app) |
+| Unified-log subsystem (diagnostics reports) | `com.tookes.Sentwise` | `com.tookes.Sentwise.qa` |
+| "Turn on notifications" deep link | System Settings entry for `com.tookes.Sentwise` | entry for `com.tookes.Sentwise.qa` |
 | UserDefaults, login item, notifications | per bundle id | per bundle id (separate automatically) |
 
 The separate Keychain service is what keeps the QA build away from the production install's items.

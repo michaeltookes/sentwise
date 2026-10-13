@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "WorkspaceAuth")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "WorkspaceAuth")
 
 /// Google Workspace / Gmail policy-failure classification and the "Sign in with
 /// Google" interest capture on `AppState` (item 75). When an IMAP connect fails

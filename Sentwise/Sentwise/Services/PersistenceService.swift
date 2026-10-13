@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "Persistence")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "Persistence")
 
 /// Persistence operations used by `AppState`.
 ///

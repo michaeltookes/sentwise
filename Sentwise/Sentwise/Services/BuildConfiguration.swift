@@ -30,6 +30,7 @@ struct BuildConfiguration: Equatable, Sendable {
         static let keychainServiceSuffix = "SentwiseKeychainServiceSuffix" // SENTWISE_KEYCHAIN_SERVICE_SUFFIX
         static let appSupportDirectoryName = "SentwiseAppSupportDirectoryName" // SENTWISE_APP_SUPPORT_DIRECTORY
         static let displayName = "CFBundleDisplayName"
+        static let bundleIdentifier = "CFBundleIdentifier"
         static let urlTypes = "CFBundleURLTypes"
         static let urlSchemes = "CFBundleURLSchemes"
 
@@ -48,6 +49,7 @@ struct BuildConfiguration: Equatable, Sendable {
         static let appSupportDirectoryName = "Sentwise"
         static let urlScheme = "sentwise"
         static let appDisplayName = "Sentwise"
+        static let bundleIdentifier = "com.tookes.Sentwise"
     }
 
     /// What a non-production build falls back to when its own value is missing
@@ -56,6 +58,7 @@ struct BuildConfiguration: Equatable, Sendable {
         static let keychainServiceSuffix = ".qa"
         static let appSupportDirectoryName = "Sentwise QA"
         static let appDisplayName = "Sentwise QA"
+        static let bundleIdentifier = "com.tookes.Sentwise.qa"
         /// Used when a non-production build's Clerk URL is missing, malformed, or
         /// the production instance: `.invalid` never resolves (RFC 2606) and
         /// `ClerkClient` refuses it before any request, so sign-in is unavailable
@@ -78,6 +81,11 @@ struct BuildConfiguration: Equatable, Sendable {
     let keychainServiceSuffix: String
     /// Folder under `~/Library/Application Support`. `Sentwise` in production.
     let appSupportDirectoryName: String
+    /// This build's bundle identifier: `com.tookes.Sentwise` in production, the
+    /// QA build's suffixed id otherwise. Drives per-app system integrations (the
+    /// Notifications settings deep link, the unified-log subsystem) so a QA
+    /// install never points at, or reads, the production app's.
+    let bundleIdentifier: String
     /// The name the status item and menu show: `Sentwise`, or the QA build's
     /// display name so the two installs are told apart.
     let appDisplayName: String
@@ -109,6 +117,7 @@ struct BuildConfiguration: Equatable, Sendable {
                 clerkFrontendAPIBaseURL: URL(string: Production.clerkFrontendAPIURLString)!,
                 keychainServiceSuffix: "",
                 appSupportDirectoryName: Production.appSupportDirectoryName,
+                bundleIdentifier: Production.bundleIdentifier,
                 appDisplayName: Production.appDisplayName,
                 urlScheme: declaredScheme,
                 paddle: .production
@@ -131,6 +140,7 @@ struct BuildConfiguration: Equatable, Sendable {
             clerkFrontendAPIBaseURL: clerkURL ?? NonProductionFallback.clerkFrontendAPIURL,
             keychainServiceSuffix: keychainSuffix(string(info, InfoKey.keychainServiceSuffix)),
             appSupportDirectoryName: directoryName(string(info, InfoKey.appSupportDirectoryName)),
+            bundleIdentifier: nonProductionBundleIdentifier(string(info, InfoKey.bundleIdentifier)),
             appDisplayName: displayName(string(info, InfoKey.displayName)),
             urlScheme: declaredScheme,
             paddle: pointsAwayFromProduction ? sandboxPaddleConfig(info) : nil
@@ -189,6 +199,15 @@ struct BuildConfiguration: Equatable, Sendable {
               url.host?.lowercased() != URL(string: production)?.host?.lowercased()
         else { return nil }
         return url
+    }
+
+    /// A suffixed `com.tookes.Sentwise.<suffix>` id, or the QA fallback; never the
+    /// production id in a non-production build.
+    private static func nonProductionBundleIdentifier(_ value: String?) -> String {
+        guard let value,
+              value.range(of: #"^com\.tookes\.Sentwise\.[A-Za-z0-9-]{1,32}$"#, options: .regularExpression) != nil
+        else { return NonProductionFallback.bundleIdentifier }
+        return value
     }
 
     private static func displayName(_ value: String?) -> String {

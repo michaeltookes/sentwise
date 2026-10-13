@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "URLCallback")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "URLCallback")
 
 /// Routes an incoming `sentwise://` deep link to the right sign-in/provisioning
 /// completion (item 59). Called from `AppDelegate.application(_:open:)`.

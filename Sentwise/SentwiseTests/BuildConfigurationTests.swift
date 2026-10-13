@@ -25,6 +25,7 @@ final class BuildConfigurationTests: XCTestCase {
             Key.keychainServiceSuffix: ".qa",
             Key.appSupportDirectoryName: "Sentwise QA",
             Key.displayName: "Sentwise QA",
+            Key.bundleIdentifier: "com.tookes.Sentwise.qa",
             Key.urlTypes: urlTypes("sentwise-qa")
         ]
         for (key, value) in overrides { info[key] = value }
@@ -42,6 +43,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(config.appSupportDirectoryName, "Sentwise", file: file, line: line)
         XCTAssertEqual(config.urlScheme, "sentwise", file: file, line: line)
         XCTAssertEqual(config.appDisplayName, "Sentwise", file: file, line: line)
+        XCTAssertEqual(config.bundleIdentifier, "com.tookes.Sentwise", file: file, line: line)
         XCTAssertEqual(config.paddle, .production, file: file, line: line)
         XCTAssertTrue(config.allowsAutomaticUpdates, file: file, line: line)
     }
@@ -83,6 +85,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertNotEqual(config.appSupportDirectoryName, BuildConfiguration.Production.appSupportDirectoryName)
         XCTAssertEqual(config.urlScheme, "sentwise-qa")
         XCTAssertEqual(config.appDisplayName, "Sentwise QA")
+        XCTAssertEqual(config.bundleIdentifier, "com.tookes.Sentwise.qa")
         XCTAssertFalse(config.allowsAutomaticUpdates)
 
         let paddle = try XCTUnwrap(config.paddle)
@@ -176,6 +179,14 @@ final class BuildConfigurationTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? ClerkError, .transport("Sign-in isn't available in this build."))
         }
+    }
+
+    func testQABundleIdentifierNeverResolvesToProduction() {
+        for value in ["", "com.tookes.Sentwise", "com.example.Other", "com.tookes.Sentwise.a b"] {
+            let config = BuildConfiguration.resolve(infoDictionary: qaInfo([Key.bundleIdentifier: value]))
+            XCTAssertEqual(config.bundleIdentifier, "com.tookes.Sentwise.qa", value)
+        }
+        XCTAssertEqual(DiagnosticLog.subsystem, "com.tookes.Sentwise")
     }
 
     func testURLSchemeIsTheOneTheBuildDeclares() {

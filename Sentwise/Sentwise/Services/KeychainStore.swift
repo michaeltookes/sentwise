@@ -2,7 +2,7 @@ import Foundation
 import os
 import Security
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "Keychain")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "Keychain")
 
 /// Errors thrown by `KeychainStore`.
 enum KeychainError: Error, Equatable {

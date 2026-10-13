@@ -3,7 +3,7 @@ import Combine
 import os
 import Sparkle
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "Updates")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "Updates")
 
 /// Manages application updates via Sparkle.
 ///

@@ -255,7 +255,7 @@ private struct PaddleCheckoutRunner: View {
     }
 }
 
-private let checkoutLogger = Logger(subsystem: "com.tookes.Sentwise", category: "PaddleCheckout")
+private let checkoutLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "PaddleCheckout")
 
 /// Hosts the Paddle.js overlay checkout in a `WKWebView` (backlog item 56c).
 /// Loads the bundled harness page, tells the model when the page has finished

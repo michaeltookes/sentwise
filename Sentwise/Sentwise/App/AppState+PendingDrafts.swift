@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "PendingDrafts")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "PendingDrafts")
 private enum RegenerationReplacementError: LocalizedError {
     case alreadyApproved
 

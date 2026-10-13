@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "ManagedAccount")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedAccount")
 
 /// The stage of the managed-inference email-code sign-in flow.
 enum ManagedSignInStage: Equatable {

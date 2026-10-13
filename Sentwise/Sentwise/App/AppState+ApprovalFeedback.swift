@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let feedbackLogger = Logger(subsystem: "com.tookes.Sentwise", category: "ApprovalFeedback")
+private let feedbackLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "ApprovalFeedback")
 
 /// On-device approval-signal capture (item 83, Phase 1). Every terminal draft
 /// action — approved-as-is, approved-after-edit, denied, or abandoned from a
