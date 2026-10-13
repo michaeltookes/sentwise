@@ -218,6 +218,7 @@ extension AppState {
         stopAllBackgroundWatchers()
         stopTranscriptFolderWatching()
 
+        cancelGoogleOperationsForErase()
         await managedAccount.cancelSignIn()
         do {
             try await managedAccount.signOut()

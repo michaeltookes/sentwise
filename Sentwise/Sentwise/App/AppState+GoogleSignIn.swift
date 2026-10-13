@@ -63,6 +63,9 @@ extension AppState {
             return false
         }
         guard !isConnecting else { return false }
+        // "Erase all local data" may run while the browser is open; a flow
+        // started before the erase must never recreate tokens or reconnect.
+        let localDataGeneration = localDataEraseGeneration
 
         let authorization: GmailAuthorization
         do {
@@ -70,14 +73,26 @@ extension AppState {
         } catch is CancellationError {
             return false
         } catch {
+            guard isCurrentLocalDataGeneration(localDataGeneration) else { return false }
             setConnectionError(GmailAuthCoordinator.message(for: error), for: messageSurface)
             return false
         }
 
         let email = authorization.email
+        guard isCurrentLocalDataGeneration(localDataGeneration) else {
+            await googleMailAuth.disconnect(email)
+            return false
+        }
         let wasGoogleConnected = savedAccountUsesGoogleSignIn(email)
         let credentials = GoogleMailCredential.credentials(email: email)
-        let connected = await testConnection(with: credentials, messageSurface: messageSurface, shouldApplyResult: shouldApplyResult)
+        let connected = await testConnection(with: credentials, messageSurface: messageSurface) {
+            self.isCurrentLocalDataGeneration(localDataGeneration) && shouldApplyResult($0)
+        }
+        guard isCurrentLocalDataGeneration(localDataGeneration) else {
+            // Erased mid-verification: whatever the outcome, keep no grant.
+            await googleMailAuth.disconnect(email)
+            return false
+        }
         if !connected && !wasGoogleConnected {
             // Never leave an orphaned grant behind for a mailbox that didn't connect.
             await googleMailAuth.disconnect(email)
@@ -90,6 +105,12 @@ extension AppState {
 
     /// Abandons a Google sign-in that is waiting on the browser.
     func cancelGoogleSignIn() {
+        googleMailAuth.cancelSignIn()
+    }
+
+    /// Stops every in-flight Google operation before "Erase all local data"
+    /// wipes the Keychain, so none can save a token afterward.
+    func cancelGoogleOperationsForErase() {
         googleMailAuth.cancelSignIn()
     }
 
