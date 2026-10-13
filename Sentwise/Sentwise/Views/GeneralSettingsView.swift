@@ -16,6 +16,20 @@ struct GeneralSettingsView: View {
                     set: { appState.setLaunchAtLogin($0) }
                 ))
                 .accessibilityLabel("Launch Sentwise at login")
+                .accessibilityIdentifier("launchAtLoginToggle")
+
+                if let caption = appState.launchAtLoginState.caption {
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("launchAtLoginApprovalCaption")
+                }
+                if appState.launchAtLoginState.showsOpenLoginItemsAction {
+                    Button(LaunchAtLoginState.openLoginItemsTitle) {
+                        appState.openLoginItemsSettings()
+                    }
+                    .accessibilityIdentifier("openLoginItemsSettings")
+                }
 
                 Stepper(
                     "Inbox poll interval: \(appState.pollIntervalSeconds)s",
