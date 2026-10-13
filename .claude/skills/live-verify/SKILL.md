@@ -9,7 +9,8 @@ model: claude-opus-5-5
 
 Dispatch-only. This skill triggers the `live-tests.yml` GitHub Actions workflow
 on the **Lucius Mac mini** self-hosted runner, waits for it, and reports the
-result. It is the on-demand counterpart to the automatic push-to-main run.
+result. Live tests run only on demand; merges to `main` do not trigger them.
+Post-merge verification requires an explicit dispatch targeting the merged SHA.
 
 ## Hard rules
 
@@ -18,6 +19,15 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
   `test-without-building` locally. All live execution happens on Lucius, inside
   the workflow. If `gh` is unavailable or the dispatch fails, STOP and report —
   do not fall back to running anything locally.
+- **Coordinate the shared QA desktop before dispatch.** The QA operator or
+  orchestrator must pause QA and quit `/Applications/Sentwise.app` on Lucius
+  before the run. Keep QA paused and the installed app closed through queue
+  time and completion, then have the operator or orchestrator relaunch it and
+  resume QA whether the run passes or fails. This skill only dispatches and
+  watches; neither it nor the workflow terminates or launches the installed app.
+  If the desktop is not ready, stop and report the prerequisite rather than
+  dispatching a run that the installed-app guard will refuse. See
+  `docs/live-testing.md` → *Shared QA desktop procedure*.
 - **Scope guardrail (standing, 2026-09-10 billing-guardrail decision):** the
   live suite signs in, drafts, checks the checkout overlay *loads*, and fetches
   portal links. It NEVER completes a purchase, enters card data, or touches any
@@ -134,7 +144,7 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
    ```
 
 3. **Find the exact run** it started, then **watch** it to completion. Do not use
-   `--limit 1` unfiltered; another workflow_dispatch or push-to-main run may
+   `--limit 1` unfiltered; another workflow_dispatch run may
    register while Actions is still creating this one.
 
    ```bash
@@ -180,6 +190,6 @@ result. It is the on-demand counterpart to the automatic push-to-main run.
   queues behind it — watch is still correct, it just waits. Do not add a global
   workflow concurrency group; GitHub can cancel older pending dispatches even
   when `cancel-in-progress` is false.
-- Merges to `main` are live-verified automatically by the workflow's push
-  trigger; this skill is for verifying a branch **before** merge, or re-running
-  on demand.
+- Use this skill for branch verification **before** merge, explicit post-merge
+  verification of the merged SHA on `main`, or re-running on demand. A merge
+  alone does not run the live suite; the operator must dispatch it.
