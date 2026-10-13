@@ -65,6 +65,11 @@ struct OAuthTokenService {
         fallbackRefreshToken: String?
     ) throws -> OAuthToken {
         guard response.isSuccess else {
+            // 5xx/429 are outages and throttling, never a verdict on the grant,
+            // even when Google includes an error body.
+            if OAuthError.isTransientHTTPStatus(response.statusCode) {
+                throw OAuthError.temporarilyUnavailable(httpStatus: response.statusCode)
+            }
             if let error = try? JSONDecoder().decode(TokenErrorResponse.self, from: response.body) {
                 throw OAuthError.server(code: error.error, description: error.errorDescription)
             }

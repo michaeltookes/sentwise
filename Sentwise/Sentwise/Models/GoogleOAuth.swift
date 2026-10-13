@@ -152,4 +152,14 @@ enum OAuthError: Error, Equatable {
     case redirectTimedOut
     /// Google returned a token that lacks one or more required Gmail scopes.
     case missingRequiredScopes([String])
+    /// The token endpoint is overloaded or down (HTTP 5xx) or rate-limiting us
+    /// (HTTP 429). Transient: the grant is still good, so callers retry later
+    /// instead of asking the user to sign in again.
+    case temporarilyUnavailable(httpStatus: Int)
+
+    /// Whether an HTTP status from the token endpoint means "retry later"
+    /// rather than "this request or grant is bad".
+    static func isTransientHTTPStatus(_ status: Int) -> Bool {
+        status == 429 || (500...599).contains(status)
+    }
 }

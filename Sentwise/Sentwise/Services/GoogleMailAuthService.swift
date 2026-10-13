@@ -169,6 +169,10 @@ struct GoogleOAuthMailProvider: MailProvider {
             token = try await auth.accessToken(for: credentials.email)
         } catch let error as GmailAuthError {
             throw MailError.authenticationFailed(Self.detail(for: error))
+        } catch OAuthError.temporarilyUnavailable(let status) {
+            // Google outage or throttling: the grant is fine, so retry later
+            // instead of pausing the mailbox as an auth failure.
+            throw MailError.connectionFailed("Couldn't refresh Google sign-in right now (HTTP \(status)).")
         } catch let error as OAuthError {
             throw MailError.authenticationFailed("\(GoogleMailCredential.failurePrefix) failed: \(error)")
         } catch {

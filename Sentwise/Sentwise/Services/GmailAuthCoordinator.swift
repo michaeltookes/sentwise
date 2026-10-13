@@ -315,6 +315,8 @@ final class GmailAuthCoordinator {
             return "Google sign-in failed: \(description ?? code)."
         case .invalidResponse:
             return "Google sign-in returned an unexpected response. Please try again."
+        case .temporarilyUnavailable:
+            return "Google's sign-in service is temporarily unavailable. Please try again in a few minutes."
         }
     }
 }
