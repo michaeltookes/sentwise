@@ -66,7 +66,24 @@ final class GmailAuthCoordinator {
 
     /// One refresh per mailbox at a time: concurrent pollers share it, so a
     /// burst of IMAP sessions never fires parallel refresh requests.
-    private var refreshTasks: [String: Task<String, Error>] = [:]
+    private var refreshTasks: [String: (id: UUID, task: Task<String, Error>)] = [:]
+
+    /// Bumped per mailbox on disconnect, and for every mailbox on
+    /// `invalidateAll()`. A refresh captures the generation it started under
+    /// and never saves or returns a token once it has moved on, so a response
+    /// that lands after a disconnect, removal, or erase can't resurrect the
+    /// mailbox's token.
+    private var accountGenerations: [String: UInt64] = [:]
+    private var globalGeneration: UInt64 = 0
+
+    private struct TokenGeneration: Equatable {
+        let global: UInt64
+        let account: UInt64
+    }
+
+    private func generation(for key: String) -> TokenGeneration {
+        TokenGeneration(global: globalGeneration, account: accountGenerations[key] ?? 0)
+    }
 
     init(
         client: GoogleOAuthClientConfiguration,
@@ -176,8 +193,11 @@ final class GmailAuthCoordinator {
     /// stored one has expired. Concurrent callers share one refresh.
     func validAccessToken(for email: String) async throws -> String {
         let key = SavedMailAccount.normalizedEmail(email)
+        let startGeneration = generation(for: key)
         if let inFlight = refreshTasks[key] {
-            return try await inFlight.value
+            let accessToken = try await inFlight.task.value
+            try requireCurrent(startGeneration, for: key)
+            return accessToken
         }
         guard let token = try store.loadToken(for: email) else {
             throw GmailAuthError.notConnected
@@ -192,6 +212,8 @@ final class GmailAuthCoordinator {
         let task = Task { () throws -> String in
             do {
                 let refreshed = try await tokenService.refresh(refreshToken: refreshToken, client: client, now: now())
+                // Disconnected (or erased) while the request was out: drop it.
+                try requireCurrent(startGeneration, for: key)
                 try requireFullScope(refreshed)
                 try store.saveToken(refreshed, for: email)
                 return refreshed.accessToken
@@ -202,15 +224,38 @@ final class GmailAuthCoordinator {
                 throw GmailAuthError.reauthorizationRequired
             }
         }
-        refreshTasks[key] = task
-        defer { refreshTasks[key] = nil }
-        return try await task.value
+        let taskID = UUID()
+        refreshTasks[key] = (taskID, task)
+        defer {
+            if refreshTasks[key]?.id == taskID { refreshTasks[key] = nil }
+        }
+        let accessToken = try await task.value
+        try requireCurrent(startGeneration, for: key)
+        return accessToken
+    }
+
+    private func requireCurrent(_ startGeneration: TokenGeneration, for key: String) throws {
+        guard generation(for: key) == startGeneration else { throw GmailAuthError.notConnected }
+    }
+
+    /// Invalidates every outstanding token refresh, for all mailboxes, so none
+    /// can save a token afterward (used before "Erase all local data").
+    func invalidateAll() {
+        globalGeneration &+= 1
+        for entry in refreshTasks.values { entry.task.cancel() }
+        refreshTasks.removeAll()
+    }
+
+    private func invalidate(_ key: String) {
+        accountGenerations[key, default: 0] &+= 1
+        refreshTasks.removeValue(forKey: key)?.task.cancel()
     }
 
     /// Forgets `email`'s token locally and, best effort, revokes the grant at
     /// Google so the app no longer appears in the user's third-party access
     /// list. A revocation network failure never blocks the local removal.
     func disconnect(_ email: String) async {
+        invalidate(SavedMailAccount.normalizedEmail(email))
         let token = (try? store.loadToken(for: email)) ?? nil
         do {
             try store.deleteToken(for: email)

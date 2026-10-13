@@ -95,6 +95,84 @@ final class GoogleSignInRaceTests: XCTestCase {
         XCTAssertTrue(appState.savedAccounts.isEmpty)
     }
 
+    // MARK: - Disconnect during a token refresh
+
+    private func makeRefreshHarness() throws -> (GmailAuthCoordinator, GmailAuthStore, GatedRefreshTransport) {
+        let store = GmailAuthStore(secrets: InMemorySecretStore())
+        try store.saveToken(OAuthToken(
+            accessToken: "stale-at", refreshToken: "rt", expiresAt: .distantPast,
+            scope: GoogleOAuth.mailScope, tokenType: "Bearer"
+        ), for: "me@gmail.com")
+        let transport = GatedRefreshTransport()
+        let coordinator = GmailAuthCoordinator(
+            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            store: store,
+            tokenService: OAuthTokenService(transport: transport)
+        )
+        return (coordinator, store, transport)
+    }
+
+    private let refreshedJSON = #"{"access_token":"late-at","expires_in":3600,"scope":"https://mail.google.com/"}"#
+
+    func testRefreshThatLandsAfterDisconnectIsNotSavedOrReturned() async throws {
+        let (coordinator, store, transport) = try makeRefreshHarness()
+
+        let refresh = Task { try await coordinator.validAccessToken(for: "me@gmail.com") }
+        let waiter = Task { try await coordinator.validAccessToken(for: "ME@gmail.com") }
+        await fulfillment(of: [transport.didStartRefresh], timeout: 2)
+
+        await coordinator.disconnect("me@gmail.com")
+        XCTAssertFalse(store.hasToken(for: "me@gmail.com"))
+        transport.completeRefresh(HTTPResponse(statusCode: 200, body: Data(refreshedJSON.utf8)))
+
+        for task in [refresh, waiter] {
+            do {
+                _ = try await task.value
+                XCTFail("a refresh outliving its mailbox must not hand out a token")
+            } catch {
+                XCTAssertEqual(error as? GmailAuthError, .notConnected)
+            }
+        }
+        XCTAssertFalse(store.hasToken(for: "me@gmail.com"), "the late response never re-saves the token")
+        XCTAssertEqual(transport.refreshCount, 1, "the waiter shared the one refresh")
+    }
+
+    func testRefreshThatLandsAfterInvalidateAllIsNotSaved() async throws {
+        let (coordinator, store, transport) = try makeRefreshHarness()
+
+        let refresh = Task { try await coordinator.validAccessToken(for: "me@gmail.com") }
+        await fulfillment(of: [transport.didStartRefresh], timeout: 2)
+
+        coordinator.invalidateAll()
+        try store.deleteToken(for: "me@gmail.com") // what erase-all's Keychain wipe does
+        transport.completeRefresh(HTTPResponse(statusCode: 200, body: Data(refreshedJSON.utf8)))
+
+        do {
+            _ = try await refresh.value
+            XCTFail("expected the invalidated refresh to fail")
+        } catch {
+            XCTAssertEqual(error as? GmailAuthError, .notConnected)
+        }
+        XCTAssertFalse(store.hasToken(for: "me@gmail.com"))
+    }
+
+    func testRefreshAfterReconnectUsesTheNewGeneration() async throws {
+        let (coordinator, store, transport) = try makeRefreshHarness()
+        await coordinator.disconnect("me@gmail.com")
+        try store.saveToken(OAuthToken(
+            accessToken: "new-at", refreshToken: "rt2", expiresAt: .distantPast,
+            scope: GoogleOAuth.mailScope, tokenType: "Bearer"
+        ), for: "me@gmail.com")
+
+        let refresh = Task { try await coordinator.validAccessToken(for: "me@gmail.com") }
+        await fulfillment(of: [transport.didStartRefresh], timeout: 2)
+        transport.completeRefresh(HTTPResponse(statusCode: 200, body: Data(refreshedJSON.utf8)))
+
+        let accessToken = try await refresh.value
+        XCTAssertEqual(accessToken, "late-at")
+        XCTAssertEqual(try store.loadToken(for: "me@gmail.com")?.accessToken, "late-at")
+    }
+
     // MARK: - Helpers
 
     func waitUntil(
@@ -146,4 +224,34 @@ final class GatedRedirectListener: RedirectListener, @unchecked Sendable {
     }
 
     func stop() {}
+}
+
+/// A transport whose refresh requests wait until the test answers them;
+/// every other request (e.g. revoke) answers 200 immediately.
+final class GatedRefreshTransport: HTTPTransport, @unchecked Sendable {
+    let didStartRefresh = XCTestExpectation(description: "token refresh started")
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<HTTPResponse, Error>?
+    private(set) var refreshCount = 0
+
+    func postForm(_ url: URL, fields: [String: String]) async throws -> HTTPResponse {
+        guard fields["grant_type"] == "refresh_token" else {
+            return HTTPResponse(statusCode: 200, body: Data())
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            refreshCount += 1
+            self.continuation = continuation
+            lock.unlock()
+            didStartRefresh.fulfill()
+        }
+    }
+
+    func completeRefresh(_ response: HTTPResponse) {
+        lock.lock()
+        let continuation = continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(returning: response)
+    }
 }

@@ -112,6 +112,7 @@ extension AppState {
     /// wipes the Keychain, so none can save a token afterward.
     func cancelGoogleOperationsForErase() {
         googleMailAuth.cancelSignIn()
+        googleMailAuth.invalidateAllTokenOperations()
     }
 
     /// Deletes `email`'s Google token and revokes the grant (best effort) once

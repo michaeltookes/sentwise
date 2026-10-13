@@ -136,6 +136,11 @@ final class GoogleMailAuthService: ObservableObject {
         return try await coordinator.validAccessToken(for: email)
     }
 
+    /// Invalidates every in-flight token refresh (before an erase).
+    func invalidateAllTokenOperations() {
+        coordinator?.invalidateAll()
+    }
+
     /// Removes `email`'s token and revokes it at Google (best effort).
     func disconnect(_ email: String) async {
         await coordinator?.disconnect(email)
