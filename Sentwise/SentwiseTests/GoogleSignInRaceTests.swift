@@ -173,6 +173,73 @@ final class GoogleSignInRaceTests: XCTestCase {
         XCTAssertEqual(try store.loadToken(for: "me@gmail.com")?.accessToken, "late-at")
     }
 
+    // MARK: - Builds without a bundled client
+
+    func testDisconnectWithoutAClientStillDeletesTheLocalToken() async throws {
+        let store = GmailAuthStore(secrets: InMemorySecretStore())
+        try store.saveToken(OAuthToken(
+            accessToken: "at", refreshToken: "rt", expiresAt: .distantFuture,
+            scope: GoogleOAuth.mailScope, tokenType: "Bearer"
+        ), for: "me@gmail.com")
+        let service = GoogleMailAuthService(coordinator: nil, tokenStore: store)
+        XCTAssertFalse(service.isAvailable)
+
+        await service.disconnect("me@gmail.com")
+
+        XCTAssertFalse(store.hasToken(for: "me@gmail.com"))
+    }
+
+    func testRemovingAGoogleAccountInAnUnconfiguredBuildDeletesItsTokens() async throws {
+        let secrets = InMemorySecretStore()
+        let appState = makeAppState(secrets: secrets)
+        let store = GmailAuthStore(secrets: secrets)
+        let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data(exchangeJSON.utf8)))
+        appState.googleMailAuth.install(GmailAuthCoordinator(
+            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            store: store,
+            tokenService: OAuthTokenService(transport: transport),
+            makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
+            browser: SpyBrowser(),
+            makeState: { self.state }
+        ))
+        await appState.connectWithGoogle()
+        let account = try XCTUnwrap(appState.savedAccounts.first)
+        XCTAssertTrue(store.hasToken(for: "me@gmail.com"))
+
+        // A later build ships without the client (or it was pulled).
+        appState.googleMailAuth.install(nil)
+        let requestsBefore = transport.requests.count
+        appState.removeSavedAccount(account)
+
+        try await waitUntil { !store.hasToken(for: "me@gmail.com") }
+        XCTAssertEqual(transport.requests.count, requestsBefore, "no client, so no remote revoke")
+    }
+
+    func testSwitchingToAnAppPasswordInAnUnconfiguredBuildDeletesTheTokens() async throws {
+        let secrets = InMemorySecretStore()
+        let appState = makeAppState(secrets: secrets)
+        let store = GmailAuthStore(secrets: secrets)
+        appState.googleMailAuth.install(GmailAuthCoordinator(
+            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            store: store,
+            tokenService: OAuthTokenService(transport: FakeTransport(
+                response: HTTPResponse(statusCode: 200, body: Data(exchangeJSON.utf8))
+            )),
+            makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
+            browser: SpyBrowser(),
+            makeState: { self.state }
+        ))
+        await appState.connectWithGoogle()
+        appState.googleMailAuth.install(nil)
+
+        let connected = await appState.testConnection(with: MailAccountCredentials(
+            email: "me@gmail.com", appPassword: "abcdefghijklmnop", host: "imap.gmail.com", port: 993
+        ))
+
+        XCTAssertTrue(connected)
+        try await waitUntil { !store.hasToken(for: "me@gmail.com") }
+    }
+
     // MARK: - Helpers
 
     func waitUntil(

@@ -1,6 +1,9 @@
 import Combine
 import Foundation
+import os
 import SentwiseMail
+
+private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "GoogleSignIn")
 
 /// How a Google-signed-in mailbox is represented in the per-account credential
 /// slot (item 104).
@@ -76,30 +79,37 @@ enum MailConnectMethod: Equatable {
 /// access-token source behind `GoogleOAuthMailProvider`.
 ///
 /// `coordinator` is nil when the build has no bundled client, which switches
-/// the feature off everywhere. Available on every plan tier (item 104 — tier
-/// placement pending owner confirmation; no gate is applied here).
+/// the feature off everywhere. The token store stays reachable regardless, so
+/// local cleanup (disconnect, removal, switching to an app password) always
+/// deletes a mailbox's tokens even in a build without a client. Available on
+/// every plan tier (item 104 — tier placement pending owner confirmation; no
+/// gate is applied here).
 @MainActor
 final class GoogleMailAuthService: ObservableObject {
     @Published private(set) var phase: GmailAuthPhase = .idle
 
     private(set) var coordinator: GmailAuthCoordinator?
+    /// Independent of `coordinator` (and of client availability).
+    private let tokenStore: GmailAuthStore?
     private var signInTask: Task<GmailAuthorization, Error>?
 
-    init(coordinator: GmailAuthCoordinator?) {
+    init(coordinator: GmailAuthCoordinator?, tokenStore: GmailAuthStore? = nil) {
+        self.tokenStore = tokenStore
         install(coordinator)
     }
 
     /// The production service: the bundled client from Info.plist (if any),
     /// tokens in `secrets`.
     static func live(secrets: SecretStore) -> GoogleMailAuthService {
+        let store = GmailAuthStore(secrets: secrets)
         let coordinator = GoogleOAuthClientConfiguration.bundled().map { client in
             GmailAuthCoordinator(
                 client: client,
-                store: GmailAuthStore(secrets: secrets),
+                store: store,
                 tokenService: OAuthTokenService(transport: URLSessionTransport())
             )
         }
-        return GoogleMailAuthService(coordinator: coordinator)
+        return GoogleMailAuthService(coordinator: coordinator, tokenStore: store)
     }
 
     /// Swaps the engine (tests inject one wired to fakes).
@@ -141,9 +151,17 @@ final class GoogleMailAuthService: ObservableObject {
         coordinator?.invalidateAll()
     }
 
-    /// Removes `email`'s token and revokes it at Google (best effort).
+    /// Removes `email`'s token and revokes it at Google (best effort). Without
+    /// a bundled client only the remote revoke is skipped: the local token is
+    /// always deleted.
     func disconnect(_ email: String) async {
         await coordinator?.disconnect(email)
+        guard let tokenStore, tokenStore.hasToken(for: email) else { return }
+        do {
+            try tokenStore.deleteToken(for: email)
+        } catch {
+            logger.error("Couldn't remove a Google token from the Keychain: \(error.localizedDescription)")
+        }
     }
 
     /// Clears a failed attempt's message (e.g. when the user edits the form).
