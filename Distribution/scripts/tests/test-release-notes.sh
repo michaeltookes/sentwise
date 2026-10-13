@@ -65,7 +65,7 @@ Intro paragraph with a [link](https://example.com/a?b=1&c=2) & an <angle>.
 
 ## [9.9.6] - 2026-08-01
 
-### Added
+### **Added**
 
 -
 

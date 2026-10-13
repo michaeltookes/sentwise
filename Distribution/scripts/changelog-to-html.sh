@@ -144,7 +144,7 @@ fi
 # "### Added" / "### Fixed" headings or bare "- " bullets renders as headings
 # and <ul></ul>, which Sparkle shows as a notes area with nothing under the
 # headings. Heading text itself does not count.
-text="$(printf '%s' "$html" | sed -E -e 's#<h[1-6]>[^<]*</h[1-6]>##g' -e 's/<[^>]*>//g' | tr -d '[:space:]')"
+text="$(printf '%s' "$html" | sed -E -e 's#<h[1-6]>.*</h[1-6]>##g' -e 's/<[^>]*>//g' | tr -d '[:space:]')"
 if [[ -z "$text" ]]; then
   echo "changelog-to-html: the '## [$VERSION]' section of $CHANGELOG has no release-note text" >&2
   echo "                   (headings or bullets with nothing in them do not count)." >&2
