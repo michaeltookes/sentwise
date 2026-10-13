@@ -35,8 +35,12 @@ final class KeychainStore: SecretStore {
     typealias DeleteItem = (CFDictionary) -> OSStatus
     typealias UpdateItem = (CFDictionary, CFDictionary) -> OSStatus
 
-    /// The installed app's Keychain service — the hard default.
+    /// The production app's Keychain service.
     static let productionService = "com.tookes.Sentwise"
+    /// The Keychain service of this build: `productionService` in production, and
+    /// `productionService` plus the build's suffix (e.g. `.qa`) in a QA build, so a
+    /// QA install never reads or rewrites the production app's items (item 123).
+    static let appService = productionService + BuildConfiguration.current.keychainServiceSuffix
     /// The isolated service test runs read and write instead (item 115).
     static let testService = "com.tookes.Sentwise.tests"
     /// Environment variable that opts a process into `testService`.
@@ -55,7 +59,7 @@ final class KeychainStore: SecretStore {
     static func resolvedDefaultService(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> String {
-        isTestKeychainRequested(environment: environment) ? testService : productionService
+        isTestKeychainRequested(environment: environment) ? testService : appService
     }
 
     /// Whether the environment explicitly requests the isolated test service.

@@ -106,7 +106,8 @@ extension PersistenceProvider {
 
 /// File-based persistence for non-secret application settings.
 ///
-/// Data is stored as JSON in `~/Library/Application Support/Sentwise/`.
+/// Data is stored as JSON in `~/Library/Application Support/Sentwise/` (a QA build
+/// uses its own folder, `BuildConfiguration.appSupportDirectoryName`).
 /// Writes are atomic and happen off the main thread.
 final class PersistenceService: PersistenceProvider {
 
@@ -148,7 +149,10 @@ final class PersistenceService: PersistenceProvider {
         let appSupport = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first!
-        let directory = appSupport.appendingPathComponent("Sentwise", isDirectory: true)
+        let directory = appSupport.appendingPathComponent(
+            BuildConfiguration.current.appSupportDirectoryName,
+            isDirectory: true
+        )
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         self.directory = directory
         settingsURL = directory.appendingPathComponent("Settings.json")

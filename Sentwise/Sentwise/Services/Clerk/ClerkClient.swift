@@ -197,10 +197,10 @@ struct ClerkClient: Sendable {
 
     /// The production Clerk Frontend API on the sentwise.ai custom domain
     /// (item 74 cutover, 2026-09-19; dev instance was peaceful-eel-9660).
-    static let defaultFrontendAPIBaseURLString = "https://clerk.sentwise.ai"
+    static let defaultFrontendAPIBaseURLString = BuildConfiguration.Production.clerkFrontendAPIURLString
 
     init(
-        frontendAPIBaseURL: URL = URL(string: ClerkClient.defaultFrontendAPIBaseURLString)!,
+        frontendAPIBaseURL: URL = ClerkClient.configuredFrontendAPIBaseURL,
         transport: ClerkHTTPTransport = ClerkURLSessionTransport()
     ) {
         self.frontendAPIBaseURL = frontendAPIBaseURL
@@ -443,6 +443,7 @@ struct ClerkClient: Sendable {
         clientToken: String,
         extraQuery: [URLQueryItem] = []
     ) async throws -> ClerkHTTPResponse {
+        try requireAvailable()
         let url = Self.buildURL(base: frontendAPIBaseURL, path: path, extraQuery: extraQuery)
         // Native mode: send the Authorization header (never an Origin header).
         let headers = ["authorization": "Bearer \(clientToken)"]
@@ -454,6 +455,7 @@ struct ClerkClient: Sendable {
     }
 
     private func get(path: String, clientToken: String, extraQuery: [URLQueryItem]) async throws -> ClerkHTTPResponse {
+        try requireAvailable()
         let url = Self.buildURL(base: frontendAPIBaseURL, path: path, extraQuery: extraQuery)
         let headers = ["authorization": "Bearer \(clientToken)"]
         do {

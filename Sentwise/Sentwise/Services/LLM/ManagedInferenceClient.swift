@@ -1,14 +1,17 @@
 import Foundation
 
 /// Compile-time configuration for the Sentwise managed-inference service
-/// (`sentwise-service`, backlog item 56a). The base URL is a constant; DEBUG
+/// (`sentwise-service`, backlog item 56a). The base URL comes from the build
+/// (`BuildConfiguration`, production by default; QA builds use the sandbox
+/// deployment, item 123); DEBUG
 /// builds additionally honor a `SENTWISE_INFERENCE_URL` environment override for
 /// dev/tests pointing at a local `wrangler dev` or a staging deployment.
 enum ManagedInference {
     /// The deployed production Worker. Recorded here and in the service README.
-    static let defaultBaseURLString = "https://sentwise-inference.sentwise-service.workers.dev"
+    static let defaultBaseURLString = BuildConfiguration.Production.serviceBaseURLString
 
-    /// The base URL. Release builds are pinned to `defaultBaseURLString`; the
+    /// The base URL. Release builds are pinned to the build's configured base URL
+    /// (`BuildConfiguration.current.serviceBaseURL`); the
     /// `SENTWISE_INFERENCE_URL` override is honored in DEBUG builds only, so a
     /// shipped app cannot have all managed-drafting traffic (mail content + the
     /// session JWT) silently redirected by an environment variable (security
@@ -23,8 +26,8 @@ enum ManagedInference {
             return url
         }
         #endif
-        // The default string is a compile-time constant we control, so this is safe.
-        return URL(string: defaultBaseURLString)!
+        // From the signed bundle's Info.plist, validated as https; production by default.
+        return BuildConfiguration.current.serviceBaseURL
     }
 
     static var draftEndpoint: URL { baseURL.appendingPathComponent("v1/draft") }

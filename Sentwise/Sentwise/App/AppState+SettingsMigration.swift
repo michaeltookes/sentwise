@@ -249,7 +249,7 @@ extension AppState {
     }
 
     private static var managedClerkEnvMarkerValue: String {
-        ClerkClient.defaultFrontendAPIBaseURLString
+        ClerkClient.configuredFrontendAPIBaseURL.absoluteString
     }
 
     private static func hasStoredManagedClerkClientToken(secrets: SecretStore) -> Bool {
