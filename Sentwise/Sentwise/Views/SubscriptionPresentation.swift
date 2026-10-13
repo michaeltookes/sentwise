@@ -14,7 +14,7 @@ struct SubscriptionPaneModel: Equatable {
     /// A secondary line under the plan: "Renews <date>" when active, or the
     /// explanatory copy for a problem state. `nil` when there is nothing to add.
     var secondaryText: String?
-    /// Whether managed drafting is paused (past-due / canceled / lapsed). Drives
+    /// Whether managed drafting is paused (past-due / canceled / paused / lapsed). Drives
     /// the red styling.
     var isProblemState: Bool
 
@@ -66,6 +66,8 @@ struct SubscriptionPaneModel: Equatable {
                     + "until you resubscribe.",
                 isProblemState: true
             )
+        case .paused:
+            return pausedModel(plan: effective.plan)
         case .lapsed:
             // A lapsed *trial* reads "Trial ended"; a lapsed paid plan (post-56c)
             // must not — name the plan so a former subscriber isn't told their
@@ -101,6 +103,16 @@ struct SubscriptionPaneModel: Equatable {
         let seconds = endsAt.timeIntervalSince(now)
         if seconds <= 0 { return 0 }
         return Int((seconds / 86_400).rounded(.up))
+    }
+
+    /// The paused explanation (item 124). Exact copy is a QA spec.
+    static func pausedLine(plan: ManagedSubscription.Plan) -> String {
+        "Paused — your \(plan.displayName) subscription is paused. Resume it in Manage billing."
+    }
+
+    /// A paused Paddle subscription (item 124): drafting is denied, Manage billing resumes it.
+    private static func pausedModel(plan: ManagedSubscription.Plan) -> SubscriptionPaneModel {
+        SubscriptionPaneModel(planText: "Paused", secondaryText: pausedLine(plan: plan), isProblemState: true)
     }
 
     // MARK: - Helpers

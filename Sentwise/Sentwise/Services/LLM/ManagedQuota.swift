@@ -233,6 +233,11 @@ struct ManagedSubscription: Codable, Sendable, Equatable {
         case active
         case pastDue = "past_due"
         case canceled
+        /// Paddle has the subscription paused (item 124). The Worker keeps the
+        /// wire `status` as "canceled" (drafting is denied while paused) and adds
+        /// `paddleStatus: "paused"`; the subscription still exists at Paddle and
+        /// resumes from Manage billing.
+        case paused
         case lapsed
         case unknown
     }
@@ -252,7 +257,7 @@ struct ManagedSubscription: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case plan, status, renewsAt
+        case plan, status, renewsAt, paddleStatus
         case manageBillingURL = "manageBillingUrl"
     }
 
@@ -261,12 +266,25 @@ struct ManagedSubscription: Codable, Sendable, Equatable {
         let planRaw = (try? container.decodeIfPresent(String.self, forKey: .plan)) ?? nil
         plan = planRaw.flatMap(Plan.init(rawValue:)) ?? .unknown
         let statusRaw = (try? container.decodeIfPresent(String.self, forKey: .status)) ?? nil
-        status = statusRaw.flatMap(Status.init(rawValue:)) ?? .unknown
+        let paddleStatusRaw = (try? container.decodeIfPresent(String.self, forKey: .paddleStatus)) ?? nil
+        status = Self.decodedStatus(status: statusRaw, paddleStatus: paddleStatusRaw)
         let renewsRaw = (try? container.decodeIfPresent(String.self, forKey: .renewsAt)) ?? nil
         renewsAt = renewsRaw.flatMap(ManagedQuotaDate.date(from:))
         let billingRaw = ((try? container.decodeIfPresent(String.self, forKey: .manageBillingURL)) ?? nil)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         manageBillingURL = (billingRaw?.isEmpty == false) ? billingRaw : nil
+    }
+
+    /// Resolves the lifecycle status from the wire (item 124). A Worker that
+    /// reports `paddleStatus: "paused"` alongside the "canceled" display status
+    /// means paused; older Workers send no `paddleStatus`, so their "canceled"
+    /// stays canceled. A bare `status: "paused"` also decodes as paused.
+    static func decodedStatus(status: String?, paddleStatus: String?) -> Status {
+        let decoded = status.flatMap(Status.init(rawValue:)) ?? .unknown
+        if paddleStatus == Status.paused.rawValue, decoded == .canceled {
+            return .paused
+        }
+        return decoded
     }
 
     func encode(to encoder: Encoder) throws {

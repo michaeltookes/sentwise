@@ -96,11 +96,14 @@ enum SubscriptionLicenseEvaluator {
     /// weekend without a paid feature silently disappearing.
     static let defaultGrace: TimeInterval = 7 * 24 * 60 * 60
 
-    /// Whether a status entitles managed drafting.
+    /// Whether a status entitles managed drafting. Paused (item 124) is not
+    /// entitled: the Worker denies drafting while a subscription is paused (its
+    /// "in force" meaning only blocks a second checkout), and the app mirrors the
+    /// server rather than enabling drafts it would refuse.
     static func isEntitled(_ status: ManagedSubscription.Status) -> Bool {
         switch status {
         case .trialing, .active: return true
-        case .pastDue, .canceled, .lapsed, .unknown: return false
+        case .pastDue, .canceled, .paused, .lapsed, .unknown: return false
         }
     }
 
