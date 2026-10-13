@@ -156,7 +156,7 @@ final class AppStateCheckoutModelTests: XCTestCase {
         XCTAssertFalse(appState.canStartCheckout)
         appState.presentBillingCheckout(plan: .pro)
         XCTAssertNil(appState.billingCheckout, "no config may be captured before /v1/me loads")
-        XCTAssertNotNil(appState.checkoutUnavailableMessage)
+        XCTAssertNil(appState.checkoutPaddleConfig, "still nothing to capture after a refused present")
     }
 
     func testCheckoutCapturesSandboxConfigOnceStatusArrives() async {
