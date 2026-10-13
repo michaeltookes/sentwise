@@ -16,9 +16,8 @@ private struct EnvSessionProvider: ManagedSessionProviding {
 ///
 /// `testLiveDraftReturnsText` also requires `SENTWISE_LIVE_MANAGED_DRAFT`,
 /// plus `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL`, a Clerk test user with a durable
-/// Worker entitlement or trial bypass. Otherwise a recurring push-to-main run
-/// would start passing today and fail permanently after the normal trial
-/// expires.
+/// Worker entitlement or trial bypass. Otherwise an on-demand run could pass
+/// today and later runs fail permanently after the normal trial expires.
 ///
 /// `testLiveManageBillingReturnsPortalURL` requires
 /// `SENTWISE_LIVE_MANAGED_PORTAL`, plus `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL`, a
