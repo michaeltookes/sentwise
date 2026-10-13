@@ -70,6 +70,12 @@ extension AppState {
         let localDataGeneration = localDataEraseGeneration
         // Likewise a saved mailbox removed while the browser is open stays removed.
         let removalMark = googleMailAuth.accountRemovalMark()
+        // Closing/reopening Settings while the chooser is open starts a new
+        // Settings session; this flow's result belongs to the old one.
+        let settingsGeneration = settingsTransientMessageGeneration
+        let isCurrentSurface: @MainActor () -> Bool = {
+            self.isCurrentTransientMessageSurface(messageSurface, generation: settingsGeneration)
+        }
         let isStale: @MainActor (String) -> Bool = { email in
             !self.isCurrentLocalDataGeneration(localDataGeneration)
                 || self.googleMailAuth.wasAccountRemoved(email, since: removalMark)
@@ -82,7 +88,7 @@ extension AppState {
             return false
         } catch {
             guard isCurrentLocalDataGeneration(localDataGeneration),
-                  isCurrentMailConnectionAttempt(attempt) else { return false }
+                  isCurrentMailConnectionAttempt(attempt), isCurrentSurface() else { return false }
             setConnectionError(GmailAuthCoordinator.message(for: error), for: messageSurface)
             return false
         }
@@ -92,7 +98,7 @@ extension AppState {
             attempt: attempt,
             isStale: isStale,
             messageSurface: messageSurface,
-            shouldApplyResult: shouldApplyResult
+            shouldApplyResult: { isCurrentSurface() && shouldApplyResult($0) }
         )
     }
 
@@ -110,12 +116,13 @@ extension AppState {
             return false
         }
         let wasGoogleConnected = savedAccountUsesGoogleSignIn(email)
-        guard isCurrentMailConnectionAttempt(attempt) else {
-            // Another connection attempt started meanwhile: don't adopt this one.
+        let credentials = GoogleMailCredential.credentials(email: email)
+        guard isCurrentMailConnectionAttempt(attempt), shouldApplyResult(credentials) else {
+            // Another connection attempt or Settings session started meanwhile
+            // (or the caller no longer wants it): don't adopt this one.
             if !wasGoogleConnected { await googleMailAuth.disconnect(email) }
             return false
         }
-        let credentials = GoogleMailCredential.credentials(email: email)
         let connected = await testConnection(
             with: credentials, messageSurface: messageSurface, attempt: attempt
         ) { !isStale(email) && shouldApplyResult($0) }
