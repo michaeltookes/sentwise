@@ -165,6 +165,17 @@ final class AppStateBillingPortalTests: XCTestCase {
         XCTAssertFalse(appState.planChangeFailed)
     }
 
+    func testPausedSubscriptionKeepsManageBillingWithoutSubscribeOrPlanCards() {
+        let appState = makeSignedInAppState(llm: StatusLLM())
+        appState.managedAccountStatus = status(plan: .pro, statusValue: .paused, billingURL: nil)
+
+        XCTAssertTrue(appState.hasManageablePaidSubscription)
+        XCTAssertTrue(appState.canManageBilling)
+        XCTAssertFalse(appState.shouldOfferSubscribe)
+        XCTAssertFalse(appState.showsPlanManagement)
+        XCTAssertFalse(appState.canChangeManagedPlan)
+    }
+
     private func makeSignedInAppState(llm: LLMProviding) -> AppState {
         let secrets = InMemorySecretStore(seed: [
             .managedClientToken: "client_X",

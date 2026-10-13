@@ -60,6 +60,40 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertEqual(status.subscription?.plan, .trial)
     }
 
+    // MARK: - Item 124: paused
+
+    func testPausedPaddleStatusDecodesAsPaused() throws {
+        let status = try decodeStatus(
+            #"{"userId":"u","subscription":{"plan":"pro","status":"canceled","paddleStatus":"paused"}}"#
+        )
+        XCTAssertEqual(status.subscription?.status, .paused)
+        XCTAssertEqual(status.subscription?.plan, .pro)
+    }
+
+    func testCanceledWithoutPaddleStatusStaysCanceledForOlderWorkers() throws {
+        let status = try decodeStatus(#"{"userId":"u","subscription":{"plan":"pro","status":"canceled"}}"#)
+        XCTAssertEqual(status.subscription?.status, .canceled)
+    }
+
+    func testPaddleStatusOnlyOverridesTheCanceledDisplayStatus() throws {
+        let active = try decodeStatus(
+            #"{"userId":"u","subscription":{"plan":"pro","status":"active","paddleStatus":"paused"}}"#
+        )
+        XCTAssertEqual(active.subscription?.status, .active)
+        let canceled = try decodeStatus(
+            #"{"userId":"u","subscription":{"plan":"pro","status":"canceled","paddleStatus":"canceled"}}"#
+        )
+        XCTAssertEqual(canceled.subscription?.status, .canceled)
+        let bare = try decodeStatus(#"{"userId":"u","subscription":{"plan":"pro","status":"paused"}}"#)
+        XCTAssertEqual(bare.subscription?.status, .paused)
+    }
+
+    func testPausedSnapshotRoundTripsThroughTheCache() throws {
+        let snapshot = SubscriptionSnapshot(plan: .starter, status: .paused, capturedAt: Date())
+        let decoded = try JSONDecoder().decode(SubscriptionSnapshot.self, from: JSONEncoder().encode(snapshot))
+        XCTAssertEqual(decoded.status, .paused)
+    }
+
     func testNonePlanDecodes() throws {
         let status = try decodeStatus(#"{"userId":"u","subscription":{"plan":"none","status":"canceled"}}"#)
         XCTAssertEqual(status.subscription?.plan, .noPlan)
@@ -212,6 +246,17 @@ final class SubscriptionModelTests: XCTestCase {
         XCTAssertEqual(model.planText, "Pro")
         XCTAssertTrue(model.isProblemState)
         XCTAssertEqual(model.secondaryText?.contains("payment") ?? false, true)
+    }
+
+    func testPausedShowsPausedWithPlanNameAndResumeHint() {
+        let sub = ManagedSubscription(plan: .pro, status: .paused)
+        let model = SubscriptionPaneModel.make(from: status(subscription: sub))
+        XCTAssertEqual(model.planText, "Paused")
+        XCTAssertEqual(
+            model.secondaryText,
+            "Paused — your Pro subscription is paused. Resume it in Manage billing."
+        )
+        XCTAssertTrue(model.isProblemState)
     }
 
     func testSnapshotRendersWhenLiveStatusUnavailable() {
