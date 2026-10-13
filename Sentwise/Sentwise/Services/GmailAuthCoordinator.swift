@@ -169,6 +169,10 @@ final class GmailAuthCoordinator {
         // Only the access/refresh material is kept; the ID token was read once.
         var stored = token
         stored.idToken = nil
+        // A refresh still out for this mailbox belongs to the old grant: retire
+        // it so its late result (success or invalid_grant) can't overwrite or
+        // reject the new one, and so verification doesn't join it.
+        invalidate(SavedMailAccount.normalizedEmail(email))
         try store.saveToken(stored, for: email)
         return GmailAuthorization(email: email, token: stored)
     }

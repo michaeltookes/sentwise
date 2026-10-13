@@ -173,6 +173,42 @@ final class GoogleSignInRaceTests: XCTestCase {
         XCTAssertEqual(try store.loadToken(for: "me@gmail.com")?.accessToken, "late-at")
     }
 
+    func testReauthorizingDuringARefreshRetiresTheOldRefresh() async throws {
+        let store = GmailAuthStore(secrets: InMemorySecretStore())
+        try store.saveToken(OAuthToken(
+            accessToken: "stale-at", refreshToken: "old-rt", expiresAt: .distantPast,
+            scope: GoogleOAuth.mailScope, tokenType: "Bearer"
+        ), for: "me@gmail.com")
+        let exchange = exchangeJSON.replacingOccurrences(of: "fresh-at", with: "new-at")
+        let transport = GatedRefreshTransport(otherResponse: HTTPResponse(statusCode: 200, body: Data(exchange.utf8)))
+        let coordinator = GmailAuthCoordinator(
+            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            store: store,
+            tokenService: OAuthTokenService(transport: transport),
+            makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
+            browser: SpyBrowser(),
+            makeState: { self.state }
+        )
+
+        let oldRefresh = Task { try await coordinator.validAccessToken(for: "me@gmail.com") }
+        await fulfillment(of: [transport.didStartRefresh], timeout: 2)
+
+        _ = try await coordinator.authorize(loginHint: "me@gmail.com")
+        let verified = try await coordinator.validAccessToken(for: "me@gmail.com")
+        XCTAssertEqual(verified, "new-at", "verification uses the new grant instead of joining the old refresh")
+
+        // The old refresh finally answers; it must neither overwrite nor reject the new grant.
+        transport.completeRefresh(HTTPResponse(statusCode: 200, body: Data(refreshedJSON.utf8)))
+        do {
+            _ = try await oldRefresh.value
+            XCTFail("the retired refresh must not hand out a token")
+        } catch {
+            XCTAssertEqual(error as? GmailAuthError, .notConnected)
+        }
+        XCTAssertEqual(try store.loadToken(for: "me@gmail.com")?.accessToken, "new-at")
+        XCTAssertEqual(transport.refreshCount, 1)
+    }
+
     // MARK: - Reconnect while a revoke is pending
 
     func testSlowRevokeNeverDeletesTheReplacementToken() async throws {
