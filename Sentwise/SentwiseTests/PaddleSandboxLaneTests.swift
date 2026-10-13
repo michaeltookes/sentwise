@@ -164,6 +164,33 @@ final class PaddleSandboxLaneTests: XCTestCase {
         XCTAssertNil(status.billing)
     }
 
+    func testIncompleteSandboxBlockStillDecodesAsSandboxUnavailable() throws {
+        let json = """
+        {"userId":"user_qa","email":"qa@prowlqa.dev",
+         "billing":{"environment":"sandbox","checkoutAvailable":false,"prices":{}}}
+        """
+        let status = try JSONDecoder().decode(ManagedAccountStatus.self, from: Data(json.utf8))
+        XCTAssertEqual(status.billing?.environment, "sandbox")
+        XCTAssertEqual(status.billing?.checkoutAvailable, false)
+        XCTAssertNil(status.billing?.prices)
+        XCTAssertNil(PaddleConfig.resolved(billing: status.billing, accountEmail: status.email))
+    }
+
+    func testPartialPricesAndTokenTypeErrorsDoNotLoseTheLane() throws {
+        let json = """
+        {"userId":"user_qa","email":"qa@prowlqa.dev",
+         "billing":{"environment":"sandbox","clientSideToken":7,"prices":{"starter":"pri_s"}}}
+        """
+        let status = try JSONDecoder().decode(ManagedAccountStatus.self, from: Data(json.utf8))
+        XCTAssertEqual(status.billing?.environment, "sandbox")
+        XCTAssertNil(status.billing?.clientSideToken)
+        XCTAssertNil(status.billing?.prices)
+        XCTAssertNil(
+            PaddleConfig.resolved(billing: status.billing, accountEmail: status.email),
+            "an incomplete sandbox lane is unavailable, never production"
+        )
+    }
+
     func testMalformedBillingNeverBreaksAccountStatus() throws {
         let json = #"{"userId":"user_1","email":"marcus@example.com","billing":"sandbox"}"#
         let status = try JSONDecoder().decode(ManagedAccountStatus.self, from: Data(json.utf8))

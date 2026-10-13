@@ -372,6 +372,23 @@ struct ManagedBillingLane: Codable, Sendable, Equatable {
         self.clientSideToken = clientSideToken
         self.prices = prices
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case environment, checkoutAvailable, clientSideToken, prices
+    }
+
+    /// Only `environment` is required. The other fields decode independently
+    /// (`try?`), so an incomplete sandbox block such as
+    /// `{"environment":"sandbox","checkoutAvailable":false,"prices":{}}` still
+    /// yields "sandbox, unavailable" instead of failing as a whole and being
+    /// mistaken for production (item 123 review).
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        environment = try container.decode(String.self, forKey: .environment)
+        checkoutAvailable = (try? container.decodeIfPresent(Bool.self, forKey: .checkoutAvailable)) ?? nil
+        clientSideToken = (try? container.decodeIfPresent(String.self, forKey: .clientSideToken)) ?? nil
+        prices = (try? container.decodeIfPresent(Prices.self, forKey: .prices)) ?? nil
+    }
 }
 
 /// Shared ISO-8601 parsing for `resetsAt`, tolerating an optional fractional
