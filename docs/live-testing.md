@@ -11,7 +11,9 @@ division of labor is deliberate:
   report. It never runs a test on the invoking machine.
 
 Live testing is delegated to Lucius so the owner's own Mac is never locked up by
-a click-through, and so live regressions are caught automatically on merge.
+a click-through. Runs are manual: merging to `main` does not trigger live tests.
+The operator is responsible for dispatching verification of the exact merged SHA
+when verifying a merge, as well as any branch verification before merge.
 
 > The per-test details (what each live test exercises and which credentials it
 > needs) live in
@@ -22,18 +24,19 @@ a click-through, and so live regressions are caught automatically on merge.
 
 The live tests hit real services — Clerk, the `sentwise-service` Worker, the
 Paddle **sandbox**, and live IMAP mailboxes — and drafting spends real Anthropic
-budget. Running them on every PR commit would be slow, flaky, and costly. So they
-run only:
-
-- **on `push` to `main`** — every merge is re-verified automatically at its
-  triggering `github.sha`; and
-- **on `workflow_dispatch`** with a `ref` input — on demand for a branch, which
-  is what `/live-verify` triggers.
+budget. Running them on every PR commit would be slow, flaky, and costly. They
+run only **on `workflow_dispatch`** with a `ref` input (branch, tag, or SHA),
+directly or through `/live-verify`. There is no push or pull-request trigger.
+The push-to-`main` trigger was removed because Lucius is also the QA desktop:
+the installed app must be quit before a live run, or the item-115 guard refuses
+to proceed. Follow the pause-QA → dispatch → relaunch procedure below for every
+run, including post-merge verification.
 
 Live execution is serialized by the single Lucius self-hosted runner. Do **not**
 add a global Actions `concurrency` group for this workflow: GitHub keeps at most
 one pending run per group and can cancel older pending dispatches, which would
-violate the "verify every merge / watch the exact dispatch" guarantee.
+prevent an explicitly requested verification from running. Watch the exact
+dispatched run to completion.
 
 ## Scope guardrail (standing)
 
@@ -47,6 +50,58 @@ fetches portal links**. It **NEVER**:
 
 This is the 2026-09-10 billing-guardrail decision applied to automated testing.
 Never add a payload that would violate it.
+
+## Keychain isolation on the shared QA runner (item 115)
+
+The Lucius runner is **also the Sentwise QA desktop**: the installed Developer
+ID app runs in the same user account and login keychain the live tests execute
+in. A dev-signed test process that rewrites an item under the production
+Keychain service `com.tookes.Sentwise` resets that item's ACL to trust the dev
+certificate instead of the Developer ID signature — relaunching the installed
+app then hits a `securityd` "enter the login keychain password" prompt and QA
+goes blind (this happened on 2026-10-11: a `test-without-building` run rewrote
+`managed.clientToken` and `managed.clerkFrontendAPIBaseURL`). Three layers keep
+it from recurring:
+
+1. **Isolated test Keychain service.** `KeychainStore` resolves its default
+   service per process: production (`com.tookes.Sentwise`) unless the
+   `SENTWISE_TEST_KEYCHAIN` environment variable is explicitly truthy
+   (`1`/`true`/`yes`), which selects the compiled-in
+   `com.tookes.Sentwise.tests` service. The production name is the hard
+   default — a missing, empty, or garbage value can never redirect the real
+   app, and no env value can name an arbitrary service. The workflow sets the
+   variable on the test step **and** injects it into the `.xctestrun` (it rides
+   `inject-live-env.sh`'s `LIVE_VARS`), because only the xctestrun injection
+   reaches the host app's environment.
+2. **Isolated test-host launch.** The test host is the real `Sentwise.app`
+   binary, and newer xcodebuild sessions (notably `test-without-building`)
+   omit `XCTestConfigurationFilePath`, which used to be the only test-launch
+   signal. `ProwlHuntRuntime.isXCTestHostLaunch` now also recognizes
+   `XCTestSessionIdentifier` / `XCTestBundlePath`, and `AppDelegate` boots via
+   `ProwlHuntRuntime.launchRuntime()`, so any XCTest-hosted launch gets
+   in-memory stores and no startup side effects. (Deliberately separate from
+   hunt mode's `isEnabled`, which changes app behavior that unit tests encode.)
+3. **CI tripwire.** `Distribution/scripts/keychain-tripwire.sh` snapshots the
+   presence + `mdat` of every generic-password item under `com.tookes.Sentwise` before
+   the tests and verifies them unchanged after (it runs even when tests fail).
+   This includes dynamic `mail.appPassword.<email>` accounts and newly added
+   account names. Any drift fails the job loudly. Its Swift helper uses
+   `SecItemCopyMatching` with `kSecMatchLimitAll` and `kSecReturnAttributes`,
+   never password data, so no secret value is read, stored, or logged. It fails closed:
+   only `errSecItemNotFound` counts as an empty service; any other Keychain error
+   (locked keychain, `errSecInteractionNotAllowed`) aborts the step instead of
+   letting two unreadable passes compare equal. Missing account/date attributes
+   also fail closed. Snapshots are sorted JSON lines containing service, account,
+   and modification timestamp only. Run the fixture checks with
+   `bash Distribution/scripts/tests/test-keychain-snapshot.sh` and the disposable
+   Keychain integration checks with
+   `python3 Distribution/scripts/tests/test_keychain_tripwire.py` on macOS.
+
+The workflow also **never terminates or launches `/Applications/Sentwise.app`**.
+A guard step fails the run fast, with instructions, if the installed app is
+running when the job starts — quit Sentwise on the QA desktop, then
+re-dispatch. The QA desktop and live tests still share one user account; the
+isolation above is what makes that coexistence safe.
 
 ## The env-injection recipe
 
@@ -87,7 +142,7 @@ is not exercised, so provision the ones you want covered.
 | `SENTWISE_LIVE_ATTNET_APP_PASSWORD` | same | AT&T Secure Mail Key. |
 | `SENTWISE_LIVE_MANAGED_INFERENCE` | `ManagedInferenceLiveTests` | Any truthy value (`1`). Explicitly opts the Worker account-shape tests into live Worker calls. The test mints a fresh Clerk session JWT during the run using `SENTWISE_LIVE_CLERK_TEST`; after the production cutover it also requires `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE`. No JWT is stored as a repo secret. |
 | `SENTWISE_LIVE_MANAGED_DRAFT` | `ManagedInferenceLiveTests.testLiveDraftReturnsText` | Optional. Any truthy value (`1`) enables the live `/v1/draft` spend check. Provision only with `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL` below. |
-| `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL` | `ManagedInferenceLiveTests.testLiveDraftReturnsText` | Optional with `SENTWISE_LIVE_MANAGED_DRAFT`. A Clerk `+clerk_test` email whose Worker account has a durable entitlement or trial bypass; otherwise recurring push-to-main runs will eventually fail when the normal trial expires. |
+| `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL` | `ManagedInferenceLiveTests.testLiveDraftReturnsText` | Optional with `SENTWISE_LIVE_MANAGED_DRAFT`. A Clerk `+clerk_test` email whose Worker account has a durable entitlement or trial bypass; otherwise later on-demand runs will fail once the normal trial expires. |
 | `SENTWISE_LIVE_MANAGED_PORTAL` | `ManagedInferenceLiveTests.testLiveManageBillingReturnsPortalURL` | Optional. Any truthy value (`1`) enables the read-only live `/v1/paddle/manage-billing` portal-link fetch. Provision only with `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL` below. |
 | `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL` | `ManagedInferenceLiveTests.testLiveManageBillingReturnsPortalURL` | Optional with `SENTWISE_LIVE_MANAGED_PORTAL`. A Clerk `+clerk_test` email whose Worker account has an active Paddle sandbox subscription so the portal endpoint can mint a fresh customer-portal-session link. |
 | `SENTWISE_INFERENCE_URL` | `ManagedInferenceLiveTests` | The deployed Worker base URL (`https://sentwise-inference.sentwise-service.workers.dev`). |
@@ -139,6 +194,22 @@ and never opens the billing portal.
 
 ## Dispatching a run
 
+### Shared QA desktop procedure (required for either dispatch method)
+
+1. **Pause QA and quit the installed app.** Coordinate with the QA operator or
+   orchestrator to pause QA activity on Lucius and quit
+   `/Applications/Sentwise.app` through its status menu. The workflow refuses to
+   run while that app is running; neither the workflow nor `/live-verify`
+   terminates it for you.
+2. **Dispatch and watch the exact run.** Use `/live-verify` or the manual commands
+   below, targeting the exact pushed SHA to verify. For post-merge verification,
+   explicitly select the merged SHA on `main`; merging alone leaves the live
+   suite unrun. Keep QA paused and the installed app closed while the run is
+   queued and until it finishes.
+3. **Restore the QA desktop.** After the run finishes (pass or fail), the QA
+   operator or orchestrator relaunches `/Applications/Sentwise.app` and resumes
+   QA. The workflow and dispatch skill do not relaunch it.
+
 ### From an agent session
 
 Use the **`/live-verify`** skill (`.claude/skills/live-verify/SKILL.md`). It
@@ -147,8 +218,8 @@ resolves the ref (current branch by default), runs
 checkout `ref` input, watches the correlated run to completion, and reports
 pass/fail with `gh run view --log-failed` excerpts. It never runs a test locally.
 It is wired into the `/kickoff` lifecycle as the final live-verify step after
-`/validate-feature` passes and the branch is pushed; merges to `main` are
-covered automatically by the push trigger.
+`/validate-feature` passes and the branch is pushed. Post-merge verification
+requires another explicit dispatch targeting the merged SHA on `main`.
 
 ### Manually
 

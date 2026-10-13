@@ -40,7 +40,15 @@ fi
 # gates in Sentwise/SentwiseTests/*LiveTests.swift + ClerkLiveSignInTests
 # (grep SENTWISE_LIVE_ / SENTWISE_INFERENCE_URL). Optional host/port vars are
 # included so a non-default IMAP endpoint can be supplied.
+#
+# SENTWISE_TEST_KEYCHAIN is not a live gate: it redirects every KeychainStore
+# built in the test-host process to the isolated com.tookes.Sentwise.tests
+# service (item 115), so a dev-signed test run can never rewrite the installed
+# app's production Keychain items. It must reach the HOST APP's environment,
+# which only this .xctestrun injection does — a shell `env` on xcodebuild
+# does not — so it rides the same injection path.
 LIVE_VARS=(
+  SENTWISE_TEST_KEYCHAIN
   SENTWISE_LIVE_PADDLE_CHECKOUT
   SENTWISE_LIVE_CLERK_TEST
   SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE

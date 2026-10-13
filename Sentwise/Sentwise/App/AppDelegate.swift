@@ -37,7 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - NSApplicationDelegate
 
     override init() {
-        self.runtime = .current
+        // Boot with the launch runtime, not `.current`: an XCTest-hosted launch
+        // (xcodebuild test / test-without-building) must never run the real app
+        // — in-memory stores, no Keychain, no startup side effects — even when
+        // the harness omits XCTestConfigurationFilePath (item 115).
+        self.runtime = .launchRuntime()
         super.init()
     }
 

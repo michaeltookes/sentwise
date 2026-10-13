@@ -185,6 +185,27 @@ pass.
 > §6 runs on the owner's QA agent machine (Lucius Mac mini, dedicated
 > `luciusfox` account — never the maintainer's). Install-path evidence:
 > Lucius `artifacts/sentwise-qa/runs/2026-10-08-install-paths/report.md`.
+>
+> **QA desktop and live tests shared one user account (item 115, fixed):**
+> the `live-tests.yml` self-hosted runner is this same QA desktop, so until
+> the item-115 fix landed (branch `test-keychain-isolation`), a live-test run
+> shared the installed app's login keychain. On 2026-10-11 a dev-signed
+> `xcodebuild test-without-building` run rewrote `managed.clientToken` and
+> `managed.clerkFrontendAPIBaseURL` under service `com.tookes.Sentwise` and
+> killed the running app; the rewritten items' ACLs no longer trusted the
+> Developer ID signature, so the installed 0.2.0 relaunched into a `securityd`
+> "Sentwise wants to access key … enter the login keychain password" prompt,
+> the status item never appeared, and the daily QA pass went blind (the test
+> run may also have replaced the QA account's Clerk session). **Symptom to
+> recognize:** that login-keychain password prompt at app launch means a
+> differently-signed build touched the production Keychain items. **Fix
+> landed:** tests resolve an isolated `com.tookes.Sentwise.tests` service via
+> `SENTWISE_TEST_KEYCHAIN=1`, the host app's XCTest detection covers
+> `test-without-building` sessions, the workflow refuses to run while the
+> installed app is running (never terminates or launches it), and a
+> before/after mdat tripwire fails the job if any production item changes.
+> The accounts remain shared; `live-tests.yml` stays disabled until the owner
+> re-enables it after the fix merges.
 
 - [x] Fresh macOS user account or VM (never the maintainer's account).
       *(Lucius `luciusfox` account; first-ever run started from clean

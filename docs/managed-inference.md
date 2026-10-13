@@ -209,7 +209,7 @@ completed by a hijacked callback.
   by `SENTWISE_LIVE_MANAGED_DRAFT` and uses
   `SENTWISE_LIVE_MANAGED_DRAFT_EMAIL`, a dedicated Clerk test email whose Worker
   account has a durable entitlement or trial bypass and cannot age out of the
-  normal trial under recurring push-to-main runs. The live
+  normal trial before later on-demand runs. The live
   `/v1/paddle/manage-billing` portal-link fetch is separately gated by
   `SENTWISE_LIVE_MANAGED_PORTAL` and uses
   `SENTWISE_LIVE_MANAGED_PORTAL_EMAIL`, a subscribed Clerk test email; it fetches
@@ -789,6 +789,9 @@ fake and unit tests instead.
 `.github/workflows/live-tests.yml` workflow runs on the **Lucius** self-hosted runner, via the
 shellcheck-clean `Distribution/scripts/inject-live-env.sh` (it writes every provisioned
 `SENTWISE_LIVE_*` repo secret into the xctestrun's `EnvironmentVariables`, logging names only).
-The workflow runs on merge to `main` and on demand through the `/live-verify` skill; it is the
-standing home for `ClerkLiveSignInTests`, `PaddleCheckoutLiveTests`, and the mailbox live tests.
-See `docs/live-testing.md`.
+The workflow runs only on demand through `workflow_dispatch`, directly or through
+the `/live-verify` skill; it is the standing home for `ClerkLiveSignInTests`,
+`PaddleCheckoutLiveTests`, and the mailbox live tests. Merges to `main` do not
+trigger live tests: operators must explicitly dispatch the merged SHA for
+post-merge verification. Every run requires coordinating the shared QA desktop's
+pause-QA → dispatch → relaunch procedure in `docs/live-testing.md`.
