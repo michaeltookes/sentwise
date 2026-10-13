@@ -68,7 +68,8 @@ Ordered by distance to the first paid subscription. Each app-side milestone ends
 5. The trial-backdate route (119) is restricted to an allowlisted QA email domain so it can never alter a customer's trial.
 6. The changelog page content is the release's CHANGELOG section, adapted by `marketing-writer` at Stage 5; the site item only builds the route.
 7. The sandbox Worker adds no meaningful cost: it runs on the existing Cloudflare plan, the Clerk development instance and Paddle sandbox are free, and its inference key carries a low spend cap.
-8. Item 104 (bundled Google OAuth, CASA $500–1,000/yr) stays after the first paid subscription (open question 3).
+8. A paused Paddle subscription is not billed, so it is not entitled to draft: the Worker returns 402 and the app shows the paused state with **Manage billing** until it is resumed (item 124). Michael can reverse this.
+9. Item 104 (bundled Google OAuth, CASA $500–1,000/yr) stays after the first paid subscription (open question 3).
 
 ## Open questions for Michael
 1. **Production purchase test (money). Resolved 2026-10-12, re-scoped 2026-10-13:** Michael chose to build the QA purchase path now (item 123, an M3 prerequisite), and on 2026-10-13 chose a separate sandbox deployment of sentwise-service over a per-account lane in the production Worker. The 100%-off live discount code and a refunded $9 purchase remain fallbacks only, if the sandbox deployment slips.

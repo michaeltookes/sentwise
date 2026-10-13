@@ -397,18 +397,23 @@ Payment method, in order: (a) a single-use 100%-off live Paddle discount code; (
 - **Asset:** screenshot
 - **Teardown:** lucius quits **Sentwise QA**, launches **Sentwise**, and confirms it is signed in as F1 with the Subscription tab reading Pro. The orchestrator deletes F2 from production and F3 from the Clerk development instance. On the production fallback sequence, follow that sequence's teardown instead.
 
-### TC-M3-10 A paused subscription stays in force
-- **Executor:** uat (steps 1 and 4) and lucius (steps 2–3 and 5)
-- **Verifies:** item 124 (paused is stored as paused, not canceled)
+### TC-M3-10 A paused subscription pauses drafting until resumed
+- **Executor:** uat (steps 1 and 4) and lucius (steps 2–3 and 5–6)
+- **Verifies:** item 124 (paused is stored as paused, not canceled, and is not entitled to draft)
 - **Preconditions:** TC-M3-07 done, before TC-M3-08 (no scheduled cancellation on F3's subscription); **Sentwise QA** running as F3 on Starter; `uat` has `PADDLE_SANDBOX_API_KEY` and F3's sandbox subscription id from the Paddle sandbox dashboard or the TC-M3-07 portal page.
 - **Steps:**
   1. uat: `POST https://sandbox-api.paddle.com/subscriptions/<id>/pause` with body `{"effective_from":"immediately"}` and the sandbox API key; expect 200 with `"status": "paused"`.
-  2. lucius: wait 60 seconds, close and reopen **Settings…** → **Subscription**, and read the plan line.
-  3. Status menu → **New Follow-up from Transcript…**; recipient `luciusfox@prowlqa.dev`; paste T1; click **Draft follow-up**. Throw the draft away with **Deny**.
+  2. lucius: wait 60 seconds, close and reopen **Settings…** → **Subscription**, and read the plan line and the buttons shown.
+  3. Status menu → **New Follow-up from Transcript…**; recipient `luciusfox@prowlqa.dev`; paste T1. Read the state of **Draft follow-up** (click it only if it is enabled), then close the composer.
   4. uat: `POST https://sandbox-api.paddle.com/subscriptions/<id>/resume` with body `{"effective_from":"immediately"}`; expect 200 with `"status": "active"`.
   5. lucius: wait 60 seconds, close and reopen **Settings…** → **Subscription**.
-- **Expected:** step 2 shows exactly "Paused — your Starter subscription is paused. Resume it in Manage billing.", never "Canceled", "Trial ended", or a **Subscribe** button; step 3 produces a draft (paused counts as in force); step 5 shows Starter with "Renews <date>" again.
+  6. Status menu → **New Follow-up from Transcript…**; recipient `luciusfox@prowlqa.dev`; paste T1; click **Draft follow-up**; when the draft appears, throw it away with **Deny**.
+- **Expected:**
+  - Step 2 shows exactly "Paused — your Starter subscription is paused. Resume it in Manage billing.", with **Manage billing** available and no **Subscribe** button and no plan cards; never "Canceled" or "Trial ended".
+  - Step 3: drafting is refused while paused (Paddle is not billing, so the Worker returns 402 and the app matches it). **Draft follow-up** is disabled, or if clicked it is refused with no draft; no draft appears in Review Drafts.
+  - Step 5 shows Starter with "Renews <date>" again, and step 6 produces a draft.
 - **Asset:** video
+
 ### TC-M3-11 The QA build leaves the production install's data alone
 - **Executor:** lucius
 - **Verifies:** item 123 (local data isolation)
