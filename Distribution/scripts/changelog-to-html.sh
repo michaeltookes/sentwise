@@ -115,7 +115,7 @@ function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
 /^[ \t]*$/ { endlist(); next }
 /^####+ / { endlist(); h = $0; sub(/^#+ +/, "", h); print "<h4>" inline(h) "</h4>"; next }
 /^### /   { endlist(); h = $0; sub(/^#+ +/, "", h); print "<h3>" inline(h) "</h3>"; next }
-/^[-*] / {
+/^[-*]( |$)/ {                                  # bullet; a bare "-" is an empty one
   flush()
   if (!inul) { print "<ul>"; inul = 1 }
   buf = trim(substr($0, 3)); inli = 1
@@ -140,10 +140,11 @@ elif [[ "${rc:-0}" -ne 0 ]]; then
   echo "changelog-to-html: awk failed (exit $rc) rendering $CHANGELOG" >&2
   exit 1
 fi
-# "Empty" means no readable text, not just no HTML: a section holding only
-# "### Added" headings or "- " bullets renders as <h3></h3> / <ul></ul>, which
-# Sparkle shows as a blank notes area.
-text="$(printf '%s' "$html" | sed -e 's/<[^>]*>//g' | tr -d '[:space:]')"
+# "Empty" means no readable note text, not just no HTML: a section holding only
+# "### Added" / "### Fixed" headings or bare "- " bullets renders as headings
+# and <ul></ul>, which Sparkle shows as a notes area with nothing under the
+# headings. Heading text itself does not count.
+text="$(printf '%s' "$html" | sed -E -e 's#<h[1-6]>[^<]*</h[1-6]>##g' -e 's/<[^>]*>//g' | tr -d '[:space:]')"
 if [[ -z "$text" ]]; then
   echo "changelog-to-html: the '## [$VERSION]' section of $CHANGELOG has no release-note text" >&2
   echo "                   (headings or bullets with nothing in them do not count)." >&2

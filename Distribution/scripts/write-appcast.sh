@@ -91,7 +91,7 @@ description="$(xmllint --xpath \
   "string(//item[enclosure[contains(@url, '$ARCHIVE_NAME')]]/description)" \
   "$appcast" 2>/dev/null || true)"
 # Strip any markup before judging emptiness: <ul></ul> is not release notes.
-description="$(printf '%s' "$description" | sed -e 's/<[^>]*>//g')"
+description="$(printf '%s' "$description" | sed -E -e 's#<h[1-6]>[^<]*</h[1-6]>##g' -e 's/<[^>]*>//g')"
 if [[ -z "${description//[[:space:]]/}" ]]; then
   echo "write-appcast: the $ARCHIVE_NAME item in $appcast has no release notes (<description>)." >&2
   echo "               The Sparkle update dialog would be blank (item 114)." >&2
