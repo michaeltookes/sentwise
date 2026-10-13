@@ -79,13 +79,20 @@ it from recurring:
    in-memory stores and no startup side effects. (Deliberately separate from
    hunt mode's `isEnabled`, which changes app behavior that unit tests encode.)
 3. **CI tripwire.** `Distribution/scripts/keychain-tripwire.sh` snapshots the
-   presence + `mdat` of every known account under `com.tookes.Sentwise` before
+   presence + `mdat` of every generic-password item under `com.tookes.Sentwise` before
    the tests and verifies them unchanged after (it runs even when tests fail).
-   Any drift fails the job loudly. It reads item attributes only — never
-   `-g`/`-w` — so no secret value is read, stored, or logged. It fails closed:
-   only `errSecItemNotFound` counts as "absent"; any other `security` error
+   This includes dynamic `mail.appPassword.<email>` accounts and newly added
+   account names. Any drift fails the job loudly. Its Swift helper uses
+   `SecItemCopyMatching` with `kSecMatchLimitAll` and `kSecReturnAttributes`,
+   never password data, so no secret value is read, stored, or logged. It fails closed:
+   only `errSecItemNotFound` counts as an empty service; any other Keychain error
    (locked keychain, `errSecInteractionNotAllowed`) aborts the step instead of
-   letting two unreadable passes compare equal.
+   letting two unreadable passes compare equal. Missing account/date attributes
+   also fail closed. Snapshots are sorted JSON lines containing service, account,
+   and modification timestamp only. Run the fixture checks with
+   `bash Distribution/scripts/tests/test-keychain-snapshot.sh` and the disposable
+   Keychain integration checks with
+   `python3 Distribution/scripts/tests/test_keychain_tripwire.py` on macOS.
 
 The workflow also **never terminates or launches `/Applications/Sentwise.app`**.
 A guard step fails the run fast, with instructions, if the installed app is

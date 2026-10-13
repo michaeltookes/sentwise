@@ -13,92 +13,41 @@
 # the independent assertion that the isolation holds.
 #
 # Usage:
-#   keychain-tripwire.sh snapshot <state-file>   # before the test run
-#   keychain-tripwire.sh verify   <state-file>   # after the test run
+#   keychain-tripwire.sh snapshot <state-file> [keychain]  # before the test run
+#   keychain-tripwire.sh verify   <state-file> [keychain]  # after the test run
 #
-# `snapshot` records, for each known account name under the production
-# service, whether the item exists and its modification date (mdat). `verify`
-# re-reads the same attributes and fails (exit 1) if any item appeared,
-# disappeared, or changed mdat since the snapshot.
+# `snapshot` enumerates every generic-password item under the production
+# service, including dynamic mail.appPassword.<email> accounts, and records
+# its account and modification date (mdat). `verify` enumerates again and
+# fails (exit 1) if any item appeared, disappeared, or changed mdat.
 #
-# Privacy: `security find-generic-password` is called WITHOUT -g/-w, so item
-# attributes only — never a secret value — are read, stored, or printed. The
-# state file and all output hold account names and timestamps only.
+# Privacy: the Swift helper requests attributes only from SecItemCopyMatching,
+# never password data. The state file and diff contain only service/account
+# names and timestamps, JSON-escaped so unusual account names stay unambiguous.
 #
-# Scope: generic-password items are enumerated by known account name (a
-# `security dump-keychain` would be far heavier and noisier). Per-account mail
-# passwords (`mail.appPassword.<email>`) have dynamic names and are not
-# enumerable this way; they are not Clerk/managed items and were not part of
-# the incident class. Keep the list in sync with the well-known keys in
-# Sentwise/Sentwise/Services/SecretStore.swift.
+# With no keychain argument, searches the normal Keychain search list, like
+# the app. An explicit keychain restricts the query for isolated regression
+# tests. Use the same scope for snapshot and verify. Requires Xcode's Swift.
 
 set -euo pipefail
 
 SERVICE="com.tookes.Sentwise"
-
-# Known account names: the static SecretKey raw values plus the per-provider
-# LLM key slots (LLMProviderKind raw values and the OpenRouter slot).
-ACCOUNTS=(
-  gmail.token
-  mail.appPassword
-  google.clientID
-  google.clientSecret
-  managed.clientToken
-  managed.sessionID
-  managed.credentialsInvalidated
-  managed.clerkFrontendAPIBaseURL
-  managed.reauthenticationClientToken
-  managed.oauthSignInID
-  managed.oauthMessageSurface
-  managed.oauthFlowID
-  managed.oauthCanceledCallbackSurface
-  openRouter.pkceVerifier
-  openRouter.pkceMessageSurface
-  openRouter.pkceFlowID
-  openRouter.canceledCallbackSurface
-  llm.managed.apiKey
-  llm.anthropic.apiKey
-  llm.openAICompatible.apiKey
-  llm.ollama.apiKey
-  llm.openRouter.apiKey
-)
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 MODE="${1:-}"
 STATE_FILE="${2:-}"
+KEYCHAIN_FILE="${3:-}"
 
-if [[ -z "$MODE" || -z "$STATE_FILE" ]]; then
-  echo "usage: keychain-tripwire.sh <snapshot|verify> <state-file>" >&2
+if [[ -z "$MODE" || -z "$STATE_FILE" || $# -gt 3 ]]; then
+  echo "usage: keychain-tripwire.sh <snapshot|verify> <state-file> [keychain]" >&2
   exit 2
 fi
 
-# Prints "<account><TAB><state>" per account, where <state> is ABSENT or the
-# item's mdat timestamp (e.g. 20261011182920Z). Attributes only — no -g/-w, so
-# no secret value is ever read.
-#
-# Only errSecItemNotFound (exit 44) means ABSENT. Any other failure (locked or
-# unavailable keychain, errSecInteractionNotAllowed 36, a Security Server
-# error) aborts with exit 3: a tripwire that cannot read the items must fail
-# closed, or two failed passes would compare equal and certify isolation that
-# was never checked.
+# Only errSecItemNotFound means an empty service. All other lookup failures
+# and incomplete metadata abort with exit 3, so two unreadable passes cannot
+# compare equal and certify isolation that was never checked.
 capture_state() {
-  local account attrs mdat rc
-  for account in "${ACCOUNTS[@]}"; do
-    rc=0
-    attrs=$(security find-generic-password -s "$SERVICE" -a "$account" 2>/dev/null) || rc=$?
-    if [[ $rc -eq 0 ]]; then
-      # The mdat attribute line looks like:
-      #     "mdat"<timedate>=0x... "20261011182920Z\000"
-      mdat=$(printf '%s\n' "$attrs" | sed -nE 's/.*"mdat".*"([0-9]{14}Z).*/\1/p' | head -1)
-      printf '%s\t%s\n' "$account" "${mdat:-PRESENT-NO-MDAT}"
-    elif [[ $rc -eq 44 ]]; then
-      printf '%s\t%s\n' "$account" "ABSENT"
-    else
-      echo "error: Keychain lookup for account '$account' (service $SERVICE) failed with" >&2
-      echo "       security exit status $rc (not item-not-found). Refusing to record a" >&2
-      echo "       state the tripwire could not actually read." >&2
-      return 3
-    fi
-  done
+  xcrun swift "$SCRIPT_DIR/keychain-snapshot.swift" "$SERVICE" ${KEYCHAIN_FILE:+"$KEYCHAIN_FILE"}
 }
 
 case "$MODE" in
@@ -107,7 +56,8 @@ case "$MODE" in
       rm -f "$STATE_FILE"
       exit 3
     fi
-    echo "Snapshotted ${#ACCOUNTS[@]} production Keychain item states (service $SERVICE) to $STATE_FILE"
+    count=$(awk 'NF { count++ } END { print count+0 }' "$STATE_FILE")
+    echo "Snapshotted $count production Keychain item states (service $SERVICE) to $STATE_FILE"
     ;;
   verify)
     if [[ ! -f "$STATE_FILE" ]]; then

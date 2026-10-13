@@ -104,7 +104,7 @@ jobs:
           Distribution/scripts/inject-live-env.sh "$XCTESTRUN"
 
       - name: Snapshot installed-app Keychain items (tripwire)
-        # Records presence + mdat of every known item under the production
+        # Records presence + mdat of every generic-password item under the production
         # service BEFORE tests; the post-test verify fails the job if any
         # changed, catching any regression of the test-keychain isolation.
         # Attribute reads only — no secret values are read or logged.
