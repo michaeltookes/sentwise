@@ -129,7 +129,9 @@ jobs:
           if [[ "$SIGNING_MODE" != "unsigned" ]]; then
             security unlock-keychain -p "$SIGNING_KEYCHAIN_PW" "$SIGNING_KEYCHAIN"
           fi
-          Distribution/scripts/qa-build.sh "${args[@]}"
+          # Nounset-safe: an empty array is "unbound" under set -u in macOS
+          # Bash 3.2 (developer-id-unnotarized without require_checkout).
+          Distribution/scripts/qa-build.sh ${args[@]+"${args[@]}"}
 
       - name: Upload the QA DMG
         uses: actions/upload-artifact@v4
