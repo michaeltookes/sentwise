@@ -84,13 +84,37 @@ extension AppState {
 
     /// Whether direct in-app plan switching can start. Billing management remains
     /// available for indeterminate paid subscriptions; plan changes require a
-    /// lifecycle status the confirmation/reconciliation path can validate.
+    /// lifecycle status the confirmation/reconciliation path can validate, and
+    /// the live `/v1/me` account status (item 124): a cached snapshot alone can
+    /// show the plan cards but never enables a change.
     var canChangeManagedPlan: Bool {
         isManagedSignedIn
             && isOnline
             && !isChangingPlan
             && !isManagingBilling
             && hasPlanChangeablePaidSubscription
+            && isManagedAccountStatusLoaded
+    }
+
+    /// Whether this session's `/v1/me` account status has loaded (item 124).
+    var isManagedAccountStatusLoaded: Bool {
+        managedAccountStatus != nil
+    }
+
+    /// Billing-only caption under the plan cards while they are shown from a
+    /// cached snapshot and switching waits for `/v1/me` (item 124). Nil when
+    /// switching is not blocked on the account load (offline keeps its own
+    /// disabled state without a caption).
+    var planChangeUnavailableMessage: String? {
+        guard isPlanChangeWaitingForAccountStatus else { return nil }
+        return Self.planChangeAccountLoadingCaption
+    }
+
+    private var isPlanChangeWaitingForAccountStatus: Bool {
+        isManagedSignedIn
+            && isOnline
+            && hasPlanChangeablePaidSubscription
+            && !isManagedAccountStatusLoaded
     }
 
     /// Switches the subscription to `tier` (item 90). No-op when not signed in,
@@ -106,6 +130,7 @@ extension AppState {
     ) async {
         guard canChangeManagedPlan,
               let current = currentSubscriptionPlanTier, current != tier else {
+            reportBlockedPlanChange()
             return
         }
         let settingsMessageGeneration = settingsTransientMessageGeneration
@@ -292,6 +317,18 @@ extension AppState {
         planChangeFailed = false
     }
 
+    /// A confirmed plan change that cannot start because the account status has
+    /// not loaded reports why instead of returning silently (item 124). Other
+    /// blocked cases stay silent: a change or billing fetch already in flight,
+    /// the current tier, or a state where the plan cards are not offered.
+    private func reportBlockedPlanChange() {
+        guard !isChangingPlan, !isManagingBilling, isPlanChangeWaitingForAccountStatus else { return }
+        publishPlanChangeFailure(
+            Self.planChangeAccountLoadingMessage,
+            settingsMessageGeneration: settingsTransientMessageGeneration
+        )
+    }
+
     private func publishPlanChangeFailure(_ message: String, settingsMessageGeneration: UInt64) {
         guard isCurrentSettingsTransientMessageGeneration(settingsMessageGeneration) else { return }
         planChangeFailed = true
@@ -426,6 +463,13 @@ extension AppState {
             ?? "Switch to"
         return "\(verb) \(tier.displayName)? Your plan changes now, prorated."
     }
+
+    /// Caption under the plan cards while `/v1/me` loads (item 124).
+    static let planChangeAccountLoadingCaption = "Loading your account…"
+
+    /// Error for a plan change confirmed before `/v1/me` loaded (item 124).
+    static let planChangeAccountLoadingMessage =
+        "Your account is still loading, so your plan wasn't changed. Try again in a moment."
 
     /// Billing-only confirmation copy after a successful plan change (item 90).
     static func changePlanConfirmation(for tier: PaddlePlan) -> String {
