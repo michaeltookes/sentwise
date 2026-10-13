@@ -140,8 +140,13 @@ elif [[ "${rc:-0}" -ne 0 ]]; then
   echo "changelog-to-html: awk failed (exit $rc) rendering $CHANGELOG" >&2
   exit 1
 fi
-if [[ -z "$html" ]]; then
-  echo "changelog-to-html: the '## [$VERSION]' section of $CHANGELOG is empty." >&2
+# "Empty" means no readable text, not just no HTML: a section holding only
+# "### Added" headings or "- " bullets renders as <h3></h3> / <ul></ul>, which
+# Sparkle shows as a blank notes area.
+text="$(printf '%s' "$html" | sed -e 's/<[^>]*>//g' | tr -d '[:space:]')"
+if [[ -z "$text" ]]; then
+  echo "changelog-to-html: the '## [$VERSION]' section of $CHANGELOG has no release-note text" >&2
+  echo "                   (headings or bullets with nothing in them do not count)." >&2
   exit 1
 fi
 printf '%s\n' "$html"

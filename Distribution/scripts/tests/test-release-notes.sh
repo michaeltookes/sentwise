@@ -63,6 +63,14 @@ Intro paragraph with a [link](https://example.com/a?b=1&c=2) & an <angle>.
 
 ## [9.9.7] - 2026-09-01
 
+## [9.9.6] - 2026-08-01
+
+### Added
+
+-
+
+### Fixed
+
 [9.9.9]: https://github.com/example/compare/v9.9.8...v9.9.9
 [9.9.8]: https://github.com/example/compare/v9.9.7...v9.9.8
 MD
@@ -98,7 +106,13 @@ fi
 if err="$("$TO_HTML" --changelog "$CL" 9.9.7 2>&1)"; then
   bad "empty section (only link refs) fails" "$err"
 else
-  has "$err" "is empty" && ok "empty section (only link refs) fails loudly" || bad "empty section (only link refs) fails loudly" "$err"
+  has "$err" "no release-note text" && ok "empty section (only link refs) fails loudly" || bad "empty section (only link refs) fails loudly" "$err"
+fi
+
+if err="$("$TO_HTML" --changelog "$CL" 9.9.6 2>&1)"; then
+  bad "markup-only section (empty headings/bullets) fails" "$err"
+else
+  has "$err" "no release-note text" && ok "markup-only section (empty headings/bullets) fails loudly" || bad "markup-only section (empty headings/bullets) fails loudly" "$err"
 fi
 
 # Version strings are matched literally, not as regexes ("9.9.9" != "9x9x9").
