@@ -21,6 +21,9 @@ enum GmailAuthError: Error, Equatable {
     /// A token refresh was made obsolete (re-authorization, disconnect, erase)
     /// while in flight. Transient: retry against the current grant.
     case superseded
+    /// The previous grant's revocation is still in flight after the bounded
+    /// wait. Retryable: sign in again in a moment.
+    case revocationPending
 }
 
 /// The result of a completed browser authorization.
@@ -144,8 +147,11 @@ final class GmailAuthCoordinator {
     private func runAuthorization(loginHint: String?, requireHintMatch: Bool) async throws -> GmailAuthorization {
         // Google revokes the whole grant for a revoked refresh token, so a revoke
         // that lands after the new consent would invalidate the new grant too.
-        if !(await revocations.waitForPending(timeout: revocationWaitTimeout)) {
-            logger.info("A pending Google revocation didn't finish in time; continuing with sign-in")
+        // If it is still out after the bounded wait, fail retryably rather than
+        // open consent while a late revoke could still kill the new grant.
+        guard await revocations.waitForPending(timeout: revocationWaitTimeout) else {
+            logger.info("A pending Google revocation didn't finish in time; sign-in deferred")
+            throw GmailAuthError.revocationPending
         }
         try Task.checkCancellation()
         let pkce = PKCEGenerator.generate()
@@ -399,6 +405,8 @@ final class GmailAuthCoordinator {
             return "You signed in as \(actual), but this account is \(expected). Choose \(expected) on Google's screen."
         case .alreadyInProgress:
             return "A Google sign-in is already open in your browser."
+        case .revocationPending:
+            return "Sentwise is still disconnecting your previous Google sign-in. Try again in a moment."
         case .superseded:
             return "Your Google sign-in changed while Sentwise was refreshing it. Please try again."
         }

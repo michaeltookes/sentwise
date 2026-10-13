@@ -353,16 +353,29 @@ final class GoogleSignInRaceTests: XCTestCase {
         XCTAssertEqual(try store.loadToken(for: "me@gmail.com")?.accessToken, "fresh-at")
     }
 
-    func testAuthorizationProceedsWhenAPendingRevokeTimesOut() async throws {
-        let (coordinator, _, transport, browser) = try makeRevokeRaceCoordinator(revocationWaitTimeout: 0.05)
+    func testAuthorizationFailsRetryablyWhenAPendingRevokeOutlivesTheWait() async throws {
+        let (coordinator, store, transport, browser) = try makeRevokeRaceCoordinator(revocationWaitTimeout: 0.05)
 
         let disconnect = Task { await coordinator.disconnect("me@gmail.com") }
         await fulfillment(of: [transport.didStartRefresh], timeout: 2)
-        _ = try await coordinator.authorize(loginHint: "me@gmail.com")
-        XCTAssertNotNil(browser.openedURL, "a stuck revoke delays sign-in only up to the timeout")
+        do {
+            _ = try await coordinator.authorize(loginHint: "me@gmail.com")
+            XCTFail("consent must not open while the old grant's revoke is still out")
+        } catch {
+            XCTAssertEqual(error as? GmailAuthError, .revocationPending)
+        }
+        XCTAssertNil(browser.openedURL, "no browser while the revoke is pending")
+        XCTAssertFalse(store.hasToken(for: "me@gmail.com"))
+        guard case .failed(let message) = coordinator.phase else {
+            return XCTFail("expected a failed phase with retry guidance, got \(coordinator.phase)")
+        }
+        XCTAssertTrue(message.contains("Try again"), message)
 
+        // Once the revoke finishes, a retry goes through.
         transport.completeRefresh(HTTPResponse(statusCode: 200, body: Data()))
         await disconnect.value
+        _ = try await coordinator.authorize(loginHint: "me@gmail.com")
+        XCTAssertNotNil(browser.openedURL)
     }
 
     // MARK: - Builds without a bundled client
