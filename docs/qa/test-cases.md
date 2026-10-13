@@ -238,14 +238,14 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 ### TC-M2-07 Opening checkout is counted
 - **Executor:** lucius (steps 1–4) and uat (step 5)
 - **Verifies:** item 118
-- **Preconditions:** TC-M2-06 done, F2 signed in on trial; uat noted `qa.checkoutsOpened` and `qa.subscriptionsActivated.starter` for today.
+- **Preconditions:** TC-M2-06 done, F2 signed in on trial; uat noted `qa.checkoutsOpened.starter` and `qa.subscriptionsActivated.starter` for today.
 - **Steps:**
   1. **Settings…** → **Subscription** → **Subscribe**.
   2. In "Choose your plan", click the Starter card.
   3. Wait until the Paddle checkout form ("Secure checkout by Paddle") renders.
   4. Click **Close**. Then **Sign out**, and sign back in as F1.
   5. uat: `GET {base}/admin/funnel?from=<today>&to=<today>`.
-- **Expected:** `qa.checkoutsOpened` is at least one higher than before step 1, and `qa.subscriptionsActivated.starter` is unchanged; no purchase was made. The production build always opens the live Paddle checkout; checkouts opened from the Sentwise QA build reach only the sandbox deployment and never appear in this endpoint.
+- **Expected:** `qa.checkoutsOpened.starter` is at least one higher than before step 1 (F2 is new this run, so this is its first Starter checkout; the counter counts unique accounts, so reopening the Starter checkout as F2 would not raise it again), and `qa.subscriptionsActivated.starter` is unchanged; no purchase was made. The production build always opens the live Paddle checkout; checkouts opened from the Sentwise QA build reach only the sandbox deployment and never appear in this endpoint.
 - **Asset:** video
 
 ### TC-M2-08 Funnel response shape
@@ -254,7 +254,7 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 - **Preconditions:** token available.
 - **Steps:**
   1. `GET {base}/admin/funnel?from=2026-10-01&to=2026-10-31` with the token.
-- **Expected:** 200 JSON with numeric fields `trialsStarted`, `checkoutsOpened`, `subscriptionsActivated.starter`, `.pro`, `.unlimited`, `subscriptionsCanceled`, and `trialToPaidRate` for the live population only. It also has a `qa` object with the same seven numeric fields for the QA population (preamble, "Funnel populations"). The live `trialToPaidRate` uses live trials and live activations only, and `qa.trialToPaidRate` uses QA trials and QA activations only. Comp grants (item 111) are not counted as activations in either population.
+- **Expected:** 200 JSON with numeric fields `trialsStarted`, `checkoutsOpened.starter`, `.pro`, `.unlimited`, `subscriptionsActivated.starter`, `.pro`, `.unlimited`, `subscriptionsCanceled`, and `trialToPaidRate` for the live population only. Each `checkoutsOpened.*` value counts unique accounts (deduplicated by hashed account id), not checkout calls, and there is no scalar `checkoutsOpened`. It also has a `qa` object with the same nine numeric fields for the QA population (preamble, "Funnel populations"). The live `trialToPaidRate` uses live trials and live activations only, and `qa.trialToPaidRate` uses QA trials and QA activations only. Comp grants (item 111) are not counted as activations in either population.
 - **Asset:** screenshot
 
 ## M3 Trial to paid verified
@@ -328,7 +328,7 @@ M3 runs on two deployments of the same release tag.
   4. Read the price in the checkout form. Do not enter any card.
   5. Click **Close**; **Sign out**; sign back in as F1 and confirm the Subscription tab reads Pro.
   6. Quit Sentwise with **Quit Sentwise**, run TC-M3-11 step 1, then launch **Sentwise QA** from `/Applications`; sign in as F3 and set it up as in the M3 setup above.
-  7. uat: confirm F3 is in the Clerk development instance and not in production Clerk: `GET {base}/admin/comp?email=<F3>` returns a not-found response, never a 200 describing an account, while the sandbox calls below succeed. Then `POST {sandbox}/admin/trial` for F3 with `startedAt` = now minus 15 days (sandbox token). Then `GET {sandbox}/admin/comp?email=<F3>` and `GET {sandbox}/admin/funnel?from=<today>&to=<today>`; record the sandbox `qa.subscriptionsActivated.starter` and `qa.subscriptionsCanceled`.
+  7. uat: confirm F3 is in the Clerk development instance and not in production Clerk: `GET {base}/admin/comp?email=<F3>` returns 404 `{"error":{"type":"account_not_found","message":"No account matches that email."}}`, never a 200 describing an account, while the sandbox calls below succeed. Then `POST {sandbox}/admin/trial` for F3 with `startedAt` = now minus 15 days (sandbox token). Then `GET {sandbox}/admin/comp?email=<F3>` and `GET {sandbox}/admin/funnel?from=<today>&to=<today>`; record the sandbox `qa.subscriptionsActivated.starter` and `qa.subscriptionsCanceled`.
   8. lucius, in **Sentwise QA** as F3: close and reopen **Settings…** → **Subscription**; confirm "Trial ended" and a **Subscribe** button.
   9. Click **Subscribe**; in "Choose your plan", click the Starter card and wait for "Secure checkout by Paddle".
   10. Read the price in the checkout form.
@@ -339,7 +339,7 @@ M3 runs on two deployments of the same release tag.
   15. uat: `GET {sandbox}/admin/funnel?from=<today>&to=<today>`.
 - **Expected:**
   - Step 4 (production check, read-only): the checkout shows the live Starter price ($9.00/month plus any tax), with no Paddle test-mode or sandbox marking, and step 5 shows Pro for F1. The production build has no sandbox configuration, so this is a single confirmation, not a routing test; no card is entered on production.
-  - Step 7: the comp read returns 200 with `"comp": null` and `"active": false` for F3 (a missing comp is not a 404; any `"active": true` stops the case).
+  - Step 7: the production read `GET {base}/admin/comp?email=<F3>` returns 404 with `error.type` `account_not_found` (F3 does not exist in production Clerk; any 200 stops the case). The sandbox read `GET {sandbox}/admin/comp?email=<F3>` returns 200 with `"comp": null` and `"active": false` (a missing comp on an existing account is not a 404; any `"active": true` stops the case).
   - Step 8 shows "Trial ended" with **Subscribe**; steps 9–10 open the sandbox checkout with the sandbox Starter price.
   - Step 12 shows "You're on Starter — you're all set."
   - Step 13 shows Current plan Starter with "Renews <date about one month out>".
