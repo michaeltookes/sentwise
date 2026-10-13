@@ -213,13 +213,17 @@ struct PaddleConfig: Sendable, Equatable {
     ///   Otherwise nil: the Worker routes that account's checkout to the sandbox,
     ///   so falling back to live prices would only produce a server rejection.
     static func resolved(billing: ManagedBillingLane?, accountEmail: String?) -> PaddleConfig? {
-        guard let billing,
-              billing.environment == PaddleEnvironment.sandbox.rawValue,
+        guard let billing else { return active }
+        // The Worker says checkout is unavailable for this account (an
+        // incomplete sandbox lane, or a lane lock that conflicts with the
+        // account's current lane until an admin reset): never fall back to
+        // live prices the Worker would refuse.
+        if billing.checkoutAvailable == false { return nil }
+        guard billing.environment == PaddleEnvironment.sandbox.rawValue,
               isQAAccountEmail(accountEmail) else {
             return active
         }
-        guard billing.checkoutAvailable != false,
-              let token = nonEmpty(billing.clientSideToken),
+        guard let token = nonEmpty(billing.clientSideToken),
               token.hasPrefix("test_"),
               let prices = billing.prices,
               let starter = nonEmpty(prices.starter),

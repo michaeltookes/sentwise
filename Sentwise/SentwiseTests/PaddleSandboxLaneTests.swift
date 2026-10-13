@@ -83,10 +83,15 @@ final class PaddleSandboxLaneTests: XCTestCase {
     func testUnavailableSandboxLaneIsNilNotProduction() {
         let unavailable = ManagedBillingLane(environment: "sandbox", checkoutAvailable: false)
         XCTAssertNil(PaddleConfig.resolved(billing: unavailable, accountEmail: "qa@prowlqa.dev"))
-        // A production account told "sandbox, unavailable" still just gets production.
-        XCTAssertEqual(
-            PaddleConfig.resolved(billing: unavailable, accountEmail: "marcus@example.com"),
-            .production
+        // A lane-locked account whose email left the QA domain is unavailable too
+        // (the Worker refuses its checkout until an admin reset), never live.
+        XCTAssertNil(PaddleConfig.resolved(billing: unavailable, accountEmail: "marcus@example.com"))
+        // So is a live-locked QA account the Worker marks unavailable.
+        XCTAssertNil(
+            PaddleConfig.resolved(
+                billing: ManagedBillingLane(environment: "production", checkoutAvailable: false),
+                accountEmail: "qa@prowlqa.dev"
+            )
         )
         // An explicit available flag with a complete lane is sandbox.
         let available = ManagedBillingLane(
