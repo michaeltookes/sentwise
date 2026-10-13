@@ -19,6 +19,7 @@ customer's checkout changes.
 | Webhooks | Live destination `POST /v1/paddle/webhook` verifies with the live secret only. Sandbox destination `POST /v1/paddle/webhook/sandbox` is open while `PADDLE_ENV=sandbox` or a sandbox webhook secret is set, verifies with the sandbox secret only, applies events only to QA accounts or accounts whose subscription was created in the sandbox, and never overwrites a live subscription in force. |
 | `GET /v1/me` | Adds `billing`. Production accounts always get `{ "environment": "production", "checkoutAvailable": true }`. A QA account in the sandbox lane gets `{ "environment": "sandbox", "checkoutAvailable": true, "clientSideToken": "test_…", "prices": {…} }`, or `checkoutAvailable: false` while any sandbox value is missing (its checkout then returns 503). |
 | Stored lane | Checkout reservations and subscriptions made in the sandbox carry `paddleEnvironment: "sandbox"` and are always checked, cancelled, and managed in the environment they were created in. When the lane closes or the email leaves `@prowlqa.dev`, a sandbox subscription stops counting as a paid plan; Manage billing still opens the sandbox portal to cancel it. |
+| Lane lock | An account's lane is fixed by its first checkout or subscription (Clerk `paddleLane`). After that, neither `PADDLE_ENV` nor an email change moves it: checkout and plan changes from the other lane return `409 billing_lane_locked`, `/v1/me` reports the locked lane with `checkoutAvailable: false`, and webhook events from the other environment are ignored. The only way out is the admin reset below. |
 | App | Subscribe stays disabled until `/v1/me` has loaded, and the Paddle config is captured when checkout opens. The sandbox checkout opens only when `/v1/me` says `sandbox` **and** the account email is `@prowlqa.dev` **and** the lane carries a `test_` token and three distinct sandbox price ids that aren't live ids (`PaddleConfig.resolved(billing:accountEmail:)`). A QA account whose lane is unavailable sees checkout disabled. Everyone else, including an older Worker with no `billing` block, uses the embedded live config. |
 
 Both gates (Worker and app) are unit-tested in `sentwise-service/test/paddle-sandbox-lane.test.ts`
@@ -109,8 +110,25 @@ shows as paid and the app never offers checkout.
 5. **Production unaffected:** sign in with any non-QA account on the same build and confirm
    `/v1/me` returns `billing.environment = "production"` and the plan cards open the live overlay
    (no sandbox banner). Close it without paying.
-6. Clean up: cancel the sandbox subscription in the sandbox dashboard (or via Manage billing, which
-   opens the sandbox portal for the QA account) so the next run starts from trial.
+6. Clean up with the admin lane reset (below), so the next run starts from a clean account.
+
+## Resetting a QA account's lane
+
+A QA account that has bought in one Paddle environment is locked there. Before it can use the other
+environment (for example a fallback method on live after a sandbox run, or a fresh sandbox run),
+reset it:
+
+```bash
+curl -s -X POST https://sentwise-inference.sentwise-service.workers.dev/admin/paddle-lane-reset \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H "content-type: application/json" \
+  -d '{"email":"qa-buyer@prowlqa.dev"}'
+```
+
+It works only for `@prowlqa.dev` accounts. It cancels the sandbox subscription at the Paddle
+sandbox, releases pending checkouts, clears the sandbox overage credits (keeping replay protection
+so an old purchase can never be credited again) and the Clerk billing state, and removes the lock.
+It refuses (409) while a **live** subscription is in force; cancel that in the live dashboard
+first.
 
 ## Fallback methods (in order, if the sandbox lane slips)
 
@@ -119,6 +137,7 @@ shows as paid and the app never offers checkout.
    it at step 3 of TC-M3-05 with the QA account on production (`PADDLE_ENV=production`, or any
    non-sandbox lane). Paddle still creates a real subscription at $0, so the webhook and
    entitlement path is exercised. Cancel the subscription afterwards and archive the discount.
+   If the QA account was used on the sandbox, reset its lane first (above).
 2. **Real $9 Starter purchase refunded the same day.** Buy Starter with a real card on the QA
    account, verify TC-M3-05/06, then refund the transaction in the live dashboard and cancel the
    subscription the same day. Costs Paddle's fees, which are not returned on refund; use only when
