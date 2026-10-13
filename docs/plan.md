@@ -30,7 +30,7 @@ Ordered by distance to the first paid subscription. Each app-side milestone ends
 
 | ID | Name | Demo (what the QA video shows) | Exit criteria |
 |---|---|---|---|
-| M1 | v0.2.1 ships | On Lucius' Mini, Sparkle offers 0.2.1 over 0.2.0 with release notes in the dialog; Peekaboo opens the "Sentwise" status menu by name; the onboarding leg finishes with a first approved follow-up | v0.2.1 released; TC-M1-* pass; 74 §6 onboarding box ticked |
+| M1 | v0.2.1 ships | On Lucius' Mini, Sparkle offers 0.2.1 over 0.2.0 with release notes in the dialog; Peekaboo opens the "Sentwise" status menu by name; the Setup Assistant finishes and the first follow-up and first inbox reply are approved as drafts | v0.2.1 released; TC-M1-* pass; 74 §6 onboarding box ticked |
 | M2 | Funnel is measurable | `sentwise.ai/changelog` lists 0.2.1 and 0.2.0; pricing cards show per-tier features; `GET /admin/funnel` returns the week's trials, checkouts opened and paid by tier | Site and Worker deployed; TC-M2-* pass; first funnel row in `genkei-ops/docs/metrics.md` |
 | M3 | Trial → paid verified | A fresh QA account goes trial → 7-day and 1-day reminders → "Trial ended" → Subscribe → Paddle checkout → "You're on Starter" → drafts again → cancels and sees "Cancels on <date>" | Item 123 sandbox lane deployed (Worker `PADDLE_ENV`, app routes `@prowlqa.dev` accounts to sandbox checkout); v0.2.2 released; TC-M3-* pass, with the purchase made on the Paddle sandbox and a production account shown to still get live prices |
 | M4 | First-run friction cut | A Workspace custom-domain mailbox connects with the IMAP host pre-filled; "Continue with Google" signs in; the verification email arrives branded as Sentwise | v0.2.3 released; TC-M4-* pass |

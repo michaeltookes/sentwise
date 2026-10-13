@@ -30,7 +30,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 | Milestone | Demo | sentwise items | Elsewhere |
 |---|---|---|---|
-| **M1 v0.2.1 ships** | Sparkle offers 0.2.1 with release notes; status item found by name; first approved follow-up on the clean onboarding path | 113, 116, 117; in flight: 112, 114, 115; QA leg of 74 (§6) | PR #99 (live tests dispatch-only); genkei-ops P1-3 |
+| **M1 v0.2.1 ships** | Sparkle offers 0.2.1 with release notes; status item found by name; Setup Assistant finished plus first follow-up and inbox reply drafts on the clean onboarding path | 113, 116, 117; in flight: 112, 114, 115; QA leg of 74 (§6) | PR #99 (live tests dispatch-only); genkei-ops P1-3 |
 | **M2 Funnel is measurable** | `sentwise.ai/changelog` live; pricing cards per tier; `GET /admin/funnel` returns trials, checkouts, paid by tier | 88, 118 | sentwise-landing-page 10, 14; genkei-ops P1-2, 6c-1, 6c-2 |
 | **M3 Trial to paid verified** | Fresh account: reminders → "Trial ended" → checkout → "You're on Starter" → cancel shows "Cancels on <date>" | 123 (prerequisite), 119, 87, 92, 120 | sentwise-service: 123 (branch `paddle-sandbox-lane`) |
 | **M4 First-run friction cut** | Workspace domain auto-detected; "Continue with Google"; branded verification email | 110, 105, 106, 121, 122 | Clerk dashboard (owner): 74 §1 callback allowlist, 106 templates |

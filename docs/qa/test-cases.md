@@ -14,7 +14,9 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 
 **Fixtures** (no seed database; these are the fixtures):
 - **F1, the standing QA account:** `luciusfox@prowlqa.dev`. The same address is the connected Gmail (Google Workspace on the `prowlqa.dev` domain) and the Sentwise account, which carries a comped **Pro** plan (item 111), so the Subscription pane reads Pro, active. Credentials live in Lucius' workspace secrets and the password manager, never in this repo. Every case that signs the app into another account ends by signing back in as F1.
-- **F2, a throwaway trial account:** `luciusfox+trial-<YYYYMMDD>@prowlqa.dev`, using the run date. Sentwise sign-in codes for F2 arrive in F1's Gmail inbox (plus addressing). F2 is created inside the case by signing in, and removed in teardown.
+- **F2, a throwaway trial account:** `luciusfox+trial-<RUNID>@prowlqa.dev`, where `<RUNID>` is unique per run: the run's date and time, `YYYYMMDD-HHMM` (for example `20261020-1430`), never the date alone. Same-day reruns must not collide, because a purchaser from TC-M3-05 is kept until its cancellation takes effect. Sentwise sign-in codes for F2 arrive in F1's Gmail inbox (plus addressing). F2 is created inside the case by signing in, and removed in teardown. Record the RUNID in the run report.
+- **S1, an outside sender:** a mailbox QA controls on a domain other than `prowlqa.dev` (the wave-2 test mailbox, genkei-ops P1-3). Until it exists, the orchestrator asks Michael to send the message from his own address at the marked step. S1 only sends the fixture question below; it never receives anything from Sentwise.
+- **Q1, the fixture inbound question** (subject `Pilot kickoff`, body `Hi Lucius, can you confirm Thursday at 10am works for the pilot kickoff? Thanks, Dana`).
 - **T1, the fixture transcript.** Paste exactly:
   ```
   Dana (Acme): Thanks for walking us through the pilot today.
@@ -102,19 +104,34 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 - **Expected:** the command exits 0, installs version 0.2.1, and prints no line containing "deprecated".
 - **Asset:** screenshot (terminal)
 
-### TC-M1-08 First follow-up on a clean onboarding path
-- **Executor:** lucius
-- **Verifies:** item 74 (§6 onboarding leg)
-- **Preconditions:** Sentwise 0.2.1 running as F1 with the mailbox connected; send behavior **Save as draft** (Setup Assistant or Settings); voice not yet learned, or **Forget voice profile** run in Settings → AI.
+### TC-M1-08 Onboarding leg on a clean path: Setup Assistant, first follow-up, first inbox draft
+- **Executor:** lucius (Michael sends Q1 at step 10 if S1 does not exist yet)
+- **Verifies:** item 74 (`docs/launch-checklist.md` §6, first-run onboarding box)
+- **Preconditions:**
+  - Sentwise 0.2.1 running as F1 with F1's mailbox connected.
+  - The Setup Assistant is **not yet completed**. The recorded state on 2026-10-11 was step 3 of 4.
+  - If opening **Setup Assistant…** no longer shows an unfinished assistant, run the whole case in the isolated `sentwise-stranger` macOS user from TC-M5-01 instead. There, connect F1's mailbox and sign in as F1 in steps 1–2.
+  - Notifications are allowed for Sentwise.
 - **Steps:**
-  1. Open **Settings…** → **AI**, and in the Voice section start learning the voice; wait until it reports a learned profile.
-  2. From the status menu click **New Follow-up from Transcript…**.
-  3. In **Recipients** enter `luciusfox@prowlqa.dev`; in **Subject** enter `Pilot next steps`.
-  4. Paste T1 into the transcript area and click **Draft follow-up**.
-  5. When the draft-ready notification appears, click it (or click **Open Review Drafts**).
-  6. In Review Drafts, expand the draft and click **Approve**.
-  7. In Gmail on the Mini, open Drafts for `luciusfox@prowlqa.dev`.
-- **Expected:** the saved draft "Pilot next steps" is in Gmail Drafts, addressed only to `luciusfox@prowlqa.dev`, and mentions the security questionnaire by Friday and the November 9 meeting.
+  1. Status menu → **Setup Assistant…**. Walk the steps with **Continue**: the mailbox step shows F1 connected, and the Sentwise AI step shows F1 signed in.
+  2. On the send-behavior step choose **Save as draft**, then **Continue**.
+  3. On the voice step click **Learn my voice** and wait until it finishes.
+  4. Click **Finish**.
+  5. Quit Sentwise (**Quit Sentwise**) and relaunch it from `/Applications`.
+  6. Status menu → **New Follow-up from Transcript…**. In **Recipients** enter `luciusfox@prowlqa.dev`; in **Subject** enter `Pilot next steps`.
+  7. Paste T1 into the transcript area and click **Draft follow-up**.
+  8. When the draft-ready notification appears, click it (or click **Open Review Drafts**). In Review Drafts, expand the draft and click **Approve**.
+  9. If the status menu shows **Start Watching**, click it; it must then read **Pause Watching**.
+  10. From S1, send Q1 to `luciusfox@prowlqa.dev`.
+  11. Wait up to 10 minutes for the notification "Reply-worthy: <S1 sender> — draft a reply?", then click it.
+  12. On the Reply-worthy card in Review Drafts, click **Draft reply**. Wait for the draft, then click **Approve**.
+  13. In Gmail on the Mini, open Drafts for `luciusfox@prowlqa.dev`.
+- **Expected:**
+  - After step 5 the Setup Assistant does not reopen; onboarding is completed and persisted.
+  - Gmail Drafts holds the follow-up "Pilot next steps", addressed only to `luciusfox@prowlqa.dev`. It mentions the security questionnaire by Friday and the November 9 meeting.
+  - Gmail Drafts also holds a reply in the "Pilot kickoff" thread that answers the Thursday 10am question.
+  - Nothing was sent.
+  - This case passing ticks the §6 onboarding box.
 - **Asset:** video
 
 ### TC-M1-09 Live tests leave the installed app alone
@@ -284,25 +301,30 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 - **Verifies:** item 123, item 120, checkout regression (items 56c/90)
 - **Preconditions:**
   - v0.2.2 installed; item 123 deployed (Worker `PADDLE_ENV` lane with the sandbox catalog mirroring the tier matrix, see `docs/billing-qa.md`).
-  - The purchaser is a `@prowlqa.dev` account with **no active comp**: F2 in TC-M3-04's "Trial ended" state.
-  - If the run uses F1 instead, uat first revokes its comp (`DELETE {base}/admin/comp` for F1) and re-grants Pro in teardown.
-  - **P1**, a production account on a non-QA domain (the wave-2 test mailbox, genkei-ops P1-3), exists. If it does not exist yet, Michael signs in with his own account for steps 8–11.
+  - **The purchaser is always a throwaway F2** (a `@prowlqa.dev` account with no comp), here in TC-M3-04's "Trial ended" state. This applies to every path, alternates included.
+  - **Never purchase on F1.** An active Paddle subscription takes precedence over a comp (item 111's layering), and TC-M3-08 only schedules cancellation at period end. A purchase on F1 would leave it on Starter, breaking the daily Pro fixture and M4's second-account cases.
+    - If F1 is ever bought on by mistake, the orchestrator has the subscription **terminated immediately** (not scheduled) in Paddle.
+    - Only after that is the Pro comp re-granted, and the Subscription pane is confirmed to read Pro.
+  - **P1**, a production account on a domain outside `prowlqa.dev`, exists with **no active subscription and no comp**: on trial, or "Trial ended", with a **Subscribe** button in the Subscription tab.
+    - Use the wave-2 test mailbox account (genkei-ops P1-3).
+    - If it does not exist yet, Michael signs in for steps 8–11 with an account of his own that meets the same condition.
+    - An account with a paid plan is not valid. **Manage plan** would show the current plan or a prorated plan change, never the card form.
   - Paddle sandbox test card numbers are in `docs/billing-qa.md`, not here.
 - **Steps:**
-  1. uat: `GET {base}/admin/comp?email=<purchaser>` with the token.
+  1. uat: `GET {base}/admin/comp?email=<purchaser>` and `GET {base}/admin/comp?email=<P1>` with the token.
   2. lucius, as the purchaser: **Settings…** → **Subscription** → **Subscribe**.
   3. In "Choose your plan", click the Starter card and wait for "Secure checkout by Paddle".
   4. Pay with the Paddle sandbox success test card from `docs/billing-qa.md`.
   5. Wait for the confirmation, then click **Done**.
   6. Close and reopen **Settings…** → **Subscription**.
   7. Sign out; sign in as P1 (its code comes from P1's mailbox).
-  8. **Subscription** → **Subscribe** (or **Manage plan**), then click the Starter card.
+  8. Confirm the Subscription tab shows a **Subscribe** button and no current paid plan. Click **Subscribe**, then click the Starter card.
   9. Read the price in the checkout form.
   10. Enter the same sandbox test card and attempt payment.
   11. Click **Close**; sign out; sign back in as the purchaser for TC-M3-06 to TC-M3-08 (TC-M3-09 teardown returns the app to F1).
   12. uat: `GET {base}/admin/funnel?from=<today>&to=<today>`.
 - **Expected:**
-  - Step 1 returns 404 (no comp).
+  - Step 1 returns 200 for both accounts with `"comp": null` and `"active": false`. A missing comp is not a 404; any `"active": true` stops the case.
   - Step 5 shows "You're on Starter — you're all set."
   - Step 6 shows Current plan Starter with "Renews <date about one month out>".
   - For P1, step 9 shows the live price ($9.00/month plus any tax) and step 10 declines the test card. No sandbox price or sandbox checkout ever appears for P1.
@@ -318,9 +340,10 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 - **Verifies:** item 120 (paid entitlement on the release)
 - **Preconditions:** TC-M3-05 passed.
 - **Steps:**
-  1. Repeat TC-M1-08 steps 2–4 with subject `Pilot next steps (paid)`.
-  2. Open **Settings…** → **Subscription** and read Usage.
-- **Expected:** a draft is produced and Usage shows 1 of 30 drafts used this month.
+  1. Open **Settings…** → **Subscription**; record the Usage count as the baseline N. Drafts made during setup on trial count toward the month; discarding does not refund one, and buying Starter does not reset the counter.
+  2. Status menu → **New Follow-up from Transcript…**; recipient `luciusfox@prowlqa.dev`, subject `Pilot next steps (paid)`; paste T1; click **Draft follow-up**.
+  3. Close and reopen **Settings…** → **Subscription** and read Usage.
+- **Expected:** a draft is produced and Usage reads N + 1 of 30 drafts used this month.
 - **Asset:** screenshot
 
 ### TC-M3-07 Manage billing opens the portal without a sign-in
@@ -450,12 +473,21 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 - **Asset:** screenshot
 
 ### TC-M5-03 Report a Problem reaches the feedback inbox
-- **Executor:** lucius
+- **Executor:** lucius (steps 1–6); the orchestrator verifies receipt (step 7)
 - **Verifies:** item 74 (feedback inbox live)
-- **Preconditions:** Sentwise latest as F1.
+- **Preconditions:**
+  - Sentwise latest running as F1.
+  - Apple Mail on the Mini is configured as the default mail client with F1's mailbox, so `mailto:` opens a compose window.
+  - The shipped flow sends nothing itself and shows no confirmation. It writes a diagnostics file, reveals it in Finder, and opens a prefilled `mailto:` (`docs/feedback-diagnostics.md`).
 - **Steps:**
-  1. Status menu → **Report a Problem…**; enter `[QA drill] <date> report path`; include diagnostics; send.
-- **Expected:** the app confirms sending, and the orchestrator confirms the message reached `feedback@sentwise.ai` within one hour.
+  1. Status menu → **Report a Problem…**.
+  2. Confirm Finder reveals `Sentwise-Diagnostics-<timestamp>.txt` in Downloads.
+  3. Confirm a Mail compose window opened to `feedback@sentwise.ai` with the app and macOS versions in the subject or body.
+  4. Prefix the subject with `[QA drill] <RUNID> `.
+  5. Drag the revealed diagnostics file into the message as an attachment.
+  6. Click Send and confirm the message is in F1's Sent mailbox.
+  7. Orchestrator: check the `feedback@sentwise.ai` mailbox.
+- **Expected:** within one hour of step 6, the `feedback@sentwise.ai` mailbox holds the `[QA drill] <RUNID>` message with the diagnostics `.txt` attached.
 - **Asset:** screenshot
 
 ### TC-M5-04 Download always serves the latest release
