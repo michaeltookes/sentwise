@@ -8,6 +8,45 @@ struct ProwlHuntRuntime {
     static let environmentKey = "SENTWISE_PROWL_HUNT_MODE"
     static let launchArgument = "--sentwise-prowl-hunt-mode"
     static let xctestConfigurationEnvironmentKey = "XCTestConfigurationFilePath"
+    /// Environment keys that mark an XCTest-hosted launch. Newer xcodebuild
+    /// test sessions (notably `test-without-building` under recent Xcode) pass
+    /// the test configuration over testmanagerd IPC instead of
+    /// `XCTestConfigurationFilePath`, setting the session/bundle keys instead.
+    /// Missing them let a dev-signed test host boot as the *real* app on the QA
+    /// machine and rewrite the installed app's Keychain items (item 115).
+    static let xctestSessionEnvironmentKeys = [
+        xctestConfigurationEnvironmentKey,
+        "XCTestSessionIdentifier",
+        "XCTestBundlePath"
+    ]
+
+    /// Whether this process was launched as an XCTest host. Deliberately
+    /// separate from `isEnabled` (hunt mode): hunt mode changes app *behavior*
+    /// that unit tests themselves encode (quota paths, managed-account
+    /// defaults), so it must not flip on for every hosted test run — only the
+    /// app delegate's boot decision uses this, via `launchRuntime`, to keep a
+    /// test-hosted launch away from the real Keychain, settings, and startup
+    /// side effects (item 115).
+    static func isXCTestHostLaunch(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        xctestSessionEnvironmentKeys.contains { environment[$0]?.isEmpty == false }
+    }
+
+    /// The runtime the app delegate boots with: the isolated in-memory runtime
+    /// for a hunt-mode launch *or* any XCTest-hosted launch, the live runtime
+    /// otherwise. `current` keeps its narrower hunt-mode-only meaning for the
+    /// behavior guards sprinkled through the app.
+    static func launchRuntime(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        bundlePath: String = Bundle.main.bundlePath
+    ) -> ProwlHuntRuntime {
+        ProwlHuntRuntime(
+            isEnabled: isEnabled(environment: environment, arguments: arguments, bundlePath: bundlePath)
+                || isXCTestHostLaunch(environment: environment)
+        )
+    }
 
     let isEnabled: Bool
 

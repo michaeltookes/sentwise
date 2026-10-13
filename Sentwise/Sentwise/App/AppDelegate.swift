@@ -37,7 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - NSApplicationDelegate
 
     override init() {
-        self.runtime = .current
+        // Boot with the launch runtime, not `.current`: an XCTest-hosted launch
+        // (xcodebuild test / test-without-building) must never run the real app
+        // — in-memory stores, no Keychain, no startup side effects — even when
+        // the harness omits XCTestConfigurationFilePath (item 115).
+        self.runtime = .launchRuntime()
         super.init()
     }
 
@@ -141,6 +145,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// switched back sees the hint appear — or clear — without relaunching.
     func applicationDidBecomeActive(_ notification: Notification) {
         guard runtime.allowsStartupSideEffects, let appState else { return }
+        // Pick up a Login Items approval made in System Settings (item 113).
+        appState.refreshLaunchAtLoginState()
         Task {
             await appState.refreshNotificationPermission()
             await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded()

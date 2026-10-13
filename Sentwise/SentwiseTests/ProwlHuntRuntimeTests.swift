@@ -27,6 +27,63 @@ final class ProwlHuntRuntimeTests: XCTestCase {
         ))
     }
 
+    /// Newer xcodebuild test sessions (test-without-building under recent Xcode)
+    /// omit XCTestConfigurationFilePath and set session/bundle keys instead; each
+    /// one on its own must mark the launch as test-hosted (item 115).
+    func testDetectsXCTestHostLaunchFromEverySessionEnvironmentKey() {
+        for key in ProwlHuntRuntime.xctestSessionEnvironmentKeys {
+            XCTAssertTrue(
+                ProwlHuntRuntime.isXCTestHostLaunch(environment: [key: "some-non-empty-value"]),
+                "expected \(key) alone to mark an XCTest-hosted launch"
+            )
+        }
+    }
+
+    func testEmptyXCTestSessionEnvironmentValuesAreNotATestHostLaunch() {
+        var environment: [String: String] = [:]
+        for key in ProwlHuntRuntime.xctestSessionEnvironmentKeys {
+            environment[key] = ""
+        }
+        XCTAssertFalse(ProwlHuntRuntime.isXCTestHostLaunch(environment: environment))
+    }
+
+    /// An XCTest-hosted launch must NOT flip hunt mode itself — hunt mode
+    /// changes app behavior that unit tests encode. Only the app delegate's
+    /// boot decision (`launchRuntime`) isolates the test host.
+    func testSessionKeysAloneDoNotEnableHuntMode() {
+        XCTAssertFalse(ProwlHuntRuntime.isEnabled(
+            environment: ["XCTestSessionIdentifier": "ABC-123"],
+            arguments: [],
+            bundlePath: "/Applications/Sentwise.app"
+        ))
+    }
+
+    func testLaunchRuntimeIsIsolatedForXCTestHostLaunch() {
+        for key in ProwlHuntRuntime.xctestSessionEnvironmentKeys {
+            XCTAssertTrue(ProwlHuntRuntime.launchRuntime(
+                environment: [key: "some-non-empty-value"],
+                arguments: [],
+                bundlePath: "/Applications/Sentwise.app"
+            ).isEnabled, "expected \(key) alone to isolate the boot runtime")
+        }
+    }
+
+    func testLaunchRuntimeIsIsolatedForHuntMode() {
+        XCTAssertTrue(ProwlHuntRuntime.launchRuntime(
+            environment: [ProwlHuntRuntime.environmentKey: "1"],
+            arguments: [],
+            bundlePath: "/Applications/Sentwise.app"
+        ).isEnabled)
+    }
+
+    func testLaunchRuntimeIsLiveForARegularLaunch() {
+        XCTAssertFalse(ProwlHuntRuntime.launchRuntime(
+            environment: [:],
+            arguments: [],
+            bundlePath: "/Applications/Sentwise.app"
+        ).isEnabled)
+    }
+
     func testEnablesFromDocumentedProwlDerivedDataBundlePath() {
         XCTAssertTrue(ProwlHuntRuntime.isEnabled(
             environment: [:],
