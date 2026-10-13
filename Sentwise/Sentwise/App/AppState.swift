@@ -9,6 +9,7 @@ final class AppState: ObservableObject {
     var settingsTransientMessageGeneration: UInt64 = 0
     @Published var settingsTransientMessages = SettingsTransientMessages()
     var activeSettingsTab: SettingsTab?
+    var paddleConfig: PaddleConfig? = PaddleConfig.active // build's Paddle config; nil = no checkout (item 123)
     // MARK: - Watch State
     /// Current watcher status. Drives the menu-bar status line.
     @Published var watchStatus: WatchStatus = .idle

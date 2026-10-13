@@ -63,7 +63,7 @@ extension AppState {
     /// Paddle's billing portal so they modify the current subscription rather than
     /// opening a second recurring checkout.
     func presentBillingCheckout(plan: PaddlePlan? = nil) {
-        guard isManagedSignedIn, !hasManageablePaidSubscription else { return }
+        guard isManagedSignedIn, !hasManageablePaidSubscription, isCheckoutAvailable else { return }
         billingCheckout = BillingCheckoutRequest(plan: plan)
     }
 
@@ -73,12 +73,13 @@ extension AppState {
     /// as `/v1/me`), then opens the overlay with the returned transaction id. The
     /// Worker binds the account to the transaction with a signed `custom_data`, so
     /// the purchase is attributed reliably — no client-side `customData`/`clerkUserId`.
-    func makeCheckoutModel(for plan: PaddlePlan) -> PaddleCheckoutModel {
+    func makeCheckoutModel(for plan: PaddlePlan) -> PaddleCheckoutModel? {
+        guard let config = paddleConfig else { return nil }
         // Capture the Sendable `LLMProviding` (not `self`) so the mint closure is
         // Sendable and runs off the main actor for the network call.
         let llm = self.llm
         return PaddleCheckoutModel(
-            config: .active,
+            config: config,
             plan: plan,
             createTransaction: { priceID in
                 do {
@@ -119,6 +120,11 @@ extension AppState {
     /// not already tied to a current or indeterminate paid subscription — i.e. only
     /// when a new checkout can move the account forward without duplicating an
     /// existing Paddle subscription.
+    /// Whether this build can open a checkout at all (item 123). False only in a
+    /// QA build whose Paddle values are incomplete or inconsistent; production
+    /// builds always have the live config.
+    var isCheckoutAvailable: Bool { paddleConfig != nil }
+
     var shouldOfferSubscribe: Bool {
         isManagedSignedIn && !hasManageablePaidSubscription
     }

@@ -72,7 +72,7 @@ final class PaddleCheckoutModel: ObservableObject {
     private var didStartPreparing = false
 
     init(
-        config: PaddleConfig = .active,
+        config: PaddleConfig,
         plan: PaddlePlan,
         createTransaction: (@Sendable (String) async throws -> PaddleCheckoutTransaction)? = nil
     ) {

@@ -91,6 +91,7 @@ extension AppState {
             && !isChangingPlan
             && !isManagingBilling
             && hasPlanChangeablePaidSubscription
+            && isCheckoutAvailable
     }
 
     /// Switches the subscription to `tier` (item 90). No-op when not signed in,
@@ -105,6 +106,7 @@ extension AppState {
         backgroundReconcileRetryDelays: [UInt64] = planChangeBackgroundReconcileRetryDelays
     ) async {
         guard canChangeManagedPlan,
+              let paddleConfig,
               let current = currentSubscriptionPlanTier, current != tier else {
             return
         }
@@ -123,7 +125,7 @@ extension AppState {
             }
         }
 
-        let priceID = PaddleConfig.active.priceID(for: tier)
+        let priceID = paddleConfig.priceID(for: tier)
         let change: PaddlePlanChange
         let sessionAccountKey = currentManagedSessionAccountKey ?? accountKey
         do {

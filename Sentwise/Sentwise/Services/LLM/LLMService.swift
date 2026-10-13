@@ -160,7 +160,7 @@ struct LLMService: LLMProviding {
     /// for the requested tier so the confirm→reconcile flow is walkable offline.
     func changeManagedPlan(priceID: String, expectedAccountKey: String?) async throws -> PaddlePlanChange {
         if isProwlHuntMode {
-            let plan = PaddleConfig.active.plan(forPriceID: priceID)?.subscriptionPlan ?? .unknown
+            let plan = PaddleConfig.active?.plan(forPriceID: priceID)?.subscriptionPlan ?? .unknown
             return PaddlePlanChange(plan: plan, status: .active)
         }
         let client = ManagedInferenceClient(

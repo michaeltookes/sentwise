@@ -9,15 +9,16 @@ final class PaddleCheckoutTests: XCTestCase {
 
     // MARK: - Config / price-id routing
 
-    func testActiveConfigIsProductionAfterAtomicActivation() {
-        let config = PaddleConfig.active
+    func testActiveConfigIsProductionAfterAtomicActivation() throws {
+        let config = try XCTUnwrap(PaddleConfig.active)
+        XCTAssertEqual(config, .production)
         XCTAssertEqual(config.environment, .production)
         XCTAssertEqual(config.clientSideToken, "live_3affc7e38f8efd6ebd94616ab39")
         XCTAssertEqual(config.paddleJSEnvironment, "production")
     }
 
     func testPriceIDRoutingPerTier() {
-        let config = PaddleConfig.active
+        let config = PaddleConfig.production
         XCTAssertEqual(config.priceID(for: .starter), "pri_01m307sdxtk64vb7yjn4vptrcx")
         XCTAssertEqual(config.priceID(for: .pro), "pri_01m307vkn7zf0k194trcmx0qg1")
         XCTAssertEqual(config.priceID(for: .unlimited), "pri_01m307xfej4zjp0n7wkf4rf9cd")
@@ -37,14 +38,14 @@ final class PaddleCheckoutTests: XCTestCase {
         XCTAssertEqual(config.priceID(for: .unlimited), "pri_01m307xfej4zjp0n7wkf4rf9cd")
     }
 
-    func testSandboxConfigKeptForLocalTesting() {
-        let config = PaddleConfig.sandbox
+    func testSandboxConfigSelectsSandboxPaddleJSEnvironment() {
+        let config = PaddleConfig.testSandbox
         XCTAssertEqual(config.environment, .sandbox)
         XCTAssertEqual(config.paddleJSEnvironment, "sandbox")
     }
 
     func testEveryPurchasablePlanMapsToADistinctPrice() {
-        let config = PaddleConfig.active
+        let config = PaddleConfig.production
         let ids = Set(PaddlePlan.allCases.map { config.priceID(for: $0) })
         XCTAssertEqual(ids.count, PaddlePlan.allCases.count)
         XCTAssertFalse(ids.contains(""))
@@ -123,13 +124,13 @@ final class PaddleCheckoutTests: XCTestCase {
 
     @MainActor
     func testModelRoutesPriceForPlan() {
-        let model = PaddleCheckoutModel(plan: .unlimited, createTransaction: mint())
-        XCTAssertEqual(model.priceID, PaddleConfig.active.priceID(for: .unlimited))
+        let model = PaddleCheckoutModel(config: .production, plan: .unlimited, createTransaction: mint())
+        XCTAssertEqual(model.priceID, PaddleConfig.production.priceID(for: .unlimited))
     }
 
     @MainActor
     func testModelWithoutTransactionSourceCannotOpenAndFailsToPrepare() async {
-        let model = PaddleCheckoutModel(plan: .pro, createTransaction: nil)
+        let model = PaddleCheckoutModel(config: .production, plan: .pro, createTransaction: nil)
         XCTAssertFalse(model.canOpenCheckout)
         await model.prepare()
         guard case .failed = model.phase else { return XCTFail("expected failed") }
@@ -137,7 +138,7 @@ final class PaddleCheckoutTests: XCTestCase {
 
     @MainActor
     func testPrepareThenPageLoadPublishesTransactionArgument() async {
-        let model = PaddleCheckoutModel(plan: .starter, createTransaction: mint("txn_starter"))
+        let model = PaddleCheckoutModel(config: .production, plan: .starter, createTransaction: mint("txn_starter"))
         await model.prepare()
         XCTAssertEqual(model.phase, .preparing, "still awaiting page load before opening")
         XCTAssertNil(model.openArgumentJSON, "must not open before the page is ready")
@@ -148,7 +149,7 @@ final class PaddleCheckoutTests: XCTestCase {
 
     @MainActor
     func testPageLoadBeforePrepareStillOpensOnceTransactionArrives() async {
-        let model = PaddleCheckoutModel(plan: .pro, createTransaction: mint("txn_pro"))
+        let model = PaddleCheckoutModel(config: .production, plan: .pro, createTransaction: mint("txn_pro"))
         model.pageDidLoad()
         XCTAssertNil(model.openArgumentJSON, "no transaction yet")
         await model.prepare()
@@ -162,7 +163,7 @@ final class PaddleCheckoutTests: XCTestCase {
             calls += 1
             return PaddleCheckoutTransaction(transactionID: "txn_1")
         }
-        let model = PaddleCheckoutModel(plan: .pro, createTransaction: counting)
+        let model = PaddleCheckoutModel(config: .production, plan: .pro, createTransaction: counting)
         await model.prepare()
         await model.prepare()
         XCTAssertEqual(calls, 1)
@@ -173,6 +174,7 @@ final class PaddleCheckoutTests: XCTestCase {
     @MainActor
     func testCheckoutEndpointErrorSurfacesWorkerMessage() async {
         let model = PaddleCheckoutModel(
+            config: .production,
             plan: .pro,
             createTransaction: mint(error: LLMError.managedCheckoutFailed("That plan isn't available right now."))
         )
@@ -184,6 +186,7 @@ final class PaddleCheckoutTests: XCTestCase {
     @MainActor
     func testNotSignedInErrorSurfacesSignInCopy() async {
         let model = PaddleCheckoutModel(
+            config: .production,
             plan: .pro,
             createTransaction: mint(error: LLMError.managedNotSignedIn)
         )
@@ -194,6 +197,7 @@ final class PaddleCheckoutTests: XCTestCase {
     @MainActor
     func testTransportErrorSurfacesConnectionCopy() async {
         let model = PaddleCheckoutModel(
+            config: .production,
             plan: .pro,
             createTransaction: mint(error: LLMError.transport("offline"))
         )
@@ -223,7 +227,7 @@ final class PaddleCheckoutTests: XCTestCase {
 
     @MainActor
     func testOpenedThenCompletedTransitions() async {
-        let model = PaddleCheckoutModel(plan: .pro, createTransaction: mint())
+        let model = PaddleCheckoutModel(config: .production, plan: .pro, createTransaction: mint())
         await model.prepare()
         model.pageDidLoad()
         XCTAssertEqual(model.phase, .preparing)
@@ -237,14 +241,14 @@ final class PaddleCheckoutTests: XCTestCase {
     func testReadyBeforeOverlayAdvancesFromPreparing() async {
         // Even if the transaction/page race leaves us in .preparing, the real
         // overlay-open signal advances us to presenting.
-        let model = PaddleCheckoutModel(plan: .pro, createTransaction: mint())
+        let model = PaddleCheckoutModel(config: .production, plan: .pro, createTransaction: mint())
         model.handle(.ready)
         XCTAssertEqual(model.phase, .presenting)
     }
 
     @MainActor
     func testCloseAfterCompletionIsIgnored() {
-        let model = PaddleCheckoutModel(plan: .pro, createTransaction: mint())
+        let model = PaddleCheckoutModel(config: .production, plan: .pro, createTransaction: mint())
         model.handle(.completed)
         model.handle(.closed)
         XCTAssertEqual(model.phase, .completed, "a close after completion must not overwrite the win")
@@ -252,7 +256,7 @@ final class PaddleCheckoutTests: XCTestCase {
 
     @MainActor
     func testCloseWithoutCompletionTransitionsToClosed() {
-        let model = PaddleCheckoutModel(plan: .pro, createTransaction: mint())
+        let model = PaddleCheckoutModel(config: .production, plan: .pro, createTransaction: mint())
         model.handle(.ready)
         model.handle(.closed)
         XCTAssertEqual(model.phase, .closed)
@@ -260,7 +264,7 @@ final class PaddleCheckoutTests: XCTestCase {
 
     @MainActor
     func testFailedTransitionAndTerminalStickiness() {
-        let model = PaddleCheckoutModel(plan: .pro, createTransaction: mint())
+        let model = PaddleCheckoutModel(config: .production, plan: .pro, createTransaction: mint())
         model.handle(.failed("boom"))
         XCTAssertEqual(model.phase, .failed("boom"))
         // A later ready must not resurrect a failed checkout.
@@ -273,7 +277,7 @@ final class PaddleCheckoutTests: XCTestCase {
 
     @MainActor
     func testOpenArgumentNotPublishedOnceTerminal() async {
-        let model = PaddleCheckoutModel(plan: .pro, createTransaction: mint())
+        let model = PaddleCheckoutModel(config: .production, plan: .pro, createTransaction: mint())
         model.handle(.failed("boom"))
         await model.prepare()
         model.pageDidLoad()
@@ -282,7 +286,7 @@ final class PaddleCheckoutTests: XCTestCase {
 
     @MainActor
     func testFailToPrepareMarksFailure() {
-        let model = PaddleCheckoutModel(plan: .pro, createTransaction: nil)
+        let model = PaddleCheckoutModel(config: .production, plan: .pro, createTransaction: nil)
         model.failToPrepare()
         guard case .failed = model.phase else { return XCTFail("expected failed") }
     }
@@ -290,7 +294,7 @@ final class PaddleCheckoutTests: XCTestCase {
     // MARK: - HTML harness
 
     func testHTMLPageEmbedsTokenAndSandboxEnvironment() {
-        let html = PaddleCheckoutHTML.page(config: .sandbox)
+        let html = PaddleCheckoutHTML.page(config: .testSandbox)
         XCTAssertTrue(html.contains("cdn.paddle.com/paddle/v2/paddle.js"))
         XCTAssertTrue(html.contains(#"Paddle.Environment.set("sandbox")"#))
         XCTAssertTrue(html.contains("test_7a55409b65e7f906b94b863e63a"))

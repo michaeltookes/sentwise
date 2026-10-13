@@ -115,8 +115,15 @@ struct SubscriptionSettingsView: View {
                 Button("Subscribe") {
                     appState.presentBillingCheckout()
                 }
+                .disabled(!appState.isCheckoutAvailable)
                 .accessibilityIdentifier("subscribeCTA")
                 .accessibilityLabel("Subscribe to a plan")
+                if !appState.isCheckoutAvailable {
+                    Text("Checkout isn't available in this build.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("subscribeUnavailable")
+                }
             }
 
             if appState.showsPlanManagement {

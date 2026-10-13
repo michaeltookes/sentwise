@@ -22,7 +22,7 @@ final class AppStatePlanManagementFeedbackTests: XCTestCase {
 
         func changeManagedPlan(priceID: String, expectedAccountKey: String?) async throws -> PaddlePlanChange {
             if let changeResult { return changeResult }
-            let plan = PaddleConfig.active.plan(forPriceID: priceID)?.subscriptionPlan ?? .unknown
+            let plan = PaddleConfig.production.plan(forPriceID: priceID)?.subscriptionPlan ?? .unknown
             return PaddlePlanChange(plan: plan, status: .active)
         }
     }
