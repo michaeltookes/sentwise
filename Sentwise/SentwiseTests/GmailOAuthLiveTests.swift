@@ -16,8 +16,10 @@ import XCTest
 ///     address with the `https://mail.google.com/` scope (from one manual
 ///     sign-in; see `docs/gmail-oauth.md`)
 ///
-/// Under `xcodebuild test` they need the `TEST_RUNNER_` prefix
-/// (`docs/live-verification.md`). Tokens live only in memory here; nothing is
+/// The live-tests workflow (`.github/workflows/live-tests.yml`) passes them
+/// from repository secrets of the same names via
+/// `Distribution/scripts/inject-live-env.sh`. Locally, under `xcodebuild test`
+/// they need the `TEST_RUNNER_` prefix (`docs/live-verification.md`). Tokens live only in memory here; nothing is
 /// written to any Keychain.
 @MainActor
 final class GmailOAuthLiveTests: XCTestCase {
@@ -33,7 +35,7 @@ final class GmailOAuthLiveTests: XCTestCase {
         }
         let client = GoogleOAuthClientConfiguration(
             clientID: clientID,
-            clientSecret: env["SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_SECRET"]
+            clientSecret: env["SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_SECRET"].flatMap { $0.isEmpty ? nil : $0 }
         )
 
         let token = try await OAuthTokenService(transport: URLSessionTransport())

@@ -101,6 +101,10 @@ jobs:
           SENTWISE_LIVE_GMAIL_APP_PASSWORD: ${{ secrets.SENTWISE_LIVE_GMAIL_APP_PASSWORD }}
           SENTWISE_LIVE_ATTNET_EMAIL: ${{ secrets.SENTWISE_LIVE_ATTNET_EMAIL }}
           SENTWISE_LIVE_ATTNET_APP_PASSWORD: ${{ secrets.SENTWISE_LIVE_ATTNET_APP_PASSWORD }}
+          SENTWISE_LIVE_GOOGLE_OAUTH_EMAIL: ${{ secrets.SENTWISE_LIVE_GOOGLE_OAUTH_EMAIL }}
+          SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_ID }}
+          SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_SECRET }}
+          SENTWISE_LIVE_GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.SENTWISE_LIVE_GOOGLE_OAUTH_REFRESH_TOKEN }}
         run: |
           XCTESTRUN=$(find build/Build/Products -maxdepth 1 -name "*.xctestrun" | head -1)
           echo "Injecting live env into $XCTESTRUN"
@@ -133,7 +137,8 @@ jobs:
             -only-testing:SentwiseTests/ManagedInferenceLiveTests \
             -only-testing:SentwiseTests/GmailLiveSendTests \
             -only-testing:SentwiseTests/ReplyWorthinessLiveTests \
-            -only-testing:SentwiseTests/AttNetLiveDraftTests
+            -only-testing:SentwiseTests/AttNetLiveDraftTests \
+            -only-testing:SentwiseTests/GmailOAuthLiveTests
 
       - name: Verify installed-app Keychain items unchanged (tripwire)
         # Runs even when the tests fail — a failing test must not hide a

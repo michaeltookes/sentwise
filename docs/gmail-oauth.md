@@ -194,7 +194,12 @@ App access control. The app-password path stays available as the fallback.
   `SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_SECRET` (optional), and
   `SENTWISE_LIVE_GOOGLE_OAUTH_REFRESH_TOKEN` (with the `TEST_RUNNER_` prefix under
   `xcodebuild test`; see `docs/live-verification.md`). Run it only on the QA
-  runner. To get a refresh token, sign in once with a configured dev build on the
+  runner. On Lucius the dispatch-only live-tests workflow runs it: provision the
+  four repository secrets `SENTWISE_LIVE_GOOGLE_OAUTH_EMAIL`,
+  `SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_ID`, `SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_SECRET`
+  (optional), and `SENTWISE_LIVE_GOOGLE_OAUTH_REFRESH_TOKEN` (Settings → Secrets
+  and variables → Actions); `inject-live-env.sh` passes them into the test host,
+  and the test skips while any required one is unset. To get a refresh token, sign in once with a configured dev build on the
   QA Mac and read the `refreshToken` field of the Keychain item
   `gmail.oauthToken.<email>` (service `com.tookes.Sentwise`).
 - **Manual end to end** (QA Mac, not a developer workstation): with a configured

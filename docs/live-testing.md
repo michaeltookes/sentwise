@@ -168,7 +168,16 @@ SentwiseTests/ManagedInferenceLiveTests
 SentwiseTests/GmailLiveSendTests
 SentwiseTests/ReplyWorthinessLiveTests
 SentwiseTests/AttNetLiveDraftTests
+SentwiseTests/GmailOAuthLiveTests
 ```
+
+`GmailOAuthLiveTests` (item 104) refreshes a real "Sign in with Google" grant and
+authenticates Gmail IMAP with XOAUTH2, read-only. It runs once the four
+repository secrets `SENTWISE_LIVE_GOOGLE_OAUTH_EMAIL`,
+`SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_ID`, `SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_SECRET`
+(optional), and `SENTWISE_LIVE_GOOGLE_OAUTH_REFRESH_TOKEN` are provisioned, and
+skips otherwise. `Distribution/scripts/tests/test_live_env_wiring.py` (run in CI)
+fails if a live test's variables or class are missing from this pipeline.
 
 `PaddleCheckoutLiveTests` is the first checkout payload (item 97 / closes item
 95's pending live check): it loads the real `PaddleCheckoutHTML` harness in a
