@@ -173,6 +173,40 @@ final class GoogleSignInRaceTests: XCTestCase {
         XCTAssertEqual(try store.loadToken(for: "me@gmail.com")?.accessToken, "late-at")
     }
 
+    // MARK: - Reconnect while a revoke is pending
+
+    func testSlowRevokeNeverDeletesTheReplacementToken() async throws {
+        let store = GmailAuthStore(secrets: InMemorySecretStore())
+        try store.saveToken(OAuthToken(
+            accessToken: "old-at", refreshToken: "old-rt", expiresAt: .distantFuture,
+            scope: GoogleOAuth.mailScope, tokenType: "Bearer"
+        ), for: "me@gmail.com")
+        let transport = GatedRefreshTransport(gatedURL: GoogleOAuth.revocationEndpoint)
+        let service = GoogleMailAuthService(
+            coordinator: GmailAuthCoordinator(
+                client: GoogleOAuthClientConfiguration(clientID: clientID),
+                store: store,
+                tokenService: OAuthTokenService(transport: transport)
+            ),
+            tokenStore: store
+        )
+
+        let disconnect = Task { await service.disconnect("me@gmail.com") }
+        await fulfillment(of: [transport.didStartRefresh], timeout: 2)
+        XCTAssertFalse(store.hasToken(for: "me@gmail.com"), "local removal happens before the revoke")
+
+        // The user signs in again while the old revoke is still out.
+        try store.saveToken(OAuthToken(
+            accessToken: "new-at", refreshToken: "new-rt", expiresAt: .distantFuture,
+            scope: GoogleOAuth.mailScope, tokenType: "Bearer"
+        ), for: "me@gmail.com")
+        transport.completeRefresh(HTTPResponse(statusCode: 200, body: Data()))
+        await disconnect.value
+
+        XCTAssertEqual(try store.loadToken(for: "me@gmail.com")?.accessToken, "new-at")
+        XCTAssertEqual(transport.lastGatedFields["token"], "old-rt", "only the old grant was revoked")
+    }
+
     // MARK: - Builds without a bundled client
 
     func testDisconnectWithoutAClientStillDeletesTheLocalToken() async throws {
@@ -293,21 +327,30 @@ final class GatedRedirectListener: RedirectListener, @unchecked Sendable {
     func stop() {}
 }
 
-/// A transport whose refresh requests wait until the test answers them;
-/// every other request (e.g. revoke) answers 200 immediately.
+/// A transport whose refresh requests (or, with `gatedURL`, requests to that
+/// URL) wait until the test answers them; every other request answers
+/// `otherResponse` immediately.
 final class GatedRefreshTransport: HTTPTransport, @unchecked Sendable {
-    let didStartRefresh = XCTestExpectation(description: "token refresh started")
+    let didStartRefresh = XCTestExpectation(description: "gated request started")
+    private let gatedURL: URL?
+    private let otherResponse: HTTPResponse
     private let lock = NSLock()
     private var continuation: CheckedContinuation<HTTPResponse, Error>?
     private(set) var refreshCount = 0
+    private(set) var lastGatedFields: [String: String] = [:]
+
+    init(gatedURL: URL? = nil, otherResponse: HTTPResponse = HTTPResponse(statusCode: 200, body: Data())) {
+        self.gatedURL = gatedURL
+        self.otherResponse = otherResponse
+    }
 
     func postForm(_ url: URL, fields: [String: String]) async throws -> HTTPResponse {
-        guard fields["grant_type"] == "refresh_token" else {
-            return HTTPResponse(statusCode: 200, body: Data())
-        }
+        let isGated = gatedURL.map { $0 == url } ?? (fields["grant_type"] == "refresh_token")
+        guard isGated else { return otherResponse }
         return try await withCheckedThrowingContinuation { continuation in
             lock.lock()
             refreshCount += 1
+            lastGatedFields = fields
             self.continuation = continuation
             lock.unlock()
             didStartRefresh.fulfill()

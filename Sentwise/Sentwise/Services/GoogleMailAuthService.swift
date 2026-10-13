@@ -155,7 +155,13 @@ final class GoogleMailAuthService: ObservableObject {
     /// a bundled client only the remote revoke is skipped: the local token is
     /// always deleted.
     func disconnect(_ email: String) async {
-        await coordinator?.disconnect(email)
+        if let coordinator {
+            // The coordinator deletes the token *before* awaiting the revoke;
+            // never delete again afterward, because by then the user may have
+            // signed in again and the stored token is the replacement.
+            await coordinator.disconnect(email)
+            return
+        }
         guard let tokenStore, tokenStore.hasToken(for: email) else { return }
         do {
             try tokenStore.deleteToken(for: email)
