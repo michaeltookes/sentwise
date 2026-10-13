@@ -285,6 +285,7 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - These are **billing/licensing events the service inherently holds** — not device telemetry — so **no opt-in consent prompt is required** (distinct from item 83's opt-in off-device feedback). No call or draft content is involved.
     - Surfaced to the maintainer via the existing `/admin` surface (alongside 56b's margin dashboard) or an export; feeds marketing ("X% convert, mostly to Pro").
     - Depends on 56c emitting the conversion/subscription event; complements 56b (usage/margin).
+    - **Sandbox kept separate (pipeline replan 2026-10-12):** `GET /admin/funnel`'s top-level counters count live (production Paddle) events only; Paddle sandbox events from item 123's QA lane are exposed in a separate `sandbox` object (`checkoutsOpened`, `subscriptionsActivated.{starter,pro,unlimited}`, `subscriptionsCanceled`), zeros until 123 ships, and never feed `trialToPaidRate`. Vitest: a sandbox-signed webhook increments only `sandbox.*`. **Verified by:** TC-M2-08, TC-M3-05, TC-M3-09.
 
 92. **Surface scheduled cancellation ("Cancels on <date>") in the Subscription pane** — *discovered 2026-09-12 during the items 90/91 cancel live-verify*
     Canceling from the Paddle portal defaults to **cancel at end of billing period**: Paddle fires `subscription.updated` with `status` still `active` plus `scheduled_change: {action: "cancel", effective_at: …}`. The worker's webhook maps only `status` and ignores `scheduled_change`, so `/v1/me` reports a plain active subscription and the pane shows nothing about the pending cancellation until the period actually ends (when `subscription.canceled` fires and the existing canceled-state handling kicks in). Observed live: owner canceled in the portal and the app kept showing the active Pro plan with no hint the cancel had registered.
@@ -411,6 +412,7 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - `/v1/paddle/checkout` and `/v1/paddle/change-plan` write one Analytics Engine datapoint per call: HMAC-hashed account id (same scheme as `analytics.ts`), action, requested tier, trial/paid state. No email, no payment data.
     - The counts surface in item 88's `GET /admin/funnel` as `checkoutsOpened` (both actions, by tier).
     - Comp accounts (item 111) and calls that fail auth are not counted.
+    - Checkouts opened on the Paddle sandbox lane (item 123) are tagged with the environment and counted only in `/admin/funnel`'s `sandbox.checkoutsOpened`, never in the live `checkoutsOpened`.
     - Vitest: datapoint written once per successful call, never on 401, never for comp.
     - **Verified by:** TC-M2-05, TC-M2-07, TC-M2-08.
 

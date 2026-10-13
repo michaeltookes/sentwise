@@ -17,6 +17,7 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 - **F2, a throwaway trial account:** `luciusfox+trial-<RUNID>@prowlqa.dev`, where `<RUNID>` is unique per run: the run's date and time, `YYYYMMDD-HHMM` (for example `20261020-1430`), never the date alone. Same-day reruns must not collide, because a purchaser from TC-M3-05 is kept until its cancellation takes effect. Sentwise sign-in codes for F2 arrive in F1's Gmail inbox (plus addressing). F2 is created inside the case by signing in, and removed in teardown. Record the RUNID in the run report.
 - **S1, an outside sender:** a mailbox QA controls on a domain other than `prowlqa.dev` (the wave-2 test mailbox, genkei-ops P1-3). Until it exists, the orchestrator asks Michael to send the message from his own address at the marked step. S1 only sends the fixture question below; it never receives anything from Sentwise.
 - **Q1, the fixture inbound question** (subject `Pilot kickoff`, body `Hi Lucius, can you confirm Thursday at 10am works for the pilot kickoff? Thanks, Dana`).
+- **A1, the fixture availability** that answers Q1: `Yes, Thursday at 10am works for me.` Nothing in the mailbox tells Sentwise this, so a correct build may ask for it (a **Needs your input** card with no **Approve** button) instead of guessing.
 - **T1, the fixture transcript.** Paste exactly:
   ```
   Dana (Acme): Thanks for walking us through the pilot today.
@@ -27,7 +28,9 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
   ```
 - **Mail safety:** every draft is addressed only to `luciusfox@prowlqa.dev`, and send behavior is **Save as draft**. No case sends mail to anyone else.
 - **Admin endpoints:** `uat` reads `SENTWISE_ADMIN_TOKEN` from its run environment on the Mini (provisioned by Michael). The token never appears in a step, a log, or an asset; screenshots of requests show the header as `Bearer ***`. Worker base URL: `https://sentwise-inference.sentwise-service.workers.dev`.
-- **Opening the status menu:** click the menu-bar status item whose accessibility label is "Sentwise" (identifier `sentwise.statusItem`). Settings opens from the status menu item **Settings…**; its tabs are General, Account, AI, Subscription, Analytics, Rules, About.
+- **Opening the status menu:** on 0.2.1 and later, click the menu-bar status item whose accessibility label is "Sentwise" (identifier `sentwise.statusItem`, item 112). Settings opens from the status menu item **Settings…**; its tabs are General, Account, AI, Subscription, Analytics, Rules, About.
+- **Opening the status menu on 0.2.0 (old-build fallback):** 0.2.0 labels only the menu-bar image, so on macOS 26 its item has no name in the accessibility tree and Peekaboo cannot find it by "Sentwise" (`docs/resolved.md`, item 112). On 0.2.0, use the coordinate-click status-menu recipe from `SENTWISE_QA.md` in Lucius' workspace: locate the `envelope.badge` icon in a menu-bar screenshot and click its coordinates. Before acting on the menu, confirm it contains **Check for Updates…** and **Quit Sentwise**. If it does not, press Escape and do not click anything in it, because a neighboring unnamed icon was opened. If the recipe fails twice, the orchestrator asks Michael for one human-assisted click on the Mini (screen sharing) to open the menu, and the report records that the first click was assisted. This fallback is only for 0.2.0; on 0.2.1+ a coordinate click is a TC-M1-03 failure.
+- **Throwing a draft away:** a normally generated draft in Review Drafts has **Deny** and **Approve** (**Discard** appears only in exceptional states such as a dispatch queued offline). To throw a draft away, click **Deny**; in the "Why deny this draft?" sheet select **Not worth replying** and click **Deny** in the sheet. If "Don't ask again this session" was ticked earlier in this app run, the sheet does not appear and the draft is removed directly; either way the draft leaves the list.
 
 ## M1 v0.2.1 ships
 
@@ -36,10 +39,10 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 - **Verifies:** items 114, 117
 - **Preconditions:** Sentwise 0.2.0 (build 5) installed in `/Applications` and running, signed in as F1; v0.2.1 published (GitHub release, appcast, cask).
 - **Steps:**
-  1. Open the status menu and click **Check for Updates…**.
+  1. Open the status menu with the **old-build fallback** from the preamble (0.2.0 has no accessibility name; do not search for "Sentwise"), confirm it lists **Check for Updates…** and **Quit Sentwise**, and click **Check for Updates…**.
   2. Wait for the update dialog.
   3. Scroll the release-notes area to the bottom.
-- **Expected:** the dialog reads "Sentwise 0.2.1 is now available" and its release-notes area shows the 0.2.1 CHANGELOG section with at least one heading and one bullet; it is not blank.
+- **Expected:** the dialog reads "Sentwise 0.2.1 is now available" and its release-notes area shows the 0.2.1 CHANGELOG section with at least one heading and one bullet; it is not blank. The report says whether step 1 used the coordinate recipe or a human-assisted click.
 - **Asset:** video
 
 ### TC-M1-02 Install the update and confirm the version
@@ -124,12 +127,15 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
   9. If the status menu shows **Start Watching**, click it; it must then read **Pause Watching**.
   10. From S1, send Q1 to `luciusfox@prowlqa.dev`.
   11. Wait up to 10 minutes for the notification "Reply-worthy: <S1 sender> — draft a reply?", then click it.
-  12. On the Reply-worthy card in Review Drafts, click **Draft reply**. Wait for the draft, then click **Approve**.
-  13. In Gmail on the Mini, open Drafts for `luciusfox@prowlqa.dev`.
+  12. On the Reply-worthy card in Review Drafts, click **Draft reply** and wait for the draft.
+  13. If the card shows **Needs your input** with the column "Answer to re-draft" and no **Approve** button: type A1 into the **Your answer** field under the question about Thursday or availability (leave any other answer fields empty), click **Re-draft with my answers**, and wait for the card to change to "Proposed reply". If the card already shows "Proposed reply", go on.
+  14. Click **Approve**.
+  15. In Gmail on the Mini, open Drafts for `luciusfox@prowlqa.dev`.
 - **Expected:**
   - After step 5 the Setup Assistant does not reopen; onboarding is completed and persisted.
   - Gmail Drafts holds the follow-up "Pilot next steps", addressed only to `luciusfox@prowlqa.dev`. It mentions the security questionnaire by Friday and the November 9 meeting.
-  - Gmail Drafts also holds a reply in the "Pilot kickoff" thread that answers the Thursday 10am question.
+  - Gmail Drafts also holds a reply in the "Pilot kickoff" thread that confirms Thursday at 10am works. A reply that confirms the time without step 13 having supplied A1 is a defect (an invented user decision), not a pass.
+  - The report records whether step 13 was needed.
   - Nothing was sent.
   - This case passing ticks the §6 onboarding box.
 - **Asset:** video
@@ -216,7 +222,7 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
   3. Click **Sign in or create your account**, enter F2 in **Email address**, continue.
   4. Read the code from F1's Gmail inbox, enter it in **6-digit code**, verify.
   5. From the status menu open **New Follow-up from Transcript…**, enter recipient `luciusfox@prowlqa.dev`, paste T1, click **Draft follow-up**, and wait for the draft (this first draft starts the trial).
-  6. In Review Drafts, click **Discard** on that draft and pick any reason.
+  6. In Review Drafts, throw the draft away with **Deny** as in the preamble ("Throwing a draft away": **Deny**, select **Not worth replying**, **Deny** in the sheet).
   7. Close the Settings window, reopen **Settings…** → **Subscription** (this refreshes status), and read the plan line.
   8. uat: repeat step 1.
 - **Expected:** step 7 shows "Trial — 14 days left", and `trialsStarted` in step 8 is at least one higher than in step 1. Keep F2 signed in for TC-M2-07.
@@ -232,7 +238,7 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
   3. Wait until the Paddle checkout form ("Secure checkout by Paddle") renders.
   4. Click **Close**. Then **Sign out**, and sign back in as F1.
   5. uat: `GET {base}/admin/funnel?from=<today>&to=<today>`.
-- **Expected:** `checkoutsOpened` is at least one higher than before step 1, and `subscriptionsActivated.starter` is unchanged; no purchase was made.
+- **Expected:** `checkoutsOpened` is at least one higher than before step 1, and `subscriptionsActivated.starter` is unchanged; no purchase was made. If item 123 is already deployed when this case runs, F2's checkout is the sandbox one, so compare `sandbox.checkoutsOpened` and `sandbox.subscriptionsActivated.starter` instead, and the live `checkoutsOpened` is unchanged.
 - **Asset:** video
 
 ### TC-M2-08 Funnel response shape
@@ -241,12 +247,12 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 - **Preconditions:** token available.
 - **Steps:**
   1. `GET {base}/admin/funnel?from=2026-10-01&to=2026-10-31` with the token.
-- **Expected:** 200 JSON with numeric fields `trialsStarted`, `checkoutsOpened`, `subscriptionsActivated.starter`, `.pro`, `.unlimited`, `subscriptionsCanceled`, and `trialToPaidRate`; comp grants (item 111) are not counted as activations.
+- **Expected:** 200 JSON with numeric fields `trialsStarted`, `checkoutsOpened`, `subscriptionsActivated.starter`, `.pro`, `.unlimited`, `subscriptionsCanceled`, and `trialToPaidRate`, all counting live (production Paddle) events only; plus a `sandbox` object with numeric `checkoutsOpened`, `subscriptionsActivated.starter`, `.pro`, `.unlimited`, and `subscriptionsCanceled` for Paddle sandbox events (zeros until item 123 ships). Comp grants (item 111) are not counted as activations in either.
 - **Asset:** screenshot
 
 ## M3 Trial to paid verified
 
-All M3 app cases use a fresh F2 created at the start of the run (sign out of F1, sign in as F2, generate and discard one T1 draft to start the trial, and refresh status, as in TC-M2-06 steps 2–7), with exactly one mailbox (F1's) connected. The pane rounds trial days up, so each reminder fixture sets the trial end one hour inside its threshold. Trial dates are set with item 119's admin route by the `uat` executor.
+All M3 app cases use a fresh F2 created at the start of the run (sign out of F1, sign in as F2, generate one T1 draft to start the trial and throw it away with **Deny** (preamble, "Throwing a draft away"), and refresh status, as in TC-M2-06 steps 2–7), with exactly one mailbox (F1's) connected. The pane rounds trial days up, so each reminder fixture sets the trial end one hour inside its threshold. Trial dates are set with item 119's admin route by the `uat` executor.
 
 ### TC-M3-01 Trial override is limited to QA accounts
 - **Executor:** uat
@@ -298,7 +304,7 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 
 ### TC-M3-05 Checkout to a paid plan on the Paddle sandbox; production unaffected
 - **Executor:** lucius (steps 1–11) and uat (steps 1 and 12)
-- **Verifies:** item 123, item 120, checkout regression (items 56c/90)
+- **Verifies:** item 123, item 120, item 88 (sandbox counts kept separate), checkout regression (items 56c/90)
 - **Preconditions:**
   - v0.2.2 installed; item 123 deployed (Worker `PADDLE_ENV` lane with the sandbox catalog mirroring the tier matrix, see `docs/billing-qa.md`).
   - **The purchaser is always a throwaway F2** (a `@prowlqa.dev` account with no comp), here in TC-M3-04's "Trial ended" state. This applies to every path, alternates included.
@@ -311,7 +317,7 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
     - An account with a paid plan is not valid. **Manage plan** would show the current plan or a prorated plan change, never the card form.
   - Paddle sandbox test card numbers are in `docs/billing-qa.md`, not here.
 - **Steps:**
-  1. uat: `GET {base}/admin/comp?email=<purchaser>` and `GET {base}/admin/comp?email=<P1>` with the token.
+  1. uat: `GET {base}/admin/comp?email=<purchaser>` and `GET {base}/admin/comp?email=<P1>` with the token. Then `GET {base}/admin/funnel?from=<today>&to=<today>` and record the baseline: live `subscriptionsActivated.starter`, `.pro`, `.unlimited`, `subscriptionsCanceled`, and `sandbox.subscriptionsActivated.starter`, `sandbox.subscriptionsCanceled`.
   2. lucius, as the purchaser: **Settings…** → **Subscription** → **Subscribe**.
   3. In "Choose your plan", click the Starter card and wait for "Secure checkout by Paddle".
   4. Pay with the Paddle sandbox success test card from `docs/billing-qa.md`.
@@ -328,7 +334,8 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
   - Step 5 shows "You're on Starter — you're all set."
   - Step 6 shows Current plan Starter with "Renews <date about one month out>".
   - For P1, step 9 shows the live price ($9.00/month plus any tax) and step 10 declines the test card. No sandbox price or sandbox checkout ever appears for P1.
-  - Step 12 counts the purchase as `subscriptionsActivated.starter` with sandbox purchases reported separately, never mixed into the live numbers.
+  - Step 12 (primary path): `sandbox.subscriptionsActivated.starter` is at least baseline + 1, and every live counter recorded in step 1 is unchanged. On alternate paths (a) and (b) the purchase is live: live `subscriptionsActivated.starter` is at least baseline + 1 and `sandbox.subscriptionsActivated.starter` is unchanged.
+  - A live counter that moved on the primary path fails the case, unless the orchestrator confirms in the live Paddle dashboard that the same number of real customer subscriptions were created between steps 1 and 12.
 - **Alternate paths (only if item 123 is unavailable, in this order):**
   - (a) A single-use 100%-off live Paddle discount code, entered at step 4.
   - (b) A real $9 Starter purchase. Michael enters the card at step 4 and the orchestrator refunds it the same day.
@@ -340,7 +347,7 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 - **Verifies:** item 120 (paid entitlement on the release)
 - **Preconditions:** TC-M3-05 passed.
 - **Steps:**
-  1. Open **Settings…** → **Subscription**; record the Usage count as the baseline N. Drafts made during setup on trial count toward the month; discarding does not refund one, and buying Starter does not reset the counter.
+  1. Open **Settings…** → **Subscription**; record the Usage count as the baseline N. Drafts made during setup on trial count toward the month; denying does not refund one, and buying Starter does not reset the counter.
   2. Status menu → **New Follow-up from Transcript…**; recipient `luciusfox@prowlqa.dev`, subject `Pilot next steps (paid)`; paste T1; click **Draft follow-up**.
   3. Close and reopen **Settings…** → **Subscription** and read Usage.
 - **Expected:** a draft is produced and Usage reads N + 1 of 30 drafts used this month.
@@ -368,10 +375,10 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
 ### TC-M3-09 Conversion is counted
 - **Executor:** uat
 - **Verifies:** item 88
-- **Preconditions:** TC-M3-05 and TC-M3-08 done today.
+- **Preconditions:** TC-M3-05 and TC-M3-08 done today; the step 1 baseline from TC-M3-05 is in the run notes.
 - **Steps:**
   1. `GET {base}/admin/funnel?from=<today>&to=<today>` with the token.
-- **Expected:** `subscriptionsActivated.starter` ≥ 1 and `subscriptionsCanceled` ≥ 1 for today.
+- **Expected (primary path, Paddle sandbox):** `sandbox.subscriptionsActivated.starter` and `sandbox.subscriptionsCanceled` are each at least their TC-M3-05 baseline + 1. The live `subscriptionsActivated.starter`, `.pro`, `.unlimited`, and `subscriptionsCanceled` equal the TC-M3-05 baseline: the sandbox purchase and its cancellation never reach the live numbers. The same live-dashboard exception as TC-M3-05 applies. On alternate path (a) or (b), the live `subscriptionsActivated.starter` and `subscriptionsCanceled` are each at least baseline + 1 instead, and the sandbox counters are unchanged.
 - **Asset:** screenshot
 - **Teardown:** lucius signs out of F2 and back in as F1, then confirms the Subscription tab reads Pro. The orchestrator refunds the purchase if one was charged and deletes F2 once its cancellation takes effect.
 
@@ -457,7 +464,7 @@ All M3 app cases use a fresh F2 created at the start of the run (sign out of F1,
   3. Open the downloaded DMG and drag Sentwise to Applications. Open it and accept the Gatekeeper prompt.
   4. In Setup Assistant ("Welcome to Sentwise"), connect F1's mailbox (`luciusfox@prowlqa.dev`) with its app password. Then sign in to Sentwise AI as a new F2.
   5. Finish the Setup Assistant with **Save as draft**.
-  6. From the status menu open **New Follow-up from Transcript…**, enter recipient `luciusfox@prowlqa.dev`, paste T1, click **Draft follow-up**, then **Discard** the draft (the first draft starts the trial).
+  6. From the status menu open **New Follow-up from Transcript…**, enter recipient `luciusfox@prowlqa.dev`, paste T1, click **Draft follow-up**, and when the draft appears in Review Drafts throw it away with **Deny**: select **Not worth replying** and click **Deny** in the sheet (the first draft starts the trial).
   7. Close and reopen **Settings…** → **Subscription**.
 - **Expected:** Gatekeeper reports the app was checked for malicious software with none detected; the installed version is the latest release; step 3 opens to the Setup Assistant (not straight to the menu bar); step 7 shows "Trial — 14 days left". Teardown: in the stranger user, Settings → Account → disconnect the mailbox with **Disconnect & Erase Local Data**; log out of the stranger user.
 - **Asset:** video
