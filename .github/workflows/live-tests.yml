@@ -3,8 +3,9 @@
 # This is the ONLY place the SENTWISE_LIVE_* tests actually run. They hit real
 # services (Clerk, the sentwise-service Worker, Paddle sandbox, live IMAP
 # mailboxes) and drafting spends real Anthropic budget, so they never run per
-# PR-commit and never on a developer's machine — only here, on merge to main and
-# on demand for a branch (via the /live-verify skill's workflow_dispatch).
+# PR-commit and never on a developer's machine — only here, on demand via
+# workflow_dispatch (directly or through /live-verify). Merges to main do not
+# trigger live tests; operators must dispatch post-merge verification explicitly.
 #
 # Runner: the SAME self-hosted macOS runner prowl-qa.yml targets — the Lucius Mac
 # mini (labels [self-hosted, macOS]). WebKit's window server (the Paddle
@@ -45,7 +46,7 @@ on:
   # push-to-main trigger removed 2026-10-11: this runner is also the Sentwise QA
   # desktop, and the item-115 guard refuses to run while the installed app is
   # up (always, there). Live tests run on demand via the orchestrator's
-  # pause-QA → dispatch → relaunch procedure, or /live-verify.
+  # pause-QA → dispatch (directly or via /live-verify) → relaunch procedure.
 
 jobs:
   live-tests:
