@@ -49,6 +49,7 @@ Intro paragraph with a [link](https://example.com/a?b=1&c=2) & an <angle>.
 - **Bold lead** — first bullet with `inline code`
   continued on an indented line.
 - An *emphasized* word.
+- Accepts `*.vtt` and `*.srt` files, plus `**not bold**`, `[not](a-link)` and `a & b`.
 
 ### Fixed
 
@@ -77,6 +78,8 @@ has "$out" '<li><strong>Bold lead</strong> — first bullet with <code>inline co
   && ok "bullet: bold, code, continuation line joined" || bad "bullet: bold, code, continuation line joined" "$out"
 has "$out" '<li>An <em>emphasized</em> word.</li>' \
   && ok "bullet: *emphasis*" || bad "bullet: *emphasis*" "$out"
+has "$out" '<li>Accepts <code>*.vtt</code> and <code>*.srt</code> files, plus <code>**not bold**</code>, <code>[not](a-link)</code> and <code>a &amp; b</code>.</li>' \
+  && ok "bullet: markdown inside code spans stays literal" || bad "bullet: markdown inside code spans stays literal" "$out"
 [[ "$(grep -c '<ul>' <<< "$out")" -eq 2 && "$(grep -c '</ul>' <<< "$out")" -eq 2 ]] \
   && ok "lists opened and closed per section" || bad "lists opened and closed per section" "$out"
 ! has "$out" 'Older release only' && ! has "$out" 'Not shipped yet' \

@@ -15,8 +15,9 @@
 #
 # Markdown support is the subset CHANGELOG.md actually uses (Keep a Changelog):
 # ### / #### headings, "- " / "* " bullets with indented continuation lines,
-# paragraphs, **bold**, *italic*, `code`, and [text](url) links. Link reference
-# definitions ("[0.2.0]: https://…") are dropped. Text is HTML-escaped. No
+# paragraphs, **bold**, *italic*, `code` (contents rendered literally), and
+# [text](url) links. Link reference definitions ("[0.2.0]: https://…") are
+# dropped. Text is HTML-escaped. No
 # external dependencies (POSIX awk only), so it runs the same locally and on CI.
 #
 set -euo pipefail
@@ -70,12 +71,28 @@ function links(s,    out, m, mid, text, url) {
   }
   return out s
 }
-function inline(s) {
-  s = esc(s)
-  s = wrap(s, "`[^`]+`", 1, 1, "<code>", "</code>")
+# Code spans are lifted out first (placeholder \001<n>\002) so that `*.vtt`,
+# `**x**` or `[a](b)` inside backticks are rendered literally instead of being
+# re-interpreted by the emphasis and link passes; they are put back, escaped,
+# at the end. Placeholders are replaced with index/substr, never sub(), so an
+# "&" in the escaped code can not be mangled.
+function inline(s,    out, n, i, code, pos, ph) {
+  n = 0; out = ""
+  while (match(s, /`[^`]+`/)) {
+    n++; code[n] = substr(s, RSTART + 1, RLENGTH - 2)
+    out = out substr(s, 1, RSTART - 1) "\001" n "\002"
+    s = substr(s, RSTART + RLENGTH)
+  }
+  s = esc(out s)
   s = wrap(s, "\\*\\*[^*]+\\*\\*", 2, 2, "<strong>", "</strong>")
   s = wrap(s, "\\*[^* ][^*]*\\*", 1, 1, "<em>", "</em>")
-  return links(s)
+  s = links(s)
+  for (i = 1; i <= n; i++) {
+    ph = "\001" i "\002"
+    pos = index(s, ph)
+    if (pos > 0) s = substr(s, 1, pos - 1) "<code>" esc(code[i]) "</code>" substr(s, pos + length(ph))
+  }
+  return s
 }
 function flush() {
   if (buf != "") {
