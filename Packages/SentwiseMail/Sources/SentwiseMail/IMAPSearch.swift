@@ -29,7 +29,7 @@ extension IMAPMailProvider {
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
-        let password = credentials.appPassword
+        let authentication = credentials.authentication
         let mailboxName = mailbox.imapName(using: credentials.mailboxNaming)
 
         let bootstrap = ClientBootstrap(group: group)
@@ -40,7 +40,7 @@ extension IMAPMailProvider {
                     let complete = attempts.register(channel)
                     let handler = IMAPSearchHandler(
                         email: email,
-                        password: password,
+                        authentication: authentication,
                         mailboxName: mailboxName,
                         criteria: criteria,
                         offset: offset,
@@ -123,7 +123,7 @@ final class IMAPSearchHandler: ChannelInboundHandler {
     }
 
     private let email: String
-    private let password: String
+    private let authentication: MailAuthentication
     private let mailboxName: String
     private let criteria: MailSearchCriteria
     private let offset: Int
@@ -148,7 +148,7 @@ final class IMAPSearchHandler: ChannelInboundHandler {
 
     init(
         email: String,
-        password: String,
+        authentication: MailAuthentication,
         mailboxName: String,
         criteria: MailSearchCriteria,
         offset: Int,
@@ -157,7 +157,7 @@ final class IMAPSearchHandler: ChannelInboundHandler {
         complete: @escaping @Sendable (Result<MailSearchResult, Error>) -> Void
     ) {
         self.email = email
-        self.password = password
+        self.authentication = authentication
         self.mailboxName = mailboxName
         self.criteria = criteria
         self.offset = offset
@@ -174,6 +174,8 @@ final class IMAPSearchHandler: ChannelInboundHandler {
             handleFetch(fetchResponse)
         case .tagged(let tagged):
             handleTagged(tagged, context: context)
+        case .authenticationChallenge:
+            IMAPAuthentication.answerChallenge(context: context)
         case .fatal(let text):
             settle(.failure(MailError.connectionFailed(text.text)))
             context.close(promise: nil)
@@ -209,7 +211,7 @@ final class IMAPSearchHandler: ChannelInboundHandler {
 
         switch step {
         case .greeting:
-            send(.login(username: email, password: password), tag: loginTag, context: context)
+            send(IMAPAuthentication.command(email: email, authentication: authentication), tag: loginTag, context: context)
             step = .login
         case .search:
             if case .mailboxData(.search(let ids, _)) = payload {

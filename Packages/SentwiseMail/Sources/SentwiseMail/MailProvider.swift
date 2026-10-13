@@ -128,7 +128,7 @@ public protocol MailProvider: Sendable {
     ) async throws
 
     /// Submits a full RFC 822 message for delivery over SMTP (implicit TLS),
-    /// authenticating with the app password. `envelope` carries the SMTP-level
+    /// authenticating with the app password or XOAUTH2. `envelope` carries the SMTP-level
     /// sender and recipients (`MAIL FROM` / `RCPT TO`), which need not match the
     /// message's display headers. Throws `MailError` on failure.
     func sendMessage(

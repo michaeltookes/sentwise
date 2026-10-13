@@ -27,7 +27,7 @@ final class IMAPBulkCleanupTests: XCTestCase {
         let promise = channel.eventLoop.makePromise(of: IMAPBulkOutcome.self)
         let handler = IMAPBulkCleanupHandler(
             email: "me@example.com",
-            password: "pw",
+            authentication: .password("pw"),
             mailboxName: mailbox,
             destinationName: destination,
             request: IMAPBulkCleanupRequest(

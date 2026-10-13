@@ -18,7 +18,7 @@ final class IMAPAppendTests: XCTestCase {
         let promise = channel.eventLoop.makePromise(of: Void.self)
         let handler = IMAPAppendHandler(
             email: "me@gmail.com",
-            password: "pw",
+            authentication: .password("pw"),
             mailboxName: "[Gmail]/Drafts",
             message: ByteBuffer(bytes: rfc822),
             flags: flags,

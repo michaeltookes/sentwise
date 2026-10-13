@@ -17,7 +17,7 @@ final class SMTPSendTests: XCTestCase {
         let promise = channel.eventLoop.makePromise(of: Void.self)
         let handler = SMTPSendHandler(
             email: "me@gmail.com",
-            password: "app-pw",
+            authentication: .password("app-pw"),
             senderDomain: "gmail.com",
             envelope: envelope,
             message: ByteBuffer(bytes: rfc822),

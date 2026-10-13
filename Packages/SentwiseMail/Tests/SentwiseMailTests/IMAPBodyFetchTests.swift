@@ -19,7 +19,7 @@ final class IMAPBodyFetchTests: XCTestCase {
         let promise = channel.eventLoop.makePromise(of: Data.self)
         let handler = IMAPBodyFetchHandler(
             email: "me@gmail.com",
-            password: "pw",
+            authentication: .password("pw"),
             mailboxName: mailbox,
             uid: uid,
             expectedUIDValidity: expectedUIDValidity,

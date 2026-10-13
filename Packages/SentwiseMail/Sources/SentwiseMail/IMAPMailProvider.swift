@@ -6,8 +6,8 @@ import NIOSSL
 
 /// A `MailProvider` backed by SwiftNIO's IMAP stack (`NIOIMAP` over `NIOSSL`).
 ///
-/// `verifyConnection` opens a TLS connection, performs an IMAP `LOGIN` with the
-/// app password, and logs out — the basis of the Settings "Test Connection"
+/// `verifyConnection` opens a TLS connection, authenticates (IMAP `LOGIN` with
+/// the app password, or `AUTHENTICATE XOAUTH2` with an OAuth token), and logs out — the basis of the Settings "Test Connection"
 /// action. Message fetch/send are added in later slices.
 public struct IMAPMailProvider: MailProvider {
 
@@ -34,7 +34,7 @@ public struct IMAPMailProvider: MailProvider {
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
-        let password = credentials.appPassword
+        let authentication = credentials.authentication
 
         let bootstrap = ClientBootstrap(group: group)
             .connectTimeout(timeout)
@@ -42,7 +42,7 @@ public struct IMAPMailProvider: MailProvider {
                 do {
                     let ssl = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
                     let complete = attempts.register(channel)
-                    let verify = IMAPVerifyHandler(email: email, password: password, complete: complete)
+                    let verify = IMAPVerifyHandler(email: email, authentication: authentication, complete: complete)
                     return channel.pipeline.addHandlers([ssl, IMAPClientHandler(), verify])
                 } catch {
                     return channel.eventLoop.makeFailedFuture(error)
@@ -87,7 +87,7 @@ public enum LiveMailProvider {
     }
 }
 
-/// Drives a minimal IMAP `LOGIN`/`LOGOUT` exchange and settles via `complete`.
+/// Drives a minimal IMAP authenticate/`LOGOUT` exchange and settles via `complete`.
 ///
 /// The exchange: wait for the server greeting (an untagged response), send a
 /// tagged `LOGIN`, and complete on the tagged result.
@@ -95,16 +95,16 @@ final class IMAPVerifyHandler: ChannelInboundHandler {
     typealias InboundIn = Response
 
     private let email: String
-    private let password: String
+    private let authentication: MailAuthentication
     private let complete: @Sendable (Result<Void, Error>) -> Void
     private let loginTag = "A1"
     private let logoutTag = "A2"
     private var didSendLogin = false
     private var settled = false
 
-    init(email: String, password: String, complete: @escaping @Sendable (Result<Void, Error>) -> Void) {
+    init(email: String, authentication: MailAuthentication, complete: @escaping @Sendable (Result<Void, Error>) -> Void) {
         self.email = email
-        self.password = password
+        self.authentication = authentication
         self.complete = complete
     }
 
@@ -125,6 +125,8 @@ final class IMAPVerifyHandler: ChannelInboundHandler {
                 settle(.failure(MailError.authenticationFailed(text.text)))
                 context.close(promise: nil)
             }
+        case .authenticationChallenge:
+            IMAPAuthentication.answerChallenge(context: context)
         case .fatal(let text):
             settle(.failure(MailError.connectionFailed(text.text)))
             context.close(promise: nil)
@@ -145,7 +147,7 @@ final class IMAPVerifyHandler: ChannelInboundHandler {
 
     private func sendLogin(context: ChannelHandlerContext) {
         didSendLogin = true
-        let command = TaggedCommand(tag: loginTag, command: .login(username: email, password: password))
+        let command = TaggedCommand(tag: loginTag, command: IMAPAuthentication.command(email: email, authentication: authentication))
         context.writeAndFlush(NIOAny(IMAPClientHandler.Message.part(.tagged(command))), promise: nil)
     }
 

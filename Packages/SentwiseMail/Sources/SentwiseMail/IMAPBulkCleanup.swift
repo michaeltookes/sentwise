@@ -186,7 +186,7 @@ extension IMAPMailProvider {
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
-        let password = credentials.appPassword
+        let authentication = credentials.authentication
 
         return ClientBootstrap(group: group)
             .connectTimeout(timeout)
@@ -195,7 +195,7 @@ extension IMAPMailProvider {
                     let ssl = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
                     let handler = IMAPBulkCleanupHandler(
                         email: email,
-                        password: password,
+                        authentication: authentication,
                         mailboxName: mailboxName,
                         destinationName: destinationName,
                         request: request,

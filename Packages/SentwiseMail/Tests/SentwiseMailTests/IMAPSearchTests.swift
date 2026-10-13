@@ -22,7 +22,7 @@ final class IMAPSearchTests: XCTestCase {
         let promise = channel.eventLoop.makePromise(of: MailSearchResult.self)
         let handler = IMAPSearchHandler(
             email: "me@gmail.com",
-            password: "pw",
+            authentication: .password("pw"),
             mailboxName: mailbox,
             criteria: criteria,
             offset: offset,

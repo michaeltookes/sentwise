@@ -24,7 +24,7 @@ extension IMAPMailProvider {
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.smtpHost
         let email = credentials.email
-        let password = credentials.appPassword
+        let authentication = credentials.authentication
 
         let bootstrap = ClientBootstrap(group: group)
             .connectTimeout(timeout)
@@ -34,7 +34,7 @@ extension IMAPMailProvider {
                     let complete = attempts.register(channel)
                     let handler = SMTPSendHandler(
                         email: email,
-                        password: password,
+                        authentication: authentication,
                         senderDomain: SMTPSendHandler.domain(of: email),
                         envelope: envelope,
                         message: ByteBuffer(bytes: rfc822),
@@ -126,7 +126,8 @@ final class SMTPResponseDecoder: ByteToMessageDecoder {
 }
 
 /// Drives the SMTP submission exchange over an already-TLS'd channel:
-/// greeting → EHLO → AUTH LOGIN → MAIL FROM → RCPT TO… → DATA → body → QUIT,
+/// greeting → EHLO → AUTH LOGIN (app password) or AUTH XOAUTH2 (OAuth access
+/// token, item 104) → MAIL FROM → RCPT TO… → DATA → body → QUIT,
 /// settling via `complete` when the server accepts the message (250 after DATA).
 final class SMTPSendHandler: ChannelInboundHandler {
     typealias InboundIn = SMTPResponse
@@ -134,11 +135,14 @@ final class SMTPSendHandler: ChannelInboundHandler {
 
     private enum Step {
         case greeting, ehlo, authUsername, authPassword, authComplete
+        /// `AUTH XOAUTH2` was rejected with a `334` error challenge; the empty
+        /// reply was sent and the final `5xx` is pending.
+        case authXOAuth2Rejected(String)
         case mailFrom, rcpt(Int), dataCommand, dataBody, quit, done
     }
 
     private let email: String
-    private let password: String
+    private let authentication: MailAuthentication
     private let senderDomain: String
     private let envelope: SMTPEnvelope
     private let message: ByteBuffer
@@ -154,14 +158,14 @@ final class SMTPSendHandler: ChannelInboundHandler {
 
     init(
         email: String,
-        password: String,
+        authentication: MailAuthentication,
         senderDomain: String,
         envelope: SMTPEnvelope,
         message: ByteBuffer,
         complete: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
         self.email = email
-        self.password = password
+        self.authentication = authentication
         self.senderDomain = senderDomain
         self.envelope = envelope
         self.message = message
@@ -177,20 +181,30 @@ final class SMTPSendHandler: ChannelInboundHandler {
             step = .ehlo
         case .ehlo:
             guard expect(response, 250, context: context) else { return }
-            send("AUTH LOGIN", context: context)
-            step = .authUsername
+            sendAuth(context: context)
         case .authUsername:
             guard expect(response, 334, context: context, auth: true) else { return }
             send(Data(email.utf8).base64EncodedString(), context: context)
             step = .authPassword
         case .authPassword:
             guard expect(response, 334, context: context, auth: true) else { return }
-            send(Data(password.utf8).base64EncodedString(), context: context)
+            send(Data(appPassword.utf8).base64EncodedString(), context: context)
             step = .authComplete
         case .authComplete:
+            if response.code == 334, case .xoauth2 = authentication {
+                // Gmail's XOAUTH2 error challenge: answer with an empty line to
+                // receive the final failure reply.
+                step = .authXOAuth2Rejected(Self.xoauth2ChallengeDetail(response.text))
+                send("", context: context)
+                return
+            }
             guard expect(response, 235, context: context, auth: true) else { return }
             send("MAIL FROM:<\(envelope.sender)>", context: context)
             step = .mailFrom
+        case .authXOAuth2Rejected(let detail):
+            let reply = replyText(response)
+            settle(.failure(MailError.authenticationFailed(detail.isEmpty ? reply : "\(reply) (\(detail))")))
+            context.close(promise: nil)
         case .mailFrom:
             guard expect(response, 250, context: context) else { return }
             sendRecipient(0, context: context)
@@ -240,6 +254,23 @@ final class SMTPSendHandler: ChannelInboundHandler {
     }
 
     // MARK: - Sending
+
+    private var appPassword: String {
+        if case .password(let password) = authentication { return password }
+        return ""
+    }
+
+    private func sendAuth(context: ChannelHandlerContext) {
+        switch authentication {
+        case .password:
+            send("AUTH LOGIN", context: context)
+            step = .authUsername
+        case .xoauth2(let accessToken):
+            let initial = XOAuth2.encodedInitialResponse(email: email, accessToken: accessToken)
+            send("AUTH \(XOAuth2.mechanism) \(initial)", context: context)
+            step = .authComplete
+        }
+    }
 
     private func sendRecipient(_ index: Int, context: ChannelHandlerContext) {
         send("RCPT TO:<\(envelope.recipients[index])>", context: context)
@@ -306,6 +337,16 @@ final class SMTPSendHandler: ChannelInboundHandler {
         guard !settled else { return }
         settled = true
         complete(result)
+    }
+
+    /// Decodes Gmail's base64 JSON XOAUTH2 error challenge (e.g.
+    /// `{"status":"400","schemes":"Bearer","scope":"https://mail.google.com/"}`)
+    /// into readable text for diagnostics; returns "" when it is not decodable.
+    static func xoauth2ChallengeDetail(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = Data(base64Encoded: trimmed),
+              let decoded = String(data: data, encoding: .utf8) else { return "" }
+        return decoded
     }
 
     static func domain(of email: String) -> String {

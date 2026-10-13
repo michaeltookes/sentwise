@@ -23,7 +23,7 @@ extension IMAPMailProvider {
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
-        let password = credentials.appPassword
+        let authentication = credentials.authentication
         let mailboxName = mailbox.imapName(using: credentials.mailboxNaming)
 
         let bootstrap = ClientBootstrap(group: group)
@@ -34,7 +34,7 @@ extension IMAPMailProvider {
                     let complete = attempts.register(channel)
                     let handler = IMAPAppendHandler(
                         email: email,
-                        password: password,
+                        authentication: authentication,
                         mailboxName: mailboxName,
                         message: ByteBuffer(bytes: rfc822),
                         flags: flags,
@@ -83,7 +83,7 @@ final class IMAPAppendHandler: ChannelInboundHandler {
     }
 
     private let email: String
-    private let password: String
+    private let authentication: MailAuthentication
     private let mailboxName: String
     private let message: ByteBuffer
     private let flags: [MailFlag]
@@ -98,14 +98,14 @@ final class IMAPAppendHandler: ChannelInboundHandler {
 
     init(
         email: String,
-        password: String,
+        authentication: MailAuthentication,
         mailboxName: String,
         message: ByteBuffer,
         flags: [MailFlag],
         complete: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
         self.email = email
-        self.password = password
+        self.authentication = authentication
         self.mailboxName = mailboxName
         self.message = message
         self.flags = flags
@@ -116,11 +116,13 @@ final class IMAPAppendHandler: ChannelInboundHandler {
         switch unwrapInboundIn(data) {
         case .untagged:
             if step == .greeting {
-                sendTagged(.login(username: email, password: password), tag: loginTag, context: context)
+                sendTagged(IMAPAuthentication.command(email: email, authentication: authentication), tag: loginTag, context: context)
                 step = .login
             }
         case .tagged(let tagged):
             handleTagged(tagged, context: context)
+        case .authenticationChallenge:
+            IMAPAuthentication.answerChallenge(context: context)
         case .fatal(let text):
             settle(.failure(MailError.connectionFailed(text.text)))
             context.close(promise: nil)

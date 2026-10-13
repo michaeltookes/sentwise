@@ -71,7 +71,7 @@ extension IMAPMailProvider {
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
-        let password = credentials.appPassword
+        let authentication = credentials.authentication
         let mailboxName = mailbox.imapName(using: credentials.mailboxNaming)
 
         let bootstrap = ClientBootstrap(group: group)
@@ -82,7 +82,7 @@ extension IMAPMailProvider {
                     let complete = attempts.register(channel)
                     let handler = IMAPMessagePageHandler(
                         email: email,
-                        password: password,
+                        authentication: authentication,
                         mailboxName: mailboxName,
                         offset: offset,
                         limit: limit,
@@ -144,7 +144,7 @@ final class IMAPMessagePageHandler: ChannelInboundHandler {
     }
 
     private let email: String
-    private let password: String
+    private let authentication: MailAuthentication
     private let mailboxName: String
     private let offset: Int
     private let limit: Int
@@ -165,7 +165,7 @@ final class IMAPMessagePageHandler: ChannelInboundHandler {
 
     init(
         email: String,
-        password: String,
+        authentication: MailAuthentication,
         mailboxName: String,
         offset: Int,
         limit: Int,
@@ -173,7 +173,7 @@ final class IMAPMessagePageHandler: ChannelInboundHandler {
         complete: @escaping @Sendable (Result<MailSearchResult, Error>) -> Void
     ) {
         self.email = email
-        self.password = password
+        self.authentication = authentication
         self.mailboxName = mailboxName
         self.offset = offset
         self.limit = limit
@@ -189,6 +189,8 @@ final class IMAPMessagePageHandler: ChannelInboundHandler {
             handleFetch(fetchResponse)
         case .tagged(let tagged):
             handleTagged(tagged, context: context)
+        case .authenticationChallenge:
+            IMAPAuthentication.answerChallenge(context: context)
         case .fatal(let text):
             settle(.failure(MailError.connectionFailed(text.text)))
             context.close(promise: nil)
@@ -214,7 +216,7 @@ final class IMAPMessagePageHandler: ChannelInboundHandler {
 
         switch step {
         case .greeting:
-            send(.login(username: email, password: password), tag: loginTag, context: context)
+            send(IMAPAuthentication.command(email: email, authentication: authentication), tag: loginTag, context: context)
             step = .login
         case .select:
             if case .mailboxData(.exists(let count)) = payload {

@@ -19,7 +19,7 @@ final class IMAPHeaderFetchTests: XCTestCase {
         let promise = channel.eventLoop.makePromise(of: MailHeaderFields.self)
         let handler = IMAPHeaderFetchHandler(
             email: "me@gmail.com",
-            password: "pw",
+            authentication: .password("pw"),
             mailboxName: mailbox,
             uid: uid,
             expectedUIDValidity: expectedUIDValidity,
