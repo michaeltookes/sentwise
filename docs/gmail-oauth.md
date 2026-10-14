@@ -46,13 +46,23 @@ per mailbox at a time). The marker can never authenticate on its own.
 - Sign in: browser consent → token stored under the authorized address →
   verified and adopted through the same `testConnection(with:)` path as an app
   password. If verification fails, the new grant is deleted. Nothing is left
-  behind for a mailbox that did not connect.
+  behind for a mailbox that did not connect. Google revokes a whole grant at
+  once, so while a newer sign-in that could pick the same mailbox is still in
+  flight, a failed older sign-in only deletes its token locally; its revoke
+  waits until the newer sign-in ends and is dropped if that one stored a token.
+  Abandoning the flow (closing the add-account form, even mid code exchange)
+  ends quietly, never as a failed sign-in.
 - Disconnect, remove a saved account, or switch that mailbox to an app password:
   the token is deleted and the grant is revoked at Google (best effort; a
   revocation network failure never blocks the local removal).
 - Revoked or expired grant (`invalid_grant`): the session fails with "Google
   sign-in expired or was revoked — sign in with Google again…". Google failures
-  never show the app-password or Workspace-admin guidance.
+  never show the app-password or Workspace-admin guidance. A watcher paused by
+  such a failure (inbox poll or a draft's body fetch) resumes after a successful
+  "Sign in with Google again"; AI-provider auth failures and manual pauses do
+  not. A background mailbox paused this way shows "Sign in with Google again"
+  on its own row in Settings → Email Account (switching to it would only verify
+  the dead grant and switch back).
 - Token endpoint unreachable: reported as a transient connection failure, so the
   existing retry and backoff applies.
 
@@ -185,7 +195,10 @@ App access control. The app-password path stays available as the fallback.
   ID-token email, refresh, `invalid_grant`, revoke), `GmailAuthStoreTests`,
   `OAuthTokenServiceTests`, `LoopbackRedirectListenerTests` (real loopback socket),
   `GoogleSignInTests` (build switch, Google-vs-app-password selection,
-  `GoogleOAuthMailProvider`, AppState connect/disconnect/switch/remove), and in
+  `GoogleOAuthMailProvider`, AppState connect/disconnect/switch/remove), the
+  race and recovery suites (`GmailAuthorizationCleanupTests`,
+  `GmailAuthorizationOverlapTests`, `GoogleSignInCancellationTests`,
+  `GoogleWatcherRecoveryTests`, `GoogleMailboxReauthRecoveryTests`), and in
   the mail package `XOAuth2Tests` (SASL string incl. Google's example vector,
   IMAP `AUTHENTICATE XOAUTH2`, SMTP `AUTH XOAUTH2`, error-challenge handling).
 - **Live (opt-in, never runs by default):** `GmailOAuthLiveTests` refreshes a
