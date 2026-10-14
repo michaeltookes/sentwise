@@ -28,7 +28,7 @@ extension IMAPMailProvider {
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
-        let password = credentials.appPassword
+        let authentication = credentials.authentication
         let mailboxName = mailbox.imapName(using: credentials.mailboxNaming)
 
         let bootstrap = ClientBootstrap(group: group)
@@ -39,7 +39,7 @@ extension IMAPMailProvider {
                     let complete = attempts.register(channel)
                     let handler = IMAPHeaderFetchHandler(
                         email: email,
-                        password: password,
+                        authentication: authentication,
                         mailboxName: mailboxName,
                         uid: uid,
                         expectedUIDValidity: expectedUIDValidity,
@@ -91,7 +91,7 @@ final class IMAPHeaderFetchHandler: ChannelInboundHandler {
     }
 
     private let email: String
-    private let password: String
+    private let authentication: MailAuthentication
     private let mailboxName: String
     private let uid: UInt32
     private let expectedUIDValidity: UInt32?
@@ -111,14 +111,14 @@ final class IMAPHeaderFetchHandler: ChannelInboundHandler {
 
     init(
         email: String,
-        password: String,
+        authentication: MailAuthentication,
         mailboxName: String,
         uid: UInt32,
         expectedUIDValidity: UInt32? = nil,
         complete: @escaping @Sendable (Result<MailHeaderFields, Error>) -> Void
     ) {
         self.email = email
-        self.password = password
+        self.authentication = authentication
         self.mailboxName = mailboxName
         self.uid = uid
         self.expectedUIDValidity = expectedUIDValidity
@@ -133,6 +133,10 @@ final class IMAPHeaderFetchHandler: ChannelInboundHandler {
             handleFetch(fetchResponse)
         case .tagged(let tagged):
             handleTagged(tagged, context: context)
+        case .authenticationChallenge:
+            if step == .login, case .xoauth2 = authentication {
+                IMAPAuthentication.answerChallenge(context: context)
+            }
         case .fatal(let text):
             settle(.failure(MailError.connectionFailed(text.text)))
             context.close(promise: nil)
@@ -159,7 +163,7 @@ final class IMAPHeaderFetchHandler: ChannelInboundHandler {
         // Only the greeting matters here; SELECT's untagged data (EXISTS etc.)
         // is irrelevant because we address the message by UID.
         if step == .greeting {
-            send(.login(username: email, password: password), tag: loginTag, context: context)
+            send(IMAPAuthentication.command(email: email, authentication: authentication), tag: loginTag, context: context)
             step = .login
         }
     }

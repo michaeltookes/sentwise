@@ -59,7 +59,10 @@ extension AppState {
     func onboardingContinueBlockedReason(for step: OnboardingStep) -> String? {
         switch step {
         case .connectAccount:
-            return isAccountConnected ? nil : "Run Test Connection to continue."
+            guard !isAccountConnected else { return nil }
+            return isGoogleSignInAvailable
+                ? "Sign in with Google or run Test Connection to continue."
+                : "Run Test Connection to continue."
         case .connectProvider:
             guard !isLLMConnected else { return nil }
             return llmProviderKind == .managed

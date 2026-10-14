@@ -21,13 +21,14 @@ final class IMAPBulkCleanupTests: XCTestCase {
         selection: MailBulkSelection? = nil,
         mailbox: String = "INBOX",
         destination: String? = nil,
+        authentication: MailAuthentication = .password("pw"),
         onProgress: (@Sendable (MailBulkProgress) -> Void)? = nil
     ) throws -> (EmbeddedChannel, EventLoopFuture<IMAPBulkOutcome>) {
         let channel = EmbeddedChannel()
         let promise = channel.eventLoop.makePromise(of: IMAPBulkOutcome.self)
         let handler = IMAPBulkCleanupHandler(
             email: "me@example.com",
-            password: "pw",
+            authentication: authentication,
             mailboxName: mailbox,
             destinationName: destination,
             request: IMAPBulkCleanupRequest(
@@ -554,6 +555,69 @@ final class IMAPBulkCleanupTests: XCTestCase {
 
         XCTAssertEqual(try future.wait().affectedCount, 3)
         XCTAssertEqual(recorder.values, [MailBulkProgress(processed: 3, total: 3)])
+    }
+
+    // MARK: - Continuations
+
+    func testSearchLiteralContinuationDoesNotSendAnAuthenticationReply() throws {
+        for authentication in [MailAuthentication.password("pw"), .xoauth2(accessToken: "at")] {
+            let text = "first\r\nsecond"
+            let (channel, future) = try makeChannel(
+                criteria: MailSearchCriteria(text: text), authentication: authentication
+            )
+            defer { _ = try? channel.finish() }
+
+            let command = try advanceThroughSelect(channel, exists: 10)
+            XCTAssertTrue(command.hasPrefix("S0 SEARCH"), command)
+            XCTAssertTrue(command.hasSuffix("TEXT {\(text.utf8.count)}\r\n"), command)
+            XCTAssertEqual(try feed(channel, "+ OK\r\n"), text + "\r\n",
+                           "the literal must be flushed exactly once without an extra authentication reply")
+
+            try feedSearch(channel, windowIndex: 0, sequenceNumbers: [])
+            XCTAssertEqual(try future.wait().matchCount, 0)
+        }
+    }
+
+    /// NIOIMAP consumes literal continuations itself, so this fires the event
+    /// straight at the handler to pin the step guard: outside LOGIN it is ignored.
+    func testAuthenticationChallengeAfterLoginIsIgnored() throws {
+        for authentication in [MailAuthentication.password("pw"), .xoauth2(accessToken: "at")] {
+            let (channel, future) = try makeChannel(authentication: authentication)
+            defer { _ = try? channel.finish() }
+            try advanceThroughSelect(channel, exists: 10)
+
+            let client = try channel.pipeline.syncOperations.context(handlerType: IMAPClientHandler.self)
+            client.fireChannelRead(NIOAny(Response.authenticationChallenge(ByteBuffer())))
+            XCTAssertNil(try channel.readOutbound(as: ByteBuffer.self), "no reply may be written outside LOGIN")
+
+            try feedSearch(channel, windowIndex: 0, sequenceNumbers: [])
+            XCTAssertEqual(try future.wait().matchCount, 0)
+        }
+    }
+
+    func testPasswordLoginLiteralContinuationDoesNotSendAnAuthenticationReply() throws {
+        let password = "first\r\nsecond"
+        let (channel, _) = try makeChannel(authentication: .password(password))
+        defer { _ = try? channel.finish() }
+
+        let command = try feed(channel, "* OK Service Ready\r\n")
+        XCTAssertTrue(command.hasSuffix("{\(password.utf8.count)}\r\n"), "got: \(command)")
+        XCTAssertEqual(try feed(channel, "+ OK\r\n"), password + "\r\n")
+    }
+
+    func testBulkCleanupAnswersXOAuth2ErrorChallengeDuringLogin() throws {
+        let (channel, future) = try makeChannel(authentication: .xoauth2(accessToken: "expired"))
+        defer { _ = try? channel.finish() }
+        try feed(channel, "* OK Service Ready\r\n")
+        let challenge = Data(#"{"status":"401","schemes":"Bearer"}"#.utf8).base64EncodedString()
+
+        XCTAssertEqual(try feed(channel, "+ \(challenge)\r\n"), "\r\n")
+        try feed(channel, "A1 NO [AUTHENTICATIONFAILED] Invalid credentials\r\n")
+        XCTAssertThrowsError(try future.wait()) { error in
+            guard case .authenticationFailed = error as? MailError else {
+                return XCTFail("expected authenticationFailed, got \(error)")
+            }
+        }
     }
 
     // MARK: - Failures

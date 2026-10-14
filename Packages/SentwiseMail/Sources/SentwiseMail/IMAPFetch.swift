@@ -22,7 +22,7 @@ extension IMAPMailProvider {
         let sslContext = try NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
         let host = credentials.host
         let email = credentials.email
-        let password = credentials.appPassword
+        let authentication = credentials.authentication
         let mailboxName = mailbox.imapName(using: credentials.mailboxNaming)
 
         let bootstrap = ClientBootstrap(group: group)
@@ -33,7 +33,7 @@ extension IMAPMailProvider {
                     let complete = attempts.register(channel)
                     let handler = IMAPFetchHandler(
                         email: email,
-                        password: password,
+                        authentication: authentication,
                         mailboxName: mailboxName,
                         limit: limit,
                         complete: complete
@@ -93,7 +93,7 @@ final class IMAPFetchHandler: ChannelInboundHandler {
     }
 
     private let email: String
-    private let password: String
+    private let authentication: MailAuthentication
     private let mailboxName: String
     private let limit: Int
     private let complete: @Sendable (Result<[MailMessage], Error>) -> Void
@@ -112,13 +112,13 @@ final class IMAPFetchHandler: ChannelInboundHandler {
 
     init(
         email: String,
-        password: String,
+        authentication: MailAuthentication,
         mailboxName: String,
         limit: Int,
         complete: @escaping @Sendable (Result<[MailMessage], Error>) -> Void
     ) {
         self.email = email
-        self.password = password
+        self.authentication = authentication
         self.mailboxName = mailboxName
         self.limit = limit
         self.complete = complete
@@ -132,6 +132,10 @@ final class IMAPFetchHandler: ChannelInboundHandler {
             handleFetch(fetchResponse)
         case .tagged(let tagged):
             handleTagged(tagged, context: context)
+        case .authenticationChallenge:
+            if step == .login, case .xoauth2 = authentication {
+                IMAPAuthentication.answerChallenge(context: context)
+            }
         case .fatal(let text):
             settle(.failure(MailError.connectionFailed(text.text)))
             context.close(promise: nil)
@@ -158,7 +162,7 @@ final class IMAPFetchHandler: ChannelInboundHandler {
         switch step {
         case .greeting:
             // First untagged response is the server greeting → authenticate.
-            send(.login(username: email, password: password), tag: loginTag, context: context)
+            send(IMAPAuthentication.command(email: email, authentication: authentication), tag: loginTag, context: context)
             step = .login
         case .select:
             if case .mailboxData(.exists(let count)) = payload {

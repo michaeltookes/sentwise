@@ -18,7 +18,7 @@ final class IMAPMessagePageTests: XCTestCase {
         let promise = channel.eventLoop.makePromise(of: MailSearchResult.self)
         let handler = IMAPMessagePageHandler(
             email: "me@gmail.com",
-            password: "pw",
+            authentication: .password("pw"),
             mailboxName: "INBOX",
             offset: offset,
             limit: limit,

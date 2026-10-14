@@ -1,6 +1,7 @@
 import XCTest
 @testable import Sentwise
 
+/// Per-account Google token storage (item 104).
 final class GmailAuthStoreTests: XCTestCase {
 
     private func makeStore() -> (GmailAuthStore, InMemorySecretStore) {
@@ -8,124 +9,44 @@ final class GmailAuthStoreTests: XCTestCase {
         return (GmailAuthStore(secrets: secrets), secrets)
     }
 
-    private func sampleToken() -> OAuthToken {
+    private func sampleToken(_ accessToken: String = "at") -> OAuthToken {
         OAuthToken(
-            accessToken: "at",
+            accessToken: accessToken,
             refreshToken: "rt",
             expiresAt: Date(timeIntervalSince1970: 2_000_000),
-            scope: "s",
+            scope: GoogleOAuth.mailScope,
             tokenType: "Bearer"
         )
     }
 
-    func testCredentialsRoundTrip() throws {
-        let (store, _) = makeStore()
-        try store.saveCredentials(GmailCredentials(clientID: "cid", clientSecret: "secret"))
-        XCTAssertEqual(try store.loadCredentials(), GmailCredentials(clientID: "cid", clientSecret: "secret"))
-    }
-
-    func testSaveCredentialsRestoresPreviousPairWhenSecretWriteFails() throws {
-        let secrets = GmailAuthStoreFailingSecretStore(seed: [
-            .googleClientID: "old-cid",
-            .googleClientSecret: "old-secret"
-        ])
-        let store = GmailAuthStore(secrets: secrets)
-        secrets.failOnSet = .googleClientSecret
-
-        XCTAssertThrowsError(
-            try store.saveCredentials(GmailCredentials(clientID: "new-cid", clientSecret: "new-secret"))
-        )
-
-        XCTAssertEqual(try store.loadCredentials(), GmailCredentials(clientID: "old-cid", clientSecret: "old-secret"))
-    }
-
-    func testSaveCredentialsClearsPartialPairWhenSecretWriteFailsWithoutExistingCredentials() throws {
-        let secrets = GmailAuthStoreFailingSecretStore()
-        let store = GmailAuthStore(secrets: secrets)
-        secrets.failOnSet = .googleClientSecret
-
-        XCTAssertThrowsError(
-            try store.saveCredentials(GmailCredentials(clientID: "new-cid", clientSecret: "new-secret"))
-        )
-
-        XCTAssertNil(try secrets.value(for: .googleClientID))
-        XCTAssertNil(try secrets.value(for: .googleClientSecret))
-        XCTAssertNil(try store.loadCredentials())
-    }
-
-    func testCredentialsAreNilWhenIncomplete() throws {
+    func testTokenRoundTripUnderPerAccountKey() throws {
         let (store, secrets) = makeStore()
-        try secrets.set("only-id", for: .googleClientID)
-        XCTAssertNil(try store.loadCredentials())
+        try store.saveToken(sampleToken(), for: " Me@Gmail.com ")
+
+        XCTAssertEqual(try store.loadToken(for: "me@gmail.com"), sampleToken())
+        XCTAssertNotNil(try secrets.value(for: SecretKey(rawValue: "gmail.oauthToken.me@gmail.com")))
+        XCTAssertNil(try secrets.value(for: .gmailToken), "the legacy single-account slot is never written")
     }
 
-    func testTokenRoundTrip() throws {
+    func testAccountsAreIsolated() throws {
         let (store, _) = makeStore()
-        try store.saveToken(sampleToken())
-        XCTAssertEqual(try store.loadToken(), sampleToken())
+        try store.saveToken(sampleToken("a-token"), for: "a@gmail.com")
+        try store.saveToken(sampleToken("b-token"), for: "b@gmail.com")
+
+        try store.deleteToken(for: "a@gmail.com")
+
+        XCTAssertFalse(store.hasToken(for: "a@gmail.com"))
+        XCTAssertEqual(try store.loadToken(for: "b@gmail.com")?.accessToken, "b-token")
     }
 
-    func testIsConnectedReflectsStoredToken() throws {
-        let (store, _) = makeStore()
-        XCTAssertFalse(store.isConnected)
-        try store.saveToken(sampleToken())
-        XCTAssertTrue(store.isConnected)
+    func testTokensWithoutIDTokenFieldStillDecode() throws {
+        let (store, secrets) = makeStore()
+        let json = #"{"accessToken":"at","refreshToken":"rt","expiresAt":0,"scope":"s","tokenType":"Bearer"}"#
+        try secrets.set(json, for: .gmailOAuthToken(email: "me@gmail.com"))
+        XCTAssertEqual(try store.loadToken(for: "me@gmail.com")?.accessToken, "at")
     }
 
-    func testDeleteTokenLeavesCredentialsIntact() throws {
-        let (store, _) = makeStore()
-        try store.saveCredentials(GmailCredentials(clientID: "cid", clientSecret: "secret"))
-        try store.saveToken(sampleToken())
-
-        try store.deleteToken()
-
-        XCTAssertNil(try store.loadToken())
-        XCTAssertFalse(store.isConnected)
-        XCTAssertNotNil(try store.loadCredentials(), "disconnect clears the token but keeps BYO credentials")
-    }
-
-    func testDeleteCredentialsRemovesThem() throws {
-        let (store, _) = makeStore()
-        try store.saveCredentials(GmailCredentials(clientID: "cid", clientSecret: "secret"))
-        try store.deleteCredentials()
-        XCTAssertNil(try store.loadCredentials())
-    }
-}
-
-private enum GmailAuthStoreSecretError: LocalizedError {
-    case saveFailed
-
-    var errorDescription: String? {
-        "Unable to save Gmail credentials."
-    }
-}
-
-private final class GmailAuthStoreFailingSecretStore: SecretStore {
-    var failOnSet: SecretKey?
-    private var storage: [String: String]
-
-    init(seed: [SecretKey: String] = [:]) {
-        storage = seed.reduce(into: [:]) { result, item in
-            result[item.key.rawValue] = item.value
-        }
-    }
-
-    func set(_ value: String, for key: SecretKey) throws {
-        if failOnSet == key {
-            throw GmailAuthStoreSecretError.saveFailed
-        }
-        storage[key.rawValue] = value
-    }
-
-    func value(for key: SecretKey) throws -> String? {
-        storage[key.rawValue]
-    }
-
-    func remove(_ key: SecretKey) throws {
-        storage[key.rawValue] = nil
-    }
-
-    func removeAll() throws {
-        storage.removeAll()
+    func testLogSafeIdentifierNeverIncludesTheEmail() {
+        XCTAssertEqual(SecretKey.gmailOAuthToken(email: "me@gmail.com").logSafeIdentifier, "gmail.oauthToken")
     }
 }

@@ -12,13 +12,14 @@ final class IMAPAppendTests: XCTestCase {
     private let rfc822 = "Subject: Hi\r\n\r\nHello there.".data(using: .utf8)!
 
     private func makeChannel(
-        flags: [MailFlag] = [.draft]
+        flags: [MailFlag] = [.draft],
+        authentication: MailAuthentication = .password("pw")
     ) throws -> (EmbeddedChannel, EventLoopFuture<Void>) {
         let channel = EmbeddedChannel()
         let promise = channel.eventLoop.makePromise(of: Void.self)
         let handler = IMAPAppendHandler(
             email: "me@gmail.com",
-            password: "pw",
+            authentication: authentication,
             mailboxName: "[Gmail]/Drafts",
             message: ByteBuffer(bytes: rfc822),
             flags: flags,
@@ -50,11 +51,41 @@ final class IMAPAppendTests: XCTestCase {
 
         // Continuation → the client handler flushes the buffered message bytes.
         let flushed = try feed(channel, "+ OK\r\n")
-        XCTAssertTrue(flushed.contains("Hello there."), "message body not flushed: \(flushed)")
+        XCTAssertEqual(flushed, String(decoding: rfc822, as: UTF8.self) + "\r\n")
 
         try feed(channel, "A2 OK [APPENDUID 1 10] APPEND completed\r\n")
         XCTAssertNoThrow(try future.wait())
         _ = try? channel.finish()
+    }
+
+    func testOAuthAppendContinuationFlushesOnlyTheMessageAndCommandTerminator() throws {
+        let (channel, future) = try makeChannel(authentication: .xoauth2(accessToken: "token"))
+        defer { _ = try? channel.finish() }
+
+        let login = try feed(channel, "* OK Service Ready\r\n")
+        XCTAssertTrue(login.hasPrefix("A1 AUTHENTICATE XOAUTH2 "))
+        try feed(channel, "A1 OK AUTHENTICATE completed\r\n")
+
+        let flushed = try feed(channel, "+ OK\r\n")
+        XCTAssertEqual(flushed, String(decoding: rfc822, as: UTF8.self) + "\r\n")
+
+        try feed(channel, "A2 OK APPEND completed\r\n")
+        XCTAssertNoThrow(try future.wait())
+    }
+
+    func testOAuthLoginChallengeReceivesEmptyResponseBeforeAuthenticationFailure() throws {
+        let (channel, future) = try makeChannel(authentication: .xoauth2(accessToken: "expired"))
+        defer { _ = try? channel.finish() }
+
+        try feed(channel, "* OK Service Ready\r\n")
+        XCTAssertEqual(try feed(channel, "+ eyJzdGF0dXMiOiI0MDEifQ==\r\n"), "\r\n")
+        try feed(channel, "A1 NO [AUTHENTICATIONFAILED] Invalid credentials\r\n")
+
+        XCTAssertThrowsError(try future.wait()) { error in
+            guard case .authenticationFailed = error as? MailError else {
+                return XCTFail("expected authenticationFailed, got \(error)")
+            }
+        }
     }
 
     func testAppendFailureSurfacesCommandError() throws {

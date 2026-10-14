@@ -13,9 +13,10 @@ struct EmailAccountSettingsView: View {
     @State private var accountPendingRemoval: SavedMailAccount?
     @State private var showDisconnectConfirmation = false
     @State private var newAccountForm = MailAccountFormState()
-    @State private var isAddingAccount = false
+    @State private var addAccountSession = AddAccountFormSession()
     @FocusState private var isMailEmailFocused: Bool
 
+    private var isAddingAccount: Bool { addAccountSession.isActive }
     /// Whether the credential-entry form is shown: when nothing is connected, or
     /// when the user has explicitly chosen to add another account.
     private var showsConnectForm: Bool {
@@ -59,12 +60,7 @@ struct EmailAccountSettingsView: View {
             .accessibilityIdentifier("removeAccountOnly")
             Button("Cancel", role: .cancel) { accountPendingRemoval = nil }
         } message: { account in
-            Text("This forgets \(account.email) and deletes its saved password from your Keychain. "
-                 + "Your mailbox on the server is never touched.\n\n"
-                 + "\"Remove & erase local data\" also deletes this Mac's cached mail for the "
-                 + "account — pending drafts, activity history, and the skipped-message log. "
-                 + "If it is the active account, the learned voice profile is cleared too. "
-                 + "\"Remove only\" keeps that local data.")
+            Text(EmailAccountSettingsCopy.removeAccountMessage(account.email))
         }
         .confirmationDialog(
             "Disconnect \(appState.mailEmail)?",
@@ -81,17 +77,12 @@ struct EmailAccountSettingsView: View {
             .accessibilityIdentifier("disconnectOnly")
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Erasing local data deletes this Mac's cached mail for this account — pending "
-                 + "drafts, activity history, learned voice profile, and the skipped-message log. "
-                 + "Your mailbox on the server is never touched. \"Disconnect only\" keeps that "
-                 + "local data so you can reconnect without re-learning your voice.")
+            Text(EmailAccountSettingsCopy.disconnectMessage)
         }
         .onDisappear {
             abandonAddingAccountIfNeeded()
         }
     }
-
-    // MARK: - Saved accounts
 
     // MARK: - Connection / add form
 
@@ -103,7 +94,21 @@ struct EmailAccountSettingsView: View {
                     Text("Connected").foregroundStyle(.green)
                 }
                 LabeledContent("Account") {
-                    Text(appState.mailEmail).foregroundStyle(.secondary)
+                    Text(appState.mailEmail + (appState.activeAccountUsesGoogleSignIn ? " · Signed in with Google" : ""))
+                        .foregroundStyle(.secondary)
+                }
+                if appState.activeAccountUsesGoogleSignIn && appState.isGoogleSignInAvailable {
+                    GoogleSignInButtonBlock(
+                        auth: appState.googleMailAuth,
+                        loginHint: appState.mailEmail,
+                        requireHintMatch: true,
+                        messageSurface: .settings,
+                        shouldApplyResult: { [email = appState.mailEmail, sessionID = addAccountSession.id] _ in
+                            self.appState.activeAccountUsesGoogleSignIn && self.appState.mailEmail == email
+                                && self.addAccountSession.accepts(sessionID)
+                        },
+                        onConnected: {}
+                    )
                 }
                 Button("Disconnect", role: .destructive) {
                     showDisconnectConfirmation = true
@@ -132,8 +137,21 @@ struct EmailAccountSettingsView: View {
         }
     }
 
-    @ViewBuilder
     private var connectForm: some View {
+        GoogleOrAppPasswordConnect(
+            auth: appState.googleMailAuth,
+            email: guidanceEmail,
+            host: isAddingAccount ? newAccountForm.host : appState.mailHost,
+            messageSurface: .settings,
+            // Bound to the form session it started in: dropped once the add form is cancelled or reopened.
+            shouldApplyResult: { [sessionID = addAccountSession.id] _ in self.addAccountSession.accepts(sessionID) },
+            onConnected: { addAccountSession.end(); newAccountForm.resetForNewAccount() },
+            appPasswordForm: { appPasswordForm }
+        )
+    }
+
+    @ViewBuilder
+    private var appPasswordForm: some View {
         TextField("Email address", text: mailEmailBinding)
             .textContentType(.username)
             .focused($isMailEmailFocused)
@@ -161,7 +179,7 @@ struct EmailAccountSettingsView: View {
             .accessibilityLabel("Test connection and save this account")
 
             if isAddingAccount {
-                Button("Cancel") { cancelAddingAccount() }
+                Button("Cancel") { abandonAddingAccountIfNeeded() }
                     .disabled(appState.isConnecting)
                     .accessibilityLabel("Cancel adding an account")
             }
@@ -284,13 +302,13 @@ struct EmailAccountSettingsView: View {
             didConnect = await appState.testConnection(messageSurface: .settings)
         }
         if didConnect && appState.isAccountConnected {
-            isAddingAccount = false
+            addAccountSession.end()
             newAccountForm.resetForNewAccount()
         }
     }
 
     private func switchTo(_ account: SavedMailAccount) async {
-        isAddingAccount = false
+        addAccountSession.end()
         newAccountForm.resetForNewAccount()
         await appState.switchToSavedAccount(account, messageSurface: .settings)
     }
@@ -301,17 +319,15 @@ struct EmailAccountSettingsView: View {
         newAccountForm.resetForNewAccount()
         appState.setConnectionError(nil, for: .settings)
         appState.clearWorkspaceAuthGuidance(for: .settings)
-        isAddingAccount = true
+        addAccountSession.begin()
         isMailEmailFocused = true
-    }
-
-    private func cancelAddingAccount() {
-        abandonAddingAccountIfNeeded()
     }
 
     private func abandonAddingAccountIfNeeded() {
         guard isAddingAccount else { return }
-        isAddingAccount = false
+        addAccountSession.end()
+        // A Google sign-in started from this form is abandoned with it.
+        appState.googleMailAuth.cancelSignIn()
         appState.setConnectionError(nil, for: .settings)
         appState.clearWorkspaceAuthGuidance(for: .settings)
         newAccountForm.resetForNewAccount()
@@ -469,29 +485,5 @@ extension EmailAccountSettingsView {
         }
         return "Connect another mailbox below to have Sentwise watch both at once "
             + "(available on Pro and up)."
-    }
-
-    /// A per-account connection/health line for the mailboxes list.
-    func accountStatusLabel(for account: SavedMailAccount) -> String {
-        // Item 108: Starter has no inbox watcher at all — communicate that where the
-        // watch status normally shows, rather than a misleading "Connected".
-        if !appState.inboxWatchingAllowedForTier, appState.isConnectedAccount(email: account.email) {
-            return AppState.inboxWatchingProFeatureMessage
-        }
-        if let error = appState.watchError(forAccountEmail: account.email), !error.isEmpty {
-            return error
-        }
-        switch appState.watchStatus(forAccountEmail: account.email) {
-        case .watching: return "Watching"
-        case .paused: return "Paused"
-        case .idle: return appState.isConnectedAccount(email: account.email) ? "Connected" : "Not watching"
-        }
-    }
-
-    func accountStatusColor(for account: SavedMailAccount) -> Color {
-        if let error = appState.watchError(forAccountEmail: account.email), !error.isEmpty {
-            return .red
-        }
-        return appState.watchStatus(forAccountEmail: account.email) == .watching ? .green : .secondary
     }
 }

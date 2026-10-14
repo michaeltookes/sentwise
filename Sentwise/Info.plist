@@ -59,6 +59,17 @@
 	  verify future appcasts against the key that shipped in their current app.
 	-->
 	<!--
+	  "Sign in with Google" OAuth client (item 104). Expanded at build time from
+	  Config/GoogleOAuth.xcconfig (empty in the repo, so the feature is off) or
+	  its git-ignored local override / xcodebuild command-line settings. An empty
+	  or placeholder value switches the feature off. See docs/gmail-oauth.md.
+	-->
+	<key>SentwiseGoogleOAuthClientID</key>
+	<string>$(SENTWISE_GOOGLE_CLIENT_ID)</string>
+	<key>SentwiseGoogleOAuthClientSecret</key>
+	<string>$(SENTWISE_GOOGLE_CLIENT_SECRET)</string>
+
+	<!--
 	  Per-build configuration (item 123), read by BuildConfiguration. Expanded
 	  from Config/QA.xcconfig in the QA build configuration only; Debug and
 	  Release leave every value empty, which resolves to the production service,

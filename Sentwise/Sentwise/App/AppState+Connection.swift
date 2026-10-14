@@ -45,6 +45,23 @@ extension AppState {
         messageSurface: TransientMessageSurface = .shared,
         shouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool = { _ in true }
     ) async -> Bool {
+        await testConnection(
+            with: credentials,
+            messageSurface: messageSurface,
+            attempt: beginMailConnectionAttempt(),
+            shouldApplyResult: shouldApplyResult
+        )
+    }
+
+    /// The verification itself, under an attempt from `beginMailConnectionAttempt()`
+    /// (the Google path passes the attempt it began before opening the browser).
+    func testConnection(
+        with credentials: MailAccountCredentials,
+        messageSurface: TransientMessageSurface,
+        attempt: UInt64,
+        shouldApplyResult callerShouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool
+    ) async -> Bool {
+        let shouldApplyResult = guardedByMailConnectionAttempt(attempt, callerShouldApplyResult)
         setConnectionError(nil, for: messageSurface)
         clearWorkspaceAuthGuidance(for: messageSurface)
         let settingsMessageGeneration = settingsTransientMessageGeneration
@@ -61,7 +78,8 @@ extension AppState {
         ) else { return false }
 
         isConnecting = true
-        defer { isConnecting = false }
+        // A superseded attempt leaves the busy flag to the attempt that replaced it.
+        defer { if isCurrentMailConnectionAttempt(attempt) { isConnecting = false } }
         // The previously focused account, so a switch keeps it connected in the
         // background rather than disconnecting it (item 99).
         let previousFocused = previousFocusedSnapshot(from: previousSettings)
@@ -205,6 +223,9 @@ extension AppState {
             logger.info("Disconnect skipped while a connection test is running")
             return
         }
+        // Browser sign-in and code exchange precede isConnecting. Supersede
+        // their callbacks before removing credentials so they cannot reconnect.
+        _ = beginMailConnectionAttempt()
         do {
             try removeLegacyOAuthCredentialsIfPresent()
         } catch {
@@ -224,7 +245,15 @@ extension AppState {
                 return
             }
         }
+        // The Google token goes first and is rolled back with the rest (item 104).
+        guard let googleRemoval = takeGoogleTokenForDisconnect(
+            email: disconnectedAccountEmail, messageSurface: messageSurface
+        ) else {
+            restoreWatchingAfterPreservedDisconnectIfNeeded(purgeLocalData && wasWatching)
+            return
+        }
         guard let removedPassword = removeActiveMailPasswordForDisconnect(messageSurface: messageSurface) else {
+            rollBack(googleRemoval)
             restoreWatchingAfterPreservedDisconnectIfNeeded(purgeLocalData && wasWatching)
             return
         }
@@ -239,10 +268,12 @@ extension AppState {
                 restoreActiveMailPasswordRemovalMessage(removedPassword),
                 messageSurface: messageSurface
             )
+            rollBack(googleRemoval)
             restoreWatchingAfterPreservedDisconnectIfNeeded(purgeLocalData && wasWatching)
             return
         }
         mailAppPassword = ""
+        complete(googleRemoval)
         markMailHostVerifiedForGuidance()
         isAccountConnected = false
         stopWatching()
@@ -300,10 +331,17 @@ extension AppState {
             return false
         }
 
+        // Switching this mailbox from Google sign-in to an app password (item 104):
+        // the token goes first and is rolled back if any later step fails.
+        guard let googleRemoval = takeGoogleTokenForSwitch(
+            email: credentials.email, previousSecret: previousAppPassword,
+            newSecret: credentials.appPassword, messageSurface: messageSurface
+        ) else { return false }
         do {
             try secrets.set(credentials.appPassword, for: accountKey)
         } catch {
             setConnectionError(Self.keychainMessage(action: "save", error: error), for: messageSurface)
+            rollBack(googleRemoval)
             return false
         }
 
@@ -319,6 +357,7 @@ extension AppState {
                 ),
                 for: messageSurface
             )
+            rollBack(googleRemoval)
             return false
         }
 
@@ -334,11 +373,13 @@ extension AppState {
                 ),
                 messageSurface: messageSurface
             )
+            rollBack(googleRemoval)
             return false
         }
         if accountIdentityChanged {
             clearSignatureForAccountChange()
         }
+        complete(googleRemoval)
         return true
     }
 

@@ -47,6 +47,15 @@ gated; optional host/port vars default to the provider's standard IMAP endpoint.
 - `SENTWISE_LIVE_GMAIL_HOST` — IMAP host (optional; default `imap.gmail.com`)
 - `SENTWISE_LIVE_GMAIL_PORT` — IMAP port (optional; default `993`)
 
+**Google OAuth / XOAUTH2** (`GmailOAuthLiveTests`, item 104) — read-only; refreshes a
+real "Sign in with Google" grant and authenticates Gmail IMAP over XOAUTH2. Never
+runs by default; see `docs/gmail-oauth.md` for how to obtain the refresh token:
+
+- `SENTWISE_LIVE_GOOGLE_OAUTH_EMAIL` — the Gmail/Workspace address (required)
+- `SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_ID` — the Sentwise Desktop-app client ID (required)
+- `SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_SECRET` — its client secret (optional)
+- `SENTWISE_LIVE_GOOGLE_OAUTH_REFRESH_TOKEN` — a refresh token with the `https://mail.google.com/` scope (required)
+
 **att.net** (`AttNetLiveDraftTests`) — requires an AT&T **Secure Mail Key**:
 
 - `SENTWISE_LIVE_ATTNET_EMAIL` — the att.net address (required)

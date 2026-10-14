@@ -42,6 +42,7 @@ extension AppState {
             return
         }
         resumeWatchingAfterManagedReauth = false
+        resumeWatchingAfterGoogleReauth = false
         watchError = nil
         recordWatcherBaselineStartIfNeeded(account: mailCredentials.email, mailbox: .inbox)
         watchStatus = .watching
@@ -64,8 +65,14 @@ extension AppState {
     }
 
     /// Pauses watching; the queue and processed history are kept.
-    func pauseWatching(resumeAfterManagedReauthentication: Bool = false) {
+    func pauseWatching(
+        resumeAfterManagedReauthentication: Bool = false,
+        resumeAfterGoogleReauthentication: Bool = false
+    ) {
+        // An explicit pause also cancels recovery while already paused.
+        if !resumeAfterGoogleReauthentication { resumeWatchingAfterGoogleReauth = false }
         guard watchStatus == .watching else { return }
+        resumeWatchingAfterGoogleReauth = resumeAfterGoogleReauthentication
         resumeWatchingAfterManagedReauth = resumeAfterManagedReauthentication
         watchStatus = .paused
         inboxWatcher.stop()
@@ -81,6 +88,7 @@ extension AppState {
         }
         guard watchStatus != .idle else { return }
         resumeWatchingAfterManagedReauth = false
+        resumeWatchingAfterGoogleReauth = false
         watchStatus = .idle
         inboxWatcher.stop()
         logger.info("Inbox watching stopped")
@@ -140,7 +148,7 @@ extension AppState {
         do {
             messages = try await fetchWatcherMessages(credentials, mailbox: mailbox)
         } catch {
-            handlePollFetchFailure(error, account: account, localDataGeneration: localDataGeneration)
+            handlePollFetchFailure(error, account: account, credentials: credentials, localDataGeneration: localDataGeneration)
             return
         }
         DiagnosticLog.verbose("Inbox poll fetched \(messages.count) recent messages")
@@ -250,7 +258,11 @@ extension AppState {
                 account: accountEmail,
                 detail: Self.message(for: error)
             ))
-            pauseWatching(account: account)
+            let credentials = account?.credentials ?? mailCredentials
+            pauseWatching(
+                account: account,
+                resumeAfterGoogleReauthentication: GoogleMailCredential.isMarker(credentials.appPassword)
+            )
         }
         logger.error("Inbox poll fetch failed: \(error.localizedDescription)")
     }

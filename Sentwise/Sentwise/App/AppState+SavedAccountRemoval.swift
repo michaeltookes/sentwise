@@ -45,16 +45,26 @@ extension AppState {
             purgeLocalData: purgeLocalData,
             messageSurface: messageSurface
         ) else { return }
-        guard removeSavedAccountSecrets(account, context: context, messageSurface: messageSurface) else {
+        // The Google token goes first and is rolled back with the rest, so a
+        // Keychain failure never leaves a refresh token with no account behind.
+        let removedGoogleToken: OAuthToken?
+        do {
+            removedGoogleToken = try removeGoogleTokenForAccountRemoval(account.email)
+        } catch {
+            setConnectionError(Self.keychainMessage(action: "remove", error: error), for: messageSurface)
             restoreWatchingAfterPreservedSavedAccountRemovalIfNeeded(shouldRestoreWatching)
             return
         }
-        guard persistRemovedSavedAccountSettings(account, context: context, messageSurface: messageSurface) else {
+        guard removeSavedAccountSecrets(account, context: context, messageSurface: messageSurface),
+              persistRemovedSavedAccountSettings(account, context: context, messageSurface: messageSurface) else {
+            restoreGoogleTokenAfterFailedRemoval(removedGoogleToken, email: account.email)
             restoreWatchingAfterPreservedSavedAccountRemovalIfNeeded(shouldRestoreWatching)
             return
         }
 
         applyRemovedSavedAccountState(context, messageSurface: messageSurface)
+        noteGoogleAccountRemoved(account.email)
+        revokeRemovedGoogleToken(removedGoogleToken)
         // Multi-account (item 99): if the removed account was connected in the
         // background, stop its watcher and drop its runtime too.
         if let background = backgroundConnectedAccount(email: account.id) {

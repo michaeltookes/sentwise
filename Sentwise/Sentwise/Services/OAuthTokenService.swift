@@ -6,38 +6,62 @@ struct OAuthTokenService {
     let transport: HTTPTransport
 
     /// Exchanges an authorization code (with its PKCE verifier) for a token set.
-    func exchange(
+    /// An omitted scope means the grant matches the authorization request.
+    func exchange( // swiftlint:disable:this function_parameter_count
         code: String,
         verifier: String,
-        credentials: GmailCredentials,
+        client: GoogleOAuthClientConfiguration,
         redirectURI: String,
+        requestedScopes: [String],
         now: Date
     ) async throws -> OAuthToken {
-        let response = try await transport.postForm(GoogleOAuth.tokenEndpoint, fields: [
+        let response = try await transport.postForm(GoogleOAuth.tokenEndpoint, fields: Self.withClient(client, [
             "grant_type": "authorization_code",
             "code": code,
             "code_verifier": verifier,
-            "client_id": credentials.clientID,
-            "client_secret": credentials.clientSecret,
             "redirect_uri": redirectURI
-        ])
-        return try token(from: response, now: now, fallbackRefreshToken: nil)
+        ]))
+        return try token(
+            from: response, now: now, fallbackRefreshToken: nil,
+            fallbackScope: requestedScopes.joined(separator: " ")
+        )
     }
 
     /// Refreshes an access token using a refresh token. Google does not return a
     /// new refresh token on refresh, so the existing one is carried forward.
+    /// An omitted scope also carries forward the previously granted scopes.
     func refresh(
         refreshToken: String,
-        credentials: GmailCredentials,
+        grantedScope: String = "",
+        client: GoogleOAuthClientConfiguration,
         now: Date
     ) async throws -> OAuthToken {
-        let response = try await transport.postForm(GoogleOAuth.tokenEndpoint, fields: [
+        let response = try await transport.postForm(GoogleOAuth.tokenEndpoint, fields: Self.withClient(client, [
             "grant_type": "refresh_token",
-            "refresh_token": refreshToken,
-            "client_id": credentials.clientID,
-            "client_secret": credentials.clientSecret
-        ])
-        return try token(from: response, now: now, fallbackRefreshToken: refreshToken)
+            "refresh_token": refreshToken
+        ]))
+        return try token(from: response, now: now, fallbackRefreshToken: refreshToken, fallbackScope: grantedScope)
+    }
+
+    /// Revokes a token at Google (refresh tokens revoke the whole grant).
+    /// Google answers 200 on success and 400 for an already-invalid token; both
+    /// leave nothing to clean up, so only transport errors throw.
+    func revoke(token: String) async throws {
+        _ = try await transport.postForm(GoogleOAuth.revocationEndpoint, fields: ["token": token])
+    }
+
+    /// Adds the client identity. The secret is sent only when the build has
+    /// one (Google "Desktop app" clients require it at the token endpoint).
+    static func withClient(
+        _ client: GoogleOAuthClientConfiguration,
+        _ fields: [String: String]
+    ) -> [String: String] {
+        var fields = fields
+        fields["client_id"] = client.clientID
+        if let secret = client.clientSecret {
+            fields["client_secret"] = secret
+        }
+        return fields
     }
 
     // MARK: - Response parsing
@@ -45,9 +69,15 @@ struct OAuthTokenService {
     private func token(
         from response: HTTPResponse,
         now: Date,
-        fallbackRefreshToken: String?
+        fallbackRefreshToken: String?,
+        fallbackScope: String = ""
     ) throws -> OAuthToken {
         guard response.isSuccess else {
+            // 5xx/429 are outages and throttling, never a verdict on the grant,
+            // even when Google includes an error body.
+            if OAuthError.isTransientHTTPStatus(response.statusCode) {
+                throw OAuthError.temporarilyUnavailable(httpStatus: response.statusCode)
+            }
             if let error = try? JSONDecoder().decode(TokenErrorResponse.self, from: response.body) {
                 throw OAuthError.server(code: error.error, description: error.errorDescription)
             }
@@ -62,8 +92,9 @@ struct OAuthTokenService {
             accessToken: decoded.accessToken,
             refreshToken: decoded.refreshToken ?? fallbackRefreshToken,
             expiresAt: now.addingTimeInterval(TimeInterval(decoded.expiresIn)),
-            scope: decoded.scope ?? "",
-            tokenType: decoded.tokenType ?? "Bearer"
+            scope: decoded.scope ?? fallbackScope,
+            tokenType: decoded.tokenType ?? "Bearer",
+            idToken: decoded.idToken
         )
     }
 
@@ -73,6 +104,7 @@ struct OAuthTokenService {
         let refreshToken: String?
         let scope: String?
         let tokenType: String?
+        let idToken: String?
 
         enum CodingKeys: String, CodingKey {
             case accessToken = "access_token"
@@ -80,6 +112,7 @@ struct OAuthTokenService {
             case refreshToken = "refresh_token"
             case scope
             case tokenType = "token_type"
+            case idToken = "id_token"
         }
     }
 

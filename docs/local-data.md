@@ -11,8 +11,10 @@ All non-secret state is JSON under `~/Library/Application Support/Sentwise/`
 (`Sentwise QA/` for the QA build, item 123, `docs/qa-build.md`),
 written atomically by `PersistenceService` (the `PersistenceProvider` seam; the
 in-memory `MemoryPersistenceProvider` backs Prowl hunts and tests). Secrets —
-mailbox app passwords (per-account), managed-account Clerk tokens, BYO API keys —
-live in the macOS Keychain via `KeychainStore`, never in the JSON files.
+mailbox app passwords (per-account), "Sign in with Google" OAuth tokens
+(per-account `gmail.oauthToken.<email>`, item 104 — see `docs/gmail-oauth.md`),
+managed-account Clerk tokens, BYO API keys — live in the macOS Keychain via
+`KeychainStore`, never in the JSON files.
 
 | File | Contents | Scope |
 |------|----------|-------|

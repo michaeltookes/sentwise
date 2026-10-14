@@ -1,0 +1,21 @@
+// Google OAuth client for "Sign in with Google" (backlog item 104).
+//
+// Committed with EMPTY values: a build made from the repo as-is (CI, forks,
+// contributors) has the feature switched off and offers only the app-password
+// path. To switch it on for a build, supply the Sentwise-owned Google Cloud
+// "Desktop app" OAuth client either:
+//
+//   1. locally: copy GoogleOAuth.local.xcconfig.example to
+//      GoogleOAuth.local.xcconfig (git-ignored) and fill it in, or
+//   2. in CI/release: pass the build settings on the xcodebuild command line,
+//      e.g. `xcodebuild ... SENTWISE_GOOGLE_CLIENT_ID=... SENTWISE_GOOGLE_CLIENT_SECRET=...`
+//      (command-line settings override this file).
+//
+// Info.plist expands these into SentwiseGoogleOAuthClientID /
+// SentwiseGoogleOAuthClientSecret, read by GoogleOAuthClientConfiguration.
+// See docs/gmail-oauth.md. Never commit a real client ID or secret.
+
+SENTWISE_GOOGLE_CLIENT_ID =
+SENTWISE_GOOGLE_CLIENT_SECRET =
+
+#include? "GoogleOAuth.local.xcconfig"

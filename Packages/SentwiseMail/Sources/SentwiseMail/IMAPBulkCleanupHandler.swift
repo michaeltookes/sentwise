@@ -32,7 +32,7 @@ final class IMAPBulkCleanupHandler: ChannelInboundHandler {
     }
 
     private let email: String
-    private let password: String
+    private let authentication: MailAuthentication
     let mailboxName: String
     let destinationName: String?
     private let request: IMAPBulkCleanupRequest
@@ -79,14 +79,14 @@ final class IMAPBulkCleanupHandler: ChannelInboundHandler {
 
     init(
         email: String,
-        password: String,
+        authentication: MailAuthentication,
         mailboxName: String,
         destinationName: String?,
         request: IMAPBulkCleanupRequest,
         complete: @escaping @Sendable (Result<IMAPBulkOutcome, Error>) -> Void
     ) {
         self.email = email
-        self.password = password
+        self.authentication = authentication
         self.mailboxName = mailboxName
         self.destinationName = destinationName
         self.request = request
@@ -101,6 +101,10 @@ final class IMAPBulkCleanupHandler: ChannelInboundHandler {
             handleFetch(fetchResponse)
         case .tagged(let tagged):
             handleTagged(tagged, context: context)
+        case .authenticationChallenge:
+            if step == .login, case .xoauth2 = authentication {
+                IMAPAuthentication.answerChallenge(context: context)
+            }
         case .fatal(let text):
             settle(.failure(MailError.connectionFailed(text.text)))
             context.close(promise: nil)
@@ -141,7 +145,7 @@ final class IMAPBulkCleanupHandler: ChannelInboundHandler {
 
         switch step {
         case .greeting:
-            send(.login(username: email, password: password), tag: loginTag, context: context)
+            send(IMAPAuthentication.command(email: email, authentication: authentication), tag: loginTag, context: context)
             step = .login
         case .select:
             if case .mailboxData(.exists(let count)) = payload {

@@ -16,13 +16,14 @@ final class IMAPSearchTests: XCTestCase {
         offset: Int = 0,
         limit: Int = 50,
         mailbox: String = "INBOX",
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        authentication: MailAuthentication = .password("pw")
     ) throws -> (EmbeddedChannel, EventLoopFuture<MailSearchResult>) {
         let channel = EmbeddedChannel()
         let promise = channel.eventLoop.makePromise(of: MailSearchResult.self)
         let handler = IMAPSearchHandler(
             email: "me@gmail.com",
-            password: "pw",
+            authentication: authentication,
             mailboxName: mailbox,
             criteria: criteria,
             offset: offset,
@@ -114,6 +115,50 @@ final class IMAPSearchTests: XCTestCase {
     }
 
     // MARK: - State machine
+
+    func testSearchLiteralContinuationDoesNotSendAnAuthenticationReply() throws {
+        for authentication in [MailAuthentication.password("pw"), .xoauth2(accessToken: "at")] {
+            let text = "first\r\nsecond"
+            let (channel, future) = try makeChannel(
+                criteria: MailSearchCriteria(text: text), authentication: authentication
+            )
+            defer { _ = try? channel.finish() }
+
+            let command = try advanceThroughSelect(channel)
+            XCTAssertEqual(command, "A3 UID SEARCH TEXT {\(text.utf8.count)}\r\n")
+            XCTAssertEqual(try feed(channel, "+ OK\r\n"), text + "\r\n",
+                           "the literal must be flushed exactly once without an extra authentication reply")
+
+            try feed(channel, "* SEARCH\r\n")
+            try feed(channel, "A3 OK SEARCH completed\r\n")
+            XCTAssertEqual(try future.wait().totalMatches, 0)
+        }
+    }
+
+    func testPasswordLoginLiteralContinuationDoesNotSendAnAuthenticationReply() throws {
+        let password = "first\r\nsecond"
+        let (channel, _) = try makeChannel(authentication: .password(password))
+        defer { _ = try? channel.finish() }
+
+        let command = try feed(channel, "* OK Service Ready\r\n")
+        XCTAssertTrue(command.hasSuffix("{\(password.utf8.count)}\r\n"), "got: \(command)")
+        XCTAssertEqual(try feed(channel, "+ OK\r\n"), password + "\r\n")
+    }
+
+    func testSearchAnswersXOAuth2ErrorChallengeDuringLogin() throws {
+        let (channel, future) = try makeChannel(authentication: .xoauth2(accessToken: "expired"))
+        defer { _ = try? channel.finish() }
+        try feed(channel, "* OK Service Ready\r\n")
+        let challenge = Data(#"{"status":"401","schemes":"Bearer"}"#.utf8).base64EncodedString()
+
+        XCTAssertEqual(try feed(channel, "+ \(challenge)\r\n"), "\r\n")
+        try feed(channel, "A1 NO [AUTHENTICATIONFAILED] Invalid credentials\r\n")
+        XCTAssertThrowsError(try future.wait()) { error in
+            guard case .authenticationFailed = error as? MailError else {
+                return XCTFail("expected authenticationFailed, got \(error)")
+            }
+        }
+    }
 
     func testSearchReturnsPagedEnvelopesNewestFirst() throws {
         let (channel, future) = try makeChannel(offset: 0, limit: 2)

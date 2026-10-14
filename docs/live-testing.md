@@ -138,6 +138,10 @@ is not exercised, so provision the ones you want covered.
 | `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE` | `ClerkLiveSignInTests`, `ManagedInferenceLiveTests` | Required only when the compiled Clerk default is production (`clerk.sentwise.ai`). Set to `1` only after production Clerk test mode is intentionally enabled; otherwise the `+clerk_test` payloads skip. |
 | `SENTWISE_LIVE_GMAIL_EMAIL` | `GmailLiveSendTests`, `ReplyWorthinessLiveTests` | The Gmail address. |
 | `SENTWISE_LIVE_GMAIL_APP_PASSWORD` | same | 16-char Google app password (2FA required). |
+| `SENTWISE_LIVE_GOOGLE_OAUTH_EMAIL` | `GmailOAuthLiveTests` | Optional (item 104). The Gmail/Workspace address whose "Sign in with Google" grant is checked (read-only IMAP over XOAUTH2). |
+| `SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_ID` | same | The Sentwise Desktop-app OAuth client ID. |
+| `SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_SECRET` | same | Optional: that client's secret. |
+| `SENTWISE_LIVE_GOOGLE_OAUTH_REFRESH_TOKEN` | same | A refresh token for the address with the `https://mail.google.com/` scope (see `docs/gmail-oauth.md`). Testing-mode grants expire after 7 days. |
 | `SENTWISE_LIVE_ATTNET_EMAIL` | `AttNetLiveDraftTests` | The att.net address (item 44 save-as-draft verify). |
 | `SENTWISE_LIVE_ATTNET_APP_PASSWORD` | same | AT&T Secure Mail Key. |
 | `SENTWISE_LIVE_MANAGED_INFERENCE` | `ManagedInferenceLiveTests` | Any truthy value (`1`). Explicitly opts the Worker account-shape tests into live Worker calls. The test mints a fresh Clerk session JWT during the run using `SENTWISE_LIVE_CLERK_TEST`; after the production cutover it also requires `SENTWISE_LIVE_CLERK_PRODUCTION_TEST_MODE`. No JWT is stored as a repo secret. |
@@ -164,7 +168,16 @@ SentwiseTests/ManagedInferenceLiveTests
 SentwiseTests/GmailLiveSendTests
 SentwiseTests/ReplyWorthinessLiveTests
 SentwiseTests/AttNetLiveDraftTests
+SentwiseTests/GmailOAuthLiveTests
 ```
+
+`GmailOAuthLiveTests` (item 104) refreshes a real "Sign in with Google" grant and
+authenticates Gmail IMAP with XOAUTH2, read-only. It runs once the four
+repository secrets `SENTWISE_LIVE_GOOGLE_OAUTH_EMAIL`,
+`SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_ID`, `SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_SECRET`
+(optional), and `SENTWISE_LIVE_GOOGLE_OAUTH_REFRESH_TOKEN` are provisioned, and
+skips otherwise. `Distribution/scripts/tests/test_live_env_wiring.py` (run in CI)
+fails if a live test's variables or class are missing from this pipeline.
 
 `PaddleCheckoutLiveTests` is the first checkout payload (item 97 / closes item
 95's pending live check): it loads the real `PaddleCheckoutHTML` harness in a

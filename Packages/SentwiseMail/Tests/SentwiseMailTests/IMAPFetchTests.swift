@@ -17,7 +17,7 @@ final class IMAPFetchTests: XCTestCase {
         let promise = channel.eventLoop.makePromise(of: [MailMessage].self)
         let handler = IMAPFetchHandler(
             email: "me@gmail.com",
-            password: "pw",
+            authentication: .password("pw"),
             mailboxName: mailbox,
             limit: limit,
             complete: { promise.completeWith($0) }

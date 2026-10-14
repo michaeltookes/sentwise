@@ -6,19 +6,74 @@ enum GoogleOAuth {
     static let tokenEndpoint = URL(string: "https://oauth2.googleapis.com/token")!
     static let revocationEndpoint = URL(string: "https://oauth2.googleapis.com/revoke")!
 
-    /// Minimum scopes needed: read + modify messages (inbox and Sent), and send.
-    /// `gmail.modify` already includes read access, so `gmail.readonly` is omitted
-    /// as redundant.
-    static let scopes = [
-        "https://www.googleapis.com/auth/gmail.modify",
-        "https://www.googleapis.com/auth/gmail.send"
-    ]
+    /// Full IMAP/SMTP access, the only scope Google accepts for `XOAUTH2` mail
+    /// sessions (item 104). Restricted: a public client needs Google's
+    /// restricted-scope verification plus an annual CASA assessment
+    /// (`docs/gmail-oauth.md`).
+    static let mailScope = "https://mail.google.com/"
+
+    /// Requested scopes: the mail scope plus `openid email`, which are
+    /// non-sensitive and only let the app learn which address was authorized
+    /// (from the ID token) so the user never has to type it.
+    static let scopes = [mailScope, "openid", "email"]
+
+    /// Scopes the granted token must carry for the connection to be usable.
+    /// Google may grant `openid`/`email` under different spellings, so only the
+    /// mail scope is enforced.
+    static let requiredScopes = [mailScope]
 }
 
-/// The user-supplied Google Cloud OAuth client (BYO credentials).
-struct GmailCredentials: Equatable {
+/// The OAuth client Sentwise ships with (item 104): one Sentwise-owned Google
+/// Cloud "Desktop app" client, configured per build — never committed.
+///
+/// The values come from the app's Info.plist, which expands the
+/// `SENTWISE_GOOGLE_CLIENT_ID` / `SENTWISE_GOOGLE_CLIENT_SECRET` build settings
+/// from `Sentwise/Config/GoogleOAuth.xcconfig` (and its git-ignored local
+/// override). A build without a real client ID has the feature switched off:
+/// `bundled()` returns nil and the UI offers only the app-password path.
+///
+/// The client secret of an installed-app client is not confidential (Google's
+/// installed-app guidance; anything in a shipped binary is extractable) — it is
+/// kept out of the repo only so forks and CI builds do not impersonate the
+/// Sentwise client. PKCE is what protects the authorization code.
+struct GoogleOAuthClientConfiguration: Equatable, Sendable {
+    static let clientIDInfoKey = "SentwiseGoogleOAuthClientID"
+    static let clientSecretInfoKey = "SentwiseGoogleOAuthClientSecret"
+    static let clientIDSuffix = ".apps.googleusercontent.com"
+
     let clientID: String
-    let clientSecret: String
+    let clientSecret: String?
+
+    init(clientID: String, clientSecret: String? = nil) {
+        self.clientID = clientID
+        let secret = clientSecret?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.clientSecret = (secret?.isEmpty ?? true) ? nil : secret
+    }
+
+    /// The bundled client, or nil when this build has none configured.
+    static func bundled(infoDictionary: [String: Any]? = Bundle.main.infoDictionary) -> Self? {
+        guard let rawID = infoDictionary?[clientIDInfoKey] as? String else { return nil }
+        let clientID = rawID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isUsableClientID(clientID) else { return nil }
+        let rawSecret = infoDictionary?[clientSecretInfoKey] as? String
+        let secret = rawSecret.flatMap { isUnexpandedOrPlaceholder($0) ? nil : $0 }
+        return Self(clientID: clientID, clientSecret: secret)
+    }
+
+    /// A real Google OAuth client ID: non-empty, not an unexpanded build
+    /// variable or the committed placeholder, and in Google's ID format.
+    static func isUsableClientID(_ clientID: String) -> Bool {
+        guard !clientID.isEmpty, !isUnexpandedOrPlaceholder(clientID) else { return false }
+        return clientID.hasSuffix(clientIDSuffix) && clientID.count > clientIDSuffix.count
+    }
+
+    private static func isUnexpandedOrPlaceholder(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty
+            || trimmed.contains("$(")
+            || trimmed.uppercased().contains("PLACEHOLDER")
+            || trimmed.uppercased().hasPrefix("YOUR_")
+    }
 }
 
 /// An OAuth token set returned by Google's token endpoint.
@@ -29,6 +84,24 @@ struct OAuthToken: Codable, Equatable {
     let expiresAt: Date
     let scope: String
     let tokenType: String
+    /// The OpenID Connect ID token (code exchange only); carries the email.
+    var idToken: String?
+
+    init(
+        accessToken: String,
+        refreshToken: String?,
+        expiresAt: Date,
+        scope: String,
+        tokenType: String,
+        idToken: String? = nil
+    ) {
+        self.accessToken = accessToken
+        self.refreshToken = refreshToken
+        self.expiresAt = expiresAt
+        self.scope = scope
+        self.tokenType = tokenType
+        self.idToken = idToken
+    }
 
     /// Whether the access token is expired (or within `leeway` of expiring).
     func isExpired(now: Date, leeway: TimeInterval = 60) -> Bool {
@@ -38,6 +111,28 @@ struct OAuthToken: Codable, Equatable {
     func missingScopes(from requiredScopes: [String]) -> [String] {
         let grantedScopes = Set(scope.split(separator: " ").map(String.init))
         return requiredScopes.filter { !grantedScopes.contains($0) }
+    }
+}
+
+/// Reads the `email` claim from a Google ID token.
+///
+/// The token is received directly from Google's token endpoint over TLS in the
+/// same exchange, so per Google's OpenID Connect guidance its signature does not
+/// need to be re-verified to read claims. It is used only to learn which
+/// mailbox the user authorized — never as an authentication assertion.
+enum GoogleIDToken {
+    static func email(fromIDToken idToken: String) -> String? {
+        let segments = idToken.split(separator: ".", omittingEmptySubsequences: false)
+        guard segments.count == 3,
+              let payload = Data(base64URLEncoded: String(segments[1])),
+              let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              let email = (object["email"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !email.isEmpty, email.contains("@") else {
+            return nil
+        }
+        if let verified = object["email_verified"] as? Bool, !verified { return nil }
+        if let verified = object["email_verified"] as? String, verified.lowercased() != "true" { return nil }
+        return email
     }
 }
 
@@ -57,4 +152,14 @@ enum OAuthError: Error, Equatable {
     case redirectTimedOut
     /// Google returned a token that lacks one or more required Gmail scopes.
     case missingRequiredScopes([String])
+    /// The token endpoint is overloaded or down (HTTP 5xx) or rate-limiting us
+    /// (HTTP 429). Transient: the grant is still good, so callers retry later
+    /// instead of asking the user to sign in again.
+    case temporarilyUnavailable(httpStatus: Int)
+
+    /// Whether an HTTP status from the token endpoint means "retry later"
+    /// rather than "this request or grant is bad".
+    static func isTransientHTTPStatus(_ status: Int) -> Bool {
+        status == 429 || (500...599).contains(status)
+    }
 }

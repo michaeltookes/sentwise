@@ -35,12 +35,21 @@ extension AppState {
             && isConnectedAccount(credentials)
     }
 
+    /// Applies a poll's fetch failure, unless the poll is stale: local data was
+    /// erased, or the mailbox no longer uses the credentials the poll fetched
+    /// with (switched from Google sign-in to an app password, another account,
+    /// or the watcher stopped). A stale failure says nothing about the current
+    /// connection, so it never pauses it or asks for re-authorization.
     func handlePollFetchFailure(
         _ error: Error,
         account: ConnectedMailAccount? = nil,
+        credentials: MailAccountCredentials,
         localDataGeneration: UInt64
     ) {
-        guard isCurrentLocalDataGeneration(localDataGeneration) else { return }
+        guard isCurrentWatcherPoll(localDataGeneration: localDataGeneration, credentials: credentials, account: account) else {
+            DiagnosticLog.verbose("Inbox poll failure discarded; account or watcher changed during fetch")
+            return
+        }
         handlePollFetchFailure(error, account: account)
     }
 }

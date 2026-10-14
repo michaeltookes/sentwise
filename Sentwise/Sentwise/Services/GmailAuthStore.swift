@@ -1,8 +1,13 @@
 import Foundation
 
-/// Persists the Gmail OAuth session — the BYO client credentials and the token
-/// set — in a `SecretStore` (the Keychain in production). Everything here is a
-/// secret, so nothing is written to the plaintext settings file.
+/// Persists each Google-connected mailbox's OAuth token set (item 104) in a
+/// `SecretStore` — the Keychain in production, the isolated test service under
+/// test (item 115), or memory in unit tests. Everything here is a secret, so
+/// nothing is written to the plaintext settings file.
+///
+/// Tokens are keyed per account (`SecretKey.gmailOAuthToken(email:)`), mirroring
+/// the per-account app-password slots (item 48), so several Google accounts can
+/// be connected side by side and removing one deletes exactly its token.
 final class GmailAuthStore {
 
     private let secrets: SecretStore
@@ -13,75 +18,29 @@ final class GmailAuthStore {
         self.secrets = secrets
     }
 
-    // MARK: - Credentials
-
-    func saveCredentials(_ credentials: GmailCredentials) throws {
-        let existingClientID = try secrets.value(for: .googleClientID)
-        let existingClientSecret = try secrets.value(for: .googleClientSecret)
-
-        do {
-            try secrets.set(credentials.clientID, for: .googleClientID)
-            try secrets.set(credentials.clientSecret, for: .googleClientSecret)
-        } catch {
-            restore(existingClientID, for: .googleClientID)
-            restore(existingClientSecret, for: .googleClientSecret)
-            throw error
-        }
-    }
-
-    func loadCredentials() throws -> GmailCredentials? {
-        guard let clientID = try secrets.value(for: .googleClientID),
-              let clientSecret = try secrets.value(for: .googleClientSecret),
-              !clientID.isEmpty, !clientSecret.isEmpty else {
-            return nil
-        }
-        return GmailCredentials(clientID: clientID, clientSecret: clientSecret)
-    }
-
-    func deleteCredentials() throws {
-        try secrets.remove(.googleClientID)
-        try secrets.remove(.googleClientSecret)
-    }
-
-    private func restore(_ value: String?, for key: SecretKey) {
-        do {
-            if let value {
-                try secrets.set(value, for: key)
-            } else {
-                try secrets.remove(key)
-            }
-        } catch {
-            // Preserve the original save failure; rollback is best effort.
-        }
-    }
-
-    // MARK: - Token
-
-    func saveToken(_ token: OAuthToken) throws {
+    func saveToken(_ token: OAuthToken, for email: String) throws {
         let data = try encoder.encode(token)
         guard let json = String(data: data, encoding: .utf8) else {
             throw OAuthError.invalidResponse
         }
-        try secrets.set(json, for: .gmailToken)
+        try secrets.set(json, for: .gmailOAuthToken(email: email))
     }
 
-    func loadToken() throws -> OAuthToken? {
-        guard let json = try secrets.value(for: .gmailToken),
+    func loadToken(for email: String) throws -> OAuthToken? {
+        guard let json = try secrets.value(for: .gmailOAuthToken(email: email)),
               let data = json.data(using: .utf8) else {
             return nil
         }
         return try? decoder.decode(OAuthToken.self, from: data)
     }
 
-    func deleteToken() throws {
-        try secrets.remove(.gmailToken)
+    func deleteToken(for email: String) throws {
+        try secrets.remove(.gmailOAuthToken(email: email))
     }
 
-    // MARK: - Convenience
-
-    /// Whether a token is currently stored (i.e. an account is connected).
-    var isConnected: Bool {
-        let token = (try? loadToken()) ?? nil
+    /// Whether a token is stored for `email` (i.e. it is Google-connected).
+    func hasToken(for email: String) -> Bool {
+        let token = (try? loadToken(for: email)) ?? nil
         return token != nil
     }
 }
