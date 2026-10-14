@@ -13,9 +13,10 @@ struct EmailAccountSettingsView: View {
     @State private var accountPendingRemoval: SavedMailAccount?
     @State private var showDisconnectConfirmation = false
     @State private var newAccountForm = MailAccountFormState()
-    @State private var isAddingAccount = false
+    @State private var addAccountSession = AddAccountFormSession()
     @FocusState private var isMailEmailFocused: Bool
 
+    private var isAddingAccount: Bool { addAccountSession.isActive }
     /// Whether the credential-entry form is shown: when nothing is connected, or
     /// when the user has explicitly chosen to add another account.
     private var showsConnectForm: Bool {
@@ -129,8 +130,9 @@ struct EmailAccountSettingsView: View {
             email: guidanceEmail,
             host: isAddingAccount ? newAccountForm.host : appState.mailHost,
             messageSurface: .settings,
-            shouldApplyResult: { [isAddingAccount] _ in isAddingAccount == self.isAddingAccount },
-            onConnected: { isAddingAccount = false; newAccountForm.resetForNewAccount() },
+            // Bound to the form session it started in: dropped once the add form is cancelled or reopened.
+            shouldApplyResult: { [sessionID = addAccountSession.id] _ in self.addAccountSession.accepts(sessionID) },
+            onConnected: { addAccountSession.end(); newAccountForm.resetForNewAccount() },
             appPasswordForm: { appPasswordForm }
         )
     }
@@ -164,7 +166,7 @@ struct EmailAccountSettingsView: View {
             .accessibilityLabel("Test connection and save this account")
 
             if isAddingAccount {
-                Button("Cancel") { cancelAddingAccount() }
+                Button("Cancel") { abandonAddingAccountIfNeeded() }
                     .disabled(appState.isConnecting)
                     .accessibilityLabel("Cancel adding an account")
             }
@@ -287,13 +289,13 @@ struct EmailAccountSettingsView: View {
             didConnect = await appState.testConnection(messageSurface: .settings)
         }
         if didConnect && appState.isAccountConnected {
-            isAddingAccount = false
+            addAccountSession.end()
             newAccountForm.resetForNewAccount()
         }
     }
 
     private func switchTo(_ account: SavedMailAccount) async {
-        isAddingAccount = false
+        addAccountSession.end()
         newAccountForm.resetForNewAccount()
         await appState.switchToSavedAccount(account, messageSurface: .settings)
     }
@@ -304,17 +306,15 @@ struct EmailAccountSettingsView: View {
         newAccountForm.resetForNewAccount()
         appState.setConnectionError(nil, for: .settings)
         appState.clearWorkspaceAuthGuidance(for: .settings)
-        isAddingAccount = true
+        addAccountSession.begin()
         isMailEmailFocused = true
-    }
-
-    private func cancelAddingAccount() {
-        abandonAddingAccountIfNeeded()
     }
 
     private func abandonAddingAccountIfNeeded() {
         guard isAddingAccount else { return }
-        isAddingAccount = false
+        addAccountSession.end()
+        // A Google sign-in started from this form is abandoned with it.
+        appState.googleMailAuth.cancelSignIn()
         appState.setConnectionError(nil, for: .settings)
         appState.clearWorkspaceAuthGuidance(for: .settings)
         newAccountForm.resetForNewAccount()

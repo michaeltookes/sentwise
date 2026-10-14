@@ -140,7 +140,7 @@ extension AppState {
         do {
             messages = try await fetchWatcherMessages(credentials, mailbox: mailbox)
         } catch {
-            handlePollFetchFailure(error, account: account, localDataGeneration: localDataGeneration)
+            handlePollFetchFailure(error, account: account, credentials: credentials, localDataGeneration: localDataGeneration)
             return
         }
         DiagnosticLog.verbose("Inbox poll fetched \(messages.count) recent messages")
