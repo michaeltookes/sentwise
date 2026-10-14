@@ -121,17 +121,18 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
     - The output `false` means the flag is false. An error that the key does not exist means the same, because the app decodes a missing key as false. Then relaunch Sentwise, quit it again, and re-read the flag: at launch `reconcileOnboardingState()` marks an already-configured older install as completed. Proceed in F1's user only if the flag still reads false.
   - If the flag reads `true`, run the whole case in the freshly reset `sentwise-stranger` macOS user from TC-M5-01. There, `Settings.json` is absent, so the flag is false, and the user has no mailbox credentials and no Sentwise session, so step 1 connects both (its fallback branch). Do not edit `Settings.json` by hand to reset the flag.
   - Notifications are allowed for Sentwise.
+  - Both branches sign in to Sentwise AI as a **fresh F2** (preamble: `luciusfox+trial-<RUNID>@prowlqa.dev`, new RUNID for this run, a trial account, never comped), not F1, so the case exercises the trial sign-in and entitlement path launch-checklist §6 requires. F1's Gmail stays the connected mailbox. Record the RUNID in the report. In F1's user, before step 1 (after the flag check), sign F1 out of Sentwise AI: **Settings…** → **Subscription** → **Sign out**; leave the mailbox connected.
 - **Steps:**
   1. Status menu → **Setup Assistant…** (in the stranger-user fallback it opens by itself at first launch). Walk the steps with **Continue**:
-     - F1's user: the mailbox step shows "Connected as luciusfox@prowlqa.dev", and the Sentwise AI step shows F1 signed in.
-     - Stranger-user fallback: on the mailbox step, enter `luciusfox@prowlqa.dev` in **Email address** and F1's Gmail app password (Lucius' workspace secrets) in **App password**, click **Test Connection**, and wait for "Connected as luciusfox@prowlqa.dev"; then **Continue**. On the Sentwise AI step, sign in as a **fresh F2** (preamble: `luciusfox+trial-<RUNID>@prowlqa.dev`, new RUNID for this run, a trial account, never comped), not F1, so the case exercises the trial sign-in and entitlement path launch-checklist §6 requires: click **Use Sentwise AI** if it is shown, enter F2 in **Email address**, click **Send sign-in code**, read the code from F1's Gmail inbox (plus addressing), enter it in **6-digit code**, click **Verify & connect**, and wait for "Connected as" F2; then **Continue**. Record the RUNID in the report. **Continue** stays disabled on each step until its connection is made.
+     - F1's user: the mailbox step shows "Connected as luciusfox@prowlqa.dev"; **Continue**. On the Sentwise AI step, sign in as the fresh F2: click **Use Sentwise AI** if it is shown, enter F2 in **Email address**, click **Send sign-in code**, read the code from F1's Gmail inbox (plus addressing), enter it in **6-digit code**, click **Verify & connect**, and wait for "Connected as" F2; then **Continue**.
+     - Stranger-user fallback: on the mailbox step, enter `luciusfox@prowlqa.dev` in **Email address** and F1's Gmail app password (Lucius' workspace secrets) in **App password**, click **Test Connection**, and wait for "Connected as luciusfox@prowlqa.dev"; then **Continue**. On the Sentwise AI step, sign in as the fresh F2 exactly as in F1's user above. **Continue** stays disabled on each step until its connection is made.
   2. On the send-behavior step choose **Save as draft**, then **Continue**.
   3. On the voice step click **Learn my voice** and wait until it finishes.
   4. Click **Finish**.
   5. Quit Sentwise (**Quit Sentwise**) and relaunch it from `/Applications`.
   6. Status menu → **New Follow-up from Transcript…**. In **Recipients** enter `luciusfox@prowlqa.dev`; in **Subject** enter `Pilot next steps`.
   7. Paste T1 into the transcript area and click **Draft follow-up**.
-  8. When the draft-ready notification appears, click it (or click **Open Review Drafts**). In Review Drafts, expand the draft and click **Approve**. Stranger-user fallback only: this first draft started F2's trial, so then close the Settings window if it is open, open **Settings…** → **Subscription** (this refreshes status, as in TC-M2-06 step 7), and read the plan line.
+  8. When the draft-ready notification appears, click it (or click **Open Review Drafts**). In Review Drafts, expand the draft and click **Approve**. This first draft started F2's trial (both branches), so then close the Settings window if it is open, open **Settings…** → **Subscription** (this refreshes status, as in TC-M2-06 step 7), and read the plan line.
   9. If the status menu shows **Start Watching**, click it; it must then read **Pause Watching**.
   10. From S1, send Q1 to `luciusfox@prowlqa.dev`.
   11. Wait up to 10 minutes for the notification "Reply-worthy: <S1 sender> — draft a reply?", then click it.
@@ -145,10 +146,10 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
   - Gmail Drafts holds the follow-up "Pilot next steps", addressed only to `luciusfox@prowlqa.dev`. It mentions the security questionnaire by Friday and the November 9 meeting.
   - Gmail Drafts also holds a reply in the "Pilot kickoff" thread that confirms Thursday at 10am works. A reply that confirms the time without step 13 having supplied A1 is a defect (an invented user decision), not a pass.
   - The report records whether step 13 was needed.
-  - Stranger-user fallback: step 8's plan line reads "Trial — 14 days left" for F2 (trial entitlement, not Pro and not a comp), and drafting in steps 7 and 12 was never blocked by a subscribe prompt. A Pro, comped, or "Trial ended" plan line fails the case.
+  - Both branches: step 8's plan line reads "Trial — 14 days left" for F2 (trial entitlement, not Pro and not a comp), and drafting in steps 7 and 12 was never blocked by a subscribe prompt. A Pro, comped, or "Trial ended" plan line fails the case.
   - Nothing was sent.
   - This case passing ticks the §6 onboarding box.
-  - Teardown (stranger-user fallback): in the stranger user, **Settings…** → **Subscription** → **Sign out**; the orchestrator deletes F2 from production.
+  - Teardown (both branches): **Settings…** → **Subscription** → **Sign out** of F2; the orchestrator deletes F2 from production. In F1's user, then sign back in as F1 and confirm the Subscription tab reads Pro.
 - **Asset:** video
 
 ### TC-M1-09 Live tests leave the installed app alone
