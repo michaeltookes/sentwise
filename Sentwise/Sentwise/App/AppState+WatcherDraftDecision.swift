@@ -231,7 +231,8 @@ extension AppState {
                 resumeAfterManagedReauthentication: shouldResumeAfterManagedReauthentication(
                     error: error,
                     provider: draftProvider
-                )
+                ),
+                resumeAfterGoogleReauthentication: Self.isGoogleMailboxAuthFailure(error, credentials: credentials)
             )
         }
         decisionLogger.error("Watcher draft failed: \(error.localizedDescription)")

@@ -30,6 +30,9 @@ enum GmailAuthError: Error, Equatable {
 struct GmailAuthorization: Equatable {
     let email: String
     let token: OAuthToken
+    /// The `authorize` call that produced it; cleanup uses it to tell whether
+    /// a newer sign-in is still in flight (see `discard(_:)`).
+    var attempt: UInt64 = 0
 }
 
 /// The "Sign in with Google" phases, published for the UI (item 104).
@@ -96,6 +99,17 @@ final class GmailAuthCoordinator {
         fileprivate let account: UInt64
     }
 
+    /// Sign-ins between `authorize` start and return, by attempt, with the
+    /// mailbox each is bound to (nil until Google says which address, unless
+    /// the sign-in requires a specific one). Google revokes the whole grant for
+    /// a revoked token, so an older attempt's cleanup must not revoke while a
+    /// newer sign-in for that mailbox may be mid-consent.
+    private var authorizationsInFlight: [UInt64: String?] = [:]
+    private var lastAuthorizationAttempt: UInt64 = 0
+    /// Cleanup revocations held back by a newer sign-in in flight; settled
+    /// when no sign-in that could target their mailbox remains.
+    private var deferredRevocations: [(key: String, email: String, token: OAuthToken)] = []
+
     private func generation(for key: String) -> TokenGeneration {
         TokenGeneration(global: globalGeneration, account: accountGenerations[key] ?? 0)
     }
@@ -136,12 +150,21 @@ final class GmailAuthCoordinator {
     func authorize(loginHint: String? = nil, requireHintMatch: Bool = false) async throws -> GmailAuthorization {
         guard !phase.isInProgress else { throw GmailAuthError.alreadyInProgress }
         phase = .awaitingBrowser
+        lastAuthorizationAttempt &+= 1
+        let attempt = lastAuthorizationAttempt
+        let hint = loginHint?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let boundMailbox: String? = (requireHintMatch && !hint.isEmpty) ? SavedMailAccount.normalizedEmail(hint) : nil
+        // updateValue, not subscript assignment: a nil mailbox must still register.
+        authorizationsInFlight.updateValue(boundMailbox, forKey: attempt)
+        defer { finishAuthorization(attempt) }
         do {
-            let authorization = try await runAuthorization(loginHint: loginHint, requireHintMatch: requireHintMatch)
+            var authorization = try await runAuthorization(loginHint: loginHint, requireHintMatch: requireHintMatch)
+            authorization.attempt = attempt
             phase = .idle
             logger.info("Gmail account authorized with Google")
             return authorization
         } catch {
+            let error = Self.normalizingCancellation(error)
             phase = (error is CancellationError) ? .idle : .failed(Self.message(for: error))
             throw error
         }
@@ -231,17 +254,6 @@ final class GmailAuthCoordinator {
         // The tracker runs revocation in its own task, even if this sign-in was
         // canceled, and makes a subsequent sign-in wait for cleanup to finish.
         await revokeRemovedToken(token)?.value
-    }
-
-    static func authorizedEmail(token: OAuthToken, loginHint: String?, requireHintMatch: Bool) throws -> String {
-        guard let email = token.idToken.flatMap(GoogleIDToken.email(fromIDToken:)) else {
-            throw GmailAuthError.missingAccountEmail
-        }
-        if requireHintMatch, let loginHint, !loginHint.isEmpty,
-           loginHint.caseInsensitiveCompare(email) != .orderedSame {
-            throw GmailAuthError.accountMismatch(expected: loginHint, actual: email)
-        }
-        return email
     }
 
     // MARK: - Tokens
@@ -376,11 +388,16 @@ final class GmailAuthCoordinator {
         if let token { await revokeRemovedToken(token)?.value }
     }
 
-    /// Cleanup for one specific authorization: deletes and revokes `token`
-    /// only while it is still the stored grant for `email`. When a newer
-    /// sign-in has replaced it, nothing is deleted or revoked (revoking the old
-    /// grant would also kill the new one at Google).
-    func disconnect(_ email: String, ifStoredTokenIs token: OAuthToken) async {
+    /// Cleanup for one specific authorization (it failed verification or went
+    /// stale): deletes and revokes its token only while it is still the stored
+    /// grant for its mailbox. When a newer sign-in has replaced it, nothing is
+    /// deleted or revoked (revoking the old grant would also kill the new one
+    /// at Google). While a newer sign-in that could target this mailbox is
+    /// still in flight, the token is deleted locally but its revocation waits
+    /// until that sign-in ends, and is dropped if it adopted a token.
+    func discard(_ authorization: GmailAuthorization) async {
+        let email = authorization.email
+        let token = authorization.token
         guard let stored = (try? store.loadToken(for: email)) ?? nil,
               Self.isSameGrant(stored, token) else { return }
         do {
@@ -389,7 +406,39 @@ final class GmailAuthCoordinator {
             logger.error("Couldn't remove a Google token from the Keychain: \(error.localizedDescription)")
             return
         }
+        let key = SavedMailAccount.normalizedEmail(email)
+        if hasAuthorizationInFlight(newerThan: authorization.attempt, for: key) {
+            logger.info("A newer Google sign-in is in flight; revoking the discarded grant after it ends")
+            deferredRevocations.append((key, email, token))
+            return
+        }
         await revokeRemovedToken(token)?.value
+    }
+
+    private func hasAuthorizationInFlight(newerThan attempt: UInt64, for key: String) -> Bool {
+        authorizationsInFlight.contains { id, mailbox in id > attempt && (mailbox == nil || mailbox == key) }
+    }
+
+    /// Ends `attempt` and settles the revocations it was holding back: each
+    /// is dropped when its mailbox now has a token (a newer grant that the
+    /// revoke would kill) and started otherwise.
+    private func finishAuthorization(_ attempt: UInt64) {
+        authorizationsInFlight.removeValue(forKey: attempt)
+        var ready: [(key: String, email: String, token: OAuthToken)] = []
+        deferredRevocations.removeAll { entry in
+            guard !hasAuthorizationInFlight(newerThan: 0, for: entry.key) else { return false }
+            ready.append(entry)
+            return true
+        }
+        for entry in ready {
+            do {
+                guard try store.loadToken(for: entry.email) == nil else { continue }
+            } catch {
+                // An unreadable Keychain could hide a newer grant: never risk it.
+                continue
+            }
+            revokeRemovedToken(entry.token)
+        }
     }
 
     static func isSameGrant(_ lhs: OAuthToken, _ rhs: OAuthToken) -> Bool {
@@ -432,54 +481,5 @@ final class GmailAuthCoordinator {
     private func requireFullScope(_ token: OAuthToken) throws {
         let missing = token.missingScopes(from: GoogleOAuth.requiredScopes)
         guard missing.isEmpty else { throw OAuthError.missingRequiredScopes(missing) }
-    }
-
-    // MARK: - Messages
-
-    /// User-facing copy for a failed sign-in.
-    static func message(for error: Error) -> String {
-        if let error = error as? GmailAuthError { return message(for: error) }
-        if let error = error as? OAuthError { return message(for: error) }
-        return "Google sign-in failed. \(error.localizedDescription)"
-    }
-
-    private static func message(for error: GmailAuthError) -> String {
-        switch error {
-        case .notConfigured:
-            return "Sign in with Google isn't available in this build. Use an app password instead."
-        case .reauthorizationRequired, .notConnected:
-            return "Your Google sign-in has expired or was revoked. Sign in with Google again."
-        case .missingAccountEmail:
-            return "Google didn't share which address you signed in with. Please try again."
-        case .accountMismatch(let expected, let actual):
-            return "You signed in as \(actual), but this account is \(expected). Choose \(expected) on Google's screen."
-        case .alreadyInProgress:
-            return "A Google sign-in is already open in your browser."
-        case .revocationPending:
-            return "Sentwise is still disconnecting your previous Google sign-in. Try again in a moment."
-        case .superseded:
-            return "Your Google sign-in changed while Sentwise was refreshing it. Please try again."
-        }
-    }
-
-    private static func message(for error: OAuthError) -> String {
-        switch error {
-        case .authorizationDenied(let reason):
-            return reason == "access_denied" ? "Google sign-in was canceled." : "Google sign-in failed (\(reason))."
-        case .redirectTimedOut:
-            return "Google sign-in timed out. Try again and finish in your browser."
-        case .missingRequiredScopes:
-            return "Sentwise needs permission to read and send your mail. Sign in again and allow Gmail access."
-        case .missingRefreshToken:
-            return "Google didn't grant offline access. Sign in again and approve all requested access."
-        case .stateMismatch:
-            return "The Google sign-in response didn't match this request. Please try again."
-        case .server(let code, let description):
-            return "Google sign-in failed: \(description ?? code)."
-        case .invalidResponse:
-            return "Google sign-in returned an unexpected response. Please try again."
-        case .temporarilyUnavailable:
-            return "Google's sign-in service is temporarily unavailable. Please try again in a few minutes."
-        }
     }
 }

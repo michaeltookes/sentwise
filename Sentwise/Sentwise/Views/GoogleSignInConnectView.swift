@@ -113,6 +113,29 @@ struct GoogleSignInButtonBlock: View {
     }
 }
 
+/// "Sign in with Google again" on a saved background mailbox whose grant
+/// expired (`AppState.savedAccountNeedsGoogleReauth`). Signs in for exactly
+/// that address; on success it becomes the focused mailbox and its paused
+/// watcher resumes.
+struct SavedGoogleMailboxReconnect: View {
+    @EnvironmentObject var appState: AppState
+    let email: String
+    let shouldApplyResult: @MainActor (MailAccountCredentials) -> Bool
+
+    var body: some View {
+        GoogleSignInButtonBlock(
+            auth: appState.googleMailAuth,
+            loginHint: email,
+            requireHintMatch: true,
+            messageSurface: .settings,
+            shouldApplyResult: shouldApplyResult,
+            onConnected: {}
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Sign in with Google again for \(email)")
+    }
+}
+
 /// Copy for the Email Account settings confirmations, kept here so the
 /// settings view stays within its length limits.
 enum EmailAccountSettingsCopy {
