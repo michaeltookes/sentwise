@@ -178,11 +178,11 @@ final class AppState: ObservableObject {
     @Published var draftSentMessage: String?
 
     // MARK: - Preferences
-
-    /// Whether the app launches at login (mirrors `SMAppService` state).
-    @Published var launchAtLogin = LoginItemManager.shared.isEnabled
+    /// Launch-at-login state (mirrors `SMAppService` status, item 113).
+    @Published var launchAtLoginState = LoginItemManager.shared.state
     var setLaunchAtLoginHandler: (Bool) -> Bool = { LoginItemManager.shared.setEnabled($0) }
-    var launchAtLoginStatusProvider: () -> Bool = { LoginItemManager.shared.isEnabled }
+    var launchAtLoginStatusProvider: () -> LaunchAtLoginState = { LoginItemManager.shared.state }
+    var openLoginItemsSettingsHandler: () -> Void = { LoginItemManager.shared.openLoginItemsSettings() }
 
     /// How often (in seconds) the inbox is polled while the Mac is awake.
     @Published var pollIntervalSeconds: Int

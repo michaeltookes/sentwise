@@ -81,6 +81,10 @@ template, Sparkle wiring, DMG assets) lives under `Distribution/`.
   order builds. CI tag releases fail before publishing unless it is greater than
   the previous stable release's appcast build.
 - Both can be overridden per run: `release.sh --version 0.2.0 --build 5`.
+- `CHANGELOG.md` must have a `## [X.Y.Z]` section for the version being
+  released — it becomes the release notes in the Sparkle update dialog (see
+  **Release notes in the appcast** below). A signed release aborts before
+  archiving if the section is missing or empty.
 
 ---
 
@@ -95,6 +99,8 @@ Distribution/scripts/release.sh --dry-run
 Output lands in the gitignored `dist/`:
 - `dist/Sentwise-<version>.dmg` — unsigned, for layout inspection only
 - `dist/Sentwise-<version>.dmg.sha256`
+- `dist/Sentwise-<version>.html` — the CHANGELOG section rendered as the
+  Sparkle release notes (a dry run only warns if the section is missing)
 
 Open the DMG to confirm the background art and drag-to-Applications layout, then
 detach it. **Do not distribute a dry-run DMG** — it is unsigned and
@@ -115,6 +121,9 @@ Distribution/scripts/release.sh --version 0.1.0 --build 1
 
 What `release.sh` does, step by step:
 
+0. **Release-notes pre-flight** — render the version's `CHANGELOG.md` section
+   to HTML (`changelog-to-html.sh`). A missing or empty section aborts the
+   release here, before the long build/notarize steps.
 1. **Archive** the `Sentwise` scheme in Release, stamping the version/build.
 2. **Export** a Developer-ID-signed `.app` (hardened runtime, secure timestamp)
    via a generated `ExportOptions.plist`. It then **hard-aborts if the built
@@ -136,10 +145,13 @@ What `release.sh` does, step by step:
    hard-fails the release on a dyld/startup crash; it is the only gate that
    would have caught the v0.1.0 launch crash (signatures and unit tests never
    execute the binary). It runs in both dry-run and signed modes.
-7. **Appcast + checksums**: `generate_appcast dist/` signs the DMG with the
-   EdDSA private key and writes `dist/appcast.xml`; the script then verifies the
-   appcast actually references the new DMG (a silent `generate_appcast` failure
-   is what shipped a broken v0.1.0 step). A `.sha256` is written too.
+7. **Appcast + checksums** (`write-appcast.sh`): writes the release notes to
+   `dist/Sentwise-<version>.html` next to the DMG, runs
+   `generate_appcast --embed-release-notes dist/` (signs the DMG with the EdDSA
+   private key, writes `dist/appcast.xml`, and embeds the notes as the item's
+   `<description>`), then verifies the appcast references the new DMG (a silent
+   `generate_appcast` failure is what shipped a broken v0.1.0 step) **and** that
+   its item carries non-empty release notes. A `.sha256` is written too.
 
 **Guards worth knowing:**
 - **Stale-dist guard.** The script refuses to build if `dist/` holds a DMG, ZIP,
@@ -153,6 +165,29 @@ What `release.sh` does, step by step:
   form) and `SPARKLE_ED_KEY_FILE` (passed to `generate_appcast --ed-key-file`,
   since the runner has no login Keychain). Both credential paths are supported
   by the one script.
+
+### Release notes in the appcast
+
+The Sparkle update dialog shows the appcast item's `<description>`. v0.2.0
+shipped without one, so 0.1.2 users saw a blank notes area (item 114). The
+pipeline now fills it from `CHANGELOG.md`:
+
+- `Distribution/scripts/changelog-to-html.sh [--changelog PATH] X.Y.Z` prints
+  the `## [X.Y.Z]` section as an HTML fragment (headings, bullets with
+  continuation lines, paragraphs, bold/italic/code/links; link-reference lines
+  dropped; text escaped). It exits non-zero if the section is missing or empty.
+  Pure `awk`, no extra dependencies.
+- `Distribution/scripts/write-appcast.sh` places that fragment next to the
+  archive with the same basename — Sparkle 2.x's `generate_appcast` pairs
+  `Sentwise-X.Y.Z.html` with `Sentwise-X.Y.Z.dmg` — and passes
+  `--embed-release-notes`, so the notes are embedded in the appcast (no extra
+  release asset or `releaseNotesLink` to host). The `.html` file itself is not
+  uploaded.
+- Write the CHANGELOG section for users: it is what they read in the dialog.
+- Test without a build: `Distribution/scripts/tests/test-release-notes.sh`
+  (fixture CHANGELOG + fixture dist dir; set `SPARKLE_BIN` to the pinned
+  Sparkle 2.9.5 `bin/` to include the `generate_appcast` cases, otherwise they
+  are skipped).
 
 ---
 
@@ -187,6 +222,10 @@ What `release.sh` does, step by step:
 
 - On launch, Sparkle quietly checks the appcast (`SUEnableAutomaticChecks`).
 - The menu's **Check for Updates…** item triggers an interactive check.
+- The update dialog shows the release notes embedded in the appcast item (the
+  version's CHANGELOG section). **After every release, verify on a
+  previous-version install** that **Check for Updates…** shows the dialog with
+  those notes rendered, not a blank area.
 - Sparkle downloads the new DMG and verifies it against `SUPublicEDKey` before
   installing — which is why future appcasts must be signed with the private key
   matching the public key already shipped in the app.

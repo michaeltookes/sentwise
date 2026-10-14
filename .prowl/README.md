@@ -154,6 +154,13 @@ Menu actions must use the explicit safe AX identifiers assigned in
 | `id=openBrowseMailbox` | Browse Mailbox… (fixture-gated) |
 | `id=reportAProblem` | Report a Problem… (item 36 — assert-only; see below) |
 
+The Launch at Login rows (item 113) carry `id=launchAtLogin`, and, only when
+macOS has disabled the login item (`SMAppService` status `.requiresApproval`),
+`id=launchAtLoginApprovalCaption` and `id=openLoginItemsSettings` (opens System
+Settings). All three are already blocked by the `Login`/`login` substring
+forbids; hunts must not reference them. The Settings → General toggle carries
+`launchAtLoginToggle` with the same caption and button ids.
+
 ### Review Drafts window tab switch (item 69)
 
 The Review Drafts window has two tabs — **Drafts** (reviewable pending drafts)

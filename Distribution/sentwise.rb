@@ -7,7 +7,7 @@ cask "sentwise" do
   desc "Local-first macOS menu-bar email assistant that drafts replies in your voice"
   homepage "https://github.com/michaeltookes/sentwise"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "Sentwise.app"
 

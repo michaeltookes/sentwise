@@ -12,7 +12,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     // MARK: - Properties
 
     private(set) var statusItem: NSStatusItem!
-    private let appState: AppState
+    let appState: AppState
     private let updateManager: UpdateManager
 
     /// The native settings window (item 65), managed by its own controller.
@@ -113,6 +113,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // "notifications are off" row appears/clears; the async result lands before
         // the next open, and applicationDidBecomeActive keeps it fresh meanwhile.
         Task { await appState.refreshNotificationPermission() }
+        appState.refreshLaunchAtLoginState()
         menu.removeAllItems()
         for item in buildMenuItems() {
             menu.addItem(item)
@@ -235,11 +236,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         items.append(.separator())
 
-        // Launch at Login toggle
-        let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        login.target = self
-        login.state = appState.launchAtLogin ? .on : .off
-        items.append(login)
+        // Launch at Login toggle, plus the approval caption/action (item 113).
+        items.append(contentsOf: launchAtLoginMenuItems())
 
         // Check for Updates
         let updateTitle = updateManager.isConfigured
@@ -264,10 +262,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     // MARK: - Actions
-
-    @objc private func toggleLaunchAtLogin() {
-        appState.setLaunchAtLogin(!appState.launchAtLogin)
-    }
 
     @objc private func toggleWatching() {
         appState.toggleWatching()
