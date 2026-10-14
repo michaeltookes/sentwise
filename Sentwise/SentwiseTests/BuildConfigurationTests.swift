@@ -18,10 +18,10 @@ final class BuildConfigurationTests: XCTestCase {
             Key.serviceBaseURL: "https://sentwise-inference-sandbox.sentwise-service.workers.dev",
             Key.clerkFrontendAPIURL: "https://example-dev.clerk.accounts.dev",
             Key.paddleEnvironment: "sandbox",
-            Key.paddleClientToken: "test_qa_token",
-            Key.paddleStarterPriceID: "pri_qa_starter",
-            Key.paddleProPriceID: "pri_qa_pro",
-            Key.paddleUnlimitedPriceID: "pri_qa_unlimited",
+            Key.paddleClientToken: "test_0qa1token2",
+            Key.paddleStarterPriceID: "pri_01qastarter",
+            Key.paddleProPriceID: "pri_01qapro",
+            Key.paddleUnlimitedPriceID: "pri_01qaunlimited",
             Key.keychainServiceSuffix: ".qa",
             Key.appSupportDirectoryName: "Sentwise QA",
             Key.displayName: "Sentwise QA",
@@ -91,10 +91,10 @@ final class BuildConfigurationTests: XCTestCase {
         let paddle = try XCTUnwrap(config.paddle)
         XCTAssertEqual(paddle.environment, .sandbox)
         XCTAssertEqual(paddle.paddleJSEnvironment, "sandbox")
-        XCTAssertEqual(paddle.clientSideToken, "test_qa_token")
-        XCTAssertEqual(paddle.priceID(for: .starter), "pri_qa_starter")
-        XCTAssertEqual(paddle.priceID(for: .pro), "pri_qa_pro")
-        XCTAssertEqual(paddle.priceID(for: .unlimited), "pri_qa_unlimited")
+        XCTAssertEqual(paddle.clientSideToken, "test_0qa1token2")
+        XCTAssertEqual(paddle.priceID(for: .starter), "pri_01qastarter")
+        XCTAssertEqual(paddle.priceID(for: .pro), "pri_01qapro")
+        XCTAssertEqual(paddle.priceID(for: .unlimited), "pri_01qaunlimited")
         XCTAssertTrue(PaddleCheckoutHTML.page(config: paddle).contains(#"Paddle.Environment.set("sandbox");"#))
     }
 
@@ -107,7 +107,7 @@ final class BuildConfigurationTests: XCTestCase {
             ("production environment", [Key.paddleEnvironment: "production"]),
             ("live token", [Key.paddleClientToken: "live_3affc7e38f8efd6ebd94616ab39"]),
             ("production price id", [Key.paddleStarterPriceID: liveStarter]),
-            ("duplicate price ids", [Key.paddleProPriceID: "pri_qa_starter"]),
+            ("duplicate price ids", [Key.paddleProPriceID: "pri_01qastarter"]),
             ("not a price id", [Key.paddleProPriceID: "qa_pro"]),
             ("missing service URL", [Key.serviceBaseURL: ""]),
             ("malformed service URL", [Key.serviceBaseURL: "not a url"]),
@@ -124,11 +124,54 @@ final class BuildConfigurationTests: XCTestCase {
         }
     }
 
+    /// Values copied unfilled from `Config/QA.local.xcconfig.example`.
+    private let examplePlaceholders: [String: Any] = [
+        Key.clerkFrontendAPIURL: "https://YOUR-DEV-INSTANCE.clerk.accounts.dev",
+        Key.paddleClientToken: "test_YOUR_SANDBOX_CLIENT_TOKEN",
+        Key.paddleStarterPriceID: "pri_YOUR_SANDBOX_STARTER",
+        Key.paddleProPriceID: "pri_YOUR_SANDBOX_PRO",
+        Key.paddleUnlimitedPriceID: "pri_YOUR_SANDBOX_UNLIMITED"
+    ]
+
+    func testUnfilledExampleValuesMakeCheckoutAndSignInUnavailable() {
+        let config = BuildConfiguration.resolve(infoDictionary: qaInfo(examplePlaceholders))
+        XCTAssertFalse(config.isProduction)
+        XCTAssertNil(config.paddle)
+        XCTAssertFalse(config.isSignInAvailable)
+        XCTAssertEqual(config.clerkFrontendAPIBaseURL, BuildConfiguration.NonProductionFallback.clerkFrontendAPIURL)
+    }
+
+    func testValidSandboxValuesEnableCheckout() throws {
+        let sandbox = PaddleConfig.testSandbox
+        let config = BuildConfiguration.resolve(infoDictionary: qaInfo([
+            Key.paddleClientToken: sandbox.clientSideToken,
+            Key.paddleStarterPriceID: sandbox.priceID(for: .starter),
+            Key.paddleProPriceID: sandbox.priceID(for: .pro),
+            Key.paddleUnlimitedPriceID: sandbox.priceID(for: .unlimited)
+        ]))
+        XCTAssertEqual(try XCTUnwrap(config.paddle), sandbox)
+    }
+
+    func testOnePlaceholderAmongValidValuesMakesCheckoutUnavailable() {
+        for (key, value) in examplePlaceholders {
+            let config = BuildConfiguration.resolve(infoDictionary: qaInfo([key: value]))
+            XCTAssertNil(config.paddle, key)
+        }
+        for (name, overrides) in [
+            ("underscored token", [Key.paddleClientToken: "test_qa_token"]),
+            ("uppercase price id", [Key.paddleProPriceID: "pri_01QAPRO"]),
+            ("underscored price id", [Key.paddleProPriceID: "pri_qa_pro"]),
+            ("placeholder service URL", [Key.serviceBaseURL: "https://YOUR-SANDBOX.workers.dev"])
+        ] {
+            XCTAssertNil(BuildConfiguration.resolve(infoDictionary: qaInfo(overrides)).paddle, name)
+        }
+    }
+
     func testOnlyPaddleKeysPresentStillNeverUsesProductionPrices() {
         let config = BuildConfiguration.resolve(infoDictionary: [
             Key.bundleIdentifier: "com.tookes.Sentwise.qa",
             Key.paddleEnvironment: "sandbox",
-            Key.paddleClientToken: "test_qa_token"
+            Key.paddleClientToken: "test_0qa1token2"
         ])
         XCTAssertFalse(config.isProduction)
         XCTAssertNil(config.paddle)

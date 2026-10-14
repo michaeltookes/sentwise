@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Per-build configuration (sentwise item 123): which service, Clerk instance,
 /// Paddle environment, Keychain service, Application Support directory, and URL
@@ -139,7 +140,18 @@ struct BuildConfiguration: Equatable, Sendable {
             production: Production.clerkFrontendAPIURLString
         )
         // Sandbox checkout needs both; otherwise checkout is unavailable.
-        let pointsAwayFromProduction = serviceURL != nil && clerkURL != nil
+        let paddle: PaddleConfig?
+        let checkoutProblem: String?
+        if serviceURL != nil && clerkURL != nil {
+            (paddle, checkoutProblem) = sandboxPaddleConfig(info)
+        } else {
+            paddle = nil
+            checkoutProblem = "the service or Clerk URL is missing, malformed, a placeholder, or production"
+        }
+        if let checkoutProblem {
+            Logger(subsystem: qaBundleIdentifier, category: "BuildConfiguration")
+                .notice("Checkout unavailable in this build: \(checkoutProblem, privacy: .public)")
+        }
 
         return BuildConfiguration(
             isProduction: false,
@@ -152,26 +164,38 @@ struct BuildConfiguration: Equatable, Sendable {
             urlScheme: declaredScheme != Production.urlScheme
                 ? declaredScheme
                 : "\(Production.urlScheme)-\(suffix.lowercased())",
-            paddle: pointsAwayFromProduction ? sandboxPaddleConfig(info) : nil
+            paddle: paddle
         )
     }
 
-    /// A complete, self-consistent Paddle sandbox config, or nil. Requires the
-    /// sandbox environment, a `test_` client token, and three distinct `pri_`
-    /// ids none of which is a production price id.
-    private static func sandboxPaddleConfig(_ info: [String: Any]) -> PaddleConfig? {
-        guard string(info, InfoKey.paddleEnvironment)?.lowercased() == PaddleEnvironment.sandbox.rawValue,
-              let token = string(info, InfoKey.paddleClientToken), token.hasPrefix("test_"),
+    /// A complete, self-consistent Paddle sandbox config, or nil with the reason
+    /// (field names only, never values). The same rules as the QA build script
+    /// (`Distribution/scripts/lib/qa-checkout-values.sh`): the sandbox
+    /// environment, a `test_` client token, and three distinct `pri_` ids, none a
+    /// production price id and none an unfilled `QA.local.xcconfig.example`
+    /// placeholder.
+    private static func sandboxPaddleConfig(_ info: [String: Any]) -> (config: PaddleConfig?, problem: String?) {
+        guard string(info, InfoKey.paddleEnvironment)?.lowercased() == PaddleEnvironment.sandbox.rawValue else {
+            return (nil, "the Paddle environment is not sandbox")
+        }
+        guard let token = string(info, InfoKey.paddleClientToken),
               let starter = string(info, InfoKey.paddleStarterPriceID),
               let pro = string(info, InfoKey.paddleProPriceID),
               let unlimited = string(info, InfoKey.paddleUnlimitedPriceID)
-        else { return nil }
+        else { return (nil, "a Paddle token or price id is not set") }
         let ids = [starter, pro, unlimited]
+        guard !([token] + ids).contains(where: isPlaceholder) else {
+            return (nil, "a Paddle value is an unfilled placeholder")
+        }
+        guard matches(token, #"^test_[A-Za-z0-9]+$"#) else {
+            return (nil, "the Paddle client token is not a sandbox (test_) token")
+        }
         let productionIDs = Set(PaddlePlan.allCases.map { PaddleConfig.production.priceID(for: $0) })
-        guard ids.allSatisfy({ $0.hasPrefix("pri_") && !productionIDs.contains($0) }),
-              Set(ids).count == ids.count
-        else { return nil }
-        return PaddleConfig(
+        guard ids.allSatisfy({ matches($0, #"^pri_[a-z0-9]+$"#) && !productionIDs.contains($0) }) else {
+            return (nil, "a Paddle price id is malformed or a production price id")
+        }
+        guard Set(ids).count == ids.count else { return (nil, "the Paddle price ids are not distinct") }
+        let config = PaddleConfig(
             environment: .sandbox,
             clientSideToken: token,
             starterPriceID: starter,
@@ -179,6 +203,17 @@ struct BuildConfiguration: Equatable, Sendable {
             unlimitedPriceID: unlimited,
             checkoutOrigin: PaddleConfig.production.checkoutOrigin
         )
+        return (config, nil)
+    }
+
+    /// An unfilled value copied from `QA.local.xcconfig.example` (its
+    /// placeholders all contain `YOUR`).
+    private static func isPlaceholder(_ value: String) -> Bool {
+        value.contains("YOUR")
+    }
+
+    private static func matches(_ value: String, _ pattern: String) -> Bool {
+        value.range(of: pattern, options: .regularExpression) != nil
     }
 
     // MARK: - Value parsing
@@ -204,7 +239,8 @@ struct BuildConfiguration: Equatable, Sendable {
     }
 
     private static func nonProductionURL(_ value: String?, production: String) -> URL? {
-        guard let url = httpsURL(value),
+        guard let value, !isPlaceholder(value),
+              let url = httpsURL(value),
               let host = normalizedHost(url.host),
               host != normalizedHost(URL(string: production)?.host)
         else { return nil }
