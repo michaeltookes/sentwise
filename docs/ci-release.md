@@ -160,8 +160,12 @@ new `version` and DMG `sha256`, and commits in the tap's house style:
 `sentwise: X.Y.Z`.
 
 > The tap's `depends_on` line only updates the next time this workflow runs on a
-> tag. Keep the comparison string form (`">= :sonoma"`) so the cask tracks the
-> app's Sonoma-or-newer deployment target.
+> tag. Keep the bare-symbol form (`depends_on macos: :sonoma`, meaning Sonoma or
+> newer) so the cask tracks the app's deployment target. Homebrew deprecated the
+> string-comparison form (`">= :sonoma"`) and warns on every install when it is
+> used. `Distribution/scripts/tests/test-cask-template.sh` (run in CI) fails if
+> the template drifts back to the string form or away from
+> `MACOSX_DEPLOYMENT_TARGET`.
 
 ---
 
