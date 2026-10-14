@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "LocalDataPurge")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "LocalDataPurge")
 
 struct LocalDataEraseResult: Equatable {
     let persistenceError: String?

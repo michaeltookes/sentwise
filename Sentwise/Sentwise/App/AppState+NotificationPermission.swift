@@ -11,9 +11,15 @@ import Foundation
 /// itself the moment the status is granted, because every surface re-checks.
 extension AppState {
 
-    /// Deep link to System Settings → Notifications → Sentwise.
-    static let notificationSettingsURLString =
-        "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.tookes.Sentwise"
+    /// Deep link to System Settings → Notifications → this app (the QA build's own
+    /// entry in a QA build, item 123).
+    static let notificationSettingsURLString = notificationSettingsURLString(
+        bundleIdentifier: BuildConfiguration.current.bundleIdentifier
+    )
+
+    static func notificationSettingsURLString(bundleIdentifier: String) -> String {
+        "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleIdentifier)"
+    }
 
     /// Whether notifications are currently unavailable — denied outright, or not
     /// yet decided. Drives the "notifications are off" hint.

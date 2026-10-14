@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "SendCountdown")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "SendCountdown")
 
 /// Auto-send safety net (item 23): a short, cancellable grace period between the
 /// user approving an auto-send draft and the actual SMTP dispatch. The draft is

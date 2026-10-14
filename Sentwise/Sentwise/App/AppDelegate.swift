@@ -2,7 +2,7 @@ import AppKit
 import os
 import SwiftUI
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "AppDelegate")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "AppDelegate")
 
 /// Manages the application lifecycle and coordinates the top-level components.
 ///

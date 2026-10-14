@@ -83,18 +83,48 @@ final class AppStateCheckoutModelTests: XCTestCase {
         )
     }
 
-    func testCheckoutModelRoutesTierPriceAndCanOpen() {
+    func testCheckoutModelRoutesTierPriceAndCanOpen() throws {
         let llm = CheckoutLLM()
         let appState = makeSignedInAppState(llm: llm)
         appState.managedAccountStatus = status(userID: "user_abc", plan: .trial, statusValue: .trialing)
 
-        let model = appState.makeCheckoutModel(for: .starter)
+        let model = try XCTUnwrap(appState.makeCheckoutModel(for: .starter))
 
         // The Clerk id + email are no longer threaded client-side (item 56c): the
         // server-minted transaction carries the signed binding. The model just
         // routes the price and can open via the injected authed mint closure.
         XCTAssertTrue(model.canOpenCheckout)
-        XCTAssertEqual(model.priceID, PaddleConfig.active.priceID(for: .starter))
+        XCTAssertEqual(model.priceID, PaddleConfig.production.priceID(for: .starter))
+    }
+
+    func testProductionBuildHasCheckoutAvailable() {
+        let appState = makeSignedInAppState(llm: CheckoutLLM())
+        XCTAssertEqual(appState.paddleConfig, .production)
+        XCTAssertTrue(appState.isCheckoutAvailable)
+    }
+
+    func testUnavailableCheckoutConfigBlocksCheckoutAndPlanChanges() {
+        let appState = makeSignedInAppState(llm: CheckoutLLM())
+        appState.managedAccountStatus = status(userID: "user_abc", plan: .trial, statusValue: .trialing)
+        appState.paddleConfig = nil
+
+        XCTAssertFalse(appState.isCheckoutAvailable)
+        XCTAssertNil(appState.makeCheckoutModel(for: .starter))
+        appState.presentBillingCheckout(plan: .starter)
+        XCTAssertNil(appState.billingCheckout)
+
+        appState.managedAccountStatus = status(userID: "user_abc", plan: .starter, statusValue: .active)
+        XCTAssertFalse(appState.canChangeManagedPlan)
+    }
+
+    func testSandboxCheckoutConfigRoutesSandboxPrices() throws {
+        let llm = CheckoutLLM()
+        let appState = makeSignedInAppState(llm: llm)
+        appState.paddleConfig = .testSandbox
+
+        let model = try XCTUnwrap(appState.makeCheckoutModel(for: .pro))
+        XCTAssertEqual(model.config.environment, .sandbox)
+        XCTAssertEqual(model.priceID, PaddleConfig.testSandbox.priceID(for: .pro))
     }
 
     func testReconcileAfterCheckoutPollsWithoutDismissingTheSheet() async {
@@ -113,33 +143,33 @@ final class AppStateCheckoutModelTests: XCTestCase {
         XCTAssertTrue(appState.isOnActivePaidPlan)
     }
 
-    func testMakeCheckoutModelMintsTransactionThroughAuthedLLM() async {
+    func testMakeCheckoutModelMintsTransactionThroughAuthedLLM() async throws {
         let llm = CheckoutLLM()
         llm.checkoutTransactionToReturn = PaddleCheckoutTransaction(transactionID: "txn_from_worker")
         let appState = makeSignedInAppState(llm: llm)
 
-        let model = appState.makeCheckoutModel(for: .pro)
+        let model = try XCTUnwrap(appState.makeCheckoutModel(for: .pro))
         XCTAssertTrue(model.canOpenCheckout)
 
         await model.prepare()
         model.pageDidLoad()
 
-        XCTAssertEqual(llm.checkoutPriceIDs, [PaddleConfig.active.priceID(for: .pro)])
+        XCTAssertEqual(llm.checkoutPriceIDs, [PaddleConfig.production.priceID(for: .pro)])
         XCTAssertEqual(model.openArgumentJSON, #"{"transactionId":"txn_from_worker"}"#)
     }
 
-    func testMakeCheckoutModelSurfacesWorkerErrorAsFailure() async {
+    func testMakeCheckoutModelSurfacesWorkerErrorAsFailure() async throws {
         let llm = CheckoutLLM()
         llm.checkoutError = LLMError.managedCheckoutFailed("Checkout is not configured.")
         let appState = makeSignedInAppState(llm: llm)
 
-        let model = appState.makeCheckoutModel(for: .pro)
+        let model = try XCTUnwrap(appState.makeCheckoutModel(for: .pro))
         await model.prepare()
 
         XCTAssertEqual(model.phase, .failed("Checkout is not configured."))
     }
 
-    func testMakeCheckoutModelReconcilesAuthFailureBeforeSurfacingFailure() async {
+    func testMakeCheckoutModelReconcilesAuthFailureBeforeSurfacingFailure() async throws {
         let llm = CheckoutLLM()
         llm.checkoutError = LLMError.managedNotSignedIn
         let fixture = makeSignedInFixture(llm: llm)
@@ -149,11 +179,11 @@ final class AppStateCheckoutModelTests: XCTestCase {
         XCTAssertNoThrow(try fixture.secrets.remove(.managedClientToken))
         XCTAssertNoThrow(try fixture.secrets.remove(.managedSessionID))
 
-        let model = appState.makeCheckoutModel(for: .pro)
+        let model = try XCTUnwrap(appState.makeCheckoutModel(for: .pro))
         await model.prepare()
 
         XCTAssertEqual(model.phase, .failed("Sign in to Sentwise AI before subscribing."))
-        XCTAssertEqual(llm.checkoutPriceIDs, [PaddleConfig.active.priceID(for: .pro)])
+        XCTAssertEqual(llm.checkoutPriceIDs, [PaddleConfig.production.priceID(for: .pro)])
         XCTAssertFalse(appState.isManagedSignedIn)
         XCTAssertTrue(appState.managedAccountEmail.isEmpty)
         XCTAssertNil(appState.managedAccountStatus)

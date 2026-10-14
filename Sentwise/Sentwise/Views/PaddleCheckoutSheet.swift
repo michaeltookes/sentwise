@@ -20,13 +20,36 @@ struct PaddleCheckoutSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             if let plan = activePlan {
-                PaddleCheckoutRunner(model: appState.makeCheckoutModel(for: plan))
+                if let model = appState.makeCheckoutModel(for: plan) {
+                    PaddleCheckoutRunner(model: model)
+                } else {
+                    checkoutUnavailable
+                }
             } else {
                 planPicker
             }
         }
         .frame(width: 480, height: 620)
         .accessibilityIdentifier("paddleCheckoutSheet")
+    }
+
+    // MARK: - Checkout unavailable (item 123)
+
+    /// Shown only by a QA build whose Paddle values are incomplete; production
+    /// builds always carry the live config.
+    private var checkoutUnavailable: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Text("Checkout isn't available in this build.")
+                .font(.headline)
+                .accessibilityIdentifier("paddleCheckoutUnavailable")
+            Button("Close") {
+                appState.billingCheckout = nil
+            }
+            .accessibilityIdentifier("paddleCheckoutClose")
+            Spacer()
+        }
+        .padding(24)
     }
 
     // MARK: - Plan picker
@@ -232,7 +255,7 @@ private struct PaddleCheckoutRunner: View {
     }
 }
 
-private let checkoutLogger = Logger(subsystem: "com.tookes.Sentwise", category: "PaddleCheckout")
+private let checkoutLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "PaddleCheckout")
 
 /// Hosts the Paddle.js overlay checkout in a `WKWebView` (backlog item 56c).
 /// Loads the bundled harness page, tells the model when the page has finished

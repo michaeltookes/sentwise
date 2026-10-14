@@ -70,7 +70,7 @@ final class PaddleCheckoutLiveTests: XCTestCase {
     func testSandboxOverlayRendersInsideRestrictedWebView() async throws {
         try requireLive()
 
-        let config = PaddleConfig.sandbox
+        let config = PaddleConfig.testSandbox
         let driver = CheckoutOverlayDriver()
 
         // Host the web view in a real window so WebKit has a window server-backed

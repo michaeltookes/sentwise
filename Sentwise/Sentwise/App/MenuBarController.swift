@@ -87,7 +87,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         if let button = statusItem.button {
             button.image = NSImage(
                 systemSymbolName: "envelope.badge",
-                accessibilityDescription: "Sentwise"
+                accessibilityDescription: BuildConfiguration.current.appDisplayName
             )
             button.image?.isTemplate = true  // Adapts to light/dark menu bar.
 
@@ -98,7 +98,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             // the accessibility tree as an anonymous "Item-0", so assistive
             // tech and automated QA cannot locate the Sentwise menu by name.
             button.setAccessibilityIdentifier("sentwise.statusItem")
-            button.setAccessibilityLabel("Sentwise")
+            button.setAccessibilityLabel(BuildConfiguration.current.appDisplayName)
         }
 
         let menu = NSMenu()
@@ -180,7 +180,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         var items: [NSMenuItem] = []
 
         // Header (disabled label)
-        let header = NSMenuItem(title: "Sentwise", action: nil, keyEquivalent: "")
+        let header = NSMenuItem(title: BuildConfiguration.current.appDisplayName, action: nil, keyEquivalent: "")
         header.isEnabled = false
         items.append(header)
 
@@ -254,7 +254,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         items.append(.separator())
 
         // Quit
-        let quit = NSMenuItem(title: "Quit Sentwise", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit \(BuildConfiguration.current.appDisplayName)", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         items.append(quit)
 

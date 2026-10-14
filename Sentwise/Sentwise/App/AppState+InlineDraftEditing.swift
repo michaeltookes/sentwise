@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let inlineDraftEditingLogger = Logger(subsystem: "com.tookes.Sentwise", category: "PendingDrafts")
+private let inlineDraftEditingLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "PendingDrafts")
 
 extension AppState {
 

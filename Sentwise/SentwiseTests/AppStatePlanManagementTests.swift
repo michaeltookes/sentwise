@@ -56,7 +56,7 @@ final class AppStatePlanManagementTests: XCTestCase {
             if let changeError { throw changeError }
             if let statusAfterChange { statusToReturn = statusAfterChange }
             if let changeResult { return changeResult }
-            let plan = PaddleConfig.active.plan(forPriceID: priceID)?.subscriptionPlan ?? .unknown
+            let plan = PaddleConfig.production.plan(forPriceID: priceID)?.subscriptionPlan ?? .unknown
             return PaddlePlanChange(plan: plan, status: .active)
         }
     }
@@ -154,7 +154,7 @@ final class AppStatePlanManagementTests: XCTestCase {
 
         await appState.changePlan(to: .pro)
 
-        XCTAssertEqual(llm.changedPriceIDs, [PaddleConfig.active.priceID(for: .pro)])
+        XCTAssertEqual(llm.changedPriceIDs, [PaddleConfig.production.priceID(for: .pro)])
         XCTAssertEqual(llm.changedExpectedAccountKeys, [
             ManagedUsageAccountKey.make(from: "clerk-session:sess_X")
         ])
@@ -178,7 +178,7 @@ final class AppStatePlanManagementTests: XCTestCase {
             backgroundReconcileRetryDelays: [1_000_000_000]
         )
 
-        XCTAssertEqual(llm.changedPriceIDs, [PaddleConfig.active.priceID(for: .pro)])
+        XCTAssertEqual(llm.changedPriceIDs, [PaddleConfig.production.priceID(for: .pro)])
         XCTAssertEqual(appState.currentSubscriptionPlanTier, .pro)
         XCTAssertEqual(appState.managedAccountStatus?.subscription?.plan, .pro)
         XCTAssertFalse(appState.managedAccountStatusIsFresh)

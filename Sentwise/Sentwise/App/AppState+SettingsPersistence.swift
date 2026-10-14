@@ -2,7 +2,7 @@ import Combine
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "SettingsPersistence")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "SettingsPersistence")
 
 /// Builds and persists the `Settings` snapshot from `AppState`'s live published
 /// values. Kept in its own file so `AppState` stays within lint limits.

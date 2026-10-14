@@ -1,7 +1,7 @@
 import SentwiseMail
 import os
 
-private let decisionLogger = Logger(subsystem: "com.tookes.Sentwise", category: "WatcherDraftDecision")
+private let decisionLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "WatcherDraftDecision")
 
 /// The outcome of building one watcher draft (item 67 gate): it was queued for
 /// review, routed to the skip log because the model produced no sendable reply,

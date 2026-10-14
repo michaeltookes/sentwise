@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let needsInfoAnswersLogger = Logger(subsystem: "com.tookes.Sentwise", category: "PendingDrafts")
+private let needsInfoAnswersLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "PendingDrafts")
 
 /// Answer-in-place actions for `NEEDS_INFO` drafts (item 85): attach the user's
 /// typed facts to the queued draft, re-draft through the existing regenerate

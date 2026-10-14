@@ -2,7 +2,7 @@ import Foundation
 import os
 
 private let credentialEnvironmentLogger = Logger(
-    subsystem: "com.tookes.Sentwise",
+    subsystem: DiagnosticLog.subsystem,
     category: "ManagedAccountService"
 )
 

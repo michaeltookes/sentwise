@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "ManagedAccountService")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedAccountService")
 
 /// The non-secret account identity AppState persists after a successful managed
 /// sign-in. `displayIdentifier` is for UI copy; `accountIdentifier` is for

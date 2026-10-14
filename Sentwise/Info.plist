@@ -24,15 +24,18 @@
 	  sentwise://openrouter-callback respectively.
 	  AppDelegate.application(_:open:) routes them; the Clerk dashboard must list
 	  https://sentwise-inference.sentwise-service.workers.dev/auth/callback as an allowed redirect URL.
+	  A QA build (item 123, Config/QA.xcconfig) registers its own scheme,
+	  sentwise-qa://, and bundle-suffixed URL name so production callbacks never
+	  reach it; production builds leave both suffixes empty.
 	-->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.tookes.Sentwise</string>
+			<string>com.tookes.Sentwise$(SENTWISE_BUNDLE_ID_SUFFIX)</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>sentwise</string>
+				<string>sentwise$(SENTWISE_URL_SCHEME_SUFFIX)</string>
 			</array>
 		</dict>
 	</array>
@@ -55,6 +58,31 @@
 	  Do not replace this public key for normal releases: installed clients
 	  verify future appcasts against the key that shipped in their current app.
 	-->
+	<!--
+	  Per-build configuration (item 123), read by BuildConfiguration. Expanded
+	  from Config/QA.xcconfig in the QA build configuration only; Debug and
+	  Release leave every value empty, which resolves to the production service,
+	  Clerk instance, Paddle config, Keychain service, and data folder.
+	-->
+	<key>SentwiseServiceBaseURL</key>
+	<string>$(SENTWISE_SERVICE_BASE_URL)</string>
+	<key>SentwiseClerkFrontendAPIURL</key>
+	<string>$(SENTWISE_CLERK_FRONTEND_API_URL)</string>
+	<key>SentwisePaddleEnvironment</key>
+	<string>$(SENTWISE_PADDLE_ENVIRONMENT)</string>
+	<key>SentwisePaddleClientToken</key>
+	<string>$(SENTWISE_PADDLE_CLIENT_TOKEN)</string>
+	<key>SentwisePaddleStarterPriceID</key>
+	<string>$(SENTWISE_PADDLE_STARTER_PRICE_ID)</string>
+	<key>SentwisePaddleProPriceID</key>
+	<string>$(SENTWISE_PADDLE_PRO_PRICE_ID)</string>
+	<key>SentwisePaddleUnlimitedPriceID</key>
+	<string>$(SENTWISE_PADDLE_UNLIMITED_PRICE_ID)</string>
+	<key>SentwiseKeychainServiceSuffix</key>
+	<string>$(SENTWISE_KEYCHAIN_SERVICE_SUFFIX)</string>
+	<key>SentwiseAppSupportDirectoryName</key>
+	<string>$(SENTWISE_APP_SUPPORT_DIRECTORY)</string>
+
 	<key>SUFeedURL</key>
 	<string>https://github.com/michaeltookes/sentwise/releases/latest/download/appcast.xml</string>
 	<key>SUEnableAutomaticChecks</key>

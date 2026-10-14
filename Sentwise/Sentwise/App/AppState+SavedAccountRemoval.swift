@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "SavedAccounts")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "SavedAccounts")
 
 private struct SavedAccountRemovalContext {
     let shouldClearCurrentAccount: Bool

@@ -3,7 +3,7 @@ import Foundation
 import os
 import ServiceManagement
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "LoginItem")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "LoginItem")
 
 /// Manages the app's "launch at login" registration via `SMAppService`.
 ///

@@ -1,0 +1,10 @@
+// Copy to QA.local.xcconfig (git-ignored) to fill in the QA build's sandbox
+// values locally. See docs/qa-build.md. Placeholders only: as written, the QA
+// build treats these as invalid and keeps checkout unavailable.
+// "//" starts an xcconfig comment, so write URLs with $(SLASH)$(SLASH).
+
+SENTWISE_CLERK_FRONTEND_API_URL = https:$(SLASH)$(SLASH)YOUR-DEV-INSTANCE.clerk.accounts.dev
+SENTWISE_PADDLE_CLIENT_TOKEN = test_YOUR_SANDBOX_CLIENT_TOKEN
+SENTWISE_PADDLE_STARTER_PRICE_ID = pri_YOUR_SANDBOX_STARTER
+SENTWISE_PADDLE_PRO_PRICE_ID = pri_YOUR_SANDBOX_PRO
+SENTWISE_PADDLE_UNLIMITED_PRICE_ID = pri_YOUR_SANDBOX_UNLIMITED

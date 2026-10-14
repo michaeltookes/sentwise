@@ -93,6 +93,7 @@ extension AppState {
             && !isChangingPlan
             && !isManagingBilling
             && hasPlanChangeablePaidSubscription
+            && isCheckoutAvailable
             && isManagedAccountStatusLoaded
     }
 
@@ -129,6 +130,7 @@ extension AppState {
         backgroundReconcileRetryDelays: [UInt64] = planChangeBackgroundReconcileRetryDelays
     ) async {
         guard canChangeManagedPlan,
+              let paddleConfig,
               let current = currentSubscriptionPlanTier, current != tier else {
             reportBlockedPlanChange()
             return
@@ -148,11 +150,10 @@ extension AppState {
             }
         }
 
-        let priceID = PaddleConfig.active.priceID(for: tier)
         let change: PaddlePlanChange
         let sessionAccountKey = currentManagedSessionAccountKey ?? accountKey
         do {
-            change = try await llm.changeManagedPlan(priceID: priceID, expectedAccountKey: sessionAccountKey)
+            change = try await llm.changeManagedPlan(priceID: paddleConfig.priceID(for: tier), expectedAccountKey: sessionAccountKey)
         } catch {
             guard isCurrentPlanChangeOperation(operationGeneration, accountKey: accountKey) else { return }
             await reconcileManagedAccountState(after: error, provider: .managed, messageSurface: .settings)

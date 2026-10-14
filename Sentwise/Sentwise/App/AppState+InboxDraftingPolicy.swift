@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let policyLogger = Logger(subsystem: "com.tookes.Sentwise", category: "InboxDraftingPolicy")
+private let policyLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "InboxDraftingPolicy")
 
 enum AutoDraftBudgetReservationError: Error, Equatable {
     case exhausted

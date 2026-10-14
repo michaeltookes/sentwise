@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "ActivityHistory")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "ActivityHistory")
 
 /// Activity-history recording and linkage on `AppState` (item 21). The history is
 /// a bounded, persisted log of what the assistant did — drafts created, approvals

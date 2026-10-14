@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "Persistence")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "Persistence")
 
 /// Per-account voice-profile persistence (item 99). Split out of
 /// `PersistenceService` so that file stays within the file-length limit. Each

@@ -1,0 +1,315 @@
+import Foundation
+import os
+
+/// Per-build configuration (sentwise item 123): which service, Clerk instance,
+/// Paddle environment, Keychain service, Application Support directory, and URL
+/// scheme this build of the app uses.
+///
+/// Production builds (the Debug and Release configurations) carry none of the
+/// `Sentwise…` Info.plist keys below — they expand to empty strings — so every
+/// value resolves to the compiled-in production default and nothing about an
+/// existing install moves. The QA build configuration (`Config/QA.xcconfig` plus
+/// its git-ignored `QA.local.xcconfig`, see docs/qa-build.md) fills the keys so a
+/// QA build talks to the sandbox deployment of `sentwise-service`, opens Paddle in
+/// sandbox mode, and keeps its own Keychain items, data directory, and URL
+/// scheme, letting it run beside the production app on the same Mac.
+///
+/// Values come from a signed bundle's Info.plist, so nothing at runtime (no
+/// environment variable, no defaults write) can redirect a shipped build. Two
+/// guards keep a stray value out of a production bundle: Debug and Release define
+/// every `SENTWISE_*` build setting as empty (so a shell variable exported for a
+/// QA build cannot expand into them), and the keys are honored only in a bundle
+/// whose identifier is `com.tookes.Sentwise.<suffix>`; the production bundle id
+/// always resolves to production.
+struct BuildConfiguration: Equatable, Sendable {
+
+    /// Info.plist keys, expanded at build time from the xcconfig settings named
+    /// in the comments (see `Sentwise/Info.plist`).
+    enum InfoKey {
+        static let serviceBaseURL = "SentwiseServiceBaseURL" // SENTWISE_SERVICE_BASE_URL
+        static let clerkFrontendAPIURL = "SentwiseClerkFrontendAPIURL" // SENTWISE_CLERK_FRONTEND_API_URL
+        static let paddleEnvironment = "SentwisePaddleEnvironment" // SENTWISE_PADDLE_ENVIRONMENT
+        static let paddleClientToken = "SentwisePaddleClientToken" // SENTWISE_PADDLE_CLIENT_TOKEN
+        static let paddleStarterPriceID = "SentwisePaddleStarterPriceID" // SENTWISE_PADDLE_STARTER_PRICE_ID
+        static let paddleProPriceID = "SentwisePaddleProPriceID" // SENTWISE_PADDLE_PRO_PRICE_ID
+        static let paddleUnlimitedPriceID = "SentwisePaddleUnlimitedPriceID" // SENTWISE_PADDLE_UNLIMITED_PRICE_ID
+        static let keychainServiceSuffix = "SentwiseKeychainServiceSuffix" // SENTWISE_KEYCHAIN_SERVICE_SUFFIX
+        static let appSupportDirectoryName = "SentwiseAppSupportDirectoryName" // SENTWISE_APP_SUPPORT_DIRECTORY
+        static let displayName = "CFBundleDisplayName"
+        static let bundleIdentifier = "CFBundleIdentifier"
+        static let urlTypes = "CFBundleURLTypes"
+        static let urlSchemes = "CFBundleURLSchemes"
+
+        /// The keys a QA bundle reads (ignored in any other bundle).
+        static let overrides = [
+            serviceBaseURL, clerkFrontendAPIURL, paddleEnvironment, paddleClientToken,
+            paddleStarterPriceID, paddleProPriceID, paddleUnlimitedPriceID,
+            keychainServiceSuffix, appSupportDirectoryName
+        ]
+    }
+
+    /// Production defaults. Changing one of these changes the shipped app.
+    enum Production {
+        static let serviceBaseURLString = "https://sentwise-inference.sentwise-service.workers.dev"
+        static let clerkFrontendAPIURLString = "https://clerk.sentwise.ai"
+        static let appSupportDirectoryName = "Sentwise"
+        static let urlScheme = "sentwise"
+        static let appDisplayName = "Sentwise"
+        static let bundleIdentifier = "com.tookes.Sentwise"
+    }
+
+    /// What a non-production build falls back to when its own value is missing
+    /// or malformed. Identity values (Keychain suffix, data folder, name, URL
+    /// scheme) are derived from the bundle id's suffix instead, so they are never
+    /// the production ones.
+    enum NonProductionFallback {
+        /// Used when a non-production build's Clerk URL is missing, malformed, or
+        /// the production instance: `.invalid` never resolves (RFC 2606) and
+        /// `ClerkClient` refuses it before any request, so sign-in is unavailable
+        /// rather than creating accounts in production Clerk.
+        static let clerkFrontendAPIURL = URL(string: "https://clerk-unavailable.invalid")!
+        /// The same for the service base URL: drafting and billing are unavailable
+        /// rather than sending a non-production build's traffic to production.
+        static let serviceBaseURL = URL(string: "https://service-unavailable.invalid")!
+    }
+
+    /// True for a build that carries no override keys (Debug/Release).
+    let isProduction: Bool
+    let serviceBaseURL: URL
+    let clerkFrontendAPIBaseURL: URL
+    /// False only for a non-production build without a usable, non-production
+    /// Clerk Frontend API URL.
+    var isSignInAvailable: Bool { clerkFrontendAPIBaseURL != NonProductionFallback.clerkFrontendAPIURL }
+    /// Appended to the Keychain service (`com.tookes.Sentwise` + suffix). Empty in
+    /// production.
+    let keychainServiceSuffix: String
+    /// Folder under `~/Library/Application Support`. `Sentwise` in production.
+    let appSupportDirectoryName: String
+    /// This build's bundle identifier: `com.tookes.Sentwise` in production, the
+    /// QA build's suffixed id otherwise. Drives per-app system integrations (the
+    /// Notifications settings deep link, the unified-log subsystem) so a QA
+    /// install never points at, or reads, the production app's.
+    let bundleIdentifier: String
+    /// The name the status item and menu show: `Sentwise`, or the QA build's
+    /// display name so the two installs are told apart.
+    let appDisplayName: String
+    /// The custom URL scheme this build registers (`CFBundleURLSchemes`).
+    let urlScheme: String
+    /// The Paddle checkout config, or nil when checkout is unavailable in this
+    /// build (an incomplete or inconsistent non-production config). Never falls
+    /// back to production prices in a non-production build.
+    let paddle: PaddleConfig?
+
+    /// Sparkle updates install the production release, so only production
+    /// builds may start the updater.
+    var allowsAutomaticUpdates: Bool { isProduction }
+
+    /// The configuration of the running app, resolved once.
+    static let current = BuildConfiguration.resolve(infoDictionary: Bundle.main.infoDictionary)
+
+    // MARK: - Resolution
+
+    // MIRROR: Distribution/scripts/lib/qa-checkout-values.sh applies the same
+    // rules to a built QA bundle (qa-build.sh --require-checkout). Change both
+    // together, keeping the rules in this order:
+    //   1. Placeholder: any value containing "YOUR" (any case) is rejected.
+    //   2. URL shape (service and Clerk URLs): https, a non-empty host, no
+    //      userinfo, no query, no fragment.
+    //   3. Production host: the host, lowercased with terminal dots trimmed,
+    //      must not be the production service or Clerk host.
+    //   4. Paddle environment: sandbox.
+    //   5. Client token: ^test_[A-Za-z0-9]+$
+    //   6. Price ids: ^pri_[a-z0-9]+$, none a production id
+    //      (PaddleConfig.production), all three distinct.
+
+    static func resolve(infoDictionary: [String: Any]?) -> BuildConfiguration {
+        let info = infoDictionary ?? [:]
+        let declaredScheme = declaredURLScheme(info) ?? Production.urlScheme
+        // The bundle id alone decides: a `com.tookes.Sentwise.<suffix>` bundle is
+        // always non-production, even with every override key missing (its
+        // identity is derived from the suffix and its services fail closed); any
+        // other id is production, and leaked override keys are ignored.
+        guard let qaBundleIdentifier = qaBundleIdentifier(string(info, InfoKey.bundleIdentifier)) else {
+            return BuildConfiguration(
+                isProduction: true,
+                serviceBaseURL: URL(string: Production.serviceBaseURLString)!,
+                clerkFrontendAPIBaseURL: URL(string: Production.clerkFrontendAPIURLString)!,
+                keychainServiceSuffix: "",
+                appSupportDirectoryName: Production.appSupportDirectoryName,
+                bundleIdentifier: Production.bundleIdentifier,
+                appDisplayName: Production.appDisplayName,
+                urlScheme: declaredScheme,
+                paddle: .production
+            )
+        }
+        let suffix = String(qaBundleIdentifier.dropFirst(Production.bundleIdentifier.count + 1))
+        let derivedName = "\(Production.appDisplayName) \(suffix.uppercased())"
+
+        // A non-production build never talks to the production service or Clerk
+        // instance: a missing, malformed, or production URL becomes unavailable.
+        let serviceURL = nonProductionURL(string(info, InfoKey.serviceBaseURL), production: Production.serviceBaseURLString)
+        let clerkURL = nonProductionURL(
+            string(info, InfoKey.clerkFrontendAPIURL),
+            production: Production.clerkFrontendAPIURLString
+        )
+        // Sandbox checkout needs both; otherwise checkout is unavailable.
+        let paddle: PaddleConfig?
+        let checkoutProblem: String?
+        if serviceURL != nil && clerkURL != nil {
+            (paddle, checkoutProblem) = sandboxPaddleConfig(info)
+        } else {
+            paddle = nil
+            checkoutProblem = "the service or Clerk URL is missing, malformed, a placeholder, or production"
+        }
+        if let checkoutProblem {
+            Logger(subsystem: qaBundleIdentifier, category: "BuildConfiguration")
+                .notice("Checkout unavailable in this build: \(checkoutProblem, privacy: .public)")
+        }
+
+        return BuildConfiguration(
+            isProduction: false,
+            serviceBaseURL: serviceURL ?? NonProductionFallback.serviceBaseURL,
+            clerkFrontendAPIBaseURL: clerkURL ?? NonProductionFallback.clerkFrontendAPIURL,
+            keychainServiceSuffix: keychainSuffix(string(info, InfoKey.keychainServiceSuffix), derived: "." + suffix),
+            appSupportDirectoryName: directoryName(string(info, InfoKey.appSupportDirectoryName), derived: derivedName),
+            bundleIdentifier: qaBundleIdentifier,
+            appDisplayName: displayName(string(info, InfoKey.displayName), derived: derivedName),
+            urlScheme: declaredScheme != Production.urlScheme
+                ? declaredScheme
+                : "\(Production.urlScheme)-\(suffix.lowercased())",
+            paddle: paddle
+        )
+    }
+
+    /// A complete, self-consistent Paddle sandbox config, or nil with the reason
+    /// (field names only, never values). The same rules as the QA build script
+    /// (`Distribution/scripts/lib/qa-checkout-values.sh`): the sandbox
+    /// environment, a `test_` client token, and three distinct `pri_` ids, none a
+    /// production price id and none an unfilled `QA.local.xcconfig.example`
+    /// placeholder.
+    private static func sandboxPaddleConfig(_ info: [String: Any]) -> (config: PaddleConfig?, problem: String?) {
+        guard string(info, InfoKey.paddleEnvironment)?.lowercased() == PaddleEnvironment.sandbox.rawValue else {
+            return (nil, "the Paddle environment is not sandbox")
+        }
+        guard let token = string(info, InfoKey.paddleClientToken),
+              let starter = string(info, InfoKey.paddleStarterPriceID),
+              let pro = string(info, InfoKey.paddleProPriceID),
+              let unlimited = string(info, InfoKey.paddleUnlimitedPriceID)
+        else { return (nil, "a Paddle token or price id is not set") }
+        let ids = [starter, pro, unlimited]
+        guard !([token] + ids).contains(where: isPlaceholder) else {
+            return (nil, "a Paddle value is an unfilled placeholder")
+        }
+        guard matches(token, #"^test_[A-Za-z0-9]+$"#) else {
+            return (nil, "the Paddle client token is not a sandbox (test_) token")
+        }
+        let productionIDs = Set(PaddlePlan.allCases.map { PaddleConfig.production.priceID(for: $0) })
+        guard ids.allSatisfy({ matches($0, #"^pri_[a-z0-9]+$"#) && !productionIDs.contains($0) }) else {
+            return (nil, "a Paddle price id is malformed or a production price id")
+        }
+        guard Set(ids).count == ids.count else { return (nil, "the Paddle price ids are not distinct") }
+        let config = PaddleConfig(
+            environment: .sandbox,
+            clientSideToken: token,
+            starterPriceID: starter,
+            proPriceID: pro,
+            unlimitedPriceID: unlimited,
+            checkoutOrigin: PaddleConfig.production.checkoutOrigin
+        )
+        return (config, nil)
+    }
+
+    /// Rule 1: an unfilled value copied from `QA.local.xcconfig.example` (its
+    /// placeholders all contain `YOUR`), in any case.
+    private static func isPlaceholder(_ value: String) -> Bool {
+        value.range(of: "YOUR", options: .caseInsensitive) != nil
+    }
+
+    private static func matches(_ value: String, _ pattern: String) -> Bool {
+        value.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    // MARK: - Value parsing
+
+    /// A trimmed, non-empty string value. An unexpanded `$(…)` (a setting the
+    /// build did not define) counts as absent.
+    private static func string(_ info: [String: Any], _ key: String) -> String? {
+        guard let raw = info[key] as? String else { return nil }
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, !value.hasPrefix("$(") else { return nil }
+        return value
+    }
+
+    private static func httpsURL(_ value: String?) -> URL? {
+        guard let value, let components = URLComponents(string: value),
+              components.scheme?.lowercased() == "https",
+              let host = components.host, !host.isEmpty,
+              components.user == nil, components.password == nil,
+              components.query == nil, components.fragment == nil,
+              let url = components.url
+        else { return nil }
+        return url
+    }
+
+    private static func nonProductionURL(_ value: String?, production: String) -> URL? {
+        guard let value, !isPlaceholder(value),
+              let url = httpsURL(value),
+              let host = normalizedHost(url.host),
+              host != normalizedHost(URL(string: production)?.host)
+        else { return nil }
+        return url
+    }
+
+    /// A host in comparable form: lowercased, with terminal dots trimmed, so a
+    /// fully qualified `clerk.sentwise.ai.` (which DNS resolves to production)
+    /// compares equal to `clerk.sentwise.ai`. Nil when nothing is left.
+    private static func normalizedHost(_ host: String?) -> String? {
+        guard var host = host?.lowercased() else { return nil }
+        while host.hasSuffix(".") { host.removeLast() }
+        return host.isEmpty ? nil : host
+    }
+
+    /// A suffixed `com.tookes.Sentwise.<suffix>` bundle id, or nil (production or
+    /// anything else).
+    private static func qaBundleIdentifier(_ value: String?) -> String? {
+        guard let value,
+              value.range(of: #"^com\.tookes\.Sentwise\.[A-Za-z0-9-]{1,32}$"#, options: .regularExpression) != nil
+        else { return nil }
+        return value
+    }
+
+    private static func displayName(_ value: String?, derived: String) -> String {
+        guard let value, value != Production.appDisplayName else { return derived }
+        return value
+    }
+
+    private static func keychainSuffix(_ value: String?, derived: String) -> String {
+        guard let value,
+              value.range(of: #"^\.[A-Za-z0-9-]{1,32}$"#, options: .regularExpression) != nil
+        else { return derived }
+        return value
+    }
+
+    private static func directoryName(_ value: String?, derived: String) -> String {
+        guard let value,
+              value.range(of: #"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$"#, options: .regularExpression) != nil,
+              !value.contains(".."),
+              value.lowercased() != Production.appSupportDirectoryName.lowercased()
+        else { return derived }
+        return value
+    }
+
+    /// The first scheme in `CFBundleURLTypes`, the one macOS routes to this app.
+    private static func declaredURLScheme(_ info: [String: Any]) -> String? {
+        guard let types = info[InfoKey.urlTypes] as? [[String: Any]] else { return nil }
+        for type in types {
+            for scheme in (type[InfoKey.urlSchemes] as? [String]) ?? [] {
+                let value = scheme.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if value.range(of: #"^[a-z][a-z0-9+.-]{0,31}$"#, options: .regularExpression) != nil {
+                    return value
+                }
+            }
+        }
+        return nil
+    }
+}

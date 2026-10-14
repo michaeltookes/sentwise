@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let transcriptFolderLogger = Logger(subsystem: "com.tookes.Sentwise", category: "TranscriptFolder")
+private let transcriptFolderLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "TranscriptFolder")
 
 /// Watched-folder lifecycle for the post-call follow-up workflow (item 51). Kept
 /// in its own file so `AppState` stays within length limits.
