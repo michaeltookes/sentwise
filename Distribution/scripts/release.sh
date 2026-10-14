@@ -192,10 +192,14 @@ APPLE_REJECT_RE='status: (Invalid|Rejected)|Rejected|Record not found|does not h
 # Retried: transport/DNS failures and notary-service 5xx responses.
 APPLE_NETWORK_RE='NSURLErrorDomain|could not be found|connection was lost|timed out|temporarily unavailable|HTTP status code:? *5[0-9][0-9]|status code:? *5[0-9][0-9]|statusCode[=:] *5[0-9][0-9]|HTTP/[0-9.]+ 5[0-9][0-9]'
 
-# classify_apple_output LOGFILE RC -> prints ok | rejected | network | other
+# classify_apple_output LOGFILE RC -> prints ok | rejected | network | other,
+# or "capture-failed" when RC is not an integer or LOGFILE is unreadable (fail
+# closed: a lost exit status must never be read as success).
 classify_apple_output() {
   local logfile="$1" rc="$2"
-  if grep -Eq "$APPLE_REJECT_RE" "$logfile"; then
+  if ! [[ "$rc" =~ ^[0-9]+$ ]] || [[ ! -r "$logfile" ]]; then
+    echo capture-failed
+  elif grep -Eq "$APPLE_REJECT_RE" "$logfile"; then
     echo rejected            # fatal even if the tool exited 0
   elif [[ "$rc" -eq 0 ]]; then
     echo ok
@@ -210,16 +214,28 @@ retry_apple() {
   local attempt=1 rc delay tmp logfile rcfile class
   local -a delays
   read -r -a delays <<< "$RETRY_APPLE_DELAYS"
-  tmp="$(mktemp -d "${TMPDIR:-/tmp}/sentwise-retry.XXXXXX")"
+  # Fail closed on every capture step: callers invoke this in || lists, where
+  # errexit is off, so a silent capture failure could otherwise turn a failed
+  # Apple command into success. 70 = EX_SOFTWARE.
+  if ! tmp="$(mktemp -d "${TMPDIR:-/tmp}/sentwise-retry.XXXXXX")" || [[ -z "$tmp" ]]; then
+    log "retry_apple: could not create a temp dir to capture output — failing: $1 $2"
+    return 70
+  fi
   logfile="$tmp/out.log"
   rcfile="$tmp/rc"
   while :; do
+    rm -f "$rcfile" "$logfile"   # never read a previous attempt's status
     # Stream the tool's output live (notarytool --wait runs for minutes) while
     # also capturing it for classification. "|| rc=$?" keeps a failed attempt
     # from tripping set -e / the ERR trap; the pipeline itself always succeeds.
     { rc=0; "$@" || rc=$?; echo "$rc" > "$rcfile"; } 2>&1 | tee "$logfile"
-    rc="$(cat "$rcfile")"
-    class="$(classify_apple_output "$logfile" "$rc")"
+    rc="$(cat "$rcfile" 2>/dev/null)" || rc=""
+    if ! [[ "$rc" =~ ^[0-9]+$ ]]; then
+      log "retry_apple: could not capture exit status — failing: $1 $2"
+      RETRY_APPLE_LAST_CLASS="capture-failed"
+      rm -rf "$tmp"; return 70
+    fi
+    class="$(classify_apple_output "$logfile" "$rc")" || class="capture-failed"
     RETRY_APPLE_LAST_CLASS="$class"
     case "$class" in
       ok) rm -rf "$tmp"; return 0 ;;
@@ -228,6 +244,10 @@ retry_apple() {
         rm -rf "$tmp"; [[ "$rc" -eq 0 ]] && rc=1; return "$rc" ;;
       other)
         rm -rf "$tmp"; return "$rc" ;;
+      network) ;;
+      *)
+        log "retry_apple: could not capture output — failing: $1 $2"
+        rm -rf "$tmp"; return 70 ;;
     esac
     # class == network
     if [[ "$attempt" -ge "$RETRY_APPLE_ATTEMPTS" ]]; then
