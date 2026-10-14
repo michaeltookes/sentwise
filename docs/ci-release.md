@@ -27,7 +27,8 @@ from encrypted repository secrets instead of the login Keychain.
 | `workflow_dispatch` with **dry_run = false** | Signs and notarizes, but because there is no tag it does **not** publish or bump the tap (a real release must come from a tag). |
 
 The version comes from the tag (`v0.1.2` → `0.1.2`); for a dispatch run it is read
-from `MARKETING_VERSION` in the project file. Both paths must resolve to
+from `MARKETING_VERSION` in `Sentwise/Config/Version.xcconfig`, the one file that
+defines the version (see Versioning below). Both paths must resolve to
 `X.Y.Z`, and malformed tags such as `v0.2` fail before the release pipeline
 publishes anything.
 
@@ -183,10 +184,20 @@ proving the plumbing without signing, notarizing, or publishing.
 
 ---
 
+## Versioning
+
+The version is defined in one file, `Sentwise/Config/Version.xcconfig`
+(`MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`). It is the base configuration
+of the project-level Debug, Release, and QA build configurations, and no target or
+configuration sets either value in `project.pbxproj`, so every build (production,
+QA, tests) reports the same version. `release.sh`, `qa-build.sh`, and the
+release workflow read it from that file. Bump it there and nowhere else.
+
 ## First real release checklist
 
 1. Add all seven secrets above.
-2. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`, add the CHANGELOG
+2. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in
+   `Sentwise/Config/Version.xcconfig`, add the CHANGELOG
    `## [X.Y.Z]` section, and merge to `main`. That section is also embedded in
    the appcast as the Sparkle update dialog's release notes; `release.sh` fails
    the run if it is missing (see `releasing.md` → Release notes in the appcast). The build number must be greater

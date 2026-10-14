@@ -82,9 +82,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-pbxproj="$PROJECT/project.pbxproj"
-[[ -z "$VERSION" ]] && VERSION="$(grep -m1 'MARKETING_VERSION = ' "$pbxproj" | sed 's/.*= //; s/;.*//')"
-[[ -z "$BUILD"   ]] && BUILD="$(grep -m1 'CURRENT_PROJECT_VERSION = ' "$pbxproj" | sed 's/.*= //; s/;.*//')"
+# The version is defined once, in Version.xcconfig (inherited by every configuration).
+version_xcconfig="$REPO_ROOT/Sentwise/Config/Version.xcconfig"
+[[ -z "$VERSION" ]] && VERSION="$(grep -m1 -E '^[[:space:]]*MARKETING_VERSION = ' "$version_xcconfig" | sed 's/.*= //; s/;.*//; s/[[:space:]]*$//')"
+[[ -z "$BUILD"   ]] && BUILD="$(grep -m1 -E '^[[:space:]]*CURRENT_PROJECT_VERSION = ' "$version_xcconfig" | sed 's/.*= //; s/;.*//; s/[[:space:]]*$//')"
 
 log()  { printf '\033[1;35m==>\033[0m %s\n' "$*"; }
 step() { printf '\n\033[1;36m### %s\033[0m\n' "$*"; }
