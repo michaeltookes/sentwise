@@ -251,8 +251,7 @@ extension AppState {
     /// Revokes a removed mailbox's grant at Google (best effort, tracked).
     func revokeRemovedGoogleToken(_ token: OAuthToken?) {
         guard let token else { return }
-        let auth = googleMailAuth
-        Task { await auth.revokeRemovedToken(token) }
+        googleMailAuth.revokeRemovedToken(token)
     }
 
     /// A saved mailbox was removed: cancel/invalidate any Google sign-in that

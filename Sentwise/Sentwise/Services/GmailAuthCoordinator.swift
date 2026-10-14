@@ -230,7 +230,7 @@ final class GmailAuthCoordinator {
         }
         // The tracker runs revocation in its own task, even if this sign-in was
         // canceled, and makes a subsequent sign-in wait for cleanup to finish.
-        await revokeRemovedToken(token)
+        await revokeRemovedToken(token)?.value
     }
 
     static func authorizedEmail(token: OAuthToken, loginHint: String?, requireHintMatch: Bool) throws -> String {
@@ -373,7 +373,7 @@ final class GmailAuthCoordinator {
         } catch {
             logger.error("Couldn't remove a Google token from the Keychain: \(error.localizedDescription)")
         }
-        if let token { await revokeRemovedToken(token) }
+        if let token { await revokeRemovedToken(token)?.value }
     }
 
     /// Cleanup for one specific authorization: deletes and revokes `token`
@@ -389,7 +389,7 @@ final class GmailAuthCoordinator {
             logger.error("Couldn't remove a Google token from the Keychain: \(error.localizedDescription)")
             return
         }
-        await revokeRemovedToken(token)
+        await revokeRemovedToken(token)?.value
     }
 
     static func isSameGrant(_ lhs: OAuthToken, _ rhs: OAuthToken) -> Bool {
@@ -413,13 +413,14 @@ final class GmailAuthCoordinator {
         try store.saveToken(token, for: email)
     }
 
-    /// Revokes a removed token's grant at Google, best effort and tracked so
-    /// a new sign-in waits for it (see `GoogleRevocationTracker`).
-    func revokeRemovedToken(_ token: OAuthToken) async {
+    /// Registers a removed grant's best-effort revocation synchronously, so
+    /// even an immediate new sign-in waits for it. Await the task for completion.
+    @discardableResult
+    func revokeRemovedToken(_ token: OAuthToken) -> Task<Void, Never>? {
         let revocable = token.refreshToken ?? token.accessToken
-        guard !revocable.isEmpty else { return }
+        guard !revocable.isEmpty else { return nil }
         let tokenService = tokenService
-        await revocations.run {
+        return revocations.start {
             do {
                 try await tokenService.revoke(token: revocable)
             } catch {

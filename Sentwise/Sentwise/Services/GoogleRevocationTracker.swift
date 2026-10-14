@@ -13,13 +13,16 @@ final class GoogleRevocationTracker {
 
     var hasPending: Bool { !pending.isEmpty }
 
-    /// Runs `revoke`, tracked until it finishes (successfully or not).
-    func run(_ revoke: @escaping @MainActor () async -> Void) async {
+    /// Registers `revoke` before returning, then runs it in an independent task.
+    /// Callers may await completion without delaying registration until a task runs.
+    func start(_ revoke: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
         let id = UUID()
-        let task = Task { @MainActor in await revoke() }
+        let task = Task { @MainActor in
+            defer { pending[id] = nil }
+            await revoke()
+        }
         pending[id] = task
-        await task.value
-        pending[id] = nil
+        return task
     }
 
     /// Waits until every revoke pending right now has finished, or `timeout`

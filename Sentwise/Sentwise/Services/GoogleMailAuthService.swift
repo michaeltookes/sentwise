@@ -226,7 +226,7 @@ final class GoogleMailAuthService: ObservableObject {
             await coordinator.disconnect(email)
             return
         }
-        guard let tokenStore, tokenStore.hasToken(for: email) else { return }
+        guard let tokenStore else { return }
         do {
             try tokenStore.deleteToken(for: email)
         } catch {
@@ -244,7 +244,9 @@ final class GoogleMailAuthService: ObservableObject {
     /// the Keychain delete fails. Works without a bundled client.
     func removeLocalToken(_ email: String) throws -> OAuthToken? {
         if let coordinator { return try coordinator.removeLocalToken(for: email) }
-        guard let tokenStore, let token = try tokenStore.loadToken(for: email) else { return nil }
+        guard let tokenStore else { return nil }
+        let token = try tokenStore.loadToken(for: email)
+        // Decoding is only needed for rollback, not for deleting the raw entry.
         try tokenStore.deleteToken(for: email)
         return token
     }
@@ -258,9 +260,10 @@ final class GoogleMailAuthService: ObservableObject {
         }
     }
 
-    /// Best-effort remote revoke of a removed token (skipped without a client).
-    func revokeRemovedToken(_ token: OAuthToken) async {
-        await coordinator?.revokeRemovedToken(token)
+    /// Registers a best-effort remote revoke before returning (skipped without a client).
+    @discardableResult
+    func revokeRemovedToken(_ token: OAuthToken) -> Task<Void, Never>? {
+        coordinator?.revokeRemovedToken(token)
     }
 
     /// Clears a failed attempt's message (e.g. when the user edits the form).
