@@ -53,6 +53,7 @@ extension AppState {
     @discardableResult
     func connectWithGoogle(
         loginHint: String? = nil,
+        requireHintMatch: Bool = false,
         messageSurface: TransientMessageSurface = .shared,
         shouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool = { _ in true }
     ) async -> Bool {
@@ -83,7 +84,7 @@ extension AppState {
 
         let authorization: GmailAuthorization
         do {
-            authorization = try await googleMailAuth.signIn(loginHint: loginHint)
+            authorization = try await googleMailAuth.signIn(loginHint: loginHint, requireHintMatch: requireHintMatch)
         } catch is CancellationError {
             return false
         } catch {

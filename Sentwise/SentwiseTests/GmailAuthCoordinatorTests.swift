@@ -204,6 +204,36 @@ final class GmailAuthCoordinatorTests: XCTestCase {
         XCTAssertEqual(stored.refreshToken, "rt", "refresh token carried forward")
     }
 
+    func testRefreshWithoutScopePreservesStoredGrantAndPersistsNewToken() async throws {
+        let harness = makeHarness(tokenJSON: #"{"access_token":"refreshed-at","expires_in":3600}"#)
+        try harness.store.saveToken(storedToken(expiresAt: .distantPast), for: "me@gmail.com")
+
+        let accessToken = try await harness.coordinator.validAccessToken(for: "me@gmail.com")
+
+        XCTAssertEqual(accessToken, "refreshed-at")
+        let stored = try XCTUnwrap(harness.store.loadToken(for: "me@gmail.com"))
+        XCTAssertEqual(stored.scope, grantedScopes)
+        XCTAssertEqual(stored.refreshToken, "rt")
+        XCTAssertEqual(stored.accessToken, "refreshed-at")
+    }
+
+    func testRefreshWithExplicitlyReducedScopeStillFailsWithoutReplacingStoredGrant() async throws {
+        for scope in ["openid", ""] {
+            let harness = makeHarness(tokenJSON: """
+            {"access_token":"refreshed-at","expires_in":3600,"scope":"\(scope)"}
+            """)
+            let original = storedToken(expiresAt: .distantPast)
+            try harness.store.saveToken(original, for: "me@gmail.com")
+
+            await assertThrows(
+                try await harness.coordinator.validAccessToken(for: "me@gmail.com"),
+                OAuthError.missingRequiredScopes([GoogleOAuth.mailScope])
+            )
+
+            XCTAssertEqual(try harness.store.loadToken(for: "me@gmail.com"), original)
+        }
+    }
+
     func testInvalidGrantOnRefreshRequiresReauthorization() async throws {
         let harness = makeHarness(
             tokenJSON: #"{"error":"invalid_grant","error_description":"Token has been expired or revoked."}"#,

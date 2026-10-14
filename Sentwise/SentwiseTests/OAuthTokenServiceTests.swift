@@ -82,6 +82,21 @@ final class OAuthTokenServiceTests: XCTestCase {
         XCTAssertEqual(transport.lastFields["refresh_token"], "existing-rt")
     }
 
+    func testRefreshKeepsGrantedScopeOnlyWhenResponseOmitsIt() async throws {
+        for responseScope in [nil, "openid", ""] as [String?] {
+            let scopeField = responseScope.map { ",\"scope\":\"\($0)\"" } ?? ""
+            let (service, _) = service(json("""
+            {"access_token":"new-at","expires_in":3600\(scopeField)}
+            """))
+
+            let token = try await service.refresh(
+                refreshToken: "rt", grantedScope: GoogleOAuth.mailScope, client: client, now: now
+            )
+
+            XCTAssertEqual(token.scope, responseScope ?? GoogleOAuth.mailScope)
+        }
+    }
+
     func testServerErrorIsSurfaced() async {
         let (service, _) = service(json("""
         {"error":"invalid_grant","error_description":"Token has been expired or revoked."}

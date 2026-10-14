@@ -272,7 +272,9 @@ final class GmailAuthCoordinator {
         let task = Task { () throws -> String in
             let refreshed: OAuthToken
             do {
-                refreshed = try await tokenService.refresh(refreshToken: refreshToken, client: client, now: now())
+                refreshed = try await tokenService.refresh(
+                    refreshToken: refreshToken, grantedScope: token.scope, client: client, now: now()
+                )
             } catch {
                 // The old grant's failure (invalid_grant, cancellation) says
                 // nothing about the grant that replaced it.

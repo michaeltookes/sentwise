@@ -24,8 +24,10 @@ struct OAuthTokenService {
 
     /// Refreshes an access token using a refresh token. Google does not return a
     /// new refresh token on refresh, so the existing one is carried forward.
+    /// An omitted scope also carries forward the previously granted scopes.
     func refresh(
         refreshToken: String,
+        grantedScope: String = "",
         client: GoogleOAuthClientConfiguration,
         now: Date
     ) async throws -> OAuthToken {
@@ -33,7 +35,7 @@ struct OAuthTokenService {
             "grant_type": "refresh_token",
             "refresh_token": refreshToken
         ]))
-        return try token(from: response, now: now, fallbackRefreshToken: refreshToken)
+        return try token(from: response, now: now, fallbackRefreshToken: refreshToken, fallbackScope: grantedScope)
     }
 
     /// Revokes a token at Google (refresh tokens revoke the whole grant).
@@ -62,7 +64,8 @@ struct OAuthTokenService {
     private func token(
         from response: HTTPResponse,
         now: Date,
-        fallbackRefreshToken: String?
+        fallbackRefreshToken: String?,
+        fallbackScope: String = ""
     ) throws -> OAuthToken {
         guard response.isSuccess else {
             // 5xx/429 are outages and throttling, never a verdict on the grant,
@@ -84,7 +87,7 @@ struct OAuthTokenService {
             accessToken: decoded.accessToken,
             refreshToken: decoded.refreshToken ?? fallbackRefreshToken,
             expiresAt: now.addingTimeInterval(TimeInterval(decoded.expiresIn)),
-            scope: decoded.scope ?? "",
+            scope: decoded.scope ?? fallbackScope,
             tokenType: decoded.tokenType ?? "Bearer",
             idToken: decoded.idToken
         )

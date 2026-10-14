@@ -77,6 +77,50 @@ final class LoopbackRedirectListenerTests: XCTestCase {
         XCTAssertEqual(captured["state"], "live-state")
     }
 
+    func testFragmentedRedirectWaitsForCompleteRequestLine() async throws {
+        let listener = LoopbackRedirectListener()
+        let redirectURI = try await listener.start()
+        defer { listener.stop() }
+        let components = try XCTUnwrap(URLComponents(string: redirectURI))
+        let port = try XCTUnwrap(components.port.flatMap { NWEndpoint.Port(rawValue: UInt16($0)) })
+        let connection = NWConnection(host: "127.0.0.1", port: port, using: .tcp)
+        defer { connection.cancel() }
+        let ready = expectation(description: "client connected")
+        connection.stateUpdateHandler = { state in
+            if case .ready = state { ready.fulfill() }
+        }
+        connection.start(queue: DispatchQueue(label: "LoopbackRedirectListenerTests.client"))
+        await fulfillment(of: [ready], timeout: 5)
+
+        let response = expectation(description: "HTTP response")
+        connection.receive(minimumIncompleteLength: 12, maximumLength: 8192) { data, _, _, error in
+            XCTAssertNil(error)
+            XCTAssertTrue(data.flatMap { String(data: $0, encoding: .utf8) }?.hasPrefix("HTTP/1.1 200") == true)
+            response.fulfill()
+        }
+
+        // Force separate reads before the query, inside a percent escape,
+        // and between CR and LF. None may complete the redirect early.
+        for fragment in ["GET /", "?code=split%", "2Bcode&state=complete-state HTTP/1.1\r"] {
+            try await send(fragment, on: connection)
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        try await send("\nHost: 127.0.0.1\r\n\r\n", on: connection)
+        await fulfillment(of: [response], timeout: 5)
+
+        let params = try await listener.waitForRedirect(timeout: 5)
+        XCTAssertEqual(params["code"], "split+code")
+        XCTAssertEqual(params["state"], "complete-state")
+    }
+
+    private func send(_ fragment: String, on connection: NWConnection) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            connection.send(content: Data(fragment.utf8), completion: .contentProcessed { error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+            })
+        }
+    }
+
     func testRedirectArrivingBeforeWaitIsDeliveredToTheLaterWaiter() async throws {
         let listener = LoopbackRedirectListener()
         let redirectURI = try await listener.start()

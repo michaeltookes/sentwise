@@ -59,6 +59,7 @@ struct GoogleSignInButtonBlock: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var auth: GoogleMailAuthService
     let loginHint: String
+    var requireHintMatch = false
     let messageSurface: AppState.TransientMessageSurface
     let shouldApplyResult: @MainActor (MailAccountCredentials) -> Bool
     let onConnected: () -> Void
@@ -70,13 +71,15 @@ struct GoogleSignInButtonBlock: View {
                     let hint = loginHint.trimmingCharacters(in: .whitespacesAndNewlines)
                     let connected = await appState.connectWithGoogle(
                         loginHint: hint.isEmpty ? nil : hint,
+                        requireHintMatch: requireHintMatch,
                         messageSurface: messageSurface,
                         shouldApplyResult: shouldApplyResult
                     )
                     if connected { onConnected() }
                 }
             } label: {
-                Label("Sign in with Google", systemImage: "person.crop.circle.badge.checkmark")
+                Label(requireHintMatch ? "Sign in with Google again" : "Sign in with Google",
+                      systemImage: "person.crop.circle.badge.checkmark")
             }
             .buttonStyle(.borderedProminent)
             .disabled(appState.isConnecting || auth.phase.isInProgress)

@@ -49,6 +49,8 @@ final class LoopbackRedirectListener: RedirectListener {
     private var pendingResult: Result<[String: String], Error>?
     private var redirectContinuation: CheckedContinuation<[String: String], Error>?
     private var timeoutWorkItem: DispatchWorkItem?
+    private var receivingConnections: [ObjectIdentifier: NWConnection] = [:]
+    private static let maximumRequestLineLength = 8192
 
     func start() async throws -> String {
         let listener = try NWListener(using: Self.listenerParameters(), on: .any)
@@ -140,10 +142,30 @@ final class LoopbackRedirectListener: RedirectListener {
     }
 
     private func handle(connection: NWConnection) {
+        receivingConnections[ObjectIdentifier(connection)] = connection
         connection.start(queue: queue)
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] data, _, _, _ in
-            guard let self else { return }
-            let request = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        receiveRequestLine(on: connection, buffered: Data())
+    }
+
+    private func receiveRequestLine(on connection: NWConnection, buffered: Data) {
+        let remaining = Self.maximumRequestLineLength - buffered.count
+        connection.receive(minimumIncompleteLength: 1, maximumLength: remaining) { [weak self] data, _, isComplete, error in
+            guard let self else { connection.cancel(); return }
+            var buffer = buffered
+            if let data { buffer.append(data) }
+            // TCP can split anywhere, including between CR and LF or inside
+            // a percent-encoded query value. Decode only a complete line.
+            guard let terminator = buffer.range(of: Data([13, 10])) else {
+                if error != nil || isComplete || buffer.count >= Self.maximumRequestLineLength {
+                    self.receivingConnections.removeValue(forKey: ObjectIdentifier(connection))
+                    connection.cancel()
+                } else {
+                    self.receiveRequestLine(on: connection, buffered: buffer)
+                }
+                return
+            }
+            self.receivingConnections.removeValue(forKey: ObjectIdentifier(connection))
+            let request = String(data: buffer[..<terminator.lowerBound], encoding: .utf8) ?? ""
             let params = Self.parseQuery(fromRequestLine: request)
 
             self.respond(on: connection)
@@ -195,6 +217,8 @@ final class LoopbackRedirectListener: RedirectListener {
             self.listener?.newConnectionHandler = nil
             self.listener?.cancel()
             self.listener = nil
+            for connection in self.receivingConnections.values { connection.cancel() }
+            self.receivingConnections.removeAll()
         }
     }
 

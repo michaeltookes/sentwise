@@ -237,6 +237,50 @@ final class GoogleSignInTests: XCTestCase {
         XCTAssertNil(harness.appState.connectionError)
     }
 
+    func testReauthorizationReplacesExpiredGrantWithoutDisconnectingMailbox() async throws {
+        let harness = makeHarness()
+        try seedToken(harness.store)
+        let credentials = GoogleMailCredential.credentials(email: "me@gmail.com")
+        let initiallyConnected = await harness.appState.testConnection(with: credentials)
+        XCTAssertTrue(initiallyConnected)
+        try seedToken(harness.store, expired: true)
+        harness.appState.watchStatus = .paused
+        harness.appState.connectionError = GoogleMailCredential.reauthorizationDetail
+
+        let connected = await harness.appState.connectWithGoogle(
+            loginHint: harness.appState.mailEmail, requireHintMatch: true, messageSurface: .settings
+        )
+
+        XCTAssertTrue(connected)
+        XCTAssertTrue(harness.appState.activeAccountUsesGoogleSignIn)
+        XCTAssertEqual(harness.appState.savedAccounts.map(\.email), ["me@gmail.com"])
+        XCTAssertEqual(try harness.store.loadToken(for: "me@gmail.com")?.accessToken, "fresh-at")
+        XCTAssertEqual(harness.provider.lastCredentials?.authentication, .xoauth2(accessToken: "fresh-at"))
+        XCTAssertNil(harness.appState.connectionError(for: .settings))
+    }
+
+    func testReauthorizationRejectsDifferentGoogleAccountAndPreservesActiveGrant() async throws {
+        let harness = makeHarness(idEmail: "other@gmail.com")
+        try seedToken(harness.store)
+        let credentials = GoogleMailCredential.credentials(email: "me@gmail.com")
+        let initiallyConnected = await harness.appState.testConnection(with: credentials)
+        XCTAssertTrue(initiallyConnected)
+
+        let connected = await harness.appState.connectWithGoogle(
+            loginHint: harness.appState.mailEmail, requireHintMatch: true, messageSurface: .settings
+        )
+
+        XCTAssertFalse(connected)
+        XCTAssertTrue(harness.appState.activeAccountUsesGoogleSignIn)
+        XCTAssertEqual(harness.appState.mailEmail, "me@gmail.com")
+        XCTAssertEqual(try harness.store.loadToken(for: "me@gmail.com")?.accessToken, "stored-at")
+        XCTAssertFalse(harness.store.hasToken(for: "other@gmail.com"))
+        XCTAssertEqual(harness.appState.savedAccounts.map(\.email), ["me@gmail.com"])
+        XCTAssertEqual(harness.appState.connectionError(for: .settings), GmailAuthCoordinator.message(
+            for: GmailAuthError.accountMismatch(expected: "me@gmail.com", actual: "other@gmail.com")
+        ))
+    }
+
     func testConnectWithGoogleIsUnavailableWithoutABundledClient() async {
         let harness = makeHarness(installCoordinator: false)
 
