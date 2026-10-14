@@ -223,6 +223,9 @@ extension AppState {
             logger.info("Disconnect skipped while a connection test is running")
             return
         }
+        // Browser sign-in and code exchange precede isConnecting. Supersede
+        // their callbacks before removing credentials so they cannot reconnect.
+        _ = beginMailConnectionAttempt()
         do {
             try removeLegacyOAuthCredentialsIfPresent()
         } catch {
