@@ -15,7 +15,7 @@ the transcript and Sentwise drafts the next-steps email in your voice, addressed
 and ready to send. It also watches your inbox and drafts replies to mail that
 deserves one. You stay in the loop — every draft waits for your approval.
 
-> **Release note:** This README describes Sentwise 0.2.0, the current signed DMG
+> **Release note:** This README describes Sentwise 0.2.1, the current signed DMG
 > and Homebrew package. Sentwise AI is included with subscriptions; no
 > user-managed API keys are required.
 
@@ -82,7 +82,7 @@ binary uses your Sentwise account to license managed drafting.
    - Download the latest DMG from [Releases](https://github.com/michaeltookes/sentwise/releases/latest) and drag Sentwise to Applications, **or**
    - `brew install --cask michaeltookes/tap/sentwise`
 
-   The current package installs Sentwise 0.2.0. Sentwise lives in your menu bar
+   The current package installs Sentwise 0.2.1. Sentwise lives in your menu bar
    (no Dock icon) and keeps itself up to date.
 
 2. **Connect your Gmail.** You'll need a Google **app password** (Gmail's
