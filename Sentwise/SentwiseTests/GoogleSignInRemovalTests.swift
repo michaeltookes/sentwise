@@ -36,6 +36,32 @@ final class GoogleSignInRemovalTests: XCTestCase {
         return (appState, store, transport)
     }
 
+    func testUndecodableTokenRemovalFailureKeepsAccountUntilDeletionSucceeds() async throws {
+        let secrets = TokenRemovalFailingSecretStore()
+        let (appState, _, transport) = try await connectedAppState(secrets: secrets)
+        let account = try XCTUnwrap(appState.savedAccounts.first)
+        let key = SecretKey.gmailOAuthToken(email: account.email)
+        try secrets.set("not-json", for: key)
+        let requestsBefore = transport.requests.count
+
+        secrets.failTokenRemoval = true
+        appState.removeSavedAccount(account)
+
+        XCTAssertNotNil(appState.connectionError)
+        XCTAssertEqual(appState.savedAccounts.map(\.email), [account.email])
+        XCTAssertTrue(appState.isAccountConnected)
+        XCTAssertEqual(try secrets.value(for: key), "not-json")
+        XCTAssertEqual(try secrets.value(for: .mailAppPassword(email: account.email)), GoogleMailCredential.marker)
+
+        secrets.failTokenRemoval = false
+        appState.removeSavedAccount(account)
+
+        XCTAssertTrue(appState.savedAccounts.isEmpty)
+        XCTAssertNil(try secrets.value(for: key))
+        XCTAssertNil(try secrets.value(for: .mailAppPassword(email: account.email)))
+        XCTAssertEqual(transport.requests.count, requestsBefore)
+    }
+
     func testTokenDeleteFailureAbortsTheRemovalAndKeepsEverythingConsistent() async throws {
         let secrets = TokenRemovalFailingSecretStore()
         let (appState, store, transport) = try await connectedAppState(secrets: secrets)
@@ -114,6 +140,34 @@ final class GoogleSignInDisconnectRollbackTests: XCTestCase {
         let didConnect = await appState.connectWithGoogle()
         XCTAssertTrue(didConnect)
         return (appState, store, secrets, transport)
+    }
+
+    func testDisconnectDeletesUndecodableTokenEntry() async throws {
+        let (appState, _, secrets, _) = try await connected()
+        let key = SecretKey.gmailOAuthToken(email: "me@gmail.com")
+        try secrets.set("not-json", for: key)
+
+        appState.disconnectMail()
+
+        XCTAssertFalse(appState.isAccountConnected)
+        XCTAssertNil(try secrets.value(for: key))
+        XCTAssertNil(try secrets.value(for: .mailAppPassword(email: "me@gmail.com")))
+    }
+
+    func testSwitchToAppPasswordDeletesUndecodableTokenEntry() async throws {
+        let (appState, _, secrets, _) = try await connected()
+        let key = SecretKey.gmailOAuthToken(email: "me@gmail.com")
+        try secrets.set("not-json", for: key)
+        let credentials = MailAccountCredentials(
+            email: "me@gmail.com", appPassword: "abcdefghijklmnop", host: "imap.gmail.com", port: 993
+        )
+
+        let switched = await appState.testConnection(with: credentials)
+
+        XCTAssertTrue(switched)
+        XCTAssertFalse(appState.activeAccountUsesGoogleSignIn)
+        XCTAssertNil(try secrets.value(for: key))
+        XCTAssertEqual(try secrets.value(for: .mailAppPassword(email: "me@gmail.com")), credentials.appPassword)
     }
 
     func testDisconnectAbortsAndStaysConnectedWhenTheTokenDeleteFails() async throws {

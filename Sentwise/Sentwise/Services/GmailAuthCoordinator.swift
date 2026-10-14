@@ -402,7 +402,8 @@ final class GmailAuthCoordinator {
     /// with `restoreLocalToken(_:for:)`. Throws when the Keychain delete fails.
     func removeLocalToken(for email: String) throws -> OAuthToken? {
         invalidate(SavedMailAccount.normalizedEmail(email))
-        guard let token = try store.loadToken(for: email) else { return nil }
+        let token = try store.loadToken(for: email)
+        // An undecodable entry still contains OAuth material and must be deleted.
         try store.deleteToken(for: email)
         return token
     }

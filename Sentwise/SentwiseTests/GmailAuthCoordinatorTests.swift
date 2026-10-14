@@ -264,6 +264,34 @@ final class GmailAuthCoordinatorTests: XCTestCase {
 
     // MARK: - Disconnect
 
+    func testRemoveLocalTokenDeletesUndecodableEntriesWithoutTouchingOtherAccounts() throws {
+        let harness = makeHarness()
+        let otherToken = storedToken(expiresAt: .distantFuture)
+        try harness.store.saveToken(otherToken, for: "other@gmail.com")
+        let key = SecretKey.gmailOAuthToken(email: "me@gmail.com")
+        for json in ["not-json", #"{"refreshToken":"rt","expiresAt":"incompatible"}"#] {
+            try harness.secrets.set(json, for: key)
+
+            XCTAssertNil(try harness.coordinator.removeLocalToken(for: " Me@Gmail.com "))
+
+            XCTAssertNil(try harness.secrets.value(for: key), "inspect the raw entry, not just the decoded token")
+            XCTAssertEqual(try harness.store.loadToken(for: "other@gmail.com"), otherToken)
+        }
+        XCTAssertNil(try harness.coordinator.removeLocalToken(for: "me@gmail.com"), "removal stays idempotent")
+        XCTAssertTrue(harness.transport.requests.isEmpty)
+    }
+
+    func testDisconnectDeletesUndecodableEntryWithoutAttemptingRevocation() async throws {
+        let harness = makeHarness()
+        let key = SecretKey.gmailOAuthToken(email: "me@gmail.com")
+        try harness.secrets.set("not-json", for: key)
+
+        await harness.coordinator.disconnect("me@gmail.com")
+
+        XCTAssertNil(try harness.secrets.value(for: key))
+        XCTAssertTrue(harness.transport.requests.isEmpty, "revocation requires a decoded token")
+    }
+
     func testDisconnectDeletesTokenAndRevokesRefreshToken() async throws {
         let harness = makeHarness(tokenJSON: "")
         try harness.store.saveToken(storedToken(expiresAt: now.addingTimeInterval(3600)), for: "me@gmail.com")
