@@ -441,7 +441,7 @@ final class AppStateLocalDataPurgeTests: XCTestCase {
         let persistence = seededPersistence()
         let (app, _, _) = makeAppState(persistence: persistence)
         app.setLaunchAtLoginHandler = { _ in false }
-        app.launchAtLoginStatusProvider = { true }
+        app.launchAtLoginStatusProvider = { .enabled }
 
         let result = await app.eraseAllLocalData()
 

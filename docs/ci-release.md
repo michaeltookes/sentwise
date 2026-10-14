@@ -160,8 +160,12 @@ new `version` and DMG `sha256`, and commits in the tap's house style:
 `sentwise: X.Y.Z`.
 
 > The tap's `depends_on` line only updates the next time this workflow runs on a
-> tag. Keep the comparison string form (`">= :sonoma"`) so the cask tracks the
-> app's Sonoma-or-newer deployment target.
+> tag. Keep the bare-symbol form (`depends_on macos: :sonoma`, meaning Sonoma or
+> newer) so the cask tracks the app's deployment target. Homebrew deprecated the
+> string-comparison form (`">= :sonoma"`) and warns on every install when it is
+> used. `Distribution/scripts/tests/test-cask-template.sh` (run in CI) fails if
+> the template drifts back to the string form or away from
+> `MACOSX_DEPLOYMENT_TARGET`.
 
 ---
 
@@ -183,10 +187,13 @@ proving the plumbing without signing, notarizing, or publishing.
 
 1. Add all seven secrets above.
 2. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`, add the CHANGELOG
-   `## [X.Y.Z]` section, and merge to `main`. The build number must be greater
+   `## [X.Y.Z]` section, and merge to `main`. That section is also embedded in
+   the appcast as the Sparkle update dialog's release notes; `release.sh` fails
+   the run if it is missing (see `releasing.md` → Release notes in the appcast). The build number must be greater
    than the previous stable release's Sparkle build.
 3. Tag and push: `git tag v0.1.2 && git push origin v0.1.2`.
 4. Watch the run (`gh run watch`); confirm the GitHub release, the appcast
    asset, and the `sentwise: X.Y.Z` commit in the tap.
 5. Verify Sparkle auto-update end to end from an installed older build (the
-   item 29 / item 11 carry-over).
+   item 29 / item 11 carry-over), including that the update dialog shows the
+   release notes for the new version (item 114) rather than a blank area.
