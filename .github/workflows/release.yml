@@ -73,15 +73,15 @@ jobs:
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             v="${GITHUB_REF_NAME#v}"
           else
-            v="$(grep -m1 'MARKETING_VERSION = ' \
-              Sentwise/Sentwise.xcodeproj/project.pbxproj | sed 's/.*= //; s/;.*//')"
+            v="$(grep -m1 -E '^[[:space:]]*MARKETING_VERSION = ' \
+              Sentwise/Config/Version.xcconfig | sed 's/.*= //; s/;.*//; s/[[:space:]]*$//')"
           fi
           if [[ ! "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Release version must be X.Y.Z; got '$v'." >&2
             exit 1
           fi
-          build="$(grep -m1 'CURRENT_PROJECT_VERSION = ' \
-            Sentwise/Sentwise.xcodeproj/project.pbxproj | sed 's/.*= //; s/;.*//')"
+          build="$(grep -m1 -E '^[[:space:]]*CURRENT_PROJECT_VERSION = ' \
+            Sentwise/Config/Version.xcconfig | sed 's/.*= //; s/;.*//; s/[[:space:]]*$//')"
           if [[ ! "$build" =~ ^[0-9]+$ ]]; then
             echo "CURRENT_PROJECT_VERSION must be an integer; got '$build'." >&2
             exit 1
