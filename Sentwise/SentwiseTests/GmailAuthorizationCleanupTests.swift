@@ -12,10 +12,11 @@ final class GmailAuthorizationCleanupTests: XCTestCase {
 
     private func makeHarness(
         email: String? = "selected@gmail.com",
-        scope: String = GoogleOAuth.mailScope,
+        scope: String? = GoogleOAuth.mailScope,
         refreshToken: String? = "new-refresh"
     ) throws -> Harness {
-        var fields: [String: Any] = ["access_token": "new-access", "expires_in": 3600, "scope": scope]
+        var fields: [String: Any] = ["access_token": "new-access", "expires_in": 3600]
+        if let scope { fields["scope"] = scope }
         if let email { fields["id_token"] = GmailAuthCoordinatorTests.idToken(email: email) }
         if let refreshToken { fields["refresh_token"] = refreshToken }
         let transport = AuthorizationTransport(response: HTTPResponse(
@@ -71,15 +72,17 @@ final class GmailAuthorizationCleanupTests: XCTestCase {
     }
 
     func testMissingScopeRevokesNewGrant() async throws {
-        let harness = try makeHarness(scope: "openid email")
-        do {
-            _ = try await harness.coordinator.authorize()
-            XCTFail("expected missing scope")
-        } catch {
-            XCTAssertEqual(error as? OAuthError, .missingRequiredScopes([GoogleOAuth.mailScope]))
+        for scope in ["openid email", ""] {
+            let harness = try makeHarness(scope: scope)
+            do {
+                _ = try await harness.coordinator.authorize()
+                XCTFail("expected missing scope")
+            } catch {
+                XCTAssertEqual(error as? OAuthError, .missingRequiredScopes([GoogleOAuth.mailScope]))
+            }
+            XCTAssertEqual(harness.transport.revokedTokens, ["new-refresh"])
+            XCTAssertFalse(harness.store.hasToken(for: "selected@gmail.com"))
         }
-        XCTAssertEqual(harness.transport.revokedTokens, ["new-refresh"])
-        XCTAssertFalse(harness.store.hasToken(for: "selected@gmail.com"))
     }
 
     func testMissingRefreshTokenRevokesAccessToken() async throws {
@@ -207,6 +210,16 @@ final class GmailAuthorizationCleanupTests: XCTestCase {
         let result = try await harness.coordinator.authorize()
         XCTAssertEqual(try harness.store.loadToken(for: result.email), result.token)
         XCTAssertTrue(harness.transport.revokedTokens.isEmpty)
+    }
+
+    func testOmittedScopeAdoptsRequestedScopesWithoutRevokingGrant() async throws {
+        let harness = try makeHarness(scope: nil)
+        let result = try await harness.coordinator.authorize()
+
+        XCTAssertEqual(result.token.scope, GoogleOAuth.scopes.joined(separator: " "))
+        XCTAssertEqual(try harness.store.loadToken(for: result.email), result.token)
+        XCTAssertTrue(harness.transport.revokedTokens.isEmpty)
+        XCTAssertEqual(harness.coordinator.phase, .idle)
     }
 }
 

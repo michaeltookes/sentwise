@@ -6,11 +6,13 @@ struct OAuthTokenService {
     let transport: HTTPTransport
 
     /// Exchanges an authorization code (with its PKCE verifier) for a token set.
-    func exchange(
+    /// An omitted scope means the grant matches the authorization request.
+    func exchange( // swiftlint:disable:this function_parameter_count
         code: String,
         verifier: String,
         client: GoogleOAuthClientConfiguration,
         redirectURI: String,
+        requestedScopes: [String],
         now: Date
     ) async throws -> OAuthToken {
         let response = try await transport.postForm(GoogleOAuth.tokenEndpoint, fields: Self.withClient(client, [
@@ -19,7 +21,10 @@ struct OAuthTokenService {
             "code_verifier": verifier,
             "redirect_uri": redirectURI
         ]))
-        return try token(from: response, now: now, fallbackRefreshToken: nil)
+        return try token(
+            from: response, now: now, fallbackRefreshToken: nil,
+            fallbackScope: requestedScopes.joined(separator: " ")
+        )
     }
 
     /// Refreshes an access token using a refresh token. Google does not return a

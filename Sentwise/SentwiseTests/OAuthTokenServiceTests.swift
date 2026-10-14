@@ -26,6 +26,7 @@ final class OAuthTokenServiceTests: XCTestCase {
             verifier: "verifier",
             client: client,
             redirectURI: "http://127.0.0.1:9000",
+            requestedScopes: GoogleOAuth.scopes,
             now: now
         )
 
@@ -50,11 +51,28 @@ final class OAuthTokenServiceTests: XCTestCase {
         let token = try await service.exchange(
             code: "c", verifier: "v",
             client: GoogleOAuthClientConfiguration(clientID: "cid.apps.googleusercontent.com", clientSecret: "  "),
-            redirectURI: "http://127.0.0.1:9000", now: now
+            redirectURI: "http://127.0.0.1:9000", requestedScopes: GoogleOAuth.scopes, now: now
         )
 
         XCTAssertEqual(token.idToken, "a.b.c")
         XCTAssertNil(transport.lastFields["client_secret"], "an empty secret is never sent")
+    }
+
+    func testExchangeKeepsRequestedScopesOnlyWhenResponseOmitsScope() async throws {
+        let requestedScopes = ["openid", "email"]
+        for responseScope in [nil, "openid", ""] as [String?] {
+            let scopeField = responseScope.map { ",\"scope\":\"\($0)\"" } ?? ""
+            let (service, _) = service(json("""
+            {"access_token":"at","refresh_token":"rt","expires_in":3600\(scopeField)}
+            """))
+
+            let token = try await service.exchange(
+                code: "c", verifier: "v", client: client,
+                redirectURI: "http://127.0.0.1:9000", requestedScopes: requestedScopes, now: now
+            )
+
+            XCTAssertEqual(token.scope, responseScope ?? requestedScopes.joined(separator: " "))
+        }
     }
 
     func testRevokePostsTokenToRevocationEndpoint() async throws {
@@ -118,7 +136,7 @@ final class OAuthTokenServiceTests: XCTestCase {
         do {
             _ = try await service.exchange(
                 code: "c", verifier: "v", client: client,
-                redirectURI: "uri", now: now
+                redirectURI: "uri", requestedScopes: GoogleOAuth.scopes, now: now
             )
             XCTFail("expected an error")
         } catch {

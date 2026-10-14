@@ -186,6 +186,7 @@ final class GmailAuthCoordinator {
             verifier: pkce.verifier,
             client: client,
             redirectURI: redirectURI,
+            requestedScopes: GoogleOAuth.scopes,
             now: now()
         )
         do {
