@@ -190,7 +190,9 @@ final class IMAPMessagePageHandler: ChannelInboundHandler {
         case .tagged(let tagged):
             handleTagged(tagged, context: context)
         case .authenticationChallenge:
-            IMAPAuthentication.answerChallenge(context: context)
+            if step == .login, case .xoauth2 = authentication {
+                IMAPAuthentication.answerChallenge(context: context)
+            }
         case .fatal(let text):
             settle(.failure(MailError.connectionFailed(text.text)))
             context.close(promise: nil)
