@@ -172,6 +172,9 @@ jobs:
           set -euo pipefail
           KEYCHAIN="$RUNNER_TEMP/sentwise-signing.keychain-db"
           KEYCHAIN_PW="$(openssl rand -base64 24)"
+          # Exported to GITHUB_ENV below, so later steps print it in their env
+          # block; mask it so the job log shows *** instead.
+          echo "::add-mask::$KEYCHAIN_PW"
           CERT_PATH="$RUNNER_TEMP/certificate.p12"
 
           echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
