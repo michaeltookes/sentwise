@@ -16,7 +16,7 @@
 #
 #   --unsigned          ad-hoc sign instead of Developer ID (no credentials)
 #   --notarize          notarize + staple the app and the DMG (signed builds)
-#   --require-checkout  fail unless the Clerk URL and all Paddle values are set
+#   --require-checkout  fail unless the Clerk URL and all Paddle values are real sandbox values
 #   --skip-dmg          stop after the staged app (no create-dmg, which drives Finder)
 #
 # The QA values not committed in QA.xcconfig come from (in order of precedence)
@@ -58,6 +58,9 @@ if [[ "$UNSIGNED" -eq 1 && "$NOTARIZE" -eq 1 ]]; then
   echo "qa-build: --notarize needs a Developer ID signed build (drop --unsigned)." >&2
   exit 2
 fi
+
+# shellcheck source-path=SCRIPTDIR source=lib/qa-checkout-values.sh
+source "$SCRIPT_DIR/lib/qa-checkout-values.sh"
 
 log()  { printf '\033[1;35m==>\033[0m %s\n' "$*"; }
 step() { printf '\n\033[1;36m### %s\033[0m\n' "$*"; }
@@ -137,19 +140,20 @@ expect SentwiseKeychainServiceSuffix .qa
 expect SentwiseAppSupportDirectoryName "Sentwise QA"
 expect SentwisePaddleEnvironment sandbox
 service="$(read_key SentwiseServiceBaseURL)"
-if [[ -z "$service" || "$service" == *"sentwise-inference.sentwise-service.workers.dev"* ]]; then
+service_host="$(qa_normalized_host "$service")"
+if [[ -z "$service_host" || "$service_host" == "$QA_PRODUCTION_SERVICE_HOST" ]]; then
   echo "qa-build: SentwiseServiceBaseURL is '$service'; it must be the sandbox deployment" >&2
   fail=1
 fi
 [[ "$fail" -eq 0 ]] || exit 1
 
-missing=()
-for key in SentwiseClerkFrontendAPIURL SentwisePaddleClientToken SentwisePaddleStarterPriceID \
-  SentwisePaddleProPriceID SentwisePaddleUnlimitedPriceID; do
-  [[ -n "$(read_key "$key")" ]] || missing+=("$key")
-done
-if [[ ${#missing[@]} -gt 0 ]]; then
-  echo "qa-build: not set, so sign-in and/or checkout are unavailable in this build: ${missing[*]}" >&2
+# Same rules as BuildConfiguration: placeholders, live tokens, production
+# prices, and the production Clerk host all leave checkout unavailable.
+if ! problems="$(qa_checkout_problems "$(read_key SentwiseClerkFrontendAPIURL)" \
+  "$(read_key SentwisePaddleClientToken)" "$(read_key SentwisePaddleStarterPriceID)" \
+  "$(read_key SentwisePaddleProPriceID)" "$(read_key SentwisePaddleUnlimitedPriceID)")"; then
+  echo "qa-build: sign-in and/or checkout are unavailable in this build:" >&2
+  printf '%s\n' "$problems" | sed 's/^/  /' >&2
   [[ "$REQUIRE_CHECKOUT" -eq 1 ]] && exit 1
 fi
 log "QA identity verified (service $service)"

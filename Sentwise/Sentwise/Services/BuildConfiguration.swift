@@ -205,9 +205,19 @@ struct BuildConfiguration: Equatable, Sendable {
 
     private static func nonProductionURL(_ value: String?, production: String) -> URL? {
         guard let url = httpsURL(value),
-              url.host?.lowercased() != URL(string: production)?.host?.lowercased()
+              let host = normalizedHost(url.host),
+              host != normalizedHost(URL(string: production)?.host)
         else { return nil }
         return url
+    }
+
+    /// A host in comparable form: lowercased, with terminal dots trimmed, so a
+    /// fully qualified `clerk.sentwise.ai.` (which DNS resolves to production)
+    /// compares equal to `clerk.sentwise.ai`. Nil when nothing is left.
+    private static func normalizedHost(_ host: String?) -> String? {
+        guard var host = host?.lowercased() else { return nil }
+        while host.hasSuffix(".") { host.removeLast() }
+        return host.isEmpty ? nil : host
     }
 
     /// A suffixed `com.tookes.Sentwise.<suffix>` bundle id, or nil (production or

@@ -33,7 +33,7 @@ on:
         options: [developer-id, developer-id-unnotarized, unsigned]
         default: developer-id
       require_checkout:
-        description: "Fail unless the Clerk URL and all Paddle sandbox values are set"
+        description: "Fail unless the Clerk URL and all Paddle values are real sandbox values"
         type: boolean
         default: true
 

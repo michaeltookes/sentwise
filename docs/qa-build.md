@@ -103,7 +103,10 @@ Distribution/scripts/qa-build.sh                          # Developer ID signed 
 Or in Xcode: pick the QA configuration for Run/Archive in the scheme editor. The script archives the
 QA configuration, exports it, then **verifies the built Info.plist is a QA build** (bundle id, name,
 URL scheme, Keychain suffix, data folder, sandbox service) before staging `Sentwise QA.app`, and
-warns about any value still unset (`--require-checkout` turns that into a failure). `--notarize`
+warns about any sign-in or checkout value that is unset or would leave checkout unavailable: a
+placeholder from `QA.local.xcconfig.example`, a token that is not `test_…`, a price id that is not a
+`pri_…` id or is a production price, or the production Clerk host (the same rules as
+`BuildConfiguration`; `--require-checkout` turns that into a failure). `--notarize`
 notarizes and staples the app and the DMG with the same credentials as `release.sh`. Output goes to
 the git-ignored `dist-qa/`, never `dist/`, so the release pipeline can never pick it up.
 
@@ -117,7 +120,7 @@ Do not run the full `xcodebuild test` suite on a workstation; tests run in CI.
   in `sentwise-service/docs/sandbox-deployment.md`).
 - `signing`: `developer-id` (signed and notarized, the default), `developer-id-unnotarized`, or
   `unsigned` (ad-hoc, no credentials).
-- `require_checkout`: fail unless the Clerk URL and all Paddle values are set (default on).
+- `require_checkout`: fail unless the Clerk URL and all Paddle values are real sandbox values (default on).
 
 It reuses the release signing and notarization secrets and the five `SENTWISE_QA_*` repository
 variables above, and uploads `Sentwise-QA-<version>-<sha>.dmg` (plus its `.sha256`) as the

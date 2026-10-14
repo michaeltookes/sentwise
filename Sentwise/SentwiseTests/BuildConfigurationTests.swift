@@ -170,7 +170,8 @@ final class BuildConfigurationTests: XCTestCase {
 
     func testMalformedOrProductionQAClerkURLMakesSignInUnavailableNeverProduction() {
         for value in ["", "not a url", "http://example-dev.clerk.accounts.dev",
-                      "https://clerk.sentwise.ai", "https://CLERK.sentwise.ai/"] {
+                      "https://clerk.sentwise.ai", "https://CLERK.sentwise.ai/",
+                      "https://clerk.sentwise.ai.", "https://Clerk.Sentwise.AI./", "https://clerk.sentwise.ai../"] {
             let config = BuildConfiguration.resolve(infoDictionary: qaInfo([Key.clerkFrontendAPIURL: value]))
             XCTAssertFalse(config.isSignInAvailable, value)
             XCTAssertEqual(config.clerkFrontendAPIBaseURL, BuildConfiguration.NonProductionFallback.clerkFrontendAPIURL, value)
@@ -180,9 +181,12 @@ final class BuildConfigurationTests: XCTestCase {
     }
 
     func testMalformedOrProductionQAServiceURLNeverPointsAtProduction() {
-        for value in ["", "not a url", "https://sentwise-inference.sentwise-service.workers.dev"] {
+        for value in ["", "not a url", "https://sentwise-inference.sentwise-service.workers.dev",
+                      "https://sentwise-inference.sentwise-service.workers.dev.",
+                      "https://SENTWISE-INFERENCE.sentwise-service.workers.dev./v1"] {
             let config = BuildConfiguration.resolve(infoDictionary: qaInfo([Key.serviceBaseURL: value]))
             XCTAssertEqual(config.serviceBaseURL, BuildConfiguration.NonProductionFallback.serviceBaseURL, value)
+            XCTAssertNil(config.paddle, value)
         }
     }
 
