@@ -22,6 +22,7 @@ extension AppState {
         let watchStatus: WatchStatus
         let watchError: String?
         let resumeWatchingAfterManagedReauth: Bool
+        let resumeWatchingAfterGoogleReauth: Bool
     }
 
     /// Loads the persisted settings and applies the tier gate for `newEmail`,
@@ -142,6 +143,9 @@ extension AppState {
         } else {
             inboxWatcher.stop()
         }
+        // A newly connected mailbox must not inherit the outgoing account's
+        // Google recovery intent. Existing accounts carry their own snapshot.
+        resumeWatchingAfterGoogleReauth = false
         if let promotedState {
             applyFocusedWatcherRuntimeState(promotedState)
         } else if outgoingState.watchStatus == .watching {
@@ -196,7 +200,8 @@ extension AppState {
         AccountWatcherRuntimeState(
             watchStatus: watchStatus,
             watchError: watchError,
-            resumeWatchingAfterManagedReauth: resumeWatchingAfterManagedReauth
+            resumeWatchingAfterManagedReauth: resumeWatchingAfterManagedReauth,
+            resumeWatchingAfterGoogleReauth: resumeWatchingAfterGoogleReauth
         )
     }
 
@@ -204,7 +209,8 @@ extension AppState {
         AccountWatcherRuntimeState(
             watchStatus: account.watchStatus,
             watchError: account.watchError,
-            resumeWatchingAfterManagedReauth: account.resumeWatchingAfterManagedReauth
+            resumeWatchingAfterManagedReauth: account.resumeWatchingAfterManagedReauth,
+            resumeWatchingAfterGoogleReauth: account.resumeWatchingAfterGoogleReauth
         )
     }
 
@@ -212,10 +218,12 @@ extension AppState {
         account.watchStatus = state.watchStatus
         account.watchError = state.watchError
         account.resumeWatchingAfterManagedReauth = state.resumeWatchingAfterManagedReauth
+        account.resumeWatchingAfterGoogleReauth = state.resumeWatchingAfterGoogleReauth
     }
 
     func applyFocusedWatcherRuntimeState(_ state: AccountWatcherRuntimeState) {
         resumeWatchingAfterManagedReauth = state.resumeWatchingAfterManagedReauth
+        resumeWatchingAfterGoogleReauth = state.resumeWatchingAfterGoogleReauth
         watchError = state.watchError
         watchStatus = state.watchStatus
         switch state.watchStatus {

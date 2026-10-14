@@ -65,6 +65,7 @@ extension AppState {
         guard let account else { startWatching(); return }
         guard canWatch(account: account) else { return }
         account.resumeWatchingAfterManagedReauth = false
+        account.resumeWatchingAfterGoogleReauth = false
         recordWatcherBaselineStartIfNeeded(account: account.credentials.email, mailbox: .inbox)
         setAccountWatchStatus(account, .watching)
         setWatchError(nil, account: account)
@@ -74,13 +75,19 @@ extension AppState {
 
     func pauseWatching(
         account: ConnectedMailAccount?,
-        resumeAfterManagedReauthentication: Bool = false
+        resumeAfterManagedReauthentication: Bool = false,
+        resumeAfterGoogleReauthentication: Bool = false
     ) {
         guard let account else {
-            pauseWatching(resumeAfterManagedReauthentication: resumeAfterManagedReauthentication)
+            pauseWatching(
+                resumeAfterManagedReauthentication: resumeAfterManagedReauthentication,
+                resumeAfterGoogleReauthentication: resumeAfterGoogleReauthentication
+            )
             return
         }
+        if !resumeAfterGoogleReauthentication { account.resumeWatchingAfterGoogleReauth = false }
         guard account.watchStatus == .watching else { return }
+        account.resumeWatchingAfterGoogleReauth = resumeAfterGoogleReauthentication
         account.resumeWatchingAfterManagedReauth = resumeAfterManagedReauthentication
         setAccountWatchStatus(account, .paused)
         account.watcher?.stop()
@@ -105,6 +112,7 @@ extension AppState {
         }
         guard account.watchStatus != .idle else { return }
         account.resumeWatchingAfterManagedReauth = false
+        account.resumeWatchingAfterGoogleReauth = false
         setAccountWatchStatus(account, .idle)
         account.watcher?.stop()
     }

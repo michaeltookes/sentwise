@@ -328,7 +328,7 @@ final class AppState: ObservableObject {
     var needsQueuedDraftDrainAfterCurrent = false
     /// Set when managed auth/license refresh should restart a previously intended watcher.
     var resumeWatchingAfterManagedReauth = false
-
+    var resumeWatchingAfterGoogleReauth = false // Mailbox auth pause; manual pauses never auto-resume.
     /// Observes reachability to pause offline / resume on reconnect (injected for tests).
     let reachability: NetworkReachabilityMonitoring
     @Published var skippedMessages: [SkippedMessage] = [] // Active-account visible skip slice.

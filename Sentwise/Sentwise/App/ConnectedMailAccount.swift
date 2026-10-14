@@ -22,6 +22,8 @@ final class ConnectedMailAccount: Identifiable {
     var isPollingInbox = false
     /// Set when a managed license/auth refresh should restart this account's watcher.
     var resumeWatchingAfterManagedReauth = false
+    /// Set only when this watcher was paused by a Google mailbox authentication failure.
+    var resumeWatchingAfterGoogleReauth = false
 
     /// This account's own poll loop. Nil until watching starts.
     var watcher: InboxWatcher?

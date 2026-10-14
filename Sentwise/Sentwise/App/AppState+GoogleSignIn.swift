@@ -140,6 +140,7 @@ extension AppState {
             await dropThisGrant()
         }
         if connected {
+            resumeInboxWatchingAfterGoogleReauth(email: email)
             logger.info("Mailbox connected with Google sign-in")
         }
         return connected

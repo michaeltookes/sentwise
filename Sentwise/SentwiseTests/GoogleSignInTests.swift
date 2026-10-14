@@ -75,7 +75,7 @@ final class GoogleSignInTests: XCTestCase {
 
     // MARK: - Provider decorator
 
-    private struct Harness {
+    struct Harness {
         let appState: AppState
         let provider: FakeAppMailProvider
         let secrets: InMemorySecretStore
@@ -84,7 +84,7 @@ final class GoogleSignInTests: XCTestCase {
         let browser: SpyBrowser
     }
 
-    private func makeHarness(
+    func makeHarness(
         verify: Result<Void, MailError> = .success(()),
         idEmail: String = "me@gmail.com",
         waitError: Error? = nil,
@@ -96,7 +96,8 @@ final class GoogleSignInTests: XCTestCase {
             persistence: AppStateMemoryPersistence(),
             secrets: secrets,
             mailProvider: provider,
-            llm: FakeLLMProvider(result: .success(()))
+            llm: FakeLLMProvider(result: .success(())),
+            reachability: FakeReachabilityMonitor(isOnline: true, hasCurrentPath: false)
         )
         let store = GmailAuthStore(secrets: secrets)
         let exchange = """
@@ -126,7 +127,7 @@ final class GoogleSignInTests: XCTestCase {
                        store: store, transport: transport, browser: browser)
     }
 
-    private func seedToken(_ store: GmailAuthStore, email: String = "me@gmail.com", expired: Bool = false) throws {
+    func seedToken(_ store: GmailAuthStore, email: String = "me@gmail.com", expired: Bool = false) throws {
         try store.saveToken(OAuthToken(
             accessToken: "stored-at",
             refreshToken: "rt",
