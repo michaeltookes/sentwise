@@ -109,6 +109,19 @@ struct BuildConfiguration: Equatable, Sendable {
 
     // MARK: - Resolution
 
+    // MIRROR: Distribution/scripts/lib/qa-checkout-values.sh applies the same
+    // rules to a built QA bundle (qa-build.sh --require-checkout). Change both
+    // together, keeping the rules in this order:
+    //   1. Placeholder: any value containing "YOUR" (any case) is rejected.
+    //   2. URL shape (service and Clerk URLs): https, a non-empty host, no
+    //      userinfo, no query, no fragment.
+    //   3. Production host: the host, lowercased with terminal dots trimmed,
+    //      must not be the production service or Clerk host.
+    //   4. Paddle environment: sandbox.
+    //   5. Client token: ^test_[A-Za-z0-9]+$
+    //   6. Price ids: ^pri_[a-z0-9]+$, none a production id
+    //      (PaddleConfig.production), all three distinct.
+
     static func resolve(infoDictionary: [String: Any]?) -> BuildConfiguration {
         let info = infoDictionary ?? [:]
         let declaredScheme = declaredURLScheme(info) ?? Production.urlScheme
@@ -206,10 +219,10 @@ struct BuildConfiguration: Equatable, Sendable {
         return (config, nil)
     }
 
-    /// An unfilled value copied from `QA.local.xcconfig.example` (its
-    /// placeholders all contain `YOUR`).
+    /// Rule 1: an unfilled value copied from `QA.local.xcconfig.example` (its
+    /// placeholders all contain `YOUR`), in any case.
     private static func isPlaceholder(_ value: String) -> Bool {
-        value.contains("YOUR")
+        value.range(of: "YOUR", options: .caseInsensitive) != nil
     }
 
     private static func matches(_ value: String, _ pattern: String) -> Bool {

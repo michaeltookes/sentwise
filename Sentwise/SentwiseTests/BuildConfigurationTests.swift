@@ -161,7 +161,11 @@ final class BuildConfigurationTests: XCTestCase {
             ("underscored token", [Key.paddleClientToken: "test_qa_token"]),
             ("uppercase price id", [Key.paddleProPriceID: "pri_01QAPRO"]),
             ("underscored price id", [Key.paddleProPriceID: "pri_qa_pro"]),
-            ("placeholder service URL", [Key.serviceBaseURL: "https://YOUR-SANDBOX.workers.dev"])
+            ("placeholder service URL", [Key.serviceBaseURL: "https://YOUR-SANDBOX.workers.dev"]),
+            ("alphanumeric placeholder token", [Key.paddleClientToken: "test_YOURSANDBOXCLIENTTOKEN"]),
+            ("lowercase placeholder token", [Key.paddleClientToken: "test_yoursandboxclienttoken"]),
+            ("Clerk URL with a query", [Key.clerkFrontendAPIURL: "https://example-dev.clerk.accounts.dev?x=1"]),
+            ("Clerk URL with a fragment", [Key.clerkFrontendAPIURL: "https://example-dev.clerk.accounts.dev#x"])
         ] {
             XCTAssertNil(BuildConfiguration.resolve(infoDictionary: qaInfo(overrides)).paddle, name)
         }

@@ -145,6 +145,21 @@ class QACheckoutValueValidation(unittest.TestCase):
         for key, value in placeholders.items():
             self.assertRejected(f"placeholder {key}", **{key: value})
 
+    def test_app_test_values_are_accepted(self):
+        # The well-formed QA values BuildConfigurationTests resolves to a sandbox config.
+        result = self.check(token="test_0qa1token2", starter="pri_01qastarter",
+                            pro="pri_01qapro", unlimited="pri_01qaunlimited")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_alphanumeric_placeholder_token_is_rejected(self):
+        self.assertRejected("YOUR token", token="test_YOURSANDBOXCLIENTTOKEN")
+        self.assertRejected("lowercase your token", token="test_yoursandboxclienttoken")
+
+    def test_clerk_url_with_query_fragment_or_userinfo_is_rejected(self):
+        for clerk in ["https://example-dev.clerk.accounts.dev?x=1", "https://example-dev.clerk.accounts.dev/#x",
+                      "https://example-dev.clerk.accounts.dev?", "https://user@example-dev.clerk.accounts.dev"]:
+            self.assertRejected(f"clerk {clerk!r}", clerk=clerk)
+
     def test_live_token_is_rejected(self):
         self.assertRejected("live token", token="live_3affc7e38f8efd6ebd94616ab39")
 

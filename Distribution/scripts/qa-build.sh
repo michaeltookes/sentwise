@@ -140,9 +140,8 @@ expect SentwiseKeychainServiceSuffix .qa
 expect SentwiseAppSupportDirectoryName "Sentwise QA"
 expect SentwisePaddleEnvironment sandbox
 service="$(read_key SentwiseServiceBaseURL)"
-service_host="$(qa_normalized_host "$service")"
-if [[ -z "$service_host" || "$service_host" == "$QA_PRODUCTION_SERVICE_HOST" ]]; then
-  echo "qa-build: SentwiseServiceBaseURL is '$service'; it must be the sandbox deployment" >&2
+if ! service_problem="$(qa_url_problem SentwiseServiceBaseURL "$service" "$QA_PRODUCTION_SERVICE_HOST")"; then
+  echo "qa-build: $service_problem; it must be the sandbox deployment" >&2
   fail=1
 fi
 [[ "$fail" -eq 0 ]] || exit 1
