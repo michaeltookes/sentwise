@@ -121,17 +121,18 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
     - The output `false` means the flag is false. An error that the key does not exist means the same, because the app decodes a missing key as false. Then relaunch Sentwise, quit it again, and re-read the flag: at launch `reconcileOnboardingState()` marks an already-configured older install as completed. Proceed in F1's user only if the flag still reads false.
   - If the flag reads `true`, run the whole case in the freshly reset `sentwise-stranger` macOS user from TC-M5-01. There, `Settings.json` is absent, so the flag is false, and the user has no mailbox credentials and no Sentwise session, so step 1 connects both (its fallback branch). Do not edit `Settings.json` by hand to reset the flag.
   - Notifications are allowed for Sentwise.
+  - Both branches sign in to Sentwise AI as a **fresh F2** (preamble: `luciusfox+trial-<RUNID>@prowlqa.dev`, new RUNID for this run, a trial account, never comped), not F1, so the case exercises the trial sign-in and entitlement path launch-checklist §6 requires. F1's Gmail stays the connected mailbox. Record the RUNID in the report. In F1's user, before step 1 (after the flag check), sign F1 out of Sentwise AI: **Settings…** → **Subscription** → **Sign out**; leave the mailbox connected.
 - **Steps:**
   1. Status menu → **Setup Assistant…** (in the stranger-user fallback it opens by itself at first launch). Walk the steps with **Continue**:
-     - F1's user: the mailbox step shows "Connected as luciusfox@prowlqa.dev", and the Sentwise AI step shows F1 signed in.
-     - Stranger-user fallback: on the mailbox step, enter `luciusfox@prowlqa.dev` in **Email address** and F1's Gmail app password (Lucius' workspace secrets) in **App password**, click **Test Connection**, and wait for "Connected as luciusfox@prowlqa.dev"; then **Continue**. On the Sentwise AI step, click **Use Sentwise AI** if it is shown, enter `luciusfox@prowlqa.dev` in **Email address**, click **Send sign-in code**, read the code from F1's Gmail inbox, enter it in **6-digit code**, click **Verify & connect**, and wait for "Connected as luciusfox@prowlqa.dev"; then **Continue**. **Continue** stays disabled on each step until its connection is made.
+     - F1's user: the mailbox step shows "Connected as luciusfox@prowlqa.dev"; **Continue**. On the Sentwise AI step, sign in as the fresh F2: click **Use Sentwise AI** if it is shown, enter F2 in **Email address**, click **Send sign-in code**, read the code from F1's Gmail inbox (plus addressing), enter it in **6-digit code**, click **Verify & connect**, and wait for "Connected as" F2; then **Continue**.
+     - Stranger-user fallback: on the mailbox step, enter `luciusfox@prowlqa.dev` in **Email address** and F1's Gmail app password (Lucius' workspace secrets) in **App password**, click **Test Connection**, and wait for "Connected as luciusfox@prowlqa.dev"; then **Continue**. On the Sentwise AI step, sign in as the fresh F2 exactly as in F1's user above. **Continue** stays disabled on each step until its connection is made.
   2. On the send-behavior step choose **Save as draft**, then **Continue**.
   3. On the voice step click **Learn my voice** and wait until it finishes.
   4. Click **Finish**.
   5. Quit Sentwise (**Quit Sentwise**) and relaunch it from `/Applications`.
   6. Status menu → **New Follow-up from Transcript…**. In **Recipients** enter `luciusfox@prowlqa.dev`; in **Subject** enter `Pilot next steps`.
   7. Paste T1 into the transcript area and click **Draft follow-up**.
-  8. When the draft-ready notification appears, click it (or click **Open Review Drafts**). In Review Drafts, expand the draft and click **Approve**.
+  8. When the draft-ready notification appears, click it (or click **Open Review Drafts**). In Review Drafts, expand the draft and click **Approve**. This first draft started F2's trial (both branches), so then close the Settings window if it is open, open **Settings…** → **Subscription** (this refreshes status, as in TC-M2-06 step 7), and read the plan line.
   9. If the status menu shows **Start Watching**, click it; it must then read **Pause Watching**.
   10. From S1, send Q1 to `luciusfox@prowlqa.dev`.
   11. Wait up to 10 minutes for the notification "Reply-worthy: <S1 sender> — draft a reply?", then click it.
@@ -145,8 +146,10 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
   - Gmail Drafts holds the follow-up "Pilot next steps", addressed only to `luciusfox@prowlqa.dev`. It mentions the security questionnaire by Friday and the November 9 meeting.
   - Gmail Drafts also holds a reply in the "Pilot kickoff" thread that confirms Thursday at 10am works. A reply that confirms the time without step 13 having supplied A1 is a defect (an invented user decision), not a pass.
   - The report records whether step 13 was needed.
+  - Both branches: step 8's plan line reads "Trial — 14 days left" for F2 (trial entitlement, not Pro and not a comp), and drafting in steps 7 and 12 was never blocked by a subscribe prompt. A Pro, comped, or "Trial ended" plan line fails the case.
   - Nothing was sent.
   - This case passing ticks the §6 onboarding box.
+  - Teardown (both branches): **Settings…** → **Subscription** → **Sign out** of F2; the orchestrator deletes F2 from production. In F1's user, then sign back in as F1 and confirm the Subscription tab reads Pro.
 - **Asset:** video
 
 ### TC-M1-09 Live tests leave the installed app alone
@@ -257,7 +260,7 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 - **Preconditions:** token available.
 - **Steps:**
   1. `GET {base}/admin/funnel?from=2026-10-01&to=2026-10-31` with the token.
-- **Expected:** 200 JSON with numeric fields `trialsStarted`, `checkoutsOpened.starter`, `.pro`, `.unlimited`, `subscriptionsActivated.starter`, `.pro`, `.unlimited`, `subscriptionsCanceled`, and `trialToPaidRate` for the live population only. Each `checkoutsOpened.*` value counts unique accounts (deduplicated by hashed account id), not checkout calls, and there is no scalar `checkoutsOpened`. It also has a `qa` object with the same nine numeric fields for the QA population (preamble, "Funnel populations"). The live `trialToPaidRate` uses live trials and live activations only, and `qa.trialToPaidRate` uses QA trials and QA activations only. Comp grants (item 111) are not counted as activations in either population.
+- **Expected:** 200 JSON with numeric fields `trialsStarted`, `checkoutsOpened.starter`, `.pro`, `.unlimited`, `subscriptionsActivated.starter`, `.pro`, `.unlimited`, `subscriptionsCanceled`, and `trialToPaidRate` for the live population only. Each `checkoutsOpened.*` value counts unique accounts (deduplicated by hashed account id), not checkout calls, and there is no scalar `checkoutsOpened`. It also has a `cohorts` array for the live population, one element per signup week (the ISO week, Monday UTC, of the account's trial start) that overlaps the requested range, ordered by week, each with `weekStart` (`YYYY-MM-DD`, a Monday), numeric `trialsStarted`, numeric `converted`, `convertedByTier.starter`, `.pro`, `.unlimited` (numeric, summing to `converted`), and `medianDaysToConvert` (a number of days, or `null` when `converted` is 0); an empty range yields `[]`. It also has a `qa` object with the same nine numeric fields and the same `cohorts` array for the QA population (preamble, "Funnel populations"). The live `trialToPaidRate` uses live trials and live activations only, and `qa.trialToPaidRate` uses QA trials and QA activations only. Comp grants (item 111) are not counted as activations in either population.
 - **Asset:** screenshot
 
 ## M3 Trial to paid verified
@@ -431,13 +434,16 @@ Payment method, in order: (a) a single-use 100%-off live Paddle discount code; (
 - **Steps:**
   1. Before launching **Sentwise QA** (TC-M3-05 step 6, after quitting Sentwise): save this script as `/tmp/sentwise-prod-snapshot.sh`. It covers every production location item 123 requires the QA build to leave alone: the Application Support store, caches, the WebKit and HTTP storage the Paddle checkout and URLSession use, a `Logs` folder (the app logs through the unified log, so this folder should not exist; it is listed so a stray file write fails), saved window state, the defaults domain, every `Sentwise*` entry in the per-user temporary directory (recursively), and the production Keychain service `com.tookes.Sentwise` (generic-password attributes only; `dump-keychain` without `-d` never decrypts a secret). The exact-match pattern on the service excludes `com.tookes.Sentwise.qa` and `com.tookes.Sentwise.tests`.
      ```
+     # fail closed: any failed command or pipeline stage aborts the script with a non-zero exit
+     set -euo pipefail
      # name, size in bytes, modification time (epoch seconds), then SHA-256, for every file
-     snap() { find "$@" -type f -print0 | sort -z | xargs -0 stat -f '%N %z %m'
+     snap() { set -euo pipefail
+              find "$@" -type f -print0 | sort -z | xargs -0 stat -f '%N %z %m'
               find "$@" -type f -print0 | sort -z | xargs -0 shasum -a 256; }
      for d in "Application Support/Sentwise" "Caches/com.tookes.Sentwise" "WebKit/com.tookes.Sentwise" \
               "HTTPStorages/com.tookes.Sentwise" "Logs/Sentwise" "Saved Application State/com.tookes.Sentwise.savedState"; do
        echo "## $d"
-       [ -d "$HOME/Library/$d" ] && (cd "$HOME/Library/$d" && snap .)
+       if [ -d "$HOME/Library/$d" ]; then (cd "$HOME/Library/$d" && snap .); fi
      done
      echo "## defaults"; defaults export com.tookes.Sentwise - | shasum -a 256
      echo "## tmp"; (cd "$TMPDIR" && find . -maxdepth 1 -name 'Sentwise*' | sort && snap . -path './Sentwise*')
@@ -445,10 +451,12 @@ Payment method, in order: (a) a single-use 100%-off live Paddle discount code; (
        | perl -0777 -ne 'for (split /^keychain: /m) { print if /"svce"<blob>="com\.tookes\.Sentwise"$/m }' \
        | grep -E '"(svce|acct|cdat|mdat)"'
      ```
-     Then run `zsh /tmp/sentwise-prod-snapshot.sh > /tmp/sentwise-prod-before.txt; date "+%Y-%m-%d %H:%M:%S" > /tmp/sentwise-qa-start.txt`.
-  2. After TC-M3-09's steps and before its teardown, quit **Sentwise QA** and run `zsh /tmp/sentwise-prod-snapshot.sh > /tmp/sentwise-prod-after.txt`.
+     Then run `zsh /tmp/sentwise-prod-snapshot.sh > /tmp/sentwise-prod-before.txt && date "+%Y-%m-%d %H:%M:%S" > /tmp/sentwise-qa-start.txt`, and check that `echo $?` prints `0`.
+  2. After TC-M3-09's steps and before its teardown, quit **Sentwise QA** and run `zsh /tmp/sentwise-prod-snapshot.sh > /tmp/sentwise-prod-after.txt && echo snapshot-ok`.
   3. Run `diff /tmp/sentwise-prod-before.txt /tmp/sentwise-prod-after.txt`; `log show --start "$(cat /tmp/sentwise-qa-start.txt)" --predicate 'subsystem == "com.tookes.Sentwise"' --info --style compact | tail -n +2`; `ls "$HOME/Library/Application Support/Sentwise QA"`; and `security dump-keychain "$HOME/Library/Keychains/login.keychain-db" | grep -c '"svce"<blob>="com.tookes.Sentwise.qa"'`.
 - **Expected:**
+  - Both snapshot runs exit 0 (step 1's `echo $?` prints `0`; step 2 prints `snapshot-ok`). A non-zero exit from either snapshot run fails TC-M3-11, whatever `diff` later shows: a failed `find`, `stat`, `shasum`, `defaults export`, or Keychain filter (including a `grep` that matches no production Keychain item) means the snapshot is partial and proves nothing.
+  - `/tmp/sentwise-prod-before.txt` contains a `./Settings.json` line under `## Application Support/Sentwise` and at least one `"svce"<blob>="com.tookes.Sentwise"` line under `## keychain`, so the known production store and Keychain entries were actually captured.
   - `diff` prints nothing: every production store file (`Settings.json`, drafts, voice profile, activity, and the rest), the production caches, WebKit and HTTP storage, logs folder, saved state, and `Sentwise*` temporary files keep the same names, sizes, modification times, and SHA-256 hashes across the QA run (a file overwritten in place, even with the same name, changes its mtime or hash and fails the case), the defaults domain hashes the same, and every `com.tookes.Sentwise` Keychain item has the same account and modification date (no production secret was overwritten, added, or deleted).
   - The `log show` prints no entries: nothing logged under the production subsystem while only Sentwise QA ran (its `Logger` subsystem is `com.tookes.Sentwise.qa`).
   - The `ls` lists the QA build's own store files, and the Keychain count is at least 1 (the QA build stored its mailbox and session secrets under `com.tookes.Sentwise.qa`), proving it wrote somewhere else.
