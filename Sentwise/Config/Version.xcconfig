@@ -1,0 +1,15 @@
+// The app's version, defined ONCE for every configuration (Debug, Release, QA)
+// of every target. It is the base configuration of the project-level build
+// configurations, so each target inherits it; no target or configuration sets
+// MARKETING_VERSION or CURRENT_PROJECT_VERSION itself.
+//
+// Bump both here when cutting a release (docs/ci-release.md, docs/releasing.md).
+// Distribution/scripts/release.sh, Distribution/scripts/qa-build.sh and
+// .github/workflows/release.yml read the values from this file.
+//
+// MARKETING_VERSION: the human version (CFBundleShortVersionString).
+// CURRENT_PROJECT_VERSION: integer build number Sparkle compares
+// (CFBundleVersion); it must increase with every release.
+
+MARKETING_VERSION = 0.2.1
+CURRENT_PROJECT_VERSION = 6

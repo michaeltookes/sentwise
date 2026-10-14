@@ -65,8 +65,9 @@ source "$SCRIPT_DIR/lib/qa-checkout-values.sh"
 log()  { printf '\033[1;35m==>\033[0m %s\n' "$*"; }
 step() { printf '\n\033[1;36m### %s\033[0m\n' "$*"; }
 
-pbxproj="$PROJECT/project.pbxproj"
-VERSION="$(grep -m1 'MARKETING_VERSION = ' "$pbxproj" | sed 's/.*= //; s/;.*//')"
+# The version is defined once, in Version.xcconfig (inherited by every configuration).
+version_xcconfig="$REPO_ROOT/Sentwise/Config/Version.xcconfig"
+VERSION="$(grep -m1 -E '^[[:space:]]*MARKETING_VERSION = ' "$version_xcconfig" | sed 's/.*= //; s/;.*//; s/[[:space:]]*$//')"
 SHA="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
 ARCHIVE="$OUT/SentwiseQA.xcarchive"
 EXPORT_DIR="$OUT/export"
