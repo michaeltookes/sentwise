@@ -436,45 +436,52 @@ extension EmailAccountSettingsView {
 
     func savedAccountRow(_ account: SavedMailAccount) -> some View {
         let isActive = appState.isActiveAccount(account)
-        return HStack(spacing: 8) {
-            Button {
-                Task { await switchTo(account) }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isActive ? Color.green : Color.secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(account.email).font(.callout)
-                        Text("\(account.host):\(account.port)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(accountStatusLabel(for: account))
-                            .font(.caption2)
-                            .foregroundStyle(accountStatusColor(for: account))
-                            .lineLimit(1)
-                            .accessibilityIdentifier("accountStatus-\(account.id)")
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Button {
+                    Task { await switchTo(account) }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(isActive ? Color.green : Color.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(account.email).font(.callout)
+                            Text("\(account.host):\(account.port)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(accountStatusLabel(for: account))
+                                .font(.caption2)
+                                .foregroundStyle(accountStatusColor(for: account))
+                                .lineLimit(1)
+                                .accessibilityIdentifier("accountStatus-\(account.id)")
+                        }
+                        Spacer()
+                        if isActive {
+                            Text("Active").font(.caption).foregroundStyle(.green)
+                        }
                     }
-                    Spacer()
-                    if isActive {
-                        Text("Active").font(.caption).foregroundStyle(.green)
-                    }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(isActive || appState.isConnecting)
-            .accessibilityLabel(isActive
-                                ? "\(account.email), active account"
-                                : "Switch to \(account.email)")
+                .buttonStyle(.plain)
+                .disabled(isActive || appState.isConnecting)
+                .accessibilityLabel(isActive
+                                    ? "\(account.email), active account"
+                                    : "Switch to \(account.email)")
 
-            Button(role: .destructive) {
-                accountPendingRemoval = account
-            } label: {
-                Image(systemName: "trash")
+                Button(role: .destructive) {
+                    accountPendingRemoval = account
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .disabled(appState.isConnecting)
+                .accessibilityLabel("Remove \(account.email)")
             }
-            .buttonStyle(.borderless)
-            .disabled(appState.isConnecting)
-            .accessibilityLabel("Remove \(account.email)")
+            if appState.savedAccountNeedsGoogleReauth(account) {
+                SavedGoogleMailboxReconnect(email: account.email) { [sessionID = addAccountSession.id] _ in
+                    self.addAccountSession.accepts(sessionID)
+                }
+            }
         }
     }
 

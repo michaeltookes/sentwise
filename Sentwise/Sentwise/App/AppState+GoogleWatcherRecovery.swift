@@ -30,3 +30,20 @@ extension AppState {
         }
     }
 }
+
+// MARK: - Reconnecting a background Google mailbox
+
+extension AppState {
+    /// Whether the saved mailbox `account` is a background Google mailbox
+    /// whose watcher paused on a Google auth failure (expired or revoked
+    /// grant). Switching to it can't help, because the switch verifies the
+    /// dead grant and switches back, so Settings offers "Sign in with Google
+    /// again" on its row instead. A manual pause clears the recovery intent
+    /// and with it this offer, matching how the focused mailbox recovers.
+    func savedAccountNeedsGoogleReauth(_ account: SavedMailAccount) -> Bool {
+        guard isGoogleSignInAvailable, !isActiveAccount(account),
+              let connected = backgroundConnectedAccount(email: account.email),
+              GoogleMailCredential.isGoogleSignIn(connected.credentials) else { return false }
+        return connected.resumeWatchingAfterGoogleReauth
+    }
+}
