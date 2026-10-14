@@ -235,9 +235,10 @@ final class GoogleMailAuthService: ObservableObject {
     }
 
     /// Deletes and revokes the grant from one authorization, only while it is
-    /// still the stored one (see `GmailAuthCoordinator.disconnect(_:ifStoredTokenIs:)`).
-    func disconnect(_ email: String, ifStoredTokenIs token: OAuthToken) async {
-        await coordinator?.disconnect(email, ifStoredTokenIs: token)
+    /// still the stored one and no newer sign-in could be harmed by the
+    /// revoke (see `GmailAuthCoordinator.discard(_:)`).
+    func discard(_ authorization: GmailAuthorization) async {
+        await coordinator?.discard(authorization)
     }
 
     /// Deletes `email`'s local token and returns it for rollback; throws when

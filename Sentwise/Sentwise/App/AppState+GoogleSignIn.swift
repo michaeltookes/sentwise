@@ -114,7 +114,7 @@ extension AppState {
     ) async -> Bool {
         let email = authorization.email
         // Cleanup touches only this flow's own grant, never one a newer attempt stored.
-        let dropThisGrant = { await self.googleMailAuth.disconnect(email, ifStoredTokenIs: authorization.token) }
+        let dropThisGrant = { await self.googleMailAuth.discard(authorization) }
         guard !isStale(email) else {
             await dropThisGrant()
             return false
