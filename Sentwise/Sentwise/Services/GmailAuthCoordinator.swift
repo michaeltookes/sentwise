@@ -188,8 +188,17 @@ final class GmailAuthCoordinator {
             redirectURI: redirectURI,
             now: now()
         )
+        do {
+            return try adoptAuthorization(token, loginHint: hint, requireHintMatch: requireHintMatch)
+        } catch {
+            await revokeUnadoptedToken(token)
+            throw error
+        }
+    }
+
+    private func adoptAuthorization(_ token: OAuthToken, loginHint: String?, requireHintMatch: Bool) throws -> GmailAuthorization {
         try Task.checkCancellation()
-        let email = try Self.authorizedEmail(token: token, loginHint: hint, requireHintMatch: requireHintMatch)
+        let email = try Self.authorizedEmail(token: token, loginHint: loginHint, requireHintMatch: requireHintMatch)
         try requireFullScope(token)
         guard token.refreshToken != nil else { throw OAuthError.missingRefreshToken }
         // Only the access/refresh material is kept; the ID token was read once.
@@ -202,6 +211,25 @@ final class GmailAuthCoordinator {
         guard !tokenOperationsSuspended else { throw CancellationError() }
         try store.saveToken(stored, for: email)
         return GmailAuthorization(email: email, token: stored)
+    }
+
+    /// A rejected exchange must not leave a new mailbox authorized remotely.
+    /// Revocation affects the whole account grant, including older tokens, so
+    /// only revoke when we can establish that the actual account has no token.
+    private func revokeUnadoptedToken(_ token: OAuthToken) async {
+        guard let email = token.idToken.flatMap(GoogleIDToken.email(fromIDToken:)) else {
+            logger.info("Couldn't identify a rejected Google grant; revocation skipped to preserve existing accounts")
+            return
+        }
+        do {
+            guard try store.loadToken(for: email) == nil else { return }
+        } catch {
+            logger.info("Couldn't check stored Google grants; revocation skipped to preserve existing accounts")
+            return
+        }
+        // The tracker runs revocation in its own task, even if this sign-in was
+        // canceled, and makes a subsequent sign-in wait for cleanup to finish.
+        await revokeRemovedToken(token)
     }
 
     static func authorizedEmail(token: OAuthToken, loginHint: String?, requireHintMatch: Bool) throws -> String {
