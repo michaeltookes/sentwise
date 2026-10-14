@@ -39,7 +39,10 @@ final class GmailOAuthLiveTests: XCTestCase {
         )
 
         let token = try await OAuthTokenService(transport: URLSessionTransport())
-            .refresh(refreshToken: refreshToken, client: client, now: Date())
+            .refresh(
+                refreshToken: refreshToken, grantedScope: GoogleOAuth.mailScope,
+                client: client, now: Date()
+            )
         XCTAssertTrue(token.missingScopes(from: GoogleOAuth.requiredScopes).isEmpty, "grant lacks the mail scope")
 
         var credentials = GoogleMailCredential.credentials(email: email)
