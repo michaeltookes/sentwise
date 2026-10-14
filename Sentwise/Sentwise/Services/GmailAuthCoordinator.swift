@@ -88,9 +88,12 @@ final class GmailAuthCoordinator {
     /// nothing can be restored between the invalidation and the Keychain wipe.
     private(set) var tokenOperationsSuspended = false
 
-    private struct TokenGeneration: Equatable {
-        let global: UInt64
-        let account: UInt64
+    /// A mailbox's grant generation. Mail operations capture the one their
+    /// access token was issued under (`validAccessTokenWithGrant(for:)`) so a
+    /// late rejection can be checked with `isGrantSuperseded(_:for:)`.
+    struct TokenGeneration: Equatable, Sendable {
+        fileprivate let global: UInt64
+        fileprivate let account: UInt64
     }
 
     private func generation(for key: String) -> TokenGeneration {
@@ -226,6 +229,12 @@ final class GmailAuthCoordinator {
     /// `notConnected`. A global invalidation (erase-all) never retries: it
     /// ends `notConnected`, and token operations stay suspended until resumed.
     func validAccessToken(for email: String) async throws -> String {
+        try await validAccessTokenWithGrant(for: email).accessToken
+    }
+
+    /// `validAccessToken(for:)` plus the grant generation the token belongs
+    /// to, read in the same main-actor turn the token is returned in.
+    func validAccessTokenWithGrant(for email: String) async throws -> (accessToken: String, grant: TokenGeneration) {
         do {
             return try await currentAccessToken(for: email)
         } catch GmailAuthError.superseded {
@@ -233,20 +242,28 @@ final class GmailAuthCoordinator {
         }
     }
 
-    private func currentAccessToken(for email: String) async throws -> String {
+    /// Whether `email`'s grant was replaced (re-authorization) or disconnected
+    /// since `grant` was captured. An erase (global invalidation or suspended
+    /// token operations) is not a supersession: it stays final.
+    func isGrantSuperseded(_ grant: TokenGeneration, for email: String) -> Bool {
+        let current = generation(for: SavedMailAccount.normalizedEmail(email))
+        return current != grant && !tokenOperationsSuspended && current.global == grant.global
+    }
+
+    private func currentAccessToken(for email: String) async throws -> (accessToken: String, grant: TokenGeneration) {
         guard !tokenOperationsSuspended else { throw GmailAuthError.notConnected }
         let key = SavedMailAccount.normalizedEmail(email)
         let startGeneration = generation(for: key)
         if let inFlight = refreshTasks[key] {
             let accessToken = try await inFlight.task.value
             try requireCurrent(startGeneration, for: key)
-            return accessToken
+            return (accessToken, startGeneration)
         }
         guard let token = try store.loadToken(for: email) else {
             throw GmailAuthError.notConnected
         }
         guard token.isExpired(now: now()) else {
-            return token.accessToken
+            return (token.accessToken, startGeneration)
         }
         guard let refreshToken = token.refreshToken else {
             throw GmailAuthError.reauthorizationRequired
@@ -281,7 +298,7 @@ final class GmailAuthCoordinator {
         }
         let accessToken = try await task.value
         try requireCurrent(startGeneration, for: key)
-        return accessToken
+        return (accessToken, startGeneration)
     }
 
     private func requireCurrent(_ startGeneration: TokenGeneration, for key: String) throws {

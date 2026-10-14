@@ -188,8 +188,20 @@ final class GoogleMailAuthService: ObservableObject {
     }
 
     func accessToken(for email: String) async throws -> String {
+        try await accessTokenWithGrant(for: email).accessToken
+    }
+
+    /// The access token plus the grant generation it was issued under.
+    func accessTokenWithGrant(
+        for email: String
+    ) async throws -> (accessToken: String, grant: GmailAuthCoordinator.TokenGeneration) {
         guard let coordinator else { throw GmailAuthError.notConfigured }
-        return try await coordinator.validAccessToken(for: email)
+        return try await coordinator.validAccessTokenWithGrant(for: email)
+    }
+
+    /// Whether `email`'s grant was replaced or disconnected since `grant`.
+    func isGrantSuperseded(_ grant: GmailAuthCoordinator.TokenGeneration, for email: String) -> Bool {
+        coordinator?.isGrantSuperseded(grant, for: email) ?? false
     }
 
     /// Invalidates every in-flight token refresh and suspends token
@@ -265,13 +277,23 @@ struct GoogleOAuthMailProvider: MailProvider {
     let auth: GoogleMailAuthService
 
     func resolved(_ credentials: MailAccountCredentials) async throws -> MailAccountCredentials {
+        try await resolvedWithGrant(credentials).credentials
+    }
+
+    /// Resolves the credentials and, for a Google-signed-in mailbox whose
+    /// token this call fetched, returns the grant generation that token
+    /// belongs to (nil otherwise).
+    private func resolvedWithGrant(
+        _ credentials: MailAccountCredentials
+    ) async throws -> (credentials: MailAccountCredentials, grant: GmailAuthCoordinator.TokenGeneration?) {
         guard GoogleMailCredential.isGoogleSignIn(credentials),
               (credentials.oauthAccessToken ?? "").isEmpty else {
-            return credentials
+            return (credentials, nil)
         }
         let token: String
+        let grant: GmailAuthCoordinator.TokenGeneration
         do {
-            token = try await auth.accessToken(for: credentials.email)
+            (token, grant) = try await auth.accessTokenWithGrant(for: credentials.email)
         } catch GmailAuthError.superseded {
             // The grant changed mid-refresh twice over: retry on the next poll,
             // never pause the mailbox as an auth failure.
@@ -290,7 +312,7 @@ struct GoogleOAuthMailProvider: MailProvider {
         }
         var resolved = credentials
         resolved.oauthAccessToken = token
-        return resolved
+        return (resolved, grant)
     }
 
     static func detail(for error: GmailAuthError) -> String {
@@ -304,14 +326,23 @@ struct GoogleOAuthMailProvider: MailProvider {
 
     /// Runs `operation` with resolved credentials, rewording a server-side
     /// XOAUTH2 rejection so it never reads as an app-password problem.
+    ///
+    /// A rejection of a token whose grant was replaced (the user signed in
+    /// with Google again) or disconnected while the operation was out says
+    /// nothing about the current grant: it is reported as a transient
+    /// connection failure, so the next poll retries with the current token
+    /// instead of pausing a mailbox that was just reauthorized.
     private func run<T>(
         _ credentials: MailAccountCredentials,
         _ operation: (MailAccountCredentials) async throws -> T
     ) async throws -> T {
-        let resolved = try await resolved(credentials)
+        let (resolved, grant) = try await resolvedWithGrant(credentials)
         do {
             return try await operation(resolved)
         } catch MailError.authenticationFailed(let detail) where GoogleMailCredential.isGoogleSignIn(credentials) {
+            if let grant, await auth.isGrantSuperseded(grant, for: credentials.email) {
+                throw MailError.connectionFailed("Google sign-in changed during this mail session; will retry.")
+            }
             throw MailError.authenticationFailed("\(GoogleMailCredential.failurePrefix) was rejected by Gmail. (\(detail))")
         }
     }

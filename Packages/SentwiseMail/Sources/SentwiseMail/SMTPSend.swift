@@ -203,7 +203,15 @@ final class SMTPSendHandler: ChannelInboundHandler {
             step = .mailFrom
         case .authXOAuth2Rejected(let detail):
             let reply = replyText(response)
-            settle(.failure(MailError.authenticationFailed(detail.isEmpty ? reply : "\(reply) (\(detail))")))
+            let message = detail.isEmpty ? reply : "\(reply) (\(detail))"
+            // Only a permanent (5xx) reply is a credential failure. A transient
+            // one (421, 454, any 4xx) stays a retryable command failure, the same
+            // split `expect(_:_:context:auth:)` makes for the other AUTH steps.
+            if isPermanentAuthFailure(response.code) {
+                settle(.failure(MailError.authenticationFailed(message)))
+            } else {
+                settle(.failure(MailError.smtpCommandFailed(code: response.code, message: message)))
+            }
             context.close(promise: nil)
         case .mailFrom:
             guard expect(response, 250, context: context) else { return }

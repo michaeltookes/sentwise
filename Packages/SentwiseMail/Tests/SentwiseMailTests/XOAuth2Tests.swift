@@ -195,6 +195,39 @@ final class XOAuth2Tests: XCTestCase {
         _ = try? channel.finish()
     }
 
+    func testSMTPXOAuth2TransientReplyAfterChallengeStaysRetryable() throws {
+        let (channel, future) = try makeSMTPChannel(authentication: .xoauth2(accessToken: "at"))
+        try feed(channel, "220 smtp.gmail.com ESMTP\r\n")
+        try feed(channel, "250 AUTH XOAUTH2\r\n")
+
+        let challenge = Data(#"{"status":"454","schemes":"Bearer"}"#.utf8).base64EncodedString()
+        try feed(channel, "334 \(challenge)\r\n")
+        try feed(channel, "454 4.7.0 Temporary authentication failure\r\n")
+        XCTAssertThrowsError(try future.wait()) { error in
+            guard case .smtpCommandFailed(let code, let message) = error as? MailError else {
+                return XCTFail("expected smtpCommandFailed, got \(error)")
+            }
+            XCTAssertEqual(code, 454)
+            XCTAssertTrue(message.contains("Temporary authentication failure"), "got: \(message)")
+        }
+        _ = try? channel.finish()
+    }
+
+    func testSMTPXOAuth2ServiceUnavailableAfterChallengeStaysRetryable() throws {
+        let (channel, future) = try makeSMTPChannel(authentication: .xoauth2(accessToken: "at"))
+        try feed(channel, "220 smtp.gmail.com ESMTP\r\n")
+        try feed(channel, "250 AUTH XOAUTH2\r\n")
+        try feed(channel, "334 \r\n")
+        try feed(channel, "421 4.7.0 Try again later, closing connection\r\n")
+        XCTAssertThrowsError(try future.wait()) { error in
+            guard case .smtpCommandFailed(let code, _) = error as? MailError else {
+                return XCTFail("expected smtpCommandFailed, got \(error)")
+            }
+            XCTAssertEqual(code, 421)
+        }
+        _ = try? channel.finish()
+    }
+
     func testXOAuth2ChallengeDetailIgnoresNonBase64() {
         XCTAssertEqual(SMTPSendHandler.xoauth2ChallengeDetail("not base64!"), "")
     }
