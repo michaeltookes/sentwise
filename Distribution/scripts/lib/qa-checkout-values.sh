@@ -73,11 +73,20 @@ qa_url_problem() {
 }
 
 # The production Paddle price ids, read from PaddleConfig.production so they
-# never drift from the app.
+# never drift from the app. Prints the reason to stderr and returns 1 when the
+# block is missing or yields no pri_ ids, so the check can never run against
+# an empty list (item 6j).
 qa_production_price_ids() {
-  sed -n '/static let production = PaddleConfig(/,/^    )/p' \
-    "$QA_VALUES_REPO_ROOT/Sentwise/Sentwise/Services/Billing/PaddleConfig.swift" \
-    | grep -o 'pri_[a-z0-9]*' || true
+  local file="$QA_VALUES_REPO_ROOT/Sentwise/Sentwise/Services/Billing/PaddleConfig.swift"
+  local range='/static let production = PaddleConfig(/,/^    )/' block ids
+  if ! block="$(LC_ALL=C sed -n "${range}p" "$file")"; then
+    echo "qa_production_price_ids: sed '$range' failed on $file" >&2; return 1
+  fi
+  ids="$(LC_ALL=C grep -o 'pri_[a-z0-9]*' <<<"$block" || true)"
+  if [[ -z "$ids" ]]; then
+    echo "qa_production_price_ids: no pri_ ids in sed range '$range' of $file" >&2; return 1
+  fi
+  printf '%s\n' "$ids"
 }
 
 # Prints one line per problem with the given values and returns 1 if any.
@@ -85,7 +94,9 @@ qa_production_price_ids() {
 qa_checkout_problems() {
   local clerk="$1" token="$2" starter="$3" pro="$4" unlimited="$5" problems=0
   local production_ids name value
-  production_ids="$(qa_production_price_ids)"
+  if ! production_ids="$(qa_production_price_ids)"; then
+    echo "could not read the production price ids from PaddleConfig.swift"; problems=1
+  fi
 
   qa_url_problem SentwiseClerkFrontendAPIURL "$clerk" "$QA_PRODUCTION_CLERK_HOST" || problems=1
 
@@ -111,7 +122,10 @@ qa_checkout_problems() {
     elif [[ ! "$value" =~ ^pri_[a-z0-9]+$ ]]; then
       echo "SentwisePaddle${name}PriceID '$value' is not a Paddle price id (pri_...) or is a placeholder"
       problems=1
-    elif printf '%s\n' "$production_ids" | grep -qx "$value"; then
+    # A here-string, not `printf | grep -q`: grep -q exits on the first match,
+    # so a printf still writing gets SIGPIPE and pipefail turns the match into
+    # a failure (the 2026-10-14 flake that accepted the production starter id).
+    elif grep -qxF -- "$value" <<<"$production_ids"; then
       echo "SentwisePaddle${name}PriceID is a production price id"; problems=1
     fi
   done

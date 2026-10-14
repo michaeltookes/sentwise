@@ -131,8 +131,9 @@ class QACheckoutValueValidation(unittest.TestCase):
 
     def assertRejected(self, label: str, **overrides):
         result = self.check(**overrides)
-        self.assertNotEqual(result.returncode, 0, f"{label} was accepted")
-        self.assertTrue(result.stdout.strip(), f"{label}: no problem reported")
+        output = f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        self.assertNotEqual(result.returncode, 0, f"{label} was accepted; {output}")
+        self.assertTrue(result.stdout.strip(), f"{label}: no problem reported; {output}")
 
     def test_valid_sandbox_values_are_accepted(self):
         result = self.check()
@@ -162,6 +163,27 @@ class QACheckoutValueValidation(unittest.TestCase):
 
     def test_live_token_is_rejected(self):
         self.assertRejected("live token", token="live_3affc7e38f8efd6ebd94616ab39")
+
+    def test_production_price_ids_are_read_from_paddle_config(self):
+        result = subprocess.run(
+            ["/bin/bash", "-c", 'set -euo pipefail; source "$0"; qa_production_price_ids', VALUES_LIB],
+            capture_output=True, text=True,
+        )
+        ids = result.stdout.split()
+        self.assertEqual(result.returncode, 0, f"ids={ids} stderr={result.stderr!r}")
+        self.assertEqual(ids, ["pri_01m307sdxtk64vb7yjn4vptrcx", "pri_01m307vkn7zf0k194trcmx0qg1",
+                               "pri_01m307xfej4zjp0n7wkf4rf9cd"], f"ids={ids} stderr={result.stderr!r}")
+
+    def test_unreadable_production_price_ids_are_a_problem(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                ["/bin/bash", "-c", 'set -euo pipefail; source "$0"; QA_VALUES_REPO_ROOT="$1"; shift; '
+                 'qa_checkout_problems "$@"', VALUES_LIB, tmp] + [VALID[k] for k in ORDER],
+                capture_output=True, text=True,
+            )
+        self.assertNotEqual(result.returncode, 0, f"stdout={result.stdout!r} stderr={result.stderr!r}")
+        self.assertIn("could not read the production price ids from PaddleConfig.swift", result.stdout)
+        self.assertIn("PaddleConfig.swift", result.stderr)
 
     def test_production_price_ids_are_rejected(self):
         self.assertRejected("production starter", starter="pri_01m307sdxtk64vb7yjn4vptrcx")
