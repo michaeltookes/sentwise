@@ -307,6 +307,19 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - **Open:** verify on the next release that the Sparkle dialog on a previous-version install renders the notes (now a step in the release docs). Resolve the item once observed.
     - No app code change expected — this is appcast generation.
 
+125. **"How did you hear about Sentwise?" at first sign-in (optional, skippable)** — *(post-launch, Medium; from the icp-finder intake 2026-10-14, icp-finder item 27 / US-poc-8)*
+    One optional, skippable question after a new user's first sign-in so the founder can see which channel brought them; not run-blocking (the dogfood run is attributed by tracking links plus founder matching), and Michael wants it only once Sentwise is on several platforms with call-to-action pages.
+    *As a new user, I want to answer one optional question about how I found Sentwise, or skip it, so that the trial starts either way and nothing about my mail is attached to my answer.*
+    - Choices match the icp-finder activity-log `channel` values (reddit, indie_hackers, slack, discord, linkedin, x, email, hn, build_in_public, founder_network) plus "other"; skipping leaves the answer empty and the trial proceeds unchanged.
+    - Only the chosen value is stored against the account; no mail, transcript or draft content goes with it; the founder sees per-channel aggregate counts only; the privacy copy says what is stored.
+    - Acceptance: given a first sign-in, one optional question appears and can be skipped; given a skip, the trial starts and the answer is empty; given an answer, it appears in an aggregate count with no account-identifying data.
+
+126. **Transcript-source guidance for new users (Zoom, Granola, Fathom)** — *(pre-launch, Medium; run-blocking for the icp-finder dogfood run, its plan gate line 2; from the icp-finder intake 2026-10-14, icp-finder item 28 / US-poc-10)*
+    Sentwise does not record calls, so a new user at the transcript step needs plain in-app guidance on getting a transcript out of the tools they already use; guidance only, the meeting-platform integrations in item 53 stay a separate post-launch item.
+    *As a new user at the transcript step, I want to see how to get a transcript out of Zoom, Granola or Fathom, so that my first follow-up does not stall on "where do I get the file".*
+    - A visible in-app link or panel, or a linked support page, with plain steps for Zoom (save transcript / cloud download), Granola and Fathom, and the accepted file types when the user uses none of the three.
+    - Acceptance: given a new user at the transcript step, the guidance is visible and covers the three sources in plain steps; given none of the three, it lists the accepted file types; done when the icp-finder gate can cite the screen or page.
+
 ## Low Priority
 
 116. **Homebrew cask uses deprecated `depends_on macos:` string-comparison syntax** — *found 2026-10-08 by the Lucius install-path QA run (`brew install --cask` warning)*
