@@ -184,6 +184,16 @@ proving the plumbing without signing, notarizing, or publishing.
 
 ---
 
+## Transient Apple errors
+
+GitHub-hosted runners sometimes lose DNS or the connection to Apple mid-run.
+`release.sh` retries notarytool and stapler up to 3 times on network errors
+only, and treats a `stapler validate` network failure after a successful staple
+as a warning; rejections and missing tickets still fail fast (details in
+`releasing.md` → Guards worth knowing). If a run still fails on a network
+error, re-run the failed job. The per-run signing keychain password is masked
+in the job log (`::add-mask::`).
+
 ## Versioning
 
 The version is defined in one file, `Sentwise/Config/Version.xcconfig`

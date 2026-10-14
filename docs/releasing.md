@@ -163,6 +163,16 @@ What `release.sh` does, step by step:
   `--clean-dist` to remove the strays automatically.
 - **Fail-loud.** Every step's failure aborts the script with a named
   command/line; the run can no longer exit `0` after a step has failed.
+- **Apple network retries.** `notarytool submit --wait`, `stapler staple` and
+  `stapler validate` (app and DMG) run through `retry_apple`: up to 3 attempts,
+  20s then 40s apart, retried **only** on transport errors (`NSURLErrorDomain`,
+  "could not be found", "connection was lost", "timed out", "temporarily
+  unavailable", notary HTTP 5xx). A rejected notarization (`status: Invalid`,
+  `Rejected`), a missing ticket (`Record not found`, "does not have a ticket")
+  or any other error still fails at once. If `stapler validate` still cannot
+  reach Apple after its retries but the staple succeeded, the script warns and
+  continues (the ticket is already embedded; the smoke test's `spctl` check
+  stays a hard gate). A retried `notarytool submit` makes a fresh submission.
 - **CI credential form.** Instead of `NOTARY_PROFILE`, CI supplies
   `NOTARY_APPLE_ID` / `NOTARY_TEAM_ID` / `NOTARY_PASSWORD` (notarytool's flag
   form) and `SPARKLE_ED_KEY_FILE` (passed to `generate_appcast --ed-key-file`,
