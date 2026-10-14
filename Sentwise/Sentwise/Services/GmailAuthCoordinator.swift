@@ -142,9 +142,18 @@ final class GmailAuthCoordinator {
             logger.info("Gmail account authorized with Google")
             return authorization
         } catch {
+            let error = Self.normalizingCancellation(error)
             phase = (error is CancellationError) ? .idle : .failed(Self.message(for: error))
             throw error
         }
+    }
+
+    /// Abandoning the flow cancels its task, but a canceled `URLSession`
+    /// request (the code exchange) throws `URLError(.cancelled)` rather than
+    /// `CancellationError`. Both mean "the user walked away", never a failure.
+    static func normalizingCancellation(_ error: Error) -> Error {
+        if let urlError = error as? URLError, urlError.code == .cancelled { return CancellationError() }
+        return error
     }
 
     private func runAuthorization(loginHint: String?, requireHintMatch: Bool) async throws -> GmailAuthorization {
