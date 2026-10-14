@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "ReplyWorthiness")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "ReplyWorthiness")
 
 /// Reply-worthiness gating on `AppState` (item 17): the watcher runs this before
 /// the LLM draft call so obvious non-replyable mail (no-reply senders, bulk/list

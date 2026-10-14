@@ -3,7 +3,7 @@ import Foundation
 import Network
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "OAuthRedirect")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "OAuthRedirect")
 
 /// Opens a URL in the user's default browser.
 protocol BrowserOpening {

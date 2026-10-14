@@ -100,6 +100,20 @@ final class AppStateNotificationPermissionTests: XCTestCase {
         let url = try XCTUnwrap(URL(string: AppState.notificationSettingsURLString))
 
         XCTAssertEqual(url.scheme, "x-apple.systempreferences")
-        XCTAssertTrue(AppState.notificationSettingsURLString.contains("?id=com.tookes.Sentwise"))
+        XCTAssertEqual(
+            AppState.notificationSettingsURLString,
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.tookes.Sentwise"
+        )
+    }
+
+    func testQABuildNotificationSettingsURLTargetsTheQABundle() {
+        let qa = BuildConfiguration.resolve(infoDictionary: [
+            BuildConfiguration.InfoKey.keychainServiceSuffix: ".qa",
+            BuildConfiguration.InfoKey.bundleIdentifier: "com.tookes.Sentwise.qa"
+        ])
+        XCTAssertEqual(
+            AppState.notificationSettingsURLString(bundleIdentifier: qa.bundleIdentifier),
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.tookes.Sentwise.qa"
+        )
     }
 }

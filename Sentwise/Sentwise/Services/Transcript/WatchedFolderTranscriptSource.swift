@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let watchedFolderLogger = Logger(subsystem: "com.tookes.Sentwise", category: "TranscriptFolder")
+private let watchedFolderLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "TranscriptFolder")
 
 /// Watches a folder for new transcript files and delivers each newly appeared one
 /// to `onTranscript` (item 51) — e.g. Zoom's local recording directory. This is

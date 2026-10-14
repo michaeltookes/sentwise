@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "PreGateDraftSweep")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "PreGateDraftSweep")
 
 private let preGateDraftSweepCutoff: Date = {
     var components = DateComponents()

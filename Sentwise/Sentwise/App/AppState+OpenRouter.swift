@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "OpenRouter")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "OpenRouter")
 
 /// OpenRouter one-click BYO key provisioning (item 59). Generates a PKCE pair,
 /// sends the user to OpenRouter's authorization page, and on the

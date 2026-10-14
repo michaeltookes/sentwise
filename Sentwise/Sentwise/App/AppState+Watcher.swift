@@ -2,7 +2,7 @@ import SentwiseMail
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "InboxWatcher")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "InboxWatcher")
 /// Inbox-watcher lifecycle and poll policy on `AppState`. The `InboxWatcher`
 /// owns the timer and sleep/wake handling; this file owns *what a poll does*.
 extension AppState {

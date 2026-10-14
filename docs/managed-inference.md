@@ -473,10 +473,12 @@ subscription, so the account never left trial. The fix is to mint the transactio
 alone.
 
 - **Config** (`Services/Billing/PaddleConfig.swift`) is the single source for the
-  Paddle client-side token and per-tier price ids, flagged `sandbox` vs
-  `production` so a production cutover is a one-line change of `PaddleConfig.active`.
-  Nothing in the UI hardcodes credentials. The sandbox client-side token is public
-  by design (frontend-scoped) so embedding it is safe. `priceID(for: PaddlePlan)`
+  Paddle client-side token and per-tier price ids. `PaddleConfig.active` comes from
+  the build (`BuildConfiguration`, item 123): the embedded live config in Debug and
+  Release, the Info.plist sandbox values in a QA build (`docs/qa-build.md`), or nil
+  (checkout unavailable) when a QA build's values are incomplete. No sandbox
+  credential ships in a production build. Nothing in the UI hardcodes credentials;
+  client-side tokens are public by design (frontend-scoped). `priceID(for: PaddlePlan)`
   maps `starter`/`pro`/`unlimited` to their price ids.
 - **Authed transaction mint** — when the user picks a tier, the app calls the
   authenticated `POST /v1/paddle/checkout` with `{ priceId, quantity:1 }` under the

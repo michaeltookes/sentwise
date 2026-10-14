@@ -28,3 +28,9 @@ build-dl/
 
 # Per-build Google OAuth client (item 104) — never committed
 Sentwise/Config/GoogleOAuth.local.xcconfig
+
+# Per-developer QA build values (item 123) — never committed
+Sentwise/Config/QA.local.xcconfig
+
+# QA build output (item 123), Distribution/scripts/qa-build.sh
+dist-qa/

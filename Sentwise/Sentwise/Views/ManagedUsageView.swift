@@ -58,6 +58,7 @@ struct ManagedUsageView: View {
                             appState.presentBillingCheckout()
                         }
                         .buttonStyle(.link)
+                        .disabled(!appState.isCheckoutAvailable)
                         .accessibilityIdentifier("buyMoreUsage")
                         .accessibilityLabel("Upgrade for more drafts")
                     }

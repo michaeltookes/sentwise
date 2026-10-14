@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "ManagedOAuth")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedOAuth")
 
 /// Managed-account Google sign-in via Clerk's OAuth flow (item 59), plus the
 /// shared post-sign-in finalization used by both the email-code and OAuth paths.

@@ -2,7 +2,7 @@ import AppKit
 import os
 import SwiftUI
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "AppDelegate")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "AppDelegate")
 
 /// Manages the application lifecycle and coordinates the top-level components.
 ///
@@ -145,6 +145,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// switched back sees the hint appear — or clear — without relaunching.
     func applicationDidBecomeActive(_ notification: Notification) {
         guard runtime.allowsStartupSideEffects, let appState else { return }
+        // Pick up a Login Items approval made in System Settings (item 113).
+        appState.refreshLaunchAtLoginState()
         Task {
             await appState.refreshNotificationPermission()
             await appState.refreshManagedQuotaAfterBillingPortalReturnIfNeeded()

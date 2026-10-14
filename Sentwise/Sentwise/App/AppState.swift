@@ -2,13 +2,14 @@ import Combine
 import SentwiseMail
 import os
 import SwiftUI
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "AppState")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "AppState")
 /// Central application state container and single source of truth for observed app state.
 @MainActor
 final class AppState: ObservableObject {
     var settingsTransientMessageGeneration: UInt64 = 0
     @Published var settingsTransientMessages = SettingsTransientMessages()
     var activeSettingsTab: SettingsTab?
+    var paddleConfig: PaddleConfig? = PaddleConfig.active // build's Paddle config; nil = no checkout (item 123)
     // MARK: - Watch State
     /// Current watcher status. Drives the menu-bar status line.
     @Published var watchStatus: WatchStatus = .idle
@@ -177,11 +178,11 @@ final class AppState: ObservableObject {
     @Published var draftSentMessage: String?
 
     // MARK: - Preferences
-
-    /// Whether the app launches at login (mirrors `SMAppService` state).
-    @Published var launchAtLogin = LoginItemManager.shared.isEnabled
+    /// Launch-at-login state (mirrors `SMAppService` status, item 113).
+    @Published var launchAtLoginState = LoginItemManager.shared.state
     var setLaunchAtLoginHandler: (Bool) -> Bool = { LoginItemManager.shared.setEnabled($0) }
-    var launchAtLoginStatusProvider: () -> Bool = { LoginItemManager.shared.isEnabled }
+    var launchAtLoginStatusProvider: () -> LaunchAtLoginState = { LoginItemManager.shared.state }
+    var openLoginItemsSettingsHandler: () -> Void = { LoginItemManager.shared.openLoginItemsSettings() }
 
     /// How often (in seconds) the inbox is polled while the Mac is awake.
     @Published var pollIntervalSeconds: Int

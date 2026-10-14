@@ -1,9 +1,9 @@
 import Foundation
 
-/// Which Paddle environment the app talks to. Drives both the Paddle.js
-/// `Paddle.Environment.set(...)` call and which credential set is active. Kept
-/// separate from the token/price values so a production cutover is a one-line
-/// change of `PaddleConfig.active` (backlog item 56c).
+/// Which Paddle environment the app talks to. Drives the Paddle.js
+/// `Paddle.Environment.set(...)` call. Production builds always use
+/// `.production`; only a QA build's Info.plist can select `.sandbox`
+/// (`BuildConfiguration`, item 123).
 enum PaddleEnvironment: String, Sendable, Equatable {
     case sandbox
     case production
@@ -115,11 +115,11 @@ enum PaddlePlan: String, CaseIterable, Identifiable, Sendable, Equatable {
 }
 
 /// Single source of truth for the Paddle checkout credentials and price ids
-/// (backlog item 56c, app half). The sandbox client-side token is public by
-/// design (it only permits opening a checkout in frontend code), so embedding it
-/// is safe. Production values are swapped by pointing `active` at a
-/// `.production` config once the live token and price ids exist — nothing in the
-/// UI hardcodes these, so that swap is clean.
+/// (backlog item 56c, app half). Client-side tokens are public by design (they
+/// only permit opening a checkout in frontend code), so embedding the live one
+/// is safe. Production builds embed only the live values; a QA build's sandbox
+/// values come from its Info.plist (`BuildConfiguration`, item 123), so no
+/// sandbox credential ships in the production app.
 struct PaddleConfig: Sendable, Equatable {
     let environment: PaddleEnvironment
     /// Paddle.js client-side token — safe to ship; frontend-scoped by design.
@@ -157,18 +157,6 @@ struct PaddleConfig: Sendable, Equatable {
 
     // MARK: - Credential sets
 
-    /// Paddle sandbox credentials (safe to embed). Supplied for 56c so the app
-    /// half can be exercised end-to-end against Paddle's sandbox before the
-    /// production merchant account is provisioned.
-    static let sandbox = PaddleConfig(
-        environment: .sandbox,
-        clientSideToken: "test_7a55409b65e7f906b94b863e63a",
-        starterPriceID: "pri_01m1syd7nfarp8pggpcnvjbgyy",
-        proPriceID: "pri_01m1symsxarc4c3jdea0ntb09w",
-        unlimitedPriceID: "pri_01m1syrdg05f49kz705gbzn6tz",
-        checkoutOrigin: URL(string: "https://sentwise.ai")!
-    )
-
     /// Paddle production credentials (item 74 cutover, 2026-09-20). The
     /// client-side token is frontend-scoped and safe to embed; price ids match
     /// `docs/tier-matrix.md` (Starter $9 / Pro $19 / Unlimited $39, monthly).
@@ -181,9 +169,9 @@ struct PaddleConfig: Sendable, Equatable {
         checkoutOrigin: URL(string: "https://sentwise.ai")!
     )
 
-    /// The config the app actually uses — production since the item 74 atomic
-    /// activation (2026-09-20: approved domain + live webhook confirmed, worker
-    /// on the live API base with live tier price vars). Point back at `sandbox`
-    /// only for local checkout testing against a sandbox-configured worker.
-    static let active: PaddleConfig = production
+    /// The config this build uses: `production` for Debug/Release builds, the
+    /// sandbox values from Info.plist for a QA build, or nil when a QA build's
+    /// Paddle values are incomplete or inconsistent — checkout is then
+    /// unavailable rather than falling back to production prices (item 123).
+    static let active: PaddleConfig? = BuildConfiguration.current.paddle
 }

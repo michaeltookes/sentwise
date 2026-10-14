@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "SettingsMigration")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "SettingsMigration")
 
 /// Launch-time settings migrations on `AppState`. Split out of
 /// `AppState+ManagedAccount` (item 100) so both files stay within length limits.
@@ -249,7 +249,7 @@ extension AppState {
     }
 
     private static var managedClerkEnvMarkerValue: String {
-        ClerkClient.defaultFrontendAPIBaseURLString
+        ClerkClient.configuredFrontendAPIBaseURL.absoluteString
     }
 
     private static func hasStoredManagedClerkClientToken(secrets: SecretStore) -> Bool {

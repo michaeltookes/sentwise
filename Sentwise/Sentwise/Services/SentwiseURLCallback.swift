@@ -15,12 +15,14 @@ enum SentwiseURLCallback: Equatable {
     /// OpenRouter redirect carrying the authorization code to exchange for a key.
     case openRouter(code: String, flowID: String?)
 
-    static let scheme = "sentwise"
+    /// The scheme this build registers: `sentwise` in production, the QA build's
+    /// own scheme (e.g. `sentwise-qa`) in a QA build (item 123).
+    static var scheme: String { BuildConfiguration.current.urlScheme }
     static let managedOAuthHost = "oauth-callback"
     static let openRouterHost = "openrouter-callback"
 
-    init?(url: URL) {
-        guard url.scheme?.lowercased() == Self.scheme else { return nil }
+    init?(url: URL, scheme: String = SentwiseURLCallback.scheme) {
+        guard url.scheme?.lowercased() == scheme.lowercased() else { return nil }
 
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         // The authority is the host for `scheme://host?…`, but a `scheme:path`

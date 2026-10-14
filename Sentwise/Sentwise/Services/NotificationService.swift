@@ -2,7 +2,7 @@ import Foundation
 import os
 import UserNotifications
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "Notifications")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "Notifications")
 
 /// `userInfo` key carrying a draft's `identity` on its notification.
 private let draftIdentityUserInfoKey = "draftIdentity"

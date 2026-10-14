@@ -12,7 +12,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     // MARK: - Properties
 
     private(set) var statusItem: NSStatusItem!
-    private let appState: AppState
+    let appState: AppState
     private let updateManager: UpdateManager
 
     /// The native settings window (item 65), managed by its own controller.
@@ -87,7 +87,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         if let button = statusItem.button {
             button.image = NSImage(
                 systemSymbolName: "envelope.badge",
-                accessibilityDescription: "Sentwise"
+                accessibilityDescription: BuildConfiguration.current.appDisplayName
             )
             button.image?.isTemplate = true  // Adapts to light/dark menu bar.
 
@@ -98,7 +98,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             // the accessibility tree as an anonymous "Item-0", so assistive
             // tech and automated QA cannot locate the Sentwise menu by name.
             button.setAccessibilityIdentifier("sentwise.statusItem")
-            button.setAccessibilityLabel("Sentwise")
+            button.setAccessibilityLabel(BuildConfiguration.current.appDisplayName)
         }
 
         let menu = NSMenu()
@@ -113,6 +113,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // "notifications are off" row appears/clears; the async result lands before
         // the next open, and applicationDidBecomeActive keeps it fresh meanwhile.
         Task { await appState.refreshNotificationPermission() }
+        appState.refreshLaunchAtLoginState()
         menu.removeAllItems()
         for item in buildMenuItems() {
             menu.addItem(item)
@@ -179,7 +180,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         var items: [NSMenuItem] = []
 
         // Header (disabled label)
-        let header = NSMenuItem(title: "Sentwise", action: nil, keyEquivalent: "")
+        let header = NSMenuItem(title: BuildConfiguration.current.appDisplayName, action: nil, keyEquivalent: "")
         header.isEnabled = false
         items.append(header)
 
@@ -235,11 +236,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         items.append(.separator())
 
-        // Launch at Login toggle
-        let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        login.target = self
-        login.state = appState.launchAtLogin ? .on : .off
-        items.append(login)
+        // Launch at Login toggle, plus the approval caption/action (item 113).
+        items.append(contentsOf: launchAtLoginMenuItems())
 
         // Check for Updates
         let updateTitle = updateManager.isConfigured
@@ -256,7 +254,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         items.append(.separator())
 
         // Quit
-        let quit = NSMenuItem(title: "Quit Sentwise", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit \(BuildConfiguration.current.appDisplayName)", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         items.append(quit)
 
@@ -264,10 +262,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     // MARK: - Actions
-
-    @objc private func toggleLaunchAtLogin() {
-        appState.setLaunchAtLogin(!appState.launchAtLogin)
-    }
 
     @objc private func toggleWatching() {
         appState.toggleWatching()

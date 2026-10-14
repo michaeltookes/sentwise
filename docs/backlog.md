@@ -24,6 +24,20 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 > **Item format:** every item has a bold title, a one-line summary, a user story (*As a … I want … so that …*), and acceptance criteria. See `CLAUDE.md` for backlog conventions.
 
+## Milestones (pipeline, 2026-10-12)
+
+> Added by the pipeline replan (`docs/plan.md`, test cases in `docs/qa/test-cases.md`). Ordered by distance to the first paid subscription. This section only groups items by milestone; it does not move, renumber, or reword anything below. Items from other repos are filed there by the orchestrator. New items for this plan are 117–124, appended at the end of the file.
+
+| Milestone | Demo | sentwise items | Elsewhere |
+|---|---|---|---|
+| **M1 v0.2.1 ships** | Sparkle offers 0.2.1 with release notes; status item found by name; Setup Assistant finished plus first follow-up and inbox reply drafts on the clean onboarding path | 113, 116, 117; in flight: 112, 114, 115; QA leg of 74 (§6) | PR #99 (live tests dispatch-only); genkei-ops P1-3 |
+| **M2 Funnel is measurable** | `sentwise.ai/changelog` live; pricing cards per tier; `GET /admin/funnel` returns trials, checkouts, paid by tier | 88, 118 | sentwise-landing-page 10, 14; genkei-ops P1-2, 6c-1, 6c-2 |
+| **M3 Trial to paid verified** | Fresh account: reminders → "Trial ended" → checkout → "You're on Starter" → cancel shows "Cancels on <date>" | 123 (prerequisite), 124, 119, 87, 92, 120 | sentwise-service: 123 (sandbox deployment), 124 (paused-status fix) |
+| **M4 First-run friction cut** | Workspace domain auto-detected; "Continue with Google"; branded verification email | 110, 105, 106, 121, 122 | Clerk dashboard (owner): 74 §1 callback allowlist, 106 templates |
+| **M5 Public link and 30-day push** | Public post → site → download → trial on a clean browser; support drill answered within SLA | 74 (close) | genkei-ops P1-1, P1-4, 6c-3/4/5; launch kit; sentwise-landing-page 9 |
+
+After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
+
 ---
 
 ## High Priority
@@ -101,14 +115,6 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Unit-test the MX-pattern classifier; live-verify once with a real Workspace domain (prowlqa.dev).
 
 ## Medium Priority
-
-113. **Launch at login reverts silently when the login item is disabled in System Settings** — *found 2026-10-08, wave 1 settings sweep on Lucius*
-    Turning on "Launch at login" calls `SMAppService.mainApp.register()`, which succeeds, but `backgroundtaskmanagementd` reports `registerLaunchItem: found existing item … disposition=[disabled, allowed, notified]`, so `status` stays `.requiresApproval`, `LoginItemManager.isEnabled` reads false, and the toggle snaps off within a second with no message and no log line (the manager only logs on a thrown error). The user cannot tell whether the click did anything. Reproduced on macOS 26.4.1 with the signed 0.2.0 (5) build in /Applications.
-    *As a user who once turned Sentwise off in Login Items, I want the toggle to tell me macOS needs my approval, so that I can enable it in System Settings instead of clicking a switch that keeps turning itself off.*
-    - Handle `.requiresApproval` explicitly: keep the toggle on, show a caption explaining that macOS disabled the item, with a button that opens `x-apple.systempreferences:com.apple.LoginItems-Settings.extension`.
-    - Log the resulting `SMAppService` status at info level after every register and unregister, not only on thrown errors.
-    - Mirror the same state and caption in the status-menu "Launch at Login" item.
-    - Unit-test the status-to-UI mapping for `.enabled`, `.requiresApproval`, `.notRegistered`, and `.notFound`.
 
 83. **Approval-signal learning loop (accept-as-is / edit / deny → better drafts + smarter filtering)** — *ongoing/strategic; phase 1 is a cheap early slice*
     Treat the user's action on every draft — approved untouched, edited-then-approved, or denied — as durable feedback that (a) improves drafting in the user's voice and (b) tightens what gets drafted at all, so the assistant manages the inbox better the more it's used. Prompted by the owner seeing drafts generated for mail that shouldn't be drafted, and realizing a one-shot-accept vs edit vs deny signal is the raw material for learning the user over time.
@@ -281,6 +287,8 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - These are **billing/licensing events the service inherently holds** — not device telemetry — so **no opt-in consent prompt is required** (distinct from item 83's opt-in off-device feedback). No call or draft content is involved.
     - Surfaced to the maintainer via the existing `/admin` surface (alongside 56b's margin dashboard) or an export; feeds marketing ("X% convert, mostly to Pro").
     - Depends on 56c emitting the conversion/subscription event; complements 56b (usage/margin).
+    - **QA population kept separate (pipeline replan 2026-10-12):** every funnel datapoint is tagged at write time with a population, `qa` or `live`. An event is `qa` when the account's email domain is in the Worker var `QA_EMAIL_DOMAINS` (item 119's list, initially `prowlqa.dev`) The sandbox deployment (item 123) writes to its own Analytics Engine dataset, so sandbox events never reach the production funnel at all. The tag is stored as an Analytics Engine blob, never the email. `GET /admin/funnel`'s top-level counters (`trialsStarted`, `checkoutsOpened.{starter,pro,unlimited}`, `subscriptionsActivated.{starter,pro,unlimited}`, `subscriptionsCanceled`, `trialToPaidRate`) count the `live` population only. A `qa` object carries the same nine fields for the `qa` population, so each population's rate has a numerator and a denominator from that population alone: QA trial starts never inflate the live denominator, and QA purchases never inflate the live numerator. Vitest: a QA-domain trial start and a QA-domain activation each increment only `qa.*`. **`subscriptionsCanceled` counts effective cancellations only:** one per `subscription.canceled` webhook, dated when Paddle sends it. A cancellation scheduled for the period end (`subscription.updated` with `scheduled_change.action: "cancel"`, item 92) is not counted until `subscription.canceled` arrives at its effective date, matching the webhook's existing mapping, where only `subscription.canceled` produces a canceled status; a scheduled cancel that is later undone is therefore never counted. Vitest: a `subscription.updated` carrying a scheduled cancel leaves `subscriptionsCanceled` unchanged, and the later `subscription.canceled` increments it once.
+    - **Cohorts and time-to-convert (plan follow-up 6h, 2026-10-13):** the cohort-by-signup-week and time-to-convert metrics above ship in M2 with the funnel, not later. `GET /admin/funnel` returns `cohorts[]` for the live population and `qa.cohorts[]` for the QA population: one element per signup week (ISO week, Monday UTC, of the account's trial start) overlapping the requested range, ordered by week, each `{ weekStart, trialsStarted, converted, convertedByTier: {starter, pro, unlimited}, medianDaysToConvert }`, where `converted` counts that cohort's first paid activations up to the range end, `convertedByTier` sums to `converted`, and `medianDaysToConvert` is the median of whole days from trial start to first activation (`null` when nothing converted). The activation datapoint records the account's trial start date (from its Clerk metadata) so cohort and days are computed without a join; comp grants (item 111) are not conversions. Vitest: a trial started in week W and activated on Pro 3 days later yields cohort W with `trialsStarted` 1, `converted` 1, `convertedByTier.pro` 1, `medianDaysToConvert` 3, in the matching population only. **Verified by:** TC-M2-06, TC-M2-08, TC-M3-05, TC-M3-09.
 
 92. **Surface scheduled cancellation ("Cancels on <date>") in the Subscription pane** — *discovered 2026-09-12 during the items 90/91 cancel live-verify*
     Canceling from the Paddle portal defaults to **cancel at end of billing period**: Paddle fires `subscription.updated` with `status` still `active` plus `scheduled_change: {action: "cancel", effective_at: …}`. The worker's webhook maps only `status` and ignores `scheduled_change`, so `/v1/me` reports a plain active subscription and the pane shows nothing about the pending cancellation until the period actually ends (when `subscription.canceled` fires and the existing canceled-state handling kicks in). Observed live: owner canceled in the portal and the app kept showing the active Pro plan with no hint the cancel had registered.
@@ -294,8 +302,8 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 114. **Sparkle update dialog shows no release notes** — *found 2026-10-08 by the Lucius install-path QA run (0.1.2 → 0.2.0 update)*
     The update prompt ("Sentwise 0.2.0 is now available—you have 0.1.2") renders with an empty release-notes area: the appcast item carries no description or `releaseNotesLink`, even though every release has a human-written CHANGELOG section. Users deciding whether to update see a version number and nothing else.
     *As a user prompted to update, I want to see what changed, so that I can update confidently instead of clicking through a blank dialog.*
-    - Release pipeline (release.sh / `generate_appcast`): embed the release's CHANGELOG section (or a `releaseNotesLink` to the GitHub release) in each appcast item.
-    - Verify on the next release: the Sparkle dialog on a previous-version install renders the notes.
+    - ~~Release pipeline (release.sh / `generate_appcast`): embed the release's CHANGELOG section (or a `releaseNotesLink` to the GitHub release) in each appcast item.~~ **Done 2026-10-11 (branch `appcast-release-notes`):** `changelog-to-html.sh` renders the version's CHANGELOG section to an HTML fragment (fails if missing/empty); `write-appcast.sh` places it next to the DMG and runs Sparkle 2.9.5 `generate_appcast --embed-release-notes`, then fails unless the item's `<description>` is non-empty; `release.sh` pre-flights the section before archiving. Fixture test: `Distribution/scripts/tests/test-release-notes.sh`. Documented in `docs/releasing.md` / `docs/ci-release.md`.
+    - **Open:** verify on the next release that the Sparkle dialog on a previous-version install renders the notes (now a step in the release docs). Resolve the item once observed.
     - No app code change expected — this is appcast generation.
 
 ## Low Priority
@@ -303,9 +311,9 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 116. **Homebrew cask uses deprecated `depends_on macos:` string-comparison syntax** — *found 2026-10-08 by the Lucius install-path QA run (`brew install --cask` warning)*
     `brew install --cask michaeltookes/tap/sentwise` succeeds but warns that the cask's `depends_on macos:` string-comparison form is deprecated. The cask is regenerated by the CI tap bump on every release, so the fix belongs in the generator template, not a one-off tap edit.
     *As a Homebrew user, I want the cask to install without deprecation warnings, so that the install looks healthy and keeps working when brew removes the deprecated form.*
-    - Update the cask template the release pipeline writes (symbol/comparison syntax per current Homebrew cask docs, e.g. `depends_on macos: ">= :sonoma"` form).
+    - ✅ Update the cask template the release pipeline writes. *(2026-10-12, branch `cask-depends-on-syntax`: `Distribution/sentwise.rb` now uses the bare-symbol form `depends_on macos: :sonoma`, which Homebrew reads as Sonoma or newer and parses without the deprecation warning. Note: `">= :sonoma"` was the deprecated form, not the fix. New CI test `Distribution/scripts/tests/test-cask-template.sh` guards it against drift and against `MACOSX_DEPLOYMENT_TARGET`.)*
     - Confirm the next release's tap bump produces a warning-free `brew install --cask`.
-    - One-off: patch the live tap cask to match so current installs stop warning.
+    - One-off: patch the live tap cask to match so current installs stop warning. *(2026-10-12: pushed as `michaeltookes/homebrew-tap` branch `cask-depends-on-syntax`, awaiting merge. The tap's `containerbar` and `prompter` casks have the same deprecated line.)*
 
 31. **Outlook / Microsoft 365 support**
     Add an Outlook/M365 provider behind the email-provider abstraction.
@@ -388,3 +396,82 @@ Prioritized list of planned features, improvements, and technical debt for **sen
     - Uses the user's own CRM credentials; calls go directly Mac → CRM, keeping the local-first promise.
     - Off by default, per-call opt-out; failures never block the email send itself.
     - Positioned as the **Unlimited-tier** feature in the item 56/98 pricing model — the follow-up email sells to the rep, CRM hygiene sells to the manager who holds budget.
+
+## Pipeline milestone items (2026-10-12)
+
+> New items from the pipeline replan (`docs/plan.md`). Each is tagged with its milestone and its priority tier, and names the test cases that verify it (`docs/qa/test-cases.md`). Items that change `sentwise-service` are tracked here because that repo has no backlog and shared work uses sentwise numbers.
+
+117. **Release v0.2.1** — *(M1, High)*
+    Cut the patch release that ships items 112, 114 (appcast release notes), 115, 113, and 116, so the QA Mac and early users get the fixes and the update dialog finally shows notes.
+    *As a 0.2.0 user, I want a 0.2.1 update that tells me what changed, so that I update with confidence.*
+    - `/release-prep` 0.2.1: CHANGELOG `## [0.2.1]` written for humans (fixes listed by user-visible effect); build number above 5; tag pipeline green; DMG notarized and stapled; appcast item carries the 0.2.1 notes (item 114's generator); cask bumped with a matching sha256 and the item 116 syntax.
+    - GitHub release notes link the README quickstart; `sentwise.ai/download` resolves to the 0.2.1 DMG.
+    - Item 114 resolves when TC-M1-01 shows notes in the dialog on a 0.2.0 install.
+    - **Verified by:** TC-M1-01, TC-M1-02, TC-M1-10.
+
+118. **Checkout-intent counter on the Worker (`sentwise-service`)** — *(M2, High)*
+    Count when a signed-in account opens checkout or a plan change, so the funnel has a stage between "trial started" and "paid".
+    *As the maintainer, I want to see how many trial users open checkout, so that I can tell a pricing problem from a product problem.*
+    - `/v1/paddle/checkout` and `/v1/paddle/change-plan` write one Analytics Engine datapoint per call: HMAC-hashed account id (same scheme as `analytics.ts`), action, requested tier, trial/paid state. No email, no payment data.
+    - The counts surface in item 88's `GET /admin/funnel` as `checkoutsOpened.{starter,pro,unlimited}` (both actions, by requested tier; same shape as `subscriptionsActivated`). Each tier counts **unique accounts**, not calls: `/admin/funnel` deduplicates by the stored HMAC account id within the requested date range, so retries, repeat clicks, and repeated plan changes from one account to the same tier count once. An account that requests two tiers counts once in each. No separate attempts count is exposed.
+    - Comp accounts (item 111) and calls that fail auth are not counted.
+    - Each datapoint carries item 88's population tag. Checkouts by QA-domain accounts (`QA_EMAIL_DOMAINS`) count only in `/admin/funnel`'s `qa.checkoutsOpened.*`, never in the live `checkoutsOpened.*`. Checkouts opened from the QA build reach only the sandbox deployment (item 123) and its own dataset.
+    - Vitest: datapoint written once per successful call, never on 401, never for comp; `/admin/funnel` counts two Starter checkouts from one account as `checkoutsOpened.starter` = 1, and a Starter then a Pro checkout from one account as 1 in each tier.
+    - **Verified by:** TC-M2-05, TC-M2-07, TC-M2-08.
+
+119. **QA trial override: admin route to set a test account's trial start (`sentwise-service`)** — *(M3, High)*
+    Let QA put a throwaway account at any point of the 14-day trial, so trial reminders and the trial-ended path can be tested in minutes instead of two weeks.
+    *As QA, I want to set a test account's trial start date, so that I can verify the 7-day, 1-day, and trial-ended states on production builds.*
+    - `POST /admin/trial` with `{email, startedAt}` behind the existing `authorizeAdmin` gate (`ADMIN_TOKEN`; invisible 404 when unset, 401 otherwise).
+    - Only emails whose domain is in a Worker var `QA_EMAIL_DOMAINS` (initially `prowlqa.dev`) can be changed; anything else returns 403 `trial_override_forbidden` and writes nothing.
+    - Writes only `privateMetadata.trialStartedAt`; returns the computed trial state; an audit datapoint like item 111's `admin_comp_*` (hashed id, action).
+    - Never alters an account with a real Paddle subscription or an active comp (409).
+    - README documents the curl with a `$ADMIN_TOKEN` placeholder. Production deploy is Michael's.
+    - **Verified by:** TC-M3-01, TC-M3-02, TC-M3-04.
+
+120. **Release v0.2.2 (trial reminders and scheduled cancellation)** — *(M3, High)*
+    Ship items 87 and 92 in a signed release so the trial-to-paid path can be verified on production.
+    *As a trial user, I want the release that warns me before my trial ends and shows my cancellation date, so that billing never surprises me.*
+    - `/release-prep` 0.2.2 after 87, 92, 119 (deployed), 124, and 123 (sandbox deployment live, QA build configuration merged) are in; the 0.2.2 tag is then deployed to the sandbox Worker and cut as a QA build; CHANGELOG section written; appcast notes present; cask bumped.
+    - Item 87's notification copy follows TC-M3-02/03 ("Your Sentwise trial ends in 7 days", "Your Sentwise trial ends tomorrow"); item 92 shows "Cancels on <date>".
+    - **Verified by:** TC-M3-05, TC-M3-06 (purchase in the 0.2.2 QA build against the sandbox deployment, item 123).
+
+121. **Re-enable "Continue with Google" for the Sentwise account on production** — *(M4, High)*
+    Turn managed Google sign-in back on once the owner has allowlisted the Worker callback in the production Clerk instance (`docs/launch-checklist.md` §1), removing the email-code round trip for most new users.
+    *As a new user, I want to sign in to Sentwise with my Google account, so that I don't wait for and paste an emailed code.*
+    - Precondition (owner): the `/auth/callback` redirect is allowlisted in production Clerk; until then this item stays blocked.
+    - Flip `AppState.isManagedGoogleSignInEnabled` to true; verify the browser hand-back on a production build; tick the two open §1 boxes in the launch checklist.
+    - Unit tests: the option shows when enabled, and stays hidden in Prowl hunt mode unless the fake is active (existing behavior).
+    - **Verified by:** TC-M4-03.
+
+122. **Release v0.2.3 (first-run friction)** — *(M4, High)*
+    Ship items 110, 105, and 121 in a signed release before the public link goes out.
+    *As a first-time user from the public link, I want onboarding to recognize my company mailbox and let me sign in with Google, so that I reach my first draft without help.*
+    - `/release-prep` 0.2.3; CHANGELOG section; appcast notes; cask bumped.
+    - Item 106's Clerk email branding is live before the release is announced (dashboard work, no app code).
+    - **Verified by:** TC-M4-06 (and TC-M4-01 to TC-M4-05 on this build).
+
+123. **QA purchase path via a sandbox deployment of sentwise-service** — *(M3, High; Michael 2026-10-12: build it now; re-scoped 2026-10-13)*
+    The comp entitlement (111) skips checkout, so nothing proves the paid path end to end. TC-M3-05 is blocked at the payment step until a test method exists.
+    > **Re-scoped 2026-10-13 (genkei-ops decision of that date):** the first design, a per-account Paddle lane inside the production Worker, was abandoned after six review rounds kept finding timing windows between out-of-order Paddle webhooks, Clerk metadata, and the Durable Object. Its `paddle-sandbox-lane` branches were closed unmerged. The production Worker now carries **no sandbox state at all**: no `PADDLE_ENV` switch, no per-account lane, no lane lock, no lane-reset route, no lane fields in `/v1/me`. The two production bugs that work uncovered are item 124.
+    *As the owner, I want QA to complete a real checkout on a test account every release, so that the one flow that makes money is never the one flow nobody tests.*
+    - **Second Worker deployment (`sentwise-service`):** a `wrangler` environment `sandbox` in `wrangler.jsonc` with its own Worker name (`sentwise-inference-sandbox`) and its own `workers.dev` hostname, its own Durable Object namespace (`ACCOUNT_QUOTA` is per-Worker), its own KV namespaces if any are added, and its own Analytics Engine dataset (for example `sentwise_usage_sandbox`) so no sandbox datapoint can land in the production funnel. Secrets for that environment: Paddle **sandbox** API key, sandbox webhook secret, sandbox price IDs mirroring the tier matrix, Clerk **development instance** keys, `ADMIN_TOKEN` (a different value from production), and an inference provider key (a separate key with a low spend cap). `QA_EMAIL_DOMAINS` is set the same as production. The code is identical to production; only configuration differs.
+    - **Deploy:** a `scripts/` deploy script (`wrangler deploy --env sandbox`) and a **dispatch-only** CI job (`workflow_dispatch` with a `ref` input; never on push) in its own GitHub environment `sandbox`, running the same lint/typecheck/test gate as the production deploy. The Paddle sandbox webhook points at the sandbox hostname only.
+    - **QA build of the app (`sentwise`):** a `QA` build configuration driven by an xcconfig: bundle identifier suffix `.qa`, app name **Sentwise QA**, status item accessibility label "Sentwise QA", its own Keychain service (derived from the bundle identifier, so it never reads or writes the production app's `com.tookes.Sentwise` items; see item 115), a Sparkle updater that is never started (below), service base URL pointing at the sandbox hostname, and Paddle client config for the sandbox environment, and the **Clerk development instance's Frontend API URL** (plus its publishable key, if the app uses one), all from the xcconfig. The Clerk setting matters on its own: `ClerkClient` defaults to `https://clerk.sentwise.ai` and signs in against Clerk directly, so pointing only the service URL at the sandbox would create F3 in production Clerk. It installs as `/Applications/Sentwise QA.app` and coexists with the production install on the QA Mini.
+    - **No self-update in the QA build (Codex P2, 2026-10-13):** the guarantee is that the QA build **never starts its Sparkle updater** (`UpdateManager.startUpdater` returns early when `BuildConfiguration.allowsAutomaticUpdates` is false), so neither a scheduled check nor a manual one can fetch the production appcast and replace the QA install with a production build. Turning off automatic checks alone would not be enough, because the About pane and the status menu call `checkForUpdates()` directly. Both manual entry points must stay **disabled** in the QA build: About shows **Check for Updates…** disabled with "Updates are turned off in QA builds.", and the status menu shows **Check for Updates (Unavailable)** disabled. Verified by TC-M3-05 step 8.
+    - **Local data isolation (Codex P1, 2026-10-13):** a separate bundle identifier and Keychain service are not enough, because `PersistenceService.init()` hardcodes `~/Library/Application Support/Sentwise` (`docs/local-data.md`). Every per-app location is derived from the build instead of hardcoded: the Application Support directory (`~/Library/Application Support/Sentwise QA` for the QA build), the UserDefaults suite or domain, caches, logs and `Logger` subsystem, temporary files, and any other per-app identifier. **Erase all local data** and the item 96 purges in the QA build touch only the QA build's directory and Keychain service. Unit test: the persistence root, defaults suite, and Keychain service resolve from the bundle identifier, and the production configuration still resolves to the existing `Sentwise` paths, so current users' data stays where it is.
+    - **URL scheme isolation (Codex P2, 2026-10-13):** the QA build registers `sentwise-qa://` only and never `sentwise://`, so macOS cannot route a production sign-in or OpenRouter callback to the QA app. The scheme comes from the xcconfig; the Worker's `/auth/callback` and `/openrouter/callback` landing pages forward to a scheme read from a Worker var (`sentwise` on production, `sentwise-qa` on the sandbox deployment), and the sandbox's Clerk development-instance redirect allowlist uses the sandbox hostname. The app's callback parser accepts only its own build's scheme. A dispatch-only workflow builds it from a given tag, signed and notarized like a release, as a workflow artifact; it is never published to the appcast, the cask, or a GitHub release. The production build configuration is unchanged.
+    - **Lockstep:** every release tag is deployed to both Workers (production by the existing deploy, sandbox by dispatching the sandbox job with the same tag), and the QA build is cut from the same tag as the release it verifies. `docs/billing-qa.md` records the procedure and the currently deployed sandbox tag.
+    - Document the Paddle sandbox catalog, the Clerk development instance, the sandbox hostname, and where test card numbers live in `docs/billing-qa.md`; secrets stay in the Worker's env and GitHub environment secrets, never in docs. Vendor setup (sandbox catalog, webhook, Clerk dev instance) goes through `/vendor-config`.
+    - Fallback test methods, **only if the sandbox deployment slips**, in order: a single-use 100%-off Paddle discount code on production; a real $9 Starter purchase refunded the same day.
+    - Done when sign-in and session-token minting in the QA build go to the Clerk development instance (no request to `clerk.sentwise.ai`; F3 exists in the development instance and not in production Clerk, checked in TC-M3-05 step 7), TC-M3-05 runs green on the sandbox deployment from the QA build, TC-M3-11 shows the production install's data byte-identical across the QA run, and TC-M4-03 shows the production Google sign-in returning to **Sentwise** with the QA build installed.
+    - **Verified by:** TC-M3-05, TC-M3-11, TC-M4-03 (and TC-M3-06 to TC-M3-10 run on the same deployment).
+
+124. **Production billing fixes found during the lane work** — *(M3, High; found 2026-10-13 in the abandoned item 123 lane branches)*
+    Two production defects surfaced while building the per-account lane; they are cherry-picked onto small branches in each repo, independent of the sandbox deployment.
+    *As a paying user, I want my subscription state and plan buttons to reflect what Paddle actually says, so that a paused plan reads as paused (resumable from Manage billing) rather than canceled, and I cannot click into a broken checkout.*
+    - `sentwise-service`: a paused subscription was stored as `canceled`. Keep Paddle's raw `status` in the stored subscription; `/v1/me` reports it as paused, not canceled. A paused subscription is **not** entitled to draft (Paddle stops billing while paused), so draft requests return 402. Vitest: a `subscription.paused` webhook stores `paused` and drafting returns 402; a later `subscription.resumed` returns it to `active` and drafting works again.
+    - `sentwise`: the Subscription pane's plan-change buttons (**Subscribe**, plan cards, **Manage plan**) could be enabled while `/v1/me` is still loading and no Paddle config is present. Disable them until the Paddle config is loaded; show the existing loading state meanwhile. Unit test: buttons disabled with no Paddle config, enabled once it loads.
+    - `sentwise`, paused handling on the client: decode `paused` from the service's `paddleStatus` in `/v1/me` (today the app has no paused state); the Subscription pane shows exactly "Paused — your <Plan> subscription is paused. Resume it in Manage billing." with **Manage billing** available and **Subscribe** and the plan cards hidden; drafting is refused while paused, matching the Worker, and returns after resume. Regression tests: `paused` decodes to the paused state, the pane renders that string with only **Manage billing**, and drafting is refused while paused and allowed after resume; `active`, `canceled`, and scheduled-cancel rendering are unchanged.
+    - Shipped in v0.2.1 (PR 107) and the matching Worker deploy.
+    - **Verified by:** TC-M3-10 (paused status on the sandbox deployment); TC-M3-05 steps 2–3 for the buttons (they open a working checkout once loaded; the disabled-while-loading state is covered by the unit test, since QA cannot hold `/v1/me` mid-load).

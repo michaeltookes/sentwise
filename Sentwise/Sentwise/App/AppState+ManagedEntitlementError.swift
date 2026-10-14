@@ -47,7 +47,7 @@ private extension SubscriptionSnapshot {
 
 private extension ManagedSubscription.Status {
     func blockedByManagedEntitlementError(plan: ManagedSubscription.Plan) -> Self {
-        if self == .canceled || self == .lapsed {
+        if self == .canceled || self == .paused || self == .lapsed {
             return self
         }
         if plan == .trial || plan == .noPlan {

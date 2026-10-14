@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "Onboarding")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "Onboarding")
 
 /// First-run onboarding state and transitions on `AppState`. Kept in a separate
 /// file so `AppState` stays within the file/type length limits.

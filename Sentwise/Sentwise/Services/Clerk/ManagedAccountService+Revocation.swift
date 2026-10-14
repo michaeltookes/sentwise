@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let revocationLogger = Logger(subsystem: "com.tookes.Sentwise", category: "ManagedAccountService")
+private let revocationLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedAccountService")
 
 private struct SignOutInvalidationAttempt {
     let markerPersisted: Bool

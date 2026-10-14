@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let quotaLogger = Logger(subsystem: "com.tookes.Sentwise", category: "ManagedQuota")
+private let quotaLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedQuota")
 
 struct ManagedAccountStatusRefreshOrdering {
     var startedGeneration: UInt64 = 0

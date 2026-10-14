@@ -3,7 +3,7 @@ import Combine
 import os
 import Sparkle
 
-private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "Updates")
+private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "Updates")
 
 /// Manages application updates via Sparkle.
 ///
@@ -67,7 +67,15 @@ final class UpdateManager: ObservableObject {
     /// Starts the updater. Call after launch completes. A start failure (e.g. a
     /// malformed feed URL or public key) leaves the app fully usable with
     /// updates disabled instead of interrupting the user.
-    func startUpdater() {
+    func startUpdater(allowsAutomaticUpdates: Bool = BuildConfiguration.current.allowsAutomaticUpdates) {
+        // A QA build (item 123) must never update itself: the appcast serves the
+        // production app, which would replace the QA install.
+        guard allowsAutomaticUpdates else {
+            isConfigured = false
+            unavailableReason = "Updates are turned off in QA builds."
+            logger.info("Sparkle updater not started: QA build")
+            return
+        }
         do {
             try updaterController.updater.start()
             isConfigured = true
