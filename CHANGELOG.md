@@ -5,6 +5,42 @@ All notable changes to Sentwise are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-10-13
+
+Sentwise 0.2.1 is a polish release. Update prompts now show what changed,
+Launch at Login tells you when macOS has switched it off, and the Subscription
+pane handles paused plans and slow account loads correctly.
+
+### Added
+
+- **Release notes in the update window** — when Sentwise offers an update, the
+  dialog now shows what's new in that version, so you know what you're
+  installing before you click Install.
+- **Paused subscriptions** — if you pause your plan in Paddle's billing portal,
+  Settings → Subscription now shows "Paused" and points you to Manage billing
+  to resume it, instead of treating the plan as canceled. Drafting is
+  unavailable while a plan is paused and comes back when you resume.
+
+### Changed
+
+- **Plan changes wait for your account to load** — the Subscribe button, plan
+  cards, and Manage plan stay disabled with a "Loading your account…" caption
+  until Sentwise has loaded your subscription, so you can't open a checkout
+  that isn't ready yet.
+
+### Fixed
+
+- **Launch at Login no longer turns itself off silently** — if Sentwise was
+  switched off in System Settings → Login Items, the toggle now stays on and
+  explains that macOS disabled it, with an Open Login Items… button in Settings
+  and in the menu bar menu so you can turn it back on.
+- **The menu bar icon is labeled for accessibility** — VoiceOver and other
+  assistive tools now find the Sentwise menu bar item by name instead of an
+  unnamed icon.
+- **Homebrew installs without a warning** — installing or upgrading with
+  `brew install --cask michaeltookes/tap/sentwise` no longer prints a
+  deprecation warning about the macOS version requirement.
+
 ## [0.2.0] - 2026-10-07
 
 Sentwise 0.2.0 — the first public release. Sign in, start a 14-day free trial, and
@@ -123,6 +159,7 @@ Initial release.
 - **Private by design** — local-first storage keeps settings, history, and secrets on your Mac. When you use a remote AI provider, Sentwise sends the relevant mail content, transcript text, and voice profile only to the provider you configure.
 - **Signed, notarized, auto-updating** — Developer ID–signed DMG with Sparkle auto-update and a Homebrew cask (`brew install --cask michaeltookes/tap/sentwise`).
 
+[0.2.1]: https://github.com/michaeltookes/sentwise/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/michaeltookes/sentwise/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/michaeltookes/sentwise/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/michaeltookes/sentwise/compare/v0.1.0...v0.1.1
