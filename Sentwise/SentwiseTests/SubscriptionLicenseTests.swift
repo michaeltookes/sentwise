@@ -14,6 +14,7 @@ final class SubscriptionLicenseTests: XCTestCase {
         XCTAssertTrue(SubscriptionLicenseEvaluator.isEntitled(.trialing))
         XCTAssertFalse(SubscriptionLicenseEvaluator.isEntitled(.pastDue))
         XCTAssertFalse(SubscriptionLicenseEvaluator.isEntitled(.canceled))
+        XCTAssertFalse(SubscriptionLicenseEvaluator.isEntitled(.paused))
         XCTAssertFalse(SubscriptionLicenseEvaluator.isEntitled(.lapsed))
         XCTAssertFalse(SubscriptionLicenseEvaluator.isEntitled(.unknown))
     }
@@ -28,6 +29,19 @@ final class SubscriptionLicenseTests: XCTestCase {
     func testLiveCanceledIsNotEntitledEvenWithEntitledCache() {
         let cached = snapshot(status: .active, capturedAt: now)
         let license = SubscriptionLicenseEvaluator.evaluate(liveStatus: .canceled, cached: cached, now: now)
+        XCTAssertEqual(license, .notEntitled)
+    }
+
+    // Item 124: the Worker denies drafting while paused, so the app does too.
+    func testLivePausedIsNotEntitledEvenWithEntitledCache() {
+        let cached = snapshot(status: .active, capturedAt: now)
+        let license = SubscriptionLicenseEvaluator.evaluate(liveStatus: .paused, cached: cached, now: now)
+        XCTAssertEqual(license, .notEntitled)
+    }
+
+    func testOfflineWithPausedCacheIsNotEntitledAndNotGraced() {
+        let cached = snapshot(status: .paused, capturedAt: now)
+        let license = SubscriptionLicenseEvaluator.evaluate(liveStatus: nil, cached: cached, now: now)
         XCTAssertEqual(license, .notEntitled)
     }
 
