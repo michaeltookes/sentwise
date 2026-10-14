@@ -168,18 +168,116 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   fi
 fi
 
+# ---- Apple network retries --------------------------------------------------
+# notarytool and stapler talk to Apple services (appstoreconnect.apple.com,
+# api.apple-cloudkit.com). From GitHub-hosted runners those calls sometimes die
+# on transient DNS/transport errors (v0.2.1 run 38625814613: NSURLErrorDomain
+# -1003 "hostname could not be found" on submit, -1005 "connection was lost" on
+# validate), and each failure threw away ~18 minutes of release run.
+#
+# retry_apple CMD [ARGS...] runs CMD up to RETRY_APPLE_ATTEMPTS times (default
+# 3), sleeping 20s, 40s, then 60s between attempts (RETRY_APPLE_DELAYS). It
+# retries ONLY when the output shows a network/transport failure. A rejected
+# notarization ("status: Invalid", "Rejected") or a ticket that is genuinely
+# missing ("Record not found", "does not have a ticket") fails immediately with
+# the tool's own output, exactly as before. Any other failure also fails
+# immediately. The class of the last failure is left in RETRY_APPLE_LAST_CLASS
+# (ok | network | rejected | other) for callers that need to tell them apart.
+RETRY_APPLE_ATTEMPTS="${RETRY_APPLE_ATTEMPTS:-3}"
+RETRY_APPLE_DELAYS="${RETRY_APPLE_DELAYS:-20 40 60}"
+RETRY_APPLE_LAST_CLASS=""
+
+# Never retried: the notary service or CloudKit gave a real answer.
+APPLE_REJECT_RE='status: (Invalid|Rejected)|Rejected|Record not found|does not have a ticket'
+# Retried: transport/DNS failures and notary-service 5xx responses.
+APPLE_NETWORK_RE='NSURLErrorDomain|could not be found|connection was lost|timed out|temporarily unavailable|HTTP status code:? *5[0-9][0-9]|status code:? *5[0-9][0-9]|statusCode[=:] *5[0-9][0-9]|HTTP/[0-9.]+ 5[0-9][0-9]'
+
+# classify_apple_output LOGFILE RC -> prints ok | rejected | network | other
+classify_apple_output() {
+  local logfile="$1" rc="$2"
+  if grep -Eq "$APPLE_REJECT_RE" "$logfile"; then
+    echo rejected            # fatal even if the tool exited 0
+  elif [[ "$rc" -eq 0 ]]; then
+    echo ok
+  elif grep -Eiq "$APPLE_NETWORK_RE" "$logfile"; then
+    echo network
+  else
+    echo other
+  fi
+}
+
+retry_apple() {
+  local attempt=1 rc delay tmp logfile rcfile class
+  local -a delays
+  read -r -a delays <<< "$RETRY_APPLE_DELAYS"
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/sentwise-retry.XXXXXX")"
+  logfile="$tmp/out.log"
+  rcfile="$tmp/rc"
+  while :; do
+    # Stream the tool's output live (notarytool --wait runs for minutes) while
+    # also capturing it for classification. "|| rc=$?" keeps a failed attempt
+    # from tripping set -e / the ERR trap; the pipeline itself always succeeds.
+    { rc=0; "$@" || rc=$?; echo "$rc" > "$rcfile"; } 2>&1 | tee "$logfile"
+    rc="$(cat "$rcfile")"
+    class="$(classify_apple_output "$logfile" "$rc")"
+    RETRY_APPLE_LAST_CLASS="$class"
+    case "$class" in
+      ok) rm -rf "$tmp"; return 0 ;;
+      rejected)
+        log "Apple rejected this (not a network error) — not retrying: $1 $2"
+        rm -rf "$tmp"; [[ "$rc" -eq 0 ]] && rc=1; return "$rc" ;;
+      other)
+        rm -rf "$tmp"; return "$rc" ;;
+    esac
+    # class == network
+    if [[ "$attempt" -ge "$RETRY_APPLE_ATTEMPTS" ]]; then
+      log "Network error persisted after $attempt attempts — giving up: $1 $2"
+      rm -rf "$tmp"; return "$rc"
+    fi
+    delay="${delays[$((attempt - 1))]:-${delays[${#delays[@]}-1]:-0}}"
+    log "Network error from Apple (attempt $attempt/$RETRY_APPLE_ATTEMPTS, exit $rc) — retrying in ${delay}s: $1 $2"
+    sleep "$delay"
+    attempt=$((attempt + 1))
+  done
+}
+
 # notarytool submit, using whichever credential style is configured.
+# Failures use "|| return" so the function returns the exit code to its
+# top-level call site, where the ERR trap (not inherited by functions) names it.
 notarize_submit() {
   local artifact="$1"
   if [[ -n "${NOTARY_PROFILE:-}" ]]; then
-    xcrun notarytool submit "$artifact" --keychain-profile "$NOTARY_PROFILE" --wait
+    retry_apple xcrun notarytool submit "$artifact" --keychain-profile "$NOTARY_PROFILE" --wait || return
   else
-    xcrun notarytool submit "$artifact" \
+    retry_apple xcrun notarytool submit "$artifact" \
       --apple-id "$NOTARY_APPLE_ID" \
       --team-id "$NOTARY_TEAM_ID" \
       --password "$NOTARY_PASSWORD" \
-      --wait
+      --wait || return
   fi
+}
+
+# staple_and_validate ARTIFACT — staple the notarization ticket, then validate.
+# The staple is retried and stays fatal. The validate is retried too, but if it
+# still fails on a NETWORK error once retries are exhausted we only warn and
+# continue: stapler validate re-queries Apple's CDN to compare tickets, while
+# the successful staple above has already embedded the ticket in the artifact,
+# so a lookup outage after it says nothing about the artifact (v0.2.1 attempt 2
+# failed exactly here). A validate that fails for any other reason — no ticket,
+# record not found, bad signature — still fails the release. The DMG's
+# Gatekeeper check (spctl) in the smoke test below remains a hard gate.
+staple_and_validate() {
+  local artifact="$1"
+  local rc=0
+  retry_apple xcrun stapler staple "$artifact" || return
+  retry_apple xcrun stapler validate "$artifact" || rc=$?
+  [[ "$rc" -eq 0 ]] && return 0
+  if [[ "$RETRY_APPLE_LAST_CLASS" == "network" ]]; then
+    log "WARNING: stapler validate could not reach Apple after $RETRY_APPLE_ATTEMPTS attempts;"
+    log "         the staple succeeded (ticket embedded), so continuing: $artifact"
+    return 0
+  fi
+  return "$rc"
 }
 
 # ---- launch smoke test -----------------------------------------------------
@@ -330,8 +428,7 @@ else
   ditto -c -k --keepParent "$STAGE_DIR/$APP_DISPLAY_NAME.app" "$app_zip"
   notarize_submit "$app_zip"
   log "Stapling ticket to $APP_DISPLAY_NAME.app"
-  xcrun stapler staple "$STAGE_DIR/$APP_DISPLAY_NAME.app"
-  xcrun stapler validate "$STAGE_DIR/$APP_DISPLAY_NAME.app"
+  staple_and_validate "$STAGE_DIR/$APP_DISPLAY_NAME.app"
   rm -rf "$(dirname "$app_zip")"
 fi
 
@@ -346,8 +443,7 @@ else
   step "5b/7  Notarizing + stapling the DMG"
   notarize_submit "$DMG"
   log "Stapling ticket to the DMG"
-  xcrun stapler staple "$DMG"
-  xcrun stapler validate "$DMG"
+  staple_and_validate "$DMG"
 fi
 
 # ---- 6. launch smoke test (both modes) -------------------------------------
