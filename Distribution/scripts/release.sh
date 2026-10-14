@@ -2,8 +2,9 @@
 #
 # Sentwise release pipeline.
 #
-#   archive -> export (Developer ID) -> notarize+staple app -> DMG ->
-#   notarize+staple DMG -> launch smoke test -> appcast -> checksums
+#   release-notes pre-flight -> archive -> export (Developer ID) ->
+#   notarize+staple app -> DMG -> notarize+staple DMG -> launch smoke test ->
+#   appcast (with embedded CHANGELOG release notes) -> checksums
 #
 # Everything credential-related comes from the environment (nothing is
 # hardcoded or stored in the repo). A --dry-run mode exercises the whole
@@ -68,7 +69,7 @@ CLEAN_DIST=0
 VERSION=""
 BUILD=""
 
-usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -119,7 +120,7 @@ done < <(find "$OUT" -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' -o -n
 if [[ ${#stale[@]} -gt 0 ]]; then
   if [[ "$CLEAN_DIST" -eq 1 ]]; then
     log "Removing ${#stale[@]} stale dist artifact(s):"
-    for f in "${stale[@]}"; do echo "    rm $f"; rm -f "$f" "$f.sha256"; done
+    for f in "${stale[@]}"; do echo "    rm $f"; rm -f "$f" "$f.sha256" "${f%.*}.html"; done
   else
     {
       echo "release: dist/ contains artifacts from another version:"
@@ -133,6 +134,27 @@ fi
 
 # Always start the build stages from clean archive/export/stage dirs.
 rm -rf "$ARCHIVE" "$EXPORT_DIR" "$STAGE_DIR"
+
+# ---- release-notes pre-flight ----------------------------------------------
+# Every appcast item embeds the version's CHANGELOG.md section so the Sparkle
+# update dialog shows what changed (item 114: 0.2.0 shipped with a blank one).
+# Check it BEFORE the long archive/notarize steps: a signed release with no
+# '## [VERSION]' section fails here. A dry run only warns, so layout testing
+# still works mid-cycle; the rendered notes land in dist/ for inspection.
+NOTES_HTML="$OUT/${DMG_NAME%.dmg}.html"
+if "$SCRIPT_DIR/changelog-to-html.sh" "$VERSION" > "$NOTES_HTML.tmp"; then
+  mv "$NOTES_HTML.tmp" "$NOTES_HTML"
+  log "Release notes for $VERSION rendered from CHANGELOG.md -> $NOTES_HTML"
+else
+  rm -f "$NOTES_HTML.tmp"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "WARNING: no CHANGELOG.md section for $VERSION; a signed release would abort here."
+  else
+    echo "release: CHANGELOG.md has no usable '## [$VERSION]' section — refusing to ship" >&2
+    echo "         an update with blank Sparkle release notes. Write the section first." >&2
+    exit 1
+  fi
+fi
 
 # ---- credential pre-flight (signed only) -----------------------------------
 if [[ "$DRY_RUN" -eq 0 ]]; then
@@ -324,32 +346,12 @@ step "7/7  Appcast + checksums"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   log "Appcast — SKIPPED (dry-run; needs the EdDSA private key)"
 else
-  gen_appcast="$(command -v generate_appcast || true)"
-  [[ -z "$gen_appcast" && -n "${SPARKLE_BIN:-}" ]] && gen_appcast="$SPARKLE_BIN/generate_appcast"
-  if [[ -z "$gen_appcast" || ! -x "$gen_appcast" ]]; then
-    echo "release: generate_appcast not found. Set SPARKLE_BIN to Sparkle's bin dir." >&2
-    exit 1
-  fi
-  # generate_appcast signs every archive in $OUT and (re)writes appcast.xml.
-  # On CI there is no login Keychain, so pass the private key explicitly.
-  if [[ -n "${SPARKLE_ED_KEY_FILE:-}" ]]; then
-    "$gen_appcast" --ed-key-file "$SPARKLE_ED_KEY_FILE" "$OUT"
-  else
-    "$gen_appcast" "$OUT"
-  fi
-
-  # Fail loudly if generate_appcast did not actually produce a usable appcast.
-  # (For v0.1.0 the step "succeeded" while writing nothing useful.)
-  if [[ ! -s "$OUT/appcast.xml" ]]; then
-    echo "release: generate_appcast did not write dist/appcast.xml." >&2
-    exit 1
-  fi
-  if ! grep -q "$DMG_NAME" "$OUT/appcast.xml"; then
-    echo "release: dist/appcast.xml has no entry for $DMG_NAME — appcast generation failed silently." >&2
-    echo "         (Check for stale/duplicate artifacts in dist/; re-run with --clean-dist.)" >&2
-    exit 1
-  fi
-  log "Wrote $OUT/appcast.xml (verified it references $DMG_NAME)"
+  # write-appcast.sh re-renders the CHANGELOG notes next to the DMG, runs
+  # generate_appcast --embed-release-notes over $OUT (signing every archive;
+  # SPARKLE_BIN / SPARKLE_ED_KEY_FILE pass through from the environment), and
+  # fails loudly unless appcast.xml references the DMG AND its item carries a
+  # non-empty <description> (the release notes).
+  "$SCRIPT_DIR/write-appcast.sh" --dist "$OUT" --version "$VERSION" --archive "$DMG_NAME"
 fi
 
 shasum -a 256 "$DMG" | tee "$DMG.sha256"
@@ -357,6 +359,7 @@ shasum -a 256 "$DMG" | tee "$DMG.sha256"
 step "Done"
 log "DMG:       $DMG"
 [[ "$DRY_RUN" -eq 0 ]] && log "Appcast:   $OUT/appcast.xml"
+[[ -f "$NOTES_HTML" ]] && log "Notes:     $NOTES_HTML (embedded in the appcast item)"
 log "Checksums: $DMG.sha256"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo

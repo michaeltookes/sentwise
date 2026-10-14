@@ -52,6 +52,10 @@ jobs:
           bash Distribution/scripts/tests/test-keychain-snapshot.sh
           python3 Distribution/scripts/tests/test_keychain_tripwire.py
 
+      - name: Test Homebrew cask template
+        working-directory: ${{ github.workspace }}
+        run: bash Distribution/scripts/tests/test-cask-template.sh
+
       - name: Build & Test
         run: |
           set -o pipefail
