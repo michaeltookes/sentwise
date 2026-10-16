@@ -104,7 +104,7 @@ struct GoogleSignInButtonBlock: View {
                 }
             case .idle, .failed:
                 Text("Works with Gmail and Google Workspace — no app password needed. "
-                     + "Your mail stays on this Mac; Sentwise only reads it here and sends what you approve.")
+                     + "Sentwise reads only the messages you choose to sort; nothing is stored on our servers.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -5,6 +5,17 @@ All notable changes to Sentwise are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Sign in with Google privacy caption** — the caption under Sign in with
+  Google now reads "Sentwise reads only the messages you choose to sort;
+  nothing is stored on our servers." The earlier wording said your mail was
+  read only on this Mac, which did not account for reply drafting sending the
+  message and thread to Sentwise's no-retention drafting service. Sign in with
+  Google stays switched off until the Google client is set up.
+
 ## [0.2.1] - 2026-10-13
 
 Sentwise 0.2.1 is a polish release. Update prompts now show what changed,
