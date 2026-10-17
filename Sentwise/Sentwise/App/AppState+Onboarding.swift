@@ -30,10 +30,9 @@ extension AppState {
     /// The privacy statement shown during onboarding and in Settings. A single
     /// source of truth so the two never drift.
     static let privacyStatement =
-        "Sentwise is local-first. Your mail and settings stay on this Mac, "
-        + "and secrets like API keys and app passwords are stored in the macOS "
-        + "Keychain — never in plaintext. Nothing leaves your machine except the "
-        + "LLM request you configure and control."
+        "Your mail stays on this Mac. Sentwise reads your recent inbox here to "
+        + "find messages worth a reply. To draft a reply, it sends that message "
+        + "and its thread to the drafting service and keeps nothing on our servers."
 
     /// The step the flow should resume at: the first required step that isn't
     /// yet satisfied. Once the account and provider are connected, resume at the
