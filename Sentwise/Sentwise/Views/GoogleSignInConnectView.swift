@@ -105,7 +105,7 @@ struct GoogleSignInButtonBlock: View {
             case .idle, .failed:
                 Text("Works with Gmail and Google Workspace — no app password needed. "
                      + "Sentwise reads your recent inbox on this Mac to find messages worth a reply, "
-                     + "and sends a message to the drafting service only when it drafts; "
+                     + "and sends mail to the drafting service only to write for you; "
                      + "nothing is stored on our servers.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
