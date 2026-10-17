@@ -32,7 +32,10 @@ extension AppState {
     static let privacyStatement =
         "Your mail stays on this Mac. Sentwise reads your recent inbox here to "
         + "find messages worth a reply. To draft a reply, it sends that message "
-        + "and its thread to the drafting service and keeps nothing on our servers."
+        + "and its thread to the drafting service and keeps nothing on our servers. "
+        + "If you choose Learn my voice, Sentwise also sends up to 12 of your sent "
+        + "messages to the drafting service once, to learn how you write; they are "
+        + "not stored there."
 
     /// The step the flow should resume at: the first required step that isn't
     /// yet satisfied. Once the account and provider are connected, resume at the
