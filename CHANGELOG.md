@@ -11,13 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Clearer privacy wording** — the caption under Sign in with Google now
   reads "Sentwise reads your recent inbox on this Mac to find messages worth a
-  reply, and sends a message to the drafting service only when it drafts;
-  nothing is stored on our servers." The privacy statement in setup and
-  Settings now reads "Your mail stays on this Mac. Sentwise reads your recent
-  inbox here to find messages worth a reply. To draft a reply, it sends that
-  message and its thread to the drafting service and keeps nothing on our
-  servers." The earlier wording said mail was read only on this Mac and
-  mentioned API keys you configure, which no longer matched how drafting works.
+  reply, and sends mail to the drafting service only to write for you; nothing
+  is stored on our servers." The privacy statement in setup, Settings and About
+  now reads "Your mail stays on this Mac. Sentwise reads your recent inbox here
+  to find messages worth a reply. Content leaves this Mac only to write for
+  you: to draft a reply it sends that message and its thread to the drafting
+  service; to write a follow-up it sends the transcript you pasted, imported or
+  dropped in a watched folder; and each time you learn or re-learn your voice
+  it sends up to 12 of your sent messages. The drafting service keeps none of
+  it." The earlier wording said mail was read only on this Mac and mentioned
+  API keys you configure, which no longer matched how drafting works.
   Sign in with Google stays switched off until the Google client is set up.
 
 ## [0.2.1] - 2026-10-13
