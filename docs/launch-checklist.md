@@ -68,7 +68,13 @@ secret. Security finding A-M1.
 Vendor account fully verified 2026-09-12. Since the 2026-09-20 atomic
 activation, app `PaddleConfig.active = production` (live client token + live
 `pri_…` price ids) and worker `PADDLE_API_BASE = https://api.paddle.com`.
-Findings A-I4/S-L2; item 91 portal-permission trap.
+Production config resolution validates the environment, approved live token,
+three distinct tier-mapped price ids, and checkout origin before exposing
+checkout. A blank, sandbox, duplicate, tier-swapped, or otherwise mismatched
+release config disables checkout, emits a field-only diagnostic, and shows
+update/reinstall/report guidance rather than falling back to sandbox. CI compiles
+the invalid-config fixture coverage; TC-74-08 owns signed-candidate and real paid
+path proof. Findings A-I4/S-L2; item 91 portal-permission trap.
 
 - [x] **[owner]** Paddle **live** dashboard: create the three products/prices
       exactly per `docs/tier-matrix.md` — **Starter $9/mo, Pro $19/mo,

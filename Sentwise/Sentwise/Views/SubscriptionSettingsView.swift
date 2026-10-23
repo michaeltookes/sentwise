@@ -119,7 +119,9 @@ struct SubscriptionSettingsView: View {
                 .accessibilityIdentifier("subscribeCTA")
                 .accessibilityLabel("Subscribe to a plan")
                 if !appState.isCheckoutAvailable {
-                    Text("Checkout isn't available in this build.")
+                    Text(BuildConfiguration.current.paddleConfigurationProblem.map {
+                        "Billing configuration error: \($0). Update or reinstall Sentwise, then report the error if it continues."
+                    } ?? "Checkout isn't available in this build. Update or reinstall Sentwise, then report the error if it continues.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("subscribeUnavailable")
