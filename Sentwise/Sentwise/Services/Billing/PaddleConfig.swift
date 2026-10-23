@@ -192,7 +192,11 @@ struct PaddleConfig: Sendable, Equatable {
         let actualIDs = PaddlePlan.allCases.map { config.priceID(for: $0) }
         guard actualIDs.allSatisfy({ !$0.isEmpty }) else { return "a Paddle price id is blank" }
         guard Set(actualIDs).count == actualIDs.count else { return "Paddle price ids are not distinct" }
-        let expectedIDs = PaddlePlan.allCases.map { production.priceID(for: $0) }
+        let expectedIDs = [
+            ProductionValues.starterPriceID,
+            ProductionValues.proPriceID,
+            ProductionValues.unlimitedPriceID
+        ]
         guard actualIDs == expectedIDs else { return "Paddle price ids do not match the approved tier mapping" }
         guard config.clientSideToken == ProductionValues.clientSideToken else {
             return "Paddle client token does not match the approved live configuration"

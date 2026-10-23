@@ -92,6 +92,17 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(PaddleConfig.active, .production)
     }
 
+    func testProductionPaddleMappingValidatesAgainstIndependentConstants() {
+        XCTAssertNil(PaddleConfig.productionValidationProblem(for: .production))
+
+        let live = PaddleConfig.production
+        let swapped = productionPaddle(starter: live.proPriceID, pro: live.starterPriceID)
+        XCTAssertEqual(
+            PaddleConfig.productionValidationProblem(for: swapped),
+            "Paddle price ids do not match the approved tier mapping"
+        )
+    }
+
     func testInvalidProductionPaddleValuesFailClosedWithoutSandboxFallback() {
         let live = PaddleConfig.production
         let cases: [(String, PaddleConfig)] = [

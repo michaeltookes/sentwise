@@ -174,6 +174,28 @@ class QACheckoutValueValidation(unittest.TestCase):
         self.assertEqual(ids, ["pri_01m307sdxtk64vb7yjn4vptrcx", "pri_01m307vkn7zf0k194trcmx0qg1",
                                "pri_01m307xfej4zjp0n7wkf4rf9cd"], f"ids={ids} stderr={result.stderr!r}")
 
+    def test_moved_production_price_literals_fail_with_clear_message(self):
+        source = """private enum ProductionValues {
+        static let starterPriceID = starterReference
+        static let proPriceID = proReference
+        static let unlimitedPriceID = unlimitedReference
+    }
+    // Literals elsewhere must not make the independent validator constants look valid.
+    let moved = [\"pri_movedstarter\", \"pri_movedpro\", \"pri_movedunlimited\"]
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir = os.path.join(tmp, "Sentwise", "Sentwise", "Services", "Billing")
+            os.makedirs(config_dir)
+            with open(os.path.join(config_dir, "PaddleConfig.swift"), "w", encoding="utf-8") as config:
+                config.write(source)
+            result = subprocess.run(
+                ["/bin/bash", "-c", 'set -euo pipefail; source "$0"; '
+                 'QA_VALUES_REPO_ROOT="$1"; qa_production_price_ids', VALUES_LIB, tmp],
+                capture_output=True, text=True,
+            )
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("expected exactly three literal production price ids in ProductionValues", result.stderr)
+
     def test_unreadable_production_price_ids_are_a_problem(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = subprocess.run(

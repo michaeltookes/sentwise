@@ -72,21 +72,37 @@ qa_url_problem() {
   return 0
 }
 
-# The production Paddle price ids, read from PaddleConfig.production so they
-# never drift from the app. Prints the reason to stderr and returns 1 when the
-# block is missing or yields no pri_ ids, so the check can never run against
-# an empty list (item 6j).
+# The production Paddle price ids, read from PaddleConfig.ProductionValues so
+# they never drift from the independent constants used by the app's production
+# validator. Prints a clear reason and returns 1 unless that enum contains
+# exactly one literal for each tier, in Starter/Pro/Unlimited order. This must
+# fail loudly if the constants move again rather than validating against an
+# empty or partial list (item 6j).
 qa_production_price_ids() {
   local file="$QA_VALUES_REPO_ROOT/Sentwise/Sentwise/Services/Billing/PaddleConfig.swift"
-  local range='/static let production = PaddleConfig(/,/^    )/' block ids
+  local range='/private enum ProductionValues {/,/^    }/' block all_ids name id output=""
   if ! block="$(LC_ALL=C sed -n "${range}p" "$file")"; then
     echo "qa_production_price_ids: sed '$range' failed on $file" >&2; return 1
   fi
-  ids="$(LC_ALL=C grep -o 'pri_[a-z0-9]*' <<<"$block" || true)"
-  if [[ -z "$ids" ]]; then
-    echo "qa_production_price_ids: no pri_ ids in sed range '$range' of $file" >&2; return 1
+  all_ids="$(LC_ALL=C grep -o 'pri_[a-z0-9]*' <<<"$block" || true)"
+  if [[ "$(printf '%s\n' "$all_ids" | LC_ALL=C awk 'NF { count++ } END { print count + 0 }')" -ne 3 ]]; then
+    echo "qa_production_price_ids: expected exactly three literal production price ids in ProductionValues of $file" >&2
+    return 1
   fi
-  printf '%s\n' "$ids"
+  if [[ "$(printf '%s\n' "$all_ids" | LC_ALL=C sort -u | LC_ALL=C awk 'NF { count++ } END { print count + 0 }')" -ne 3 ]]; then
+    echo "qa_production_price_ids: production price ids in ProductionValues are not distinct in $file" >&2
+    return 1
+  fi
+  for name in starter pro unlimited; do
+    id="$(printf '%s\n' "$block" | LC_ALL=C sed -nE \
+      "s/^[[:space:]]*static let ${name}PriceID = \"(pri_[a-z0-9]+)\"[[:space:]]*$/\\1/p")"
+    if [[ "$(printf '%s\n' "$id" | LC_ALL=C awk 'NF { count++ } END { print count + 0 }')" -ne 1 ]]; then
+      echo "qa_production_price_ids: expected one literal ${name}PriceID in ProductionValues of $file" >&2
+      return 1
+    fi
+    output="${output}${id}"$'\n'
+  done
+  printf '%s' "$output"
 }
 
 # Prints one line per problem with the given values and returns 1 if any.
