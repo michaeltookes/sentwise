@@ -35,14 +35,22 @@ struct PaddleCheckoutSheet: View {
 
     // MARK: - Checkout unavailable (item 123)
 
-    /// Shown only by a QA build whose Paddle values are incomplete; production
-    /// builds always carry the live config.
+    /// Shown when this build's Paddle values fail closed. A production mismatch
+    /// is possible only in a misconfigured release candidate, but it must remain
+    /// observable and actionable rather than opening sandbox or the wrong tier.
     private var checkoutUnavailable: some View {
         VStack(spacing: 16) {
             Spacer()
             Text("Checkout isn't available in this build.")
                 .font(.headline)
                 .accessibilityIdentifier("paddleCheckoutUnavailable")
+            Text(BuildConfiguration.current.paddleConfigurationProblem.map {
+                "Billing configuration error: \($0). Update or reinstall Sentwise, then report the error if it continues."
+            } ?? "Update or reinstall Sentwise. If checkout is still unavailable, report the billing configuration error.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("paddleCheckoutUnavailableGuidance")
             Button("Close") {
                 appState.billingCheckout = nil
             }

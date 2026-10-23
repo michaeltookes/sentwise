@@ -95,10 +95,13 @@ struct BuildConfiguration: Equatable, Sendable {
     let appDisplayName: String
     /// The custom URL scheme this build registers (`CFBundleURLSchemes`).
     let urlScheme: String
-    /// The Paddle checkout config, or nil when checkout is unavailable in this
-    /// build (an incomplete or inconsistent non-production config). Never falls
-    /// back to production prices in a non-production build.
+    /// The Paddle checkout config, or nil when checkout is unavailable because
+    /// the build's values are incomplete or inconsistent. Neither production nor
+    /// QA falls back to the other Paddle environment.
     let paddle: PaddleConfig?
+    /// A field-only reason checkout was disabled. Safe to log or present because
+    /// it never includes token or price-id values.
+    let paddleConfigurationProblem: String?
 
     /// Sparkle updates install the production release, so only production
     /// builds may start the updater.
@@ -122,7 +125,10 @@ struct BuildConfiguration: Equatable, Sendable {
     //   6. Price ids: ^pri_[a-z0-9]+$, none a production id
     //      (PaddleConfig.production), all three distinct.
 
-    static func resolve(infoDictionary: [String: Any]?) -> BuildConfiguration {
+    static func resolve(
+        infoDictionary: [String: Any]?,
+        productionPaddleConfig: PaddleConfig = .production
+    ) -> BuildConfiguration {
         let info = infoDictionary ?? [:]
         let declaredScheme = declaredURLScheme(info) ?? Production.urlScheme
         // The bundle id alone decides: a `com.tookes.Sentwise.<suffix>` bundle is
@@ -130,6 +136,11 @@ struct BuildConfiguration: Equatable, Sendable {
         // identity is derived from the suffix and its services fail closed); any
         // other id is production, and leaked override keys are ignored.
         guard let qaBundleIdentifier = qaBundleIdentifier(string(info, InfoKey.bundleIdentifier)) else {
+            let paddleProblem = PaddleConfig.productionValidationProblem(for: productionPaddleConfig)
+            if let paddleProblem {
+                Logger(subsystem: Production.bundleIdentifier, category: "BuildConfiguration")
+                    .fault("Production checkout disabled: \(paddleProblem, privacy: .public)")
+            }
             return BuildConfiguration(
                 isProduction: true,
                 serviceBaseURL: URL(string: Production.serviceBaseURLString)!,
@@ -139,7 +150,8 @@ struct BuildConfiguration: Equatable, Sendable {
                 bundleIdentifier: Production.bundleIdentifier,
                 appDisplayName: Production.appDisplayName,
                 urlScheme: declaredScheme,
-                paddle: .production
+                paddle: paddleProblem == nil ? productionPaddleConfig : nil,
+                paddleConfigurationProblem: paddleProblem
             )
         }
         let suffix = String(qaBundleIdentifier.dropFirst(Production.bundleIdentifier.count + 1))
@@ -177,7 +189,8 @@ struct BuildConfiguration: Equatable, Sendable {
             urlScheme: declaredScheme != Production.urlScheme
                 ? declaredScheme
                 : "\(Production.urlScheme)-\(suffix.lowercased())",
-            paddle: paddle
+            paddle: paddle,
+            paddleConfigurationProblem: checkoutProblem
         )
     }
 

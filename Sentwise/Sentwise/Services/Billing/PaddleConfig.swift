@@ -157,17 +157,51 @@ struct PaddleConfig: Sendable, Equatable {
 
     // MARK: - Credential sets
 
+    /// Canonical launch values verified against the live $9 / $19 / $39 monthly
+    /// catalog. Keeping the expected price mapping separate from the assembled
+    /// config lets the release resolver reject an accidental blank, duplicate,
+    /// sandbox, or tier-swapped value instead of opening the wrong checkout.
+    private enum ProductionValues {
+        static let clientSideToken = "live_3affc7e38f8efd6ebd94616ab39"
+        static let starterPriceID = "pri_01m307sdxtk64vb7yjn4vptrcx"
+        static let proPriceID = "pri_01m307vkn7zf0k194trcmx0qg1"
+        static let unlimitedPriceID = "pri_01m307xfej4zjp0n7wkf4rf9cd"
+        static let checkoutOrigin = URL(string: "https://sentwise.ai")!
+    }
+
     /// Paddle production credentials (item 74 cutover, 2026-09-20). The
     /// client-side token is frontend-scoped and safe to embed; price ids match
     /// `docs/tier-matrix.md` (Starter $9 / Pro $19 / Unlimited $39, monthly).
     static let production = PaddleConfig(
         environment: .production,
-        clientSideToken: "live_3affc7e38f8efd6ebd94616ab39",
-        starterPriceID: "pri_01m307sdxtk64vb7yjn4vptrcx",
-        proPriceID: "pri_01m307vkn7zf0k194trcmx0qg1",
-        unlimitedPriceID: "pri_01m307xfej4zjp0n7wkf4rf9cd",
-        checkoutOrigin: URL(string: "https://sentwise.ai")!
+        clientSideToken: ProductionValues.clientSideToken,
+        starterPriceID: ProductionValues.starterPriceID,
+        proPriceID: ProductionValues.proPriceID,
+        unlimitedPriceID: ProductionValues.unlimitedPriceID,
+        checkoutOrigin: ProductionValues.checkoutOrigin
     )
+
+    /// Returns a field-only diagnostic when a release candidate's embedded
+    /// Paddle values do not exactly match the approved production catalog.
+    /// Values are deliberately omitted so logs never disclose credentials.
+    static func productionValidationProblem(for config: PaddleConfig) -> String? {
+        guard config.environment == .production else { return "Paddle environment is not production" }
+        guard config.clientSideToken.range(of: #"^live_[A-Za-z0-9]+$"#, options: .regularExpression) != nil else {
+            return "Paddle client token is blank, malformed, or not live"
+        }
+        let actualIDs = PaddlePlan.allCases.map { config.priceID(for: $0) }
+        guard actualIDs.allSatisfy({ !$0.isEmpty }) else { return "a Paddle price id is blank" }
+        guard Set(actualIDs).count == actualIDs.count else { return "Paddle price ids are not distinct" }
+        let expectedIDs = PaddlePlan.allCases.map { production.priceID(for: $0) }
+        guard actualIDs == expectedIDs else { return "Paddle price ids do not match the approved tier mapping" }
+        guard config.clientSideToken == ProductionValues.clientSideToken else {
+            return "Paddle client token does not match the approved live configuration"
+        }
+        guard config.checkoutOrigin == ProductionValues.checkoutOrigin else {
+            return "Paddle checkout origin does not match the approved production domain"
+        }
+        return nil
+    }
 
     /// The config this build uses: `production` for Debug/Release builds, the
     /// sandbox values from Info.plist for a QA build, or nil when a QA build's

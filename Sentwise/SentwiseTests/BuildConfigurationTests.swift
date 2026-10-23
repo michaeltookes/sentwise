@@ -13,6 +13,25 @@ final class BuildConfigurationTests: XCTestCase {
         [["CFBundleURLName": "com.tookes.Sentwise", "CFBundleURLSchemes": [scheme]]]
     }
 
+    private func productionPaddle(
+        environment: PaddleEnvironment = .production,
+        token: String? = nil,
+        starter: String? = nil,
+        pro: String? = nil,
+        unlimited: String? = nil,
+        origin: URL? = nil
+    ) -> PaddleConfig {
+        let live = PaddleConfig.production
+        return PaddleConfig(
+            environment: environment,
+            clientSideToken: token ?? live.clientSideToken,
+            starterPriceID: starter ?? live.starterPriceID,
+            proPriceID: pro ?? live.proPriceID,
+            unlimitedPriceID: unlimited ?? live.unlimitedPriceID,
+            checkoutOrigin: origin ?? live.checkoutOrigin
+        )
+    }
+
     private func qaInfo(_ overrides: [String: Any] = [:]) -> [String: Any] {
         var info: [String: Any] = [
             Key.serviceBaseURL: "https://sentwise-inference-sandbox.sentwise-service.workers.dev",
@@ -45,6 +64,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(config.appDisplayName, "Sentwise", file: file, line: line)
         XCTAssertEqual(config.bundleIdentifier, "com.tookes.Sentwise", file: file, line: line)
         XCTAssertEqual(config.paddle, .production, file: file, line: line)
+        XCTAssertNil(config.paddleConfigurationProblem, file: file, line: line)
         XCTAssertTrue(config.allowsAutomaticUpdates, file: file, line: line)
     }
 
@@ -72,6 +92,45 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(PaddleConfig.active, .production)
     }
 
+    func testInvalidProductionPaddleValuesFailClosedWithoutSandboxFallback() {
+        let live = PaddleConfig.production
+        let cases: [(String, PaddleConfig)] = [
+            ("blank token", productionPaddle(token: "")),
+            ("sandbox token", productionPaddle(token: "test_not_live")),
+            ("unapproved live token", productionPaddle(token: "live_other")),
+            ("sandbox environment", productionPaddle(environment: .sandbox)),
+            ("blank price", productionPaddle(starter: "")),
+            ("duplicate price", productionPaddle(pro: live.starterPriceID)),
+            ("tier mismatch", productionPaddle(starter: live.proPriceID, pro: live.starterPriceID)),
+            ("unapproved origin", productionPaddle(origin: URL(string: "https://example.invalid")!))
+        ]
+
+        for (name, candidate) in cases {
+            let config = BuildConfiguration.resolve(
+                infoDictionary: [Key.bundleIdentifier: "com.tookes.Sentwise"],
+                productionPaddleConfig: candidate
+            )
+            XCTAssertTrue(config.isProduction, name)
+            XCTAssertNil(config.paddle, name)
+            XCTAssertNotNil(config.paddleConfigurationProblem, name)
+            XCTAssertNotEqual(config.paddle?.environment, .sandbox, name)
+        }
+    }
+
+    func testProductionPaddleDiagnosticNeverIncludesConfiguredValues() throws {
+        let live = PaddleConfig.production
+        let unexpectedPrice = "pri_unexpectedvalue"
+        let candidate = productionPaddle(starter: unexpectedPrice)
+
+        let problem = try XCTUnwrap(BuildConfiguration.resolve(
+            infoDictionary: nil,
+            productionPaddleConfig: candidate
+        ).paddleConfigurationProblem)
+        XCTAssertFalse(problem.contains(unexpectedPrice))
+        XCTAssertFalse(problem.contains(live.clientSideToken))
+        XCTAssertTrue(problem.contains("price ids"))
+    }
+
     // MARK: - QA
 
     func testCompleteQAConfigResolvesToTheSandbox() throws {
@@ -87,6 +146,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(config.appDisplayName, "Sentwise QA")
         XCTAssertEqual(config.bundleIdentifier, "com.tookes.Sentwise.qa")
         XCTAssertFalse(config.allowsAutomaticUpdates)
+        XCTAssertNil(config.paddleConfigurationProblem)
 
         let paddle = try XCTUnwrap(config.paddle)
         XCTAssertEqual(paddle.environment, .sandbox)
