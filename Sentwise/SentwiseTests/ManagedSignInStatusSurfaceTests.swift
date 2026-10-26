@@ -34,6 +34,33 @@ final class ManagedSignInStatusSurfaceTests: XCTestCase {
         XCTAssertEqual(fetchCount, 2)
     }
 
+    func testRetryBudgetExhaustionStopsRetryingAndKeepsAccountSignedIn() async {
+        let llm = ManagedSignInStatusLLMProvider(results: [
+            .failure(.transport("initial outage")),
+            .failure(.transport("retry one outage")),
+            .failure(.transport("retry two outage"))
+        ])
+        let appState = makeAppState(llm: llm, verifyResponse: managedProviderClerkResponse(
+            #"{"response":{"id":"sia_1","status":"complete","created_session_id":"sess_1"}}"#,
+            clientToken: "client_C"
+        ))
+
+        await signIn(appState, code: "123456")
+        XCTAssertEqual(appState.managedAccountStatusRefreshMessage, AppState.managedStatusRefreshPendingMessage)
+
+        appState.scheduleManagedAccountStatusRefreshRetryAfterFailure(delays: [0, 0])
+        guard let retryTask = appState.managedAccountStatusRefreshTask else {
+            return XCTFail("expected a bounded retry task")
+        }
+        await retryTask.value
+
+        XCTAssertTrue(appState.isManagedSignedIn)
+        XCTAssertEqual(appState.managedAccountStatusRefreshMessage, AppState.managedStatusRefreshExhaustedMessage)
+        XCTAssertNil(appState.managedAccountStatusRefreshTask)
+        let fetchCount = await llm.observedFetchCount()
+        XCTAssertEqual(fetchCount, 3)
+    }
+
     func testVerifyStageFailureStaysSignedOutAndUsesSignInFailureSurface() async {
         let llm = ManagedSignInStatusLLMProvider(results: [])
         let appState = makeAppState(llm: llm, verifyResponse: managedProviderClerkResponse(

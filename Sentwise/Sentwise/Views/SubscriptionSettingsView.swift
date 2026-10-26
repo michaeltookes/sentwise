@@ -105,7 +105,13 @@ struct SubscriptionSettingsView: View {
                 Label(refreshMessage, systemImage: "arrow.clockwise")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("subscriptionStatusRefreshPending")
+                    .accessibilityIdentifier(statusRefreshMessageAccessibilityIdentifier)
+                if refreshMessage == AppState.managedStatusRefreshExhaustedMessage {
+                    Button("Refresh plan") {
+                        Task { await appState.retryManagedAccountStatusRefresh() }
+                    }
+                    .accessibilityIdentifier("subscriptionStatusRefreshRetry")
+                }
             }
             // The "use your own AI key" fallback link was parked 2026-09-16 (item
             // 100): managed inference is the only shipped path, so a paused/lapsed
@@ -200,6 +206,12 @@ struct SubscriptionSettingsView: View {
         }
 
         ManagedAccountErrorMessage(messageSurface: .settings, settingsDisplayTab: .subscription)
+    }
+
+    private var statusRefreshMessageAccessibilityIdentifier: String {
+        appState.managedAccountStatusRefreshMessage == AppState.managedStatusRefreshExhaustedMessage
+            ? "subscriptionStatusRefreshExhausted"
+            : "subscriptionStatusRefreshPending"
     }
 }
 

@@ -17,6 +17,8 @@ extension AppState {
         "Google sign-in is temporarily unavailable. Use email sign-in for now."
     static let managedStatusRefreshPendingMessage =
         "Signed in. Couldn't load your plan yet, retrying…"
+    static let managedStatusRefreshExhaustedMessage =
+        "Signed in. Couldn't load your plan. Try refreshing."
 
     /// The custom-scheme URL Clerk redirects back to after the Google handshake.
     /// Registered in `Info.plist` (`CFBundleURLTypes`) and must be added as an
@@ -87,10 +89,32 @@ extension AppState {
             signInLogger.error(
                 "Post-sign-in /v1/me failed key=\(SecretKey.managedSessionID.logSafeIdentifier, privacy: .public)"
             )
+            if managedAccountStatusRefreshTask == nil {
+                finishPostSignInStatusRefreshRetries()
+            }
         } else if status != nil {
             signInLogger.info(
                 "Post-sign-in /v1/me completed key=\(SecretKey.managedSessionID.logSafeIdentifier, privacy: .public)"
             )
+        }
+    }
+
+    func finishPostSignInStatusRefreshRetries() {
+        guard isManagedSignedIn,
+              !managedAccountStatusIsFresh,
+              managedAccountStatusRefreshMessage == Self.managedStatusRefreshPendingMessage else { return }
+        managedAccountStatusRefreshMessage = Self.managedStatusRefreshExhaustedMessage
+        signInLogger.error(
+            "Post-sign-in /v1/me retries exhausted key=\(SecretKey.managedSessionID.logSafeIdentifier, privacy: .public)"
+        )
+    }
+
+    func retryManagedAccountStatusRefresh() async {
+        guard isManagedSignedIn else { return }
+        managedAccountStatusRefreshMessage = Self.managedStatusRefreshPendingMessage
+        await refreshManagedQuota()
+        if !managedAccountStatusIsFresh, managedAccountStatusRefreshTask == nil {
+            finishPostSignInStatusRefreshRetries()
         }
     }
 

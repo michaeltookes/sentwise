@@ -396,6 +396,7 @@ extension AppState {
     private func finishManagedAccountStatusRefreshRetry() {
         if !managedAccountStatusIsFresh {
             managedAccountStatusRefreshTask = nil
+            finishPostSignInStatusRefreshRetries()
         }
     }
 
