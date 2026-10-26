@@ -194,7 +194,9 @@ struct ManagedSignInControls: View {
                 // since a Prowl hunt cannot drive a real browser round-trip.
                 if isHuntMode {
                     Button("Simulate browser sign-in (Prowl hunt)") {
-                        appState.completeManagedGoogleSignInForHunt(messageSurface: messageSurface)
+                        Task {
+                            await appState.completeManagedGoogleSignInForHunt(messageSurface: messageSurface)
+                        }
                     }
                     .accessibilityIdentifier("managedSimulateGoogleCallback")
                 }

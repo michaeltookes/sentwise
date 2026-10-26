@@ -101,7 +101,11 @@ extension AppState {
             if activatesManagedProvider, llmProviderKind != .managed {
                 selectLLMProvider(.managed, messageSurface: messageSurface)
             }
-            finalizeManagedSignIn(email: signedInEmail, accountID: "hunt-email:\(signedInEmail)")
+            await finalizeManagedSignInAndRefreshStatus(
+                email: signedInEmail,
+                accountID: "hunt-email:\(signedInEmail)",
+                isHuntMode: true
+            )
             return
         }
 

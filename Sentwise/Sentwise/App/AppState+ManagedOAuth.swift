@@ -80,9 +80,13 @@ extension AppState {
     /// Finalizes a successful Clerk flow before loading `/v1/me`. The account is
     /// deliberately published as signed in first; a transient status failure has
     /// its own retrying message and can never be reported as a sign-in failure.
-    func finalizeManagedSignInAndRefreshStatus(email: String, accountID: String) async {
+    func finalizeManagedSignInAndRefreshStatus(
+        email: String,
+        accountID: String,
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
+    ) async {
         finalizeManagedSignIn(email: email, accountID: accountID)
-        let status = await refreshManagedQuota(isPostSignInRefresh: true)
+        let status = await refreshManagedQuota(isPostSignInRefresh: true, isHuntMode: isHuntMode)
         guard isManagedSignedIn else { return }
         if status == nil, !managedAccountStatusIsFresh {
             managedAccountStatusRefreshMessage = Self.managedStatusRefreshPendingMessage

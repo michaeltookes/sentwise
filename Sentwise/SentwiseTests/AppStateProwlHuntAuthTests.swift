@@ -81,7 +81,7 @@ final class AppStateProwlHuntAuthTests: XCTestCase {
         XCTAssertTrue(openedURLs.isEmpty, "hunt mode must not open a real browser")
         XCTAssertFalse(appState.isManagedSignedIn)
 
-        appState.completeManagedGoogleSignInForHunt(isHuntMode: true)
+        await appState.completeManagedGoogleSignInForHunt(isHuntMode: true)
 
         XCTAssertTrue(appState.isManagedSignedIn)
         XCTAssertEqual(appState.managedAccountEmail, AppState.huntFixtureGoogleEmail)
@@ -89,6 +89,25 @@ final class AppStateProwlHuntAuthTests: XCTestCase {
         XCTAssertTrue(appState.isManagedProviderActive)
         XCTAssertTrue(appState.isLLMConnected)
         XCTAssertEqual(appState.managedSignInStage, .idle)
+    }
+
+    func testHuntSignInPathsLoadFixturePlanAndQuotaWithoutPaneReopen() async {
+        let emailAppState = makeAppState()
+        emailAppState.managedEmailInput = "hunt.fixture@sentwise.invalid"
+        await emailAppState.startManagedSignIn(isHuntMode: true)
+        await emailAppState.verifyManagedCode(isHuntMode: true)
+
+        XCTAssertEqual(emailAppState.managedAccountStatus?.subscription?.plan, .pro)
+        XCTAssertEqual(emailAppState.managedQuota, StubManagedInferenceClient.stubbedQuota)
+        XCTAssertTrue(emailAppState.managedAccountStatusIsFresh)
+
+        let googleAppState = makeAppState()
+        await googleAppState.startManagedGoogleSignIn(openURL: { _ in }, isHuntMode: true)
+        await googleAppState.completeManagedGoogleSignInForHunt(isHuntMode: true)
+
+        XCTAssertEqual(googleAppState.managedAccountStatus?.subscription?.plan, .pro)
+        XCTAssertEqual(googleAppState.managedQuota, StubManagedInferenceClient.stubbedQuota)
+        XCTAssertTrue(googleAppState.managedAccountStatusIsFresh)
     }
 
     func testHuntOpenRouterProvisioningActivatesFakeProviderOffline() {
@@ -106,12 +125,12 @@ final class AppStateProwlHuntAuthTests: XCTestCase {
         XCTAssertEqual(try? appState.secrets.value(for: .openRouterAPIKey), "hunt-openrouter-fixture-key")
     }
 
-    func testCompletionFakesNoOpOutsideHuntMode() {
+    func testCompletionFakesNoOpOutsideHuntMode() async {
         // The completion fakes are strictly hunt-gated: called with isHuntMode:false
         // they change nothing, so the production callback paths are never affected.
         let appState = makeAppState()
 
-        appState.completeManagedGoogleSignInForHunt(isHuntMode: false)
+        await appState.completeManagedGoogleSignInForHunt(isHuntMode: false)
         XCTAssertFalse(appState.isManagedSignedIn)
 
         let providerBefore = appState.llmProviderKind
