@@ -94,52 +94,6 @@ actor ManagedAccountService: ManagedSessionProviding {
         }
     }
 
-    /// Completes sign-in with the OTP code. On success stores the session id and
-    /// the latest device token, then verifies the credentials end-to-end by
-    /// minting one session token.
-    @discardableResult
-    func completeSignIn(code: String) async throws -> ManagedAccountSignInResult {
-        guard let pending = pendingSignIn else {
-            throw ClerkError.malformedResponse("no sign-in in progress")
-        }
-        let verified: ClerkVerifiedSession
-        do {
-            verified = try await clerk.verifyEmailCode(
-                signInId: pending.signInId,
-                code: code,
-                clientToken: pending.clientToken,
-                flow: pending.flow
-            )
-        } catch let error as ClerkError {
-            updatePendingSignIn(pending, clientToken: error.clientToken)
-            throw error
-        }
-
-        updatePendingSignIn(pending, clientToken: verified.clientToken)
-        // Prove the credentials can mint a token before storing the session.
-        guard isPendingSignIn(pending) else {
-            throw ClerkError.malformedResponse("no sign-in in progress")
-        }
-        let minted = try await mintSessionToken(
-            sessionID: verified.sessionId,
-            clientToken: verified.clientToken,
-            preserveFailureClientToken: .pending(pending)
-        )
-        guard isPendingSignIn(pending) else {
-            throw ClerkError.malformedResponse("no sign-in in progress")
-        }
-        updatePendingSignIn(pending, clientToken: minted.clientToken)
-        guard isPendingSignIn(pending) else {
-            throw ClerkError.malformedResponse("no sign-in in progress")
-        }
-        let result = ManagedAccountSignInResult(
-            displayIdentifier: verified.identifier,
-            accountIdentifier: Self.accountIdentifier(userID: minted.userID, sessionID: verified.sessionId)
-        )
-        try finalizeVerifiedSession(sessionID: verified.sessionId, clientToken: minted.clientToken)
-        return result
-    }
-
     static func accountIdentifier(userID: String?, sessionID: String) -> String {
         let normalizedUserID = userID?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let normalizedUserID, !normalizedUserID.isEmpty {
@@ -461,7 +415,7 @@ actor ManagedAccountService: ManagedSessionProviding {
         }
     }
 
-    private func isPendingSignIn(_ handle: ClerkSignInHandle) -> Bool {
+    func isPendingSignIn(_ handle: ClerkSignInHandle) -> Bool {
         pendingSignIn?.signInId == handle.signInId && pendingSignIn?.flow == handle.flow
     }
 

@@ -101,6 +101,12 @@ struct SubscriptionSettingsView: View {
                     .foregroundStyle(model.isProblemState ? .red : .secondary)
                     .accessibilityIdentifier("subscriptionPlanDetail")
             }
+            if let refreshMessage = appState.managedAccountStatusRefreshMessage {
+                Label(refreshMessage, systemImage: "arrow.clockwise")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("subscriptionStatusRefreshPending")
+            }
             // The "use your own AI key" fallback link was parked 2026-09-16 (item
             // 100): managed inference is the only shipped path, so a paused/lapsed
             // account has nowhere to fall back to. The problem-state styling stays.

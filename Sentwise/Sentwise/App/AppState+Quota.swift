@@ -2,6 +2,7 @@ import Foundation
 import os
 
 private let quotaLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedQuota")
+private let signInLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedSignIn")
 
 struct ManagedAccountStatusRefreshOrdering {
     var startedGeneration: UInt64 = 0
@@ -69,6 +70,7 @@ extension AppState {
         resetPlanManagementState()
         managedQuota = nil
         managedAccountStatus = nil
+        managedAccountStatusRefreshMessage = nil
         managedAccountStatusIsFresh = false
         managedAccountStatusRefreshOrdering.startedGeneration &+= 1
         managedAccountStatusRefreshOrdering.acceptedGeneration = managedAccountStatusRefreshOrdering.startedGeneration
@@ -167,7 +169,8 @@ extension AppState {
     func refreshManagedQuota(
         scheduleRetryOnFailure: Bool = true,
         deferPendingPlanChangeStatus: Bool = true,
-        requireQuotaForFreshStatus: Bool = false
+        requireQuotaForFreshStatus: Bool = false,
+        isPostSignInRefresh: Bool = false
     ) async -> ManagedAccountStatus? {
         guard ProwlHuntRuntime.current.isEnabled || isManagedSignedIn else {
             return nil
@@ -205,6 +208,13 @@ extension AppState {
                 return nil
             }
         } catch {
+            if isPostSignInRefresh {
+                let credentialID = SecretKey.managedSessionID.logSafeIdentifier
+                let errorID = String(reflecting: type(of: error))
+                signInLogger.error(
+                    "Post-sign-in /v1/me threw credential=\(credentialID, privacy: .public) error=\(errorID, privacy: .public)"
+                )
+            }
             guard shouldApplyManagedAccountStatusRefreshFailure(
                 generation: refreshGeneration,
                 accountKey: accountKey,
@@ -243,6 +253,7 @@ extension AppState {
         }
         managedAccountStatusRefreshOrdering.acceptedGeneration = generation
         managedAccountStatusRefreshOrdering.successVersion &+= 1
+        managedAccountStatusRefreshMessage = nil
         let snapshotBeforeAccountKeyBackfill = effectiveSubscriptionSnapshot
         // Mirror the full status for the Subscription pane (item 73), even when
         // `quota` is absent on an older Worker build.

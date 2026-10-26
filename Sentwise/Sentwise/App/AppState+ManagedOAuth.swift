@@ -3,6 +3,7 @@ import Foundation
 import os
 
 private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedOAuth")
+private let signInLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedSignIn")
 
 /// Managed-account Google sign-in via Clerk's OAuth flow (item 59), plus the
 /// shared post-sign-in finalization used by both the email-code and OAuth paths.
@@ -14,6 +15,8 @@ extension AppState {
     static let isManagedGoogleSignInEnabled = false
     static let managedGoogleSignInUnavailableMessage =
         "Google sign-in is temporarily unavailable. Use email sign-in for now."
+    static let managedStatusRefreshPendingMessage =
+        "Signed in. Couldn't load your plan yet, retrying…"
 
     /// The custom-scheme URL Clerk redirects back to after the Google handshake.
     /// Registered in `Info.plist` (`CFBundleURLTypes`) and must be added as an
@@ -70,8 +73,21 @@ extension AppState {
         refreshGoogleOAuthInterestState()
         resumeInboxWatchingAfterManagedReauthenticationIfNeeded()
         startTranscriptFolderWatchingIfEnabled()
-        // Pull the current monthly allotment now that we can authenticate (item 56b).
-        Task { await refreshManagedQuota() }
+    }
+
+    /// Finalizes a successful Clerk flow before loading `/v1/me`. The account is
+    /// deliberately published as signed in first; a transient status failure has
+    /// its own retrying message and can never be reported as a sign-in failure.
+    func finalizeManagedSignInAndRefreshStatus(email: String, accountID: String) async {
+        finalizeManagedSignIn(email: email, accountID: accountID)
+        let status = await refreshManagedQuota(isPostSignInRefresh: true)
+        guard isManagedSignedIn else { return }
+        if status == nil, !managedAccountStatusIsFresh {
+            managedAccountStatusRefreshMessage = Self.managedStatusRefreshPendingMessage
+            signInLogger.error(
+                "Post-sign-in /v1/me failed credential=\(SecretKey.managedSessionID.logSafeIdentifier, privacy: .public)"
+            )
+        }
     }
 
     /// Starts Google sign-in: asks Clerk for the hosted URL and opens it in the
@@ -197,7 +213,7 @@ extension AppState {
             selectLLMProvider(.managed, messageSurface: messageSurface)
         }
         let email = result.displayIdentifier.flatMap { $0.isEmpty ? nil : $0 } ?? "your Google account"
-        finalizeManagedSignIn(email: email, accountID: result.accountIdentifier)
+        await finalizeManagedSignInAndRefreshStatus(email: email, accountID: result.accountIdentifier)
         logger.info("Managed Google sign-in completed")
     }
 

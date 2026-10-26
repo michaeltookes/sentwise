@@ -132,7 +132,7 @@ extension AppState {
         if activatesManagedProvider, llmProviderKind != .managed {
             selectLLMProvider(.managed, messageSurface: messageSurface)
         }
-        finalizeManagedSignIn(email: signedInEmail, accountID: result.accountIdentifier)
+        await finalizeManagedSignInAndRefreshStatus(email: signedInEmail, accountID: result.accountIdentifier)
     }
 
     func resetManagedSignInFlow(
