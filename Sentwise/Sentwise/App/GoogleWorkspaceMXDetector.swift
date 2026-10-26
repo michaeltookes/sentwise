@@ -44,9 +44,7 @@ actor GoogleWorkspaceMXDetector {
         do {
             result = try await withThrowingTaskGroup(of: Bool.self) { group in
                 group.addTask {
-                    let records = try await Task.detached {
-                        try await resolver.records(for: domain)
-                    }.value
+                    let records = try await resolver.records(for: domain)
                     return Self.containsGoogleMailExchange(records)
                 }
                 group.addTask {
@@ -78,7 +76,9 @@ actor GoogleWorkspaceMXDetector {
 }
 
 private final class DNSMXQuery: @unchecked Sendable {
-    private let lock = NSLock()
+    /// DNSServiceSetDispatchQueue requires a serial queue. Registration,
+    /// callbacks, cancellation and deallocation all stay on this queue.
+    private let queue = DispatchQueue(label: "ai.sentwise.mx-query", qos: .utility)
     private var continuation: CheckedContinuation<[String], Error>?
     private var service: DNSServiceRef?
     private var targets: [String] = []
@@ -86,78 +86,67 @@ private final class DNSMXQuery: @unchecked Sendable {
 
     func start(domain: String) async throws -> [String] {
         try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            guard !isFinished else {
-                lock.unlock()
-                continuation.resume(throwing: CancellationError())
-                return
-            }
-            self.continuation = continuation
-            lock.unlock()
-
-            var service: DNSServiceRef?
-            let error = DNSServiceQueryRecord(
-                &service,
-                0,
-                0,
-                domain,
-                UInt16(kDNSServiceType_MX),
-                UInt16(kDNSServiceClass_IN),
-                Self.callback,
-                Unmanaged.passUnretained(self).toOpaque()
-            )
-            guard error == kDNSServiceErr_NoError, let service else {
-                finish(.failure(MXResolverError.queryFailed(error)))
-                return
-            }
-
-            lock.lock()
-            if isFinished {
-                lock.unlock()
-                DNSServiceRefDeallocate(service)
-                return
-            }
-            self.service = service
-            lock.unlock()
-            DNSServiceSetDispatchQueue(service, DispatchQueue.global(qos: .utility))
+            queue.async { self.begin(domain: domain, continuation: continuation) }
         }
     }
 
     func cancel() {
-        finish(.failure(CancellationError()))
+        queue.async { self.finish(.failure(CancellationError())) }
+    }
+
+    private func begin(domain: String, continuation: CheckedContinuation<[String], Error>) {
+        dispatchPrecondition(condition: .onQueue(queue))
+        guard !isFinished else {
+            continuation.resume(throwing: CancellationError())
+            return
+        }
+        self.continuation = continuation
+
+        var service: DNSServiceRef?
+        let error = DNSServiceQueryRecord(
+            &service,
+            0,
+            0,
+            domain,
+            UInt16(kDNSServiceType_MX),
+            UInt16(kDNSServiceClass_IN),
+            Self.callback,
+            Unmanaged.passUnretained(self).toOpaque()
+        )
+        self.service = service
+        guard error == kDNSServiceErr_NoError, let service else {
+            finish(.failure(MXResolverError.queryFailed(error)))
+            return
+        }
+        let queueError = DNSServiceSetDispatchQueue(service, queue)
+        guard queueError == kDNSServiceErr_NoError else {
+            finish(.failure(MXResolverError.queryFailed(queueError)))
+            return
+        }
     }
 
     private func receive(flags: DNSServiceFlags, error: DNSServiceErrorType, length: UInt16, data: UnsafeRawPointer?) {
+        dispatchPrecondition(condition: .onQueue(queue))
         guard error == kDNSServiceErr_NoError else {
             finish(.failure(MXResolverError.queryFailed(error)))
             return
         }
         if let target = Self.decodeMXTarget(length: length, data: data) {
-            lock.lock()
             targets.append(target)
-            lock.unlock()
         }
         if flags & DNSServiceFlags(kDNSServiceFlagsMoreComing) == 0 {
-            lock.lock()
-            let targets = targets
-            lock.unlock()
             finish(.success(targets))
         }
     }
 
     private func finish(_ result: Result<[String], Error>) {
-        lock.lock()
-        guard !isFinished else {
-            lock.unlock()
-            return
-        }
+        dispatchPrecondition(condition: .onQueue(queue))
+        guard !isFinished else { return }
         isFinished = true
         let continuation = continuation
         self.continuation = nil
         let service = service
         self.service = nil
-        lock.unlock()
-
         if let service { DNSServiceRefDeallocate(service) }
         continuation?.resume(with: result)
     }

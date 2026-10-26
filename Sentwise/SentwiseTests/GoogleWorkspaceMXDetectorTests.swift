@@ -34,10 +34,13 @@ final class GoogleWorkspaceMXDetectorTests: XCTestCase {
     func testLookupTimeoutFallsThrough() async {
         let resolver = MXResolverStub(result: .success(["aspmx.l.google.com"]), delayNanoseconds: 5_000_000_000)
         let detector = GoogleWorkspaceMXDetector(resolver: resolver, timeoutNanoseconds: 1_000_000)
+        let clock = ContinuousClock()
+        let started = clock.now
 
         let isGoogleHosted = await detector.isGoogleHosted(domain: "slow.example")
 
         XCTAssertFalse(isGoogleHosted)
+        XCTAssertLessThan(started.duration(to: clock.now), .milliseconds(500))
     }
 
     func testSessionCacheAvoidsSecondLookup() async {
@@ -73,6 +76,53 @@ final class GoogleWorkspaceMXDetectorTests: XCTestCase {
 
         XCTAssertEqual(form.host, "imap.gmail.com")
         XCTAssertEqual(form.credentialGuidanceHostFallback, "imap.gmail.com")
+    }
+
+    func testDetectedFormDomainKeepsGmailHostOnCommit() {
+        var form = MailAccountFormState()
+        form.updateEmailFromUser("marcus@company.example")
+        form.applyGoogleWorkspaceSuggestion(for: "company.example")
+
+        form.commitEmailEditFromUser()
+
+        XCTAssertEqual(form.host, "imap.gmail.com")
+        XCTAssertEqual(form.credentialGuidanceHostFallback, "imap.gmail.com")
+    }
+
+    func testIncompleteFormDomainDoesNotUseGmailGuidance() {
+        var form = MailAccountFormState()
+        form.updateEmailFromUser("marcus@company")
+
+        XCTAssertNil(form.credentialGuidanceHostFallback)
+    }
+
+    @MainActor
+    func testDetectedAppStateDomainKeepsGmailHostOnCommit() async {
+        let resolver = MXResolverStub(result: .success(["aspmx.l.google.com."]))
+        let detector = GoogleWorkspaceMXDetector(resolver: resolver)
+        let appState = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: InMemorySecretStore(),
+            googleWorkspaceMXDetector: detector
+        )
+        appState.updateMailEmailFromUser("marcus@company.example")
+        await appState.detectGoogleWorkspaceHost(for: appState.mailEmail)
+
+        appState.commitMailEmailEditFromUser()
+
+        XCTAssertEqual(appState.mailHost, "imap.gmail.com")
+        XCTAssertEqual(appState.credentialGuidanceHostFallback, "imap.gmail.com")
+    }
+
+    @MainActor
+    func testIncompleteAppStateDomainDoesNotUseGmailGuidance() {
+        let appState = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: InMemorySecretStore()
+        )
+        appState.updateMailEmailFromUser("marcus@company")
+
+        XCTAssertNil(appState.credentialGuidanceHostFallback)
     }
 }
 

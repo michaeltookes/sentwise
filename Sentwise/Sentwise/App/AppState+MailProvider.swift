@@ -13,7 +13,8 @@ extension AppState {
             let host = mailHost.trimmingCharacters(in: .whitespacesAndNewlines)
             return host.isEmpty ? nil : host
         }
-        guard googleWorkspaceDomain == EmailProviderKind.validDomain(of: mailEmail) else { return nil }
+        guard let googleWorkspaceDomain,
+              googleWorkspaceDomain == EmailProviderKind.validDomain(of: mailEmail) else { return nil }
         return EmailProviderKind.gmail.imapHost
     }
 
@@ -299,8 +300,12 @@ extension AppState {
     /// provider host from the previous address.
     func applySuggestedHostIfDefault() {
         let current = mailHost.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let domain = EmailProviderKind.validDomain(of: mailEmail)
+        let workspaceSuggestion = googleWorkspaceDomain.flatMap {
+            $0 == domain ? EmailProviderKind.gmail.imapHost : nil
+        }
 
-        guard let suggestion = Self.suggestedIMAPHost(forEmail: mailEmail) else {
+        guard let suggestion = Self.suggestedIMAPHost(forEmail: mailEmail) ?? workspaceSuggestion else {
             if isMailHostReplaceableBySuggestion(current, suggestedHost: nil), !current.isEmpty {
                 mailHost = ""
                 markMailHostManagedByApp()
