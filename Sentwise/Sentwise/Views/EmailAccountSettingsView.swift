@@ -85,7 +85,6 @@ struct EmailAccountSettingsView: View {
     }
 
     // MARK: - Connection / add form
-
     @ViewBuilder
     private var connectionSection: some View {
         Section(showsConnectForm ? "Add account" : "Email account") {
@@ -116,7 +115,6 @@ struct EmailAccountSettingsView: View {
                 .disabled(appState.isConnecting)
                 .accessibilityIdentifier("disconnectAccount")
                 .accessibilityLabel("Disconnect \(appState.mailEmail)")
-
                 Button {
                     beginAddingAccount()
                 } label: {
@@ -126,17 +124,14 @@ struct EmailAccountSettingsView: View {
             } else {
                 connectForm
             }
-
             if let error = appState.connectionError(for: .settings) {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-
             WorkspaceAuthGuidanceView(messageSurface: .settings, settingsDisplayTab: .account)
         }
     }
-
     private var connectForm: some View {
         GoogleOrAppPasswordConnect(
             auth: appState.googleMailAuth,
@@ -161,9 +156,7 @@ struct EmailAccountSettingsView: View {
                     commitMailEmailEditFromUser()
                 }
             }
-            .task(id: guidanceEmail) {
-                await detectGoogleWorkspaceHost(for: guidanceEmail)
-            }
+            .task(id: guidanceEmail) { await detectGoogleWorkspaceHost(for: guidanceEmail) }
             .accessibilityLabel("Email address")
         SecureField("App password", text: mailAppPasswordBinding)
             .accessibilityLabel("App password")
@@ -202,7 +195,6 @@ struct EmailAccountSettingsView: View {
     }
 
     // MARK: - Recent messages
-
     private var recentMessagesSection: some View {
         Section("Recent messages") {
             Button {
@@ -292,7 +284,6 @@ struct EmailAccountSettingsView: View {
     }
 
     // MARK: - Actions
-
     private func connect() async {
         let didConnect: Bool
         if isAddingAccount {
@@ -337,7 +328,6 @@ struct EmailAccountSettingsView: View {
     }
 
     // MARK: - Bindings
-
     private var guidanceEmail: String {
         isAddingAccount ? newAccountForm.email : appState.mailEmail
     }
@@ -345,7 +335,6 @@ struct EmailAccountSettingsView: View {
     private var guidanceHostFallback: String? {
         isAddingAccount ? newAccountForm.credentialGuidanceHostFallback : appState.credentialGuidanceHostFallback
     }
-
     private func commitMailEmailEditFromUser() {
         if isAddingAccount {
             newAccountForm.commitEmailEditFromUser()
@@ -355,13 +344,10 @@ struct EmailAccountSettingsView: View {
     }
 
     private func detectGoogleWorkspaceHost(for email: String) async {
-        guard EmailProviderKind.forEmail(email) == nil,
-              let domain = EmailProviderKind.validDomain(of: email) else { return }
         if isAddingAccount {
-            let isGoogleHosted = await appState.googleWorkspaceMXDetector.isGoogleHosted(domain: domain)
-            guard isGoogleHosted,
-                  isAddingAccount,
-                  EmailProviderKind.validDomain(of: newAccountForm.email) == domain else { return }
+            guard let domain = await MailAccountFormState.detectedGoogleWorkspaceDomain(
+                for: email, using: appState.googleWorkspaceMXDetector
+            ), isAddingAccount else { return }
             newAccountForm.applyGoogleWorkspaceSuggestion(for: domain)
         } else {
             await appState.detectGoogleWorkspaceHost(for: email)

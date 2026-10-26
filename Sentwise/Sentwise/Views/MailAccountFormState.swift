@@ -64,6 +64,16 @@ struct MailAccountFormState: Equatable {
         applySuggestedHostIfDefault()
     }
 
+    static func detectedGoogleWorkspaceDomain(
+        for email: String,
+        using detector: GoogleWorkspaceMXDetector
+    ) async -> String? {
+        guard EmailProviderKind.forEmail(email) == nil,
+              let domain = EmailProviderKind.validDomain(of: email),
+              await detector.isGoogleHosted(domain: domain) else { return nil }
+        return domain
+    }
+
     mutating func applyGoogleWorkspaceSuggestion(for domain: String) {
         guard EmailProviderKind.validDomain(of: email) == domain else { return }
         googleWorkspaceDomain = domain

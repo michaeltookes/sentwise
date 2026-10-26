@@ -162,8 +162,7 @@ private final class DNSMXQuery: @unchecked Sendable {
         continuation?.resume(with: result)
     }
 
-    private static let callback: DNSServiceQueryRecordReply = {
-        _, flags, _, error, _, _, _, length, data, _, context in
+    private static let callback: DNSServiceQueryRecordReply = { _, flags, _, error, _, _, _, length, data, _, context in
         guard let context else { return }
         Unmanaged<DNSMXQuery>.fromOpaque(context).takeUnretainedValue().receive(
             flags: flags,
