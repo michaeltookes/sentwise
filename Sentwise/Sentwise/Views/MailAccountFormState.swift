@@ -11,6 +11,7 @@ struct MailAccountFormState: Equatable {
 
     private var explicitHostEmail: String?
     private var hostEnteredBeforeEmail = false
+    private var googleWorkspaceDomain: String?
 
     var credentials: MailAccountCredentials {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -28,9 +29,13 @@ struct MailAccountFormState: Equatable {
     }
 
     var credentialGuidanceHostFallback: String? {
-        guard hostWasExplicitlyEditedForCurrentAddress else { return nil }
-        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedHost.isEmpty ? nil : trimmedHost
+        if hostWasExplicitlyEditedForCurrentAddress {
+            let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedHost.isEmpty ? nil : trimmedHost
+        }
+        guard let googleWorkspaceDomain,
+              googleWorkspaceDomain == EmailProviderKind.validDomain(of: email) else { return nil }
+        return EmailProviderKind.gmail.imapHost
     }
 
     mutating func resetForNewAccount() {
@@ -39,6 +44,9 @@ struct MailAccountFormState: Equatable {
 
     mutating func updateEmailFromUser(_ newEmail: String) {
         email = newEmail
+        if googleWorkspaceDomain != EmailProviderKind.validDomain(of: newEmail) {
+            googleWorkspaceDomain = nil
+        }
 
         if hostEnteredBeforeEmail {
             guard Self.normalizedEmailDomainForHostTracking(newEmail) != nil else { return }
@@ -55,6 +63,28 @@ struct MailAccountFormState: Equatable {
     mutating func commitEmailEditFromUser() {
         restorePendingHostGuidanceIfPossible()
         applySuggestedHostIfDefault()
+    }
+
+    static func detectedGoogleWorkspaceDomain(
+        for email: String,
+        using detector: GoogleWorkspaceMXDetector
+    ) async -> String? {
+        guard EmailProviderKind.forEmail(email) == nil,
+              let domain = EmailProviderKind.validDomain(of: email),
+              await detector.isGoogleHosted(domain: domain) else { return nil }
+        return domain
+    }
+
+    mutating func applyGoogleWorkspaceSuggestion(for domain: String) {
+        guard EmailProviderKind.validDomain(of: email) == domain else { return }
+        googleWorkspaceDomain = domain
+        guard !hostWasExplicitlyEditedForCurrentAddress else { return }
+        let suggestion = EmailProviderKind.gmail.imapHost
+        let currentHost = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if isHostReplaceableBySuggestion(currentHost, suggestedHost: suggestion), currentHost != suggestion {
+            host = suggestion
+            markHostManagedByApp()
+        }
     }
 
     mutating func updateHostFromUser(_ newHost: String) {
@@ -91,8 +121,16 @@ struct MailAccountFormState: Equatable {
 
     private mutating func applySuggestedHostIfDefault() {
         let currentHost = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let domain = EmailProviderKind.validDomain(of: email)
+        let workspaceSuggestion = googleWorkspaceDomain.flatMap {
+            $0 == domain ? EmailProviderKind.gmail.imapHost : nil
+        }
+        let providerSuggestion = EmailProviderKind.forEmail(email)?.imapHost
+        if providerSuggestion == nil, workspaceSuggestion != nil, hostWasExplicitlyEditedForCurrentAddress {
+            return
+        }
 
-        guard let suggestion = EmailProviderKind.forEmail(email)?.imapHost else {
+        guard let suggestion = providerSuggestion ?? workspaceSuggestion else {
             if isHostReplaceableBySuggestion(currentHost, suggestedHost: nil), !currentHost.isEmpty {
                 host = ""
                 markHostManagedByApp()

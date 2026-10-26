@@ -79,6 +79,18 @@ enum EmailProviderKind: Equatable, CaseIterable {
         return domain.isEmpty ? nil : domain
     }
 
+    /// A complete domain suitable for an MX query. Requiring at least two labels
+    /// and a two-character TLD avoids DNS work for ordinary mid-typing states.
+    static func validDomain(of email: String) -> String? {
+        guard let domain = domain(of: email) else { return nil }
+        let labels = domain.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2,
+              labels.allSatisfy({ !$0.isEmpty }),
+              let topLevelDomain = labels.last,
+              topLevelDomain.count >= 2 else { return nil }
+        return domain
+    }
+
     private static let gmailHostSuffixes = ["gmail.com", "googlemail.com"]
     private static let attHostSuffixes = ["att.net", "sbcglobal.net", "bellsouth.net"]
     private static let yahooHostSuffixes = ["yahoo.com", "ymail.com", "rocketmail.com"]

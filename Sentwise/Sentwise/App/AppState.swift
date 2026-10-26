@@ -15,14 +15,12 @@ final class AppState: ObservableObject {
     @Published var watchStatus: WatchStatus = .idle
     /// Number of drafts awaiting the user's approval.
     @Published var pendingDraftCount: Int = 0
-
     /// System notification-authorization status (item 78); see
     /// `AppState+NotificationPermission`. Starts `.authorized` (non-nagging).
     @Published var notificationPermission: NotificationPermission = .authorized
 
     /// Whether an email account is connected.
     @Published var isAccountConnected: Bool = false
-
     /// Whether a connection attempt is in progress.
     @Published var isConnecting: Bool = false
 
@@ -32,21 +30,19 @@ final class AppState: ObservableObject {
     var pendingManagedSignInMessageSurface: TransientMessageSurface = .shared
     var pendingOpenRouterProvisioningMessageSurface: TransientMessageSurface = .shared
     // MARK: - Mail Account Inputs (bound to Settings fields)
-
     @Published var mailEmail: String
     @Published var mailAppPassword: String
     @Published var mailHost: String
     @Published var mailPort: Int
     var mailHostExplicitlyEditedEmail: String?
     var mailHostExplicitlyEditedBeforeEmail = false
-
+    var googleWorkspaceDomain: String? // session-only item 110 MX classification
     /// Remembered accounts the user can switch between without re-entry (item 48).
     @Published var savedAccounts: [SavedMailAccount] = []
 
     /// Mailboxes connected concurrently alongside the focused account (item 99).
     /// Each has its own watcher and health; the focused account is the fields above.
     @Published var backgroundConnectedAccounts: [ConnectedMailAccount] = []
-
     // MARK: - Recent Messages (preview)
 
     /// The most recently fetched messages (envelope-level), newest first.
@@ -373,6 +369,7 @@ final class AppState: ObservableObject {
     /// Internal (not private) so the `AppState+Voice` extension can reach it.
     let mailProvider: MailProvider
     let googleMailAuth: GoogleMailAuthService // item 104; wraps mailProvider (see AppState+GoogleSignIn)
+    let googleWorkspaceMXDetector: GoogleWorkspaceMXDetector
     let llm: LLMProviding
     /// The managed-inference account (item 56a): Clerk sign-in + session-token
     /// minting. Also the `ManagedSessionProviding` behind the production LLM
@@ -423,10 +420,11 @@ final class AppState: ObservableObject {
         llm: LLMProviding? = nil,
         managedAccount: ManagedAccountService? = nil,
         googleOAuthInterestClient: GoogleOAuthInterestRegistering? = nil,
+        googleWorkspaceMXDetector: GoogleWorkspaceMXDetector = GoogleWorkspaceMXDetector(),
         notifier: DraftNotifying = NullDraftNotifier(),
         reachability: NetworkReachabilityMonitoring = NetworkReachabilityMonitor()
     ) {
-        self.persistence = persistence
+        (self.persistence, self.googleWorkspaceMXDetector) = (persistence, googleWorkspaceMXDetector)
         self.secrets = secrets
         (self.googleMailAuth, self.mailProvider) = Self.makeMailStack(base: mailProvider, secrets: secrets)
         // Run launch migrations before constructing services that cache secret state.
