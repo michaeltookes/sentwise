@@ -96,7 +96,16 @@ The email-code flow:
 
 The Keychain holds the device token (`managed.clientToken`) and session id
 (`managed.sessionID`); the account email is stored in (non-secret) settings for
-the "Connected as …" display.
+the "Connected as …" display. Email-code completion is strictly ordered as
+verify → mint → finalize. Failures at those stages and at the first authenticated
+`GET /v1/me` use the `ManagedSignIn` unified-log category with only stage names,
+HTTP status/error type, and `SecretKey.logSafeIdentifier` key kinds — never the
+email, code, session id, client token, or JWT. Once finalize succeeds, the account
+is signed in even if `/v1/me` is transiently unavailable; the Subscription pane
+shows “Signed in. Couldn't load your plan yet, retrying…” on its separate status
+surface until the bounded refresh retry succeeds. A true verify/mint/finalize
+failure remains on the sign-in error surface and does not publish a signed-in
+account.
 
 ## Google sign-in via Clerk OAuth (item 59)
 
