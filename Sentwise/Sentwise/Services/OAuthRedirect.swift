@@ -57,7 +57,10 @@ final class LoopbackRedirectListener: RedirectListener {
         title: "Signed in with Google",
         cardClass: "card",
         badge: """
-        <svg viewBox="0 0 24 24" fill="none" stroke="#1f9d57" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#1f9d57" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 6 9 17l-5-5"/>
+        </svg>
         """,
         heading: "Signed in with Google",
         message: "Sentwise is connecting your mailbox. Return to the app to continue."
@@ -67,7 +70,10 @@ final class LoopbackRedirectListener: RedirectListener {
         title: "Google sign-in didn't finish",
         cardClass: "card fail",
         badge: """
-        <svg viewBox="0 0 24 24" fill="none" stroke="#d64545" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#d64545" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
         """,
         heading: "Google sign-in didn't finish",
         message: "Sentwise did not receive access. Return to the app and try again."
@@ -249,7 +255,8 @@ final class LoopbackRedirectListener: RedirectListener {
         <meta name="robots" content="noindex">
         <title>\(title)</title>
         <style>
-          :root { color-scheme: light dark; --fg:#0b0c0f; --muted:#5b6472; --bg:#f6f7f9; --card:#fff; --brand:#2f6fed; --ok:#1f9d57; --border:#e6e8ec; }
+          :root { color-scheme: light dark; --fg:#0b0c0f; --muted:#5b6472; --bg:#f6f7f9;
+                  --card:#fff; --brand:#2f6fed; --ok:#1f9d57; --border:#e6e8ec; }
           @media (prefers-color-scheme: dark) {
             :root { --fg:#f3f4f6; --muted:#9aa4b2; --bg:#0c0e12; --card:#14171d; --brand:#5b8dff; --ok:#3fbf77; --border:#232833; }
           }
