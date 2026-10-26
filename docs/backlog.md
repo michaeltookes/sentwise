@@ -115,6 +115,7 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Non-Google or failed lookups fall back to today's behavior (item 109's clearer error).
     - The lookup is DNS-only (no third-party service), cached per domain for the session, and never blocks typing or Test Connection.
     - Unit-test the MX-pattern classifier; live-verify once with a real Workspace domain (prowlqa.dev).
+    - **Build note (2026-10-26, branch `110-google-mx-autodetect`):** `GoogleWorkspaceMXDetector.isGoogleHosted(domain:)` now performs an injected, timeout-bounded system DNS MX query off the main actor, caches positive and negative results per session, and drives silent Gmail host/guidance selection in onboarding and Settings. Covered locally by build-for-testing and SwiftLint; live behavior is gated by TC-M4-01 (Google Workspace) and TC-M4-02 (negative fallback).
 
 ## Medium Priority
 
