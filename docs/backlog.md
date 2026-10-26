@@ -108,15 +108,6 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Send-test each customized template to a real inbox; check rendering in Gmail (light + dark) and Apple Mail, and confirm SPF/DKIM/DMARC pass on the received message.
     - Mostly dashboard work (owner) with agent-drafted template HTML/copy; no app code expected.
 
-110. **Auto-detect Google-hosted custom domains (MX lookup) and pre-fill the Gmail IMAP host** — *found 2026-10-01, same QA run; directly hits the "Marcus" ICP (corporate Gmail on a company domain)*
-    Google Workspace mailboxes on custom domains (e.g. `name@company.com`) are indistinguishable from unknown IMAP providers today, so the primary commercial ICP lands on an empty Advanced host field and a dead Test Connection. An MX lookup on the address's domain identifies Google-hosted mail (`*.google.com`/`*.googlemail.com` MX targets) and can pre-fill `imap.gmail.com` silently, making corporate-Gmail onboarding identical to gmail.com.
-    *As an AE whose company mail runs on Google Workspace, I want Sentwise to recognize my corporate address and connect like any Gmail account, so that I never have to know what an IMAP host is.*
-    - On email entry (connect screen + onboarding), when the domain is unrecognized, resolve its MX records off the main thread with a short timeout; on Google-pattern match, treat the account as `.gmail` for host suggestion and credential guidance (app-password instructions already exist via item 75's Workspace guidance).
-    - Non-Google or failed lookups fall back to today's behavior (item 109's clearer error).
-    - The lookup is DNS-only (no third-party service), cached per domain for the session, and never blocks typing or Test Connection.
-    - Unit-test the MX-pattern classifier; live-verify once with a real Workspace domain (prowlqa.dev).
-    - **Build note (2026-10-26, branch `110-google-mx-autodetect`):** `GoogleWorkspaceMXDetector.isGoogleHosted(domain:)` now performs an injected, timeout-bounded system DNS MX query off the main actor, caches positive and negative results per session, and drives silent Gmail host/guidance selection in onboarding and Settings. Covered locally by build-for-testing and SwiftLint; live behavior is gated by TC-M4-01 (Google Workspace) and TC-M4-02 (negative fallback).
-
 ## Medium Priority
 
 83. **Approval-signal learning loop (accept-as-is / edit / deny → better drafts + smarter filtering)** — *ongoing/strategic; phase 1 is a cheap early slice*
