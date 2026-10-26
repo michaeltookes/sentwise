@@ -85,7 +85,11 @@ extension AppState {
         if status == nil, !managedAccountStatusIsFresh {
             managedAccountStatusRefreshMessage = Self.managedStatusRefreshPendingMessage
             signInLogger.error(
-                "Post-sign-in /v1/me failed credential=\(SecretKey.managedSessionID.logSafeIdentifier, privacy: .public)"
+                "Post-sign-in /v1/me failed key=\(SecretKey.managedSessionID.logSafeIdentifier, privacy: .public)"
+            )
+        } else if status != nil {
+            signInLogger.info(
+                "Post-sign-in /v1/me completed key=\(SecretKey.managedSessionID.logSafeIdentifier, privacy: .public)"
             )
         }
     }

@@ -32,6 +32,7 @@ extension ManagedAccountService {
             throw error
         }
 
+        logSignInSuccess(stage: "verify", credential: .managedClientToken)
         updatePendingSignIn(pending, clientToken: verified.clientToken)
         try requirePendingSignIn(pending, stage: "mint")
         let minted: ClerkMintedToken
@@ -45,6 +46,7 @@ extension ManagedAccountService {
             logSignInFailure(stage: "mint", credential: .managedClientToken, error: error)
             throw error
         }
+        logSignInSuccess(stage: "mint", credential: .managedClientToken)
         try requirePendingSignIn(pending, stage: "mint")
         updatePendingSignIn(pending, clientToken: minted.clientToken)
         try requirePendingSignIn(pending, stage: "finalize")
@@ -59,6 +61,7 @@ extension ManagedAccountService {
             logSignInFailure(stage: "finalize", credential: .managedSessionID, error: error)
             throw error
         }
+        logSignInSuccess(stage: "finalize", credential: .managedSessionID)
         return result
     }
 
@@ -67,6 +70,13 @@ extension ManagedAccountService {
             signInLogger.error("Email-code sign-in failed stage=\(stage, privacy: .public) reason=cancelled-flow")
             throw ClerkError.malformedResponse("no sign-in in progress")
         }
+    }
+
+    private func logSignInSuccess(stage: String, credential: SecretKey) {
+        let credentialID = credential.logSafeIdentifier
+        signInLogger.info(
+            "Sign-in stage=\(stage, privacy: .public) completed key=\(credentialID, privacy: .public)"
+        )
     }
 
     private func logSignInFailure(stage: String, credential: SecretKey, error: Error) {
