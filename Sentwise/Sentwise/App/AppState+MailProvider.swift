@@ -9,9 +9,12 @@ extension AppState {
     /// Host fallback for provider guidance. Only hosts the user typed in
     /// Advanced count; loaded defaults and auto-suggestions can be stale.
     var credentialGuidanceHostFallback: String? {
-        guard mailHostWasExplicitlyEditedForCurrentAddress else { return nil }
-        let host = mailHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        return host.isEmpty ? nil : host
+        if mailHostWasExplicitlyEditedForCurrentAddress {
+            let host = mailHost.trimmingCharacters(in: .whitespacesAndNewlines)
+            return host.isEmpty ? nil : host
+        }
+        guard googleWorkspaceDomain == EmailProviderKind.validDomain(of: mailEmail) else { return nil }
+        return EmailProviderKind.gmail.imapHost
     }
 
     var mailHostWasExplicitlyEditedForCurrentAddress: Bool {
@@ -35,6 +38,9 @@ extension AppState {
         let changed = mailEmail != email
         mailEmail = email
         if changed {
+            if googleWorkspaceDomain != EmailProviderKind.validDomain(of: email) {
+                googleWorkspaceDomain = nil
+            }
             clearWorkspaceAuthGuidance(for: messageSurface)
         }
 
@@ -79,6 +85,27 @@ extension AppState {
         }
 
         applySuggestedHostIfDefault()
+    }
+
+    /// DNS-only entry point used by onboarding and Settings after an unrecognized
+    /// address is entered. Detection runs in the injected resolver's background
+    /// task and applies only if the address has not changed while DNS was pending.
+    func detectGoogleWorkspaceHost(for email: String) async {
+        guard EmailProviderKind.forEmail(email) == nil,
+              let domain = EmailProviderKind.validDomain(of: email) else { return }
+        let isGoogleHosted = await googleWorkspaceMXDetector.isGoogleHosted(domain: domain)
+        guard isGoogleHosted,
+              EmailProviderKind.validDomain(of: mailEmail) == domain else { return }
+
+        googleWorkspaceDomain = domain
+        let current = mailHost.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let suggestion = EmailProviderKind.gmail.imapHost
+        if isMailHostReplaceableBySuggestion(current, suggestedHost: suggestion), current != suggestion {
+            mailHost = suggestion
+            markMailHostManagedByApp()
+        } else {
+            objectWillChange.send()
+        }
     }
 
     /// Resolves an in-progress email edit before using the current inputs for a

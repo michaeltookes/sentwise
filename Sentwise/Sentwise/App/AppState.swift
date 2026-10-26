@@ -39,6 +39,7 @@ final class AppState: ObservableObject {
     @Published var mailPort: Int
     var mailHostExplicitlyEditedEmail: String?
     var mailHostExplicitlyEditedBeforeEmail = false
+    var googleWorkspaceDomain: String?
 
     /// Remembered accounts the user can switch between without re-entry (item 48).
     @Published var savedAccounts: [SavedMailAccount] = []
@@ -373,6 +374,7 @@ final class AppState: ObservableObject {
     /// Internal (not private) so the `AppState+Voice` extension can reach it.
     let mailProvider: MailProvider
     let googleMailAuth: GoogleMailAuthService // item 104; wraps mailProvider (see AppState+GoogleSignIn)
+    let googleWorkspaceMXDetector: GoogleWorkspaceMXDetector
     let llm: LLMProviding
     /// The managed-inference account (item 56a): Clerk sign-in + session-token
     /// minting. Also the `ManagedSessionProviding` behind the production LLM
@@ -423,11 +425,13 @@ final class AppState: ObservableObject {
         llm: LLMProviding? = nil,
         managedAccount: ManagedAccountService? = nil,
         googleOAuthInterestClient: GoogleOAuthInterestRegistering? = nil,
+        googleWorkspaceMXDetector: GoogleWorkspaceMXDetector = GoogleWorkspaceMXDetector(),
         notifier: DraftNotifying = NullDraftNotifier(),
         reachability: NetworkReachabilityMonitoring = NetworkReachabilityMonitor()
     ) {
         self.persistence = persistence
         self.secrets = secrets
+        self.googleWorkspaceMXDetector = googleWorkspaceMXDetector
         (self.googleMailAuth, self.mailProvider) = Self.makeMailStack(base: mailProvider, secrets: secrets)
         // Run launch migrations before constructing services that cache secret state.
         let loadedSettings = persistence.loadSettings()

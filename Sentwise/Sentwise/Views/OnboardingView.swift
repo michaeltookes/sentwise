@@ -221,6 +221,9 @@ private struct OnboardingAccountStep: View {
                     appState.commitMailEmailEditFromUser()
                 }
             }
+            .task(id: appState.mailEmail) {
+                await appState.detectGoogleWorkspaceHost(for: appState.mailEmail)
+            }
         SecureField("App password", text: mailAppPasswordBinding)
             .textFieldStyle(.roundedBorder)
 

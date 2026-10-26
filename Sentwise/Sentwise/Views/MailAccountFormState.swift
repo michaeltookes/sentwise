@@ -11,6 +11,7 @@ struct MailAccountFormState: Equatable {
 
     private var explicitHostEmail: String?
     private var hostEnteredBeforeEmail = false
+    private var googleWorkspaceDomain: String?
 
     var credentials: MailAccountCredentials {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -28,9 +29,12 @@ struct MailAccountFormState: Equatable {
     }
 
     var credentialGuidanceHostFallback: String? {
-        guard hostWasExplicitlyEditedForCurrentAddress else { return nil }
-        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedHost.isEmpty ? nil : trimmedHost
+        if hostWasExplicitlyEditedForCurrentAddress {
+            let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedHost.isEmpty ? nil : trimmedHost
+        }
+        guard googleWorkspaceDomain == EmailProviderKind.validDomain(of: email) else { return nil }
+        return EmailProviderKind.gmail.imapHost
     }
 
     mutating func resetForNewAccount() {
@@ -39,6 +43,9 @@ struct MailAccountFormState: Equatable {
 
     mutating func updateEmailFromUser(_ newEmail: String) {
         email = newEmail
+        if googleWorkspaceDomain != EmailProviderKind.validDomain(of: newEmail) {
+            googleWorkspaceDomain = nil
+        }
 
         if hostEnteredBeforeEmail {
             guard Self.normalizedEmailDomainForHostTracking(newEmail) != nil else { return }
@@ -55,6 +62,17 @@ struct MailAccountFormState: Equatable {
     mutating func commitEmailEditFromUser() {
         restorePendingHostGuidanceIfPossible()
         applySuggestedHostIfDefault()
+    }
+
+    mutating func applyGoogleWorkspaceSuggestion(for domain: String) {
+        guard EmailProviderKind.validDomain(of: email) == domain else { return }
+        googleWorkspaceDomain = domain
+        let suggestion = EmailProviderKind.gmail.imapHost
+        let currentHost = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if isHostReplaceableBySuggestion(currentHost, suggestedHost: suggestion), currentHost != suggestion {
+            host = suggestion
+            markHostManagedByApp()
+        }
     }
 
     mutating func updateHostFromUser(_ newHost: String) {

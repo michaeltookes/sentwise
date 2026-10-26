@@ -161,6 +161,9 @@ struct EmailAccountSettingsView: View {
                     commitMailEmailEditFromUser()
                 }
             }
+            .task(id: guidanceEmail) {
+                await detectGoogleWorkspaceHost(for: guidanceEmail)
+            }
             .accessibilityLabel("Email address")
         SecureField("App password", text: mailAppPasswordBinding)
             .accessibilityLabel("App password")
@@ -348,6 +351,20 @@ struct EmailAccountSettingsView: View {
             newAccountForm.commitEmailEditFromUser()
         } else {
             appState.commitMailEmailEditFromUser()
+        }
+    }
+
+    private func detectGoogleWorkspaceHost(for email: String) async {
+        guard EmailProviderKind.forEmail(email) == nil,
+              let domain = EmailProviderKind.validDomain(of: email) else { return }
+        if isAddingAccount {
+            let isGoogleHosted = await appState.googleWorkspaceMXDetector.isGoogleHosted(domain: domain)
+            guard isGoogleHosted,
+                  isAddingAccount,
+                  EmailProviderKind.validDomain(of: newAccountForm.email) == domain else { return }
+            newAccountForm.applyGoogleWorkspaceSuggestion(for: domain)
+        } else {
+            await appState.detectGoogleWorkspaceHost(for: email)
         }
     }
 
