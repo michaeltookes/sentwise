@@ -43,6 +43,26 @@ final class GoogleWorkspaceMXDetectorTests: XCTestCase {
         XCTAssertLessThan(started.duration(to: clock.now), .milliseconds(500))
     }
 
+    func testCallerCancellationDoesNotCacheNegativeResult() async {
+        let resolver = CancellationThenSuccessMXResolver()
+        let detector = GoogleWorkspaceMXDetector(resolver: resolver)
+        let firstLookup = Task {
+            await detector.isGoogleHosted(domain: "workspace.example")
+        }
+        while await resolver.callCount == 0 {
+            await Task.yield()
+        }
+
+        firstLookup.cancel()
+        let cancelledResult = await firstLookup.value
+        let retriedResult = await detector.isGoogleHosted(domain: "workspace.example")
+        let callCount = await resolver.callCount
+
+        XCTAssertFalse(cancelledResult)
+        XCTAssertTrue(retriedResult)
+        XCTAssertEqual(callCount, 2)
+    }
+
     func testSessionCacheAvoidsSecondLookup() async {
         let resolver = MXResolverStub(result: .success(["aspmx.l.google.com."]))
         let detector = GoogleWorkspaceMXDetector(resolver: resolver)
@@ -123,6 +143,18 @@ final class GoogleWorkspaceMXDetectorTests: XCTestCase {
         appState.updateMailEmailFromUser("marcus@company")
 
         XCTAssertNil(appState.credentialGuidanceHostFallback)
+    }
+}
+
+private actor CancellationThenSuccessMXResolver: MXRecordResolving {
+    private(set) var callCount = 0
+
+    func records(for _: String) async throws -> [String] {
+        callCount += 1
+        if callCount == 1 {
+            try await Task.sleep(nanoseconds: 5_000_000_000)
+        }
+        return ["aspmx.l.google.com."]
     }
 }
 

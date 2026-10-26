@@ -56,6 +56,12 @@ actor GoogleWorkspaceMXDetector {
                 return first
             }
         } catch {
+            // SwiftUI cancels the task when the address changes or the form
+            // disappears. That is not evidence about the domain: leave it
+            // uncached so entering the same address later retries DNS.
+            if Task.isCancelled || error is CancellationError {
+                return false
+            }
             result = false
         }
         cache[domain] = result
