@@ -99,6 +99,7 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Unit-test fault injection: verify succeeds, first `/v1/me` refresh throws transiently — assert the pane distinguishes "signed in; status refresh failed, retrying" from a sign-in failure (today both hit the same transient message surface).
     - Repro harness reality: Prowl hunts are offline (hunt mode cannot exercise live Clerk), and the production instance has no test mode, so a live GUI repro on Lucius needs production test users + mailbox code retrieval — build only if the instrumented logs don't settle it first.
     - Consider surfacing distinct copy for post-sign-in refresh failures ("Signed in — couldn't load your plan yet, retrying…").
+    - **Build note 2026-10-26 (`105-signin-status-instrumentation`):** added redaction-safe `ManagedSignIn` stage logs for verify → mint → finalize and the post-sign-in `/v1/me` refresh; the Subscription pane now keeps the account signed in and shows “Signed in. Couldn't load your plan yet, retrying…” until a retry succeeds. Fault-injection tests cover both that recovery and a true verify-stage failure. Keep this item open for the live Lucius observation in v0.2.3.
 
 106. **Branded Clerk transactional emails (verification code, security notices)** — *owner request 2026-09-21*
     The sign-in code and other Clerk-sent emails currently use Clerk's default template and sender identity. Brand them as Sentwise before launch — these are among the first emails a new user ever receives from the product.

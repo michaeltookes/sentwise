@@ -2,6 +2,7 @@ import Foundation
 import os
 
 private let quotaLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedQuota")
+private let signInLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedSignIn")
 
 struct ManagedAccountStatusRefreshOrdering {
     var startedGeneration: UInt64 = 0
@@ -69,6 +70,7 @@ extension AppState {
         resetPlanManagementState()
         managedQuota = nil
         managedAccountStatus = nil
+        managedAccountStatusRefreshMessage = nil
         managedAccountStatusIsFresh = false
         managedAccountStatusRefreshOrdering.startedGeneration &+= 1
         managedAccountStatusRefreshOrdering.acceptedGeneration = managedAccountStatusRefreshOrdering.startedGeneration
@@ -161,15 +163,17 @@ extension AppState {
     /// Refreshes the quota from `/v1/me`. Called at launch, on sign-in, and when
     /// the AI Provider settings pane opens. No-ops (silently) when there is no
     /// signed-in managed account. Transient errors keep the last known display
-    /// value and schedule a bounded retry. In Prowl hunt mode the LLM service
+    /// value and schedule a bounded retry. In Prowl hunt mode the refresh path
     /// returns the deterministic stub with zero network.
     @discardableResult
     func refreshManagedQuota(
         scheduleRetryOnFailure: Bool = true,
         deferPendingPlanChangeStatus: Bool = true,
-        requireQuotaForFreshStatus: Bool = false
+        requireQuotaForFreshStatus: Bool = false,
+        isPostSignInRefresh: Bool = false,
+        isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled
     ) async -> ManagedAccountStatus? {
-        guard ProwlHuntRuntime.current.isEnabled || isManagedSignedIn else {
+        guard isHuntMode || isManagedSignedIn else {
             return nil
         }
         managedAccountStatusRefreshOrdering.startedGeneration &+= 1
@@ -184,8 +188,10 @@ extension AppState {
         do {
             // The reporter path already routes the fetched quota through
             // `ingestManagedQuota`; still ingest the return value directly so an
-            // injected LLM double without a wired relay updates state too.
-            if let status = try await llm.fetchManagedAccountStatus() {
+            // injected LLM double without a wired relay updates state too. An
+            // explicitly injected hunt stays offline even when a unit test is not
+            // running under the hunt process environment.
+            if let status = try await fetchManagedAccountStatusForRefresh(isHuntMode: isHuntMode) {
                 return applyManagedAccountStatusRefreshSuccess(
                     status,
                     generation: refreshGeneration,
@@ -205,6 +211,13 @@ extension AppState {
                 return nil
             }
         } catch {
+            if isPostSignInRefresh {
+                let credentialID = SecretKey.managedSessionID.logSafeIdentifier
+                let errorID = String(reflecting: type(of: error))
+                signInLogger.error(
+                    "Post-sign-in /v1/me threw credential=\(credentialID, privacy: .public) error=\(errorID, privacy: .public)"
+                )
+            }
             guard shouldApplyManagedAccountStatusRefreshFailure(
                 generation: refreshGeneration,
                 accountKey: accountKey,
@@ -227,6 +240,13 @@ extension AppState {
         }
     }
 
+    private func fetchManagedAccountStatusForRefresh(isHuntMode: Bool) async throws -> ManagedAccountStatus? {
+        if isHuntMode {
+            return StubManagedInferenceClient.stubbedAccountStatus
+        }
+        return try await llm.fetchManagedAccountStatus()
+    }
+
     @discardableResult
     private func applyManagedAccountStatusRefreshSuccess(
         _ status: ManagedAccountStatus,
@@ -243,6 +263,7 @@ extension AppState {
         }
         managedAccountStatusRefreshOrdering.acceptedGeneration = generation
         managedAccountStatusRefreshOrdering.successVersion &+= 1
+        managedAccountStatusRefreshMessage = nil
         let snapshotBeforeAccountKeyBackfill = effectiveSubscriptionSnapshot
         // Mirror the full status for the Subscription pane (item 73), even when
         // `quota` is absent on an older Worker build.

@@ -108,6 +108,8 @@ final class AppState: ObservableObject {
 
     /// Latest `/v1/me` account status for the Subscription pane; nil until known or signed out.
     @Published var managedAccountStatus: ManagedAccountStatus?
+    /// Signed-in status-refresh failure, separate from the sign-in `managedError`.
+    @Published var managedAccountStatusRefreshMessage: String?
     /// Instant until which the latest `/v1/me` response may be trusted as live.
     @Published var managedAccountStatusFreshUntil: Date?
     var managedAccountStatusRefreshTask: Task<Void, Never>?

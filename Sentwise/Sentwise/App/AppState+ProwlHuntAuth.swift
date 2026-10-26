@@ -25,12 +25,16 @@ extension AppState {
     func completeManagedGoogleSignInForHunt(
         isHuntMode: Bool = ProwlHuntRuntime.current.isEnabled,
         messageSurface: TransientMessageSurface = .shared
-    ) {
+    ) async {
         guard isHuntMode else { return }
         if pendingManagedSignInActivatesProvider, llmProviderKind != .managed {
             selectLLMProvider(.managed, messageSurface: messageSurface)
         }
-        finalizeManagedSignIn(email: Self.huntFixtureGoogleEmail, accountID: "hunt-google")
+        await finalizeManagedSignInAndRefreshStatus(
+            email: Self.huntFixtureGoogleEmail,
+            accountID: "hunt-google",
+            isHuntMode: true
+        )
     }
 
     /// Hunt-only: deterministically completes OpenRouter provisioning to a fake
