@@ -99,7 +99,8 @@ extension AppState {
               EmailProviderKind.validDomain(of: mailEmail) == domain else { return }
 
         googleWorkspaceDomain = domain
-        guard !mailHostWasExplicitlyEditedForCurrentAddress else {
+        guard !mailHostWasExplicitlyEditedForCurrentAddress,
+              !mailHostExplicitlyEditedBeforeEmail else {
             objectWillChange.send()
             return
         }
