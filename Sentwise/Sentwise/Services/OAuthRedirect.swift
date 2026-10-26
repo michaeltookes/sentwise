@@ -228,14 +228,14 @@ final class LoopbackRedirectListener: RedirectListener {
 
     static func httpResponse(for params: [String: String]) -> Data {
         let body = params["code"] == nil ? failurePageHTML : successPageHTML
-        let headers = """
-        HTTP/1.1 200 OK\r
-        Content-Type: text/html; charset=utf-8\r
-        Content-Length: \(body.utf8.count)\r
-        Connection: close\r
-        \r
-
-        """
+        let headers = [
+            "HTTP/1.1 200 OK",
+            "Content-Type: text/html; charset=utf-8",
+            "Content-Length: \(body.utf8.count)",
+            "Connection: close",
+            "",
+            ""
+        ].joined(separator: "\r\n")
         return Data((headers + body).utf8)
     }
 
