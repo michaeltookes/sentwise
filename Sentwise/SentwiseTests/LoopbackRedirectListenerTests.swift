@@ -50,6 +50,70 @@ final class LoopbackRedirectListenerTests: XCTestCase {
         XCTAssertTrue(LoopbackRedirectListener.parseQuery(fromRequestLine: request).isEmpty)
     }
 
+    func testCodeResponseIsSuccessfulHTMLWithoutReflectedQueryValues() throws {
+        let response = try parsedResponse(
+            for: ["code": "secret-code-123", "state": "secret-state-456"]
+        )
+
+        XCTAssertEqual(response.statusLine, "HTTP/1.1 200 OK")
+        XCTAssertEqual(response.headers["content-type"], "text/html; charset=utf-8")
+        XCTAssertEqual(response.headers["connection"], "close")
+        XCTAssertEqual(response.headers["content-length"], String(response.body.utf8.count))
+        XCTAssertTrue(response.body.contains("Signed in with Google"))
+        XCTAssertTrue(response.body.contains("Sentwise is connecting your mailbox. Return to the app to continue."))
+        XCTAssertTrue(response.body.contains("Return to Sentwise"))
+        XCTAssertTrue(response.body.contains("href=\"\(SentwiseURLCallback.scheme)://\""))
+        XCTAssertFalse(response.body.contains("secret-code-123"))
+        XCTAssertFalse(response.body.contains("secret-state-456"))
+    }
+
+    func testErrorResponseIsFailureHTMLWithoutReflectedQueryValues() throws {
+        let response = try parsedResponse(
+            for: ["error": "private-access-denied", "state": "private-error-state"]
+        )
+
+        XCTAssertEqual(response.statusLine, "HTTP/1.1 200 OK")
+        XCTAssertEqual(response.headers["content-type"], "text/html; charset=utf-8")
+        XCTAssertEqual(response.headers["connection"], "close")
+        XCTAssertEqual(response.headers["content-length"], String(response.body.utf8.count))
+        XCTAssertTrue(response.body.contains("Google sign-in didn't finish"))
+        XCTAssertTrue(response.body.contains("Sentwise did not receive access. Return to the app and try again."))
+        XCTAssertTrue(response.body.contains("Return to Sentwise"))
+        XCTAssertFalse(response.body.contains("private-access-denied"))
+        XCTAssertFalse(response.body.contains("private-error-state"))
+    }
+
+    func testRequestWithoutCodeOrErrorUsesFailurePage() throws {
+        let response = try parsedResponse(for: [:])
+
+        XCTAssertTrue(response.body.contains("Google sign-in didn't finish"))
+        XCTAssertFalse(response.body.contains("Signed in with Google"))
+    }
+
+    private func parsedResponse(
+        for params: [String: String],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> (statusLine: String, headers: [String: String], body: String) {
+        let rawResponse = try XCTUnwrap(
+            String(data: LoopbackRedirectListener.httpResponse(for: params), encoding: .utf8),
+            file: file,
+            line: line
+        )
+        let parts = rawResponse.components(separatedBy: "\r\n\r\n")
+        XCTAssertEqual(parts.count, 2, file: file, line: line)
+        let head = try XCTUnwrap(parts.first, file: file, line: line)
+        let body = try XCTUnwrap(parts.last, file: file, line: line)
+        let lines = head.components(separatedBy: "\r\n")
+        let statusLine = try XCTUnwrap(lines.first, file: file, line: line)
+        let headers = lines.dropFirst().reduce(into: [String: String]()) { result, header in
+            let pair = header.split(separator: ":", maxSplits: 1).map(String.init)
+            guard pair.count == 2 else { return }
+            result[pair[0].lowercased()] = pair[1].trimmingCharacters(in: .whitespaces)
+        }
+        return (statusLine, headers, body)
+    }
+
     /// Regression for the parked item-3 bug (item 104): starting the listener
     /// used to fail with `NWError` POSIX 22 (EINVAL). This drives a real socket
     /// on 127.0.0.1 end to end — no browser, no network beyond loopback.

@@ -74,7 +74,12 @@ inference proxy is not involved.
 `NWError` POSIX 22 (EINVAL) because it pinned `requiredLocalEndpoint` to
 `127.0.0.1` with port `.any`. It now uses `NWListener(using:on: .any)` and stays
 on IPv4 loopback through `requiredInterfaceType = .loopback`. A real-socket unit
-test covers it (`LoopbackRedirectListenerTests`).
+test covers it (`LoopbackRedirectListenerTests`). After Google redirects, the
+listener returns a self-contained Sentwise finish card in the browser: a success
+state for an authorization code and a failure state for an error or malformed
+request. The page loads no external resources, reflects no query values, and its
+**Return to Sentwise** button opens the current build's registered URL-scheme
+root (`sentwise://` in production and the isolated scheme in QA builds).
 
 ---
 

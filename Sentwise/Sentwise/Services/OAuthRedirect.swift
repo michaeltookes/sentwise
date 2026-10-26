@@ -51,6 +51,33 @@ final class LoopbackRedirectListener: RedirectListener {
     private var timeoutWorkItem: DispatchWorkItem?
     private var receivingConnections: [ObjectIdentifier: NWConnection] = [:]
     private static let maximumRequestLineLength = 8192
+    private static let appRootURL = "\(SentwiseURLCallback.scheme)://"
+
+    static let successPageHTML = finishPageHTML(
+        title: "Signed in with Google",
+        cardClass: "card",
+        badge: """
+        <svg viewBox="0 0 24 24" fill="none" stroke="#1f9d57" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 6 9 17l-5-5"/>
+        </svg>
+        """,
+        heading: "Signed in with Google",
+        message: "Sentwise is connecting your mailbox. Return to the app to continue."
+    )
+
+    static let failurePageHTML = finishPageHTML(
+        title: "Google sign-in didn't finish",
+        cardClass: "card fail",
+        badge: """
+        <svg viewBox="0 0 24 24" fill="none" stroke="#d64545" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+        """,
+        heading: "Google sign-in didn't finish",
+        message: "Sentwise did not receive access. Return to the app and try again."
+    )
 
     func start() async throws -> String {
         let listener = try NWListener(using: Self.listenerParameters(), on: .any)
@@ -168,7 +195,7 @@ final class LoopbackRedirectListener: RedirectListener {
             let request = String(data: buffer[..<terminator.lowerBound], encoding: .utf8) ?? ""
             let params = Self.parseQuery(fromRequestLine: request)
 
-            self.respond(on: connection)
+            self.respond(on: connection, for: params)
 
             // Ignore incidental requests (e.g. favicon) that carry no result.
             guard params["code"] != nil || params["error"] != nil else { return }
@@ -193,19 +220,76 @@ final class LoopbackRedirectListener: RedirectListener {
         continuation?.resume(with: result)
     }
 
-    private func respond(on connection: NWConnection) {
-        let body = "Google sign-in finished. You can close this tab and return to Sentwise."
-        let response = """
-        HTTP/1.1 200 OK\r
-        Content-Type: text/plain; charset=utf-8\r
-        Content-Length: \(body.utf8.count)\r
-        Connection: close\r
-        \r
-        \(body)
-        """
-        connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
+    private func respond(on connection: NWConnection, for params: [String: String]) {
+        connection.send(content: Self.httpResponse(for: params), completion: .contentProcessed { _ in
             connection.cancel()
         })
+    }
+
+    static func httpResponse(for params: [String: String]) -> Data {
+        let body = params["code"] == nil ? failurePageHTML : successPageHTML
+        let headers = [
+            "HTTP/1.1 200 OK",
+            "Content-Type: text/html; charset=utf-8",
+            "Content-Length: \(body.utf8.count)",
+            "Connection: close",
+            "",
+            ""
+        ].joined(separator: "\r\n")
+        return Data((headers + body).utf8)
+    }
+
+    private static func finishPageHTML(
+        title: String,
+        cardClass: String,
+        badge: String,
+        heading: String,
+        message: String
+    ) -> String {
+        """
+        <!doctype html>
+        <html lang="en">
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="robots" content="noindex">
+        <title>\(title)</title>
+        <style>
+          :root { color-scheme: light dark; --fg:#0b0c0f; --muted:#5b6472; --bg:#f6f7f9;
+                  --card:#fff; --brand:#2f6fed; --ok:#1f9d57; --border:#e6e8ec; }
+          @media (prefers-color-scheme: dark) {
+            :root { --fg:#f3f4f6; --muted:#9aa4b2; --bg:#0c0e12; --card:#14171d; --brand:#5b8dff; --ok:#3fbf77; --border:#232833; }
+          }
+          * { box-sizing: border-box; }
+          body { margin:0; min-height:100vh; display:grid; place-items:center; padding:1.5rem;
+                 background:var(--bg); color:var(--fg);
+                 font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+          .card { width:100%; max-width:30rem; background:var(--card); border:1px solid var(--border);
+                  border-radius:16px; padding:2.75rem 2.25rem; text-align:center;
+                  box-shadow:0 1px 3px rgba(0,0,0,.06),0 8px 30px rgba(0,0,0,.06); }
+          .badge { width:64px; height:64px; margin:0 auto 1.25rem; border-radius:50%;
+                   display:grid; place-items:center; background:color-mix(in srgb,var(--ok) 15%,transparent); }
+          .badge svg { width:34px; height:34px; }
+          h1 { font-size:1.6rem; font-weight:650; margin:0 0 .5rem; letter-spacing:-.01em; }
+          p { margin:.35rem 0; color:var(--muted); }
+          .sub { font-size:1.02rem; }
+          .hint { font-size:.85rem; margin-top:1.25rem; }
+          .btn { display:inline-block; margin-top:1.5rem; padding:.7rem 1.4rem; border-radius:10px;
+                 background:var(--brand); color:#fff; text-decoration:none; font-weight:600; }
+          .fail .badge { background:color-mix(in srgb,#d64545 15%,transparent); }
+        </style>
+        </head>
+        <body>
+        <main class="\(cardClass)">
+          <div class="badge">\(badge)</div>
+          <h1>\(heading)</h1>
+          <p class="sub">\(message)</p>
+          <a class="btn" href="\(appRootURL)">Return to Sentwise</a>
+          <p class="hint">You can close this tab.</p>
+        </main>
+        </body>
+        </html>
+        """
     }
 
     func stop() {
