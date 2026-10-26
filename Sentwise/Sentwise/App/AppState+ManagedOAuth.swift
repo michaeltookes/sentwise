@@ -5,6 +5,12 @@ import os
 private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedOAuth")
 private let signInLogger = Logger(subsystem: DiagnosticLog.subsystem, category: "ManagedSignIn")
 
+enum StatusRefreshRetryStopReason: String {
+    case budgetExhausted = "budget-exhausted"
+    case connectivityLost = "connectivity-lost"
+    case refreshSettled = "refresh-settled"
+}
+
 /// Managed-account Google sign-in via Clerk's OAuth flow (item 59), plus the
 /// shared post-sign-in finalization used by both the email-code and OAuth paths.
 /// Kept in its own file so `AppState+ManagedAccount` stays within length limits.
@@ -103,13 +109,22 @@ extension AppState {
         }
     }
 
-    func finishPostSignInStatusRefreshRetries() {
+    var canManuallyRetryManagedAccountStatusRefresh: Bool {
+        isManagedSignedIn
+            && managedAccountStatusRefreshMessage == Self.managedStatusRefreshExhaustedMessage
+    }
+
+    func finishPostSignInStatusRefreshRetries(
+        reason: StatusRefreshRetryStopReason = .budgetExhausted
+    ) {
         guard isManagedSignedIn,
               !managedAccountStatusIsFresh,
               managedAccountStatusRefreshMessage == Self.managedStatusRefreshPendingMessage else { return }
         managedAccountStatusRefreshMessage = Self.managedStatusRefreshExhaustedMessage
+        let reasonID = reason.rawValue
+        let credentialID = SecretKey.managedSessionID.logSafeIdentifier
         signInLogger.error(
-            "Post-sign-in /v1/me retries exhausted key=\(SecretKey.managedSessionID.logSafeIdentifier, privacy: .public)"
+            "Post-sign-in /v1/me retries stopped reason=\(reasonID, privacy: .public) key=\(credentialID, privacy: .public)"
         )
     }
 

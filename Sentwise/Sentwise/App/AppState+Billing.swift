@@ -293,9 +293,15 @@ extension AppState {
                 }
                 guard let self else { return }
                 let shouldContinue = await self.refreshManagedQuotaForRetry()
-                if !shouldContinue { return }
+                if !shouldContinue {
+                    let reason: StatusRefreshRetryStopReason = self.isOnline
+                        ? .refreshSettled
+                        : .connectivityLost
+                    self.finishManagedAccountStatusRefreshRetry(reason: reason)
+                    return
+                }
             }
-            self?.finishManagedAccountStatusRefreshRetry()
+            self?.finishManagedAccountStatusRefreshRetry(reason: .budgetExhausted)
         }
     }
 
@@ -393,10 +399,10 @@ extension AppState {
         return isManagedSignedIn && isOnline && !managedAccountStatusIsFresh
     }
 
-    private func finishManagedAccountStatusRefreshRetry() {
+    private func finishManagedAccountStatusRefreshRetry(reason: StatusRefreshRetryStopReason) {
         if !managedAccountStatusIsFresh {
             managedAccountStatusRefreshTask = nil
-            finishPostSignInStatusRefreshRetries()
+            finishPostSignInStatusRefreshRetries(reason: reason)
         }
     }
 

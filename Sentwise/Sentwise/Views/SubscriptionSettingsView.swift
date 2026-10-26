@@ -106,7 +106,7 @@ struct SubscriptionSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier(statusRefreshMessageAccessibilityIdentifier)
-                if refreshMessage == AppState.managedStatusRefreshExhaustedMessage {
+                if appState.canManuallyRetryManagedAccountStatusRefresh {
                     Button("Refresh plan") {
                         Task { await appState.retryManagedAccountStatusRefresh() }
                     }
