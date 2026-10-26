@@ -99,6 +99,10 @@ extension AppState {
               EmailProviderKind.validDomain(of: mailEmail) == domain else { return }
 
         googleWorkspaceDomain = domain
+        guard !mailHostWasExplicitlyEditedForCurrentAddress else {
+            objectWillChange.send()
+            return
+        }
         let current = mailHost.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let suggestion = EmailProviderKind.gmail.imapHost
         if isMailHostReplaceableBySuggestion(current, suggestedHost: suggestion), current != suggestion {
@@ -304,8 +308,12 @@ extension AppState {
         let workspaceSuggestion = googleWorkspaceDomain.flatMap {
             $0 == domain ? EmailProviderKind.gmail.imapHost : nil
         }
+        let providerSuggestion = Self.suggestedIMAPHost(forEmail: mailEmail)
+        if providerSuggestion == nil, workspaceSuggestion != nil, mailHostWasExplicitlyEditedForCurrentAddress {
+            return
+        }
 
-        guard let suggestion = Self.suggestedIMAPHost(forEmail: mailEmail) ?? workspaceSuggestion else {
+        guard let suggestion = providerSuggestion ?? workspaceSuggestion else {
             if isMailHostReplaceableBySuggestion(current, suggestedHost: nil), !current.isEmpty {
                 mailHost = ""
                 markMailHostManagedByApp()

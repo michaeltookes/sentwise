@@ -78,6 +78,7 @@ struct MailAccountFormState: Equatable {
     mutating func applyGoogleWorkspaceSuggestion(for domain: String) {
         guard EmailProviderKind.validDomain(of: email) == domain else { return }
         googleWorkspaceDomain = domain
+        guard !hostWasExplicitlyEditedForCurrentAddress else { return }
         let suggestion = EmailProviderKind.gmail.imapHost
         let currentHost = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if isHostReplaceableBySuggestion(currentHost, suggestedHost: suggestion), currentHost != suggestion {
@@ -124,8 +125,12 @@ struct MailAccountFormState: Equatable {
         let workspaceSuggestion = googleWorkspaceDomain.flatMap {
             $0 == domain ? EmailProviderKind.gmail.imapHost : nil
         }
+        let providerSuggestion = EmailProviderKind.forEmail(email)?.imapHost
+        if providerSuggestion == nil, workspaceSuggestion != nil, hostWasExplicitlyEditedForCurrentAddress {
+            return
+        }
 
-        guard let suggestion = EmailProviderKind.forEmail(email)?.imapHost ?? workspaceSuggestion else {
+        guard let suggestion = providerSuggestion ?? workspaceSuggestion else {
             if isHostReplaceableBySuggestion(currentHost, suggestedHost: nil), !currentHost.isEmpty {
                 host = ""
                 markHostManagedByApp()

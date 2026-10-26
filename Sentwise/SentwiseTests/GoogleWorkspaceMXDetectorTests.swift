@@ -98,6 +98,32 @@ final class GoogleWorkspaceMXDetectorTests: XCTestCase {
         XCTAssertEqual(form.credentialGuidanceHostFallback, "imap.gmail.com")
     }
 
+    func testExplicitFormHostSurvivesPendingGoogleLookupAndCommit() async throws {
+        let resolver = MXResolverStub(
+            result: .success(["aspmx.l.google.com."]),
+            delayNanoseconds: 50_000_000
+        )
+        let detector = GoogleWorkspaceMXDetector(resolver: resolver)
+        var form = MailAccountFormState()
+        form.updateEmailFromUser("marcus@company.example")
+        let email = form.email
+        let lookup = Task {
+            await MailAccountFormState.detectedGoogleWorkspaceDomain(for: email, using: detector)
+        }
+        while await resolver.callCount == 0 {
+            await Task.yield()
+        }
+        form.updateHostFromUser("imap.mail.me.com")
+
+        let detectedDomain = await lookup.value
+        let domain = try XCTUnwrap(detectedDomain)
+        form.applyGoogleWorkspaceSuggestion(for: domain)
+        XCTAssertEqual(form.host, "imap.mail.me.com")
+
+        form.commitEmailEditFromUser()
+        XCTAssertEqual(form.host, "imap.mail.me.com")
+    }
+
     func testDetectedFormDomainKeepsGmailHostOnCommit() {
         var form = MailAccountFormState()
         form.updateEmailFromUser("marcus@company.example")
@@ -114,6 +140,32 @@ final class GoogleWorkspaceMXDetectorTests: XCTestCase {
         form.updateEmailFromUser("marcus@company")
 
         XCTAssertNil(form.credentialGuidanceHostFallback)
+    }
+
+    @MainActor
+    func testExplicitAppStateHostSurvivesPendingGoogleLookupAndCommit() async {
+        let resolver = MXResolverStub(
+            result: .success(["aspmx.l.google.com."]),
+            delayNanoseconds: 50_000_000
+        )
+        let detector = GoogleWorkspaceMXDetector(resolver: resolver)
+        let appState = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: InMemorySecretStore(),
+            googleWorkspaceMXDetector: detector
+        )
+        appState.updateMailEmailFromUser("marcus@company.example")
+        let lookup = Task { await appState.detectGoogleWorkspaceHost(for: appState.mailEmail) }
+        while await resolver.callCount == 0 {
+            await Task.yield()
+        }
+        appState.updateMailHostFromUser("imap.mail.me.com")
+
+        await lookup.value
+        XCTAssertEqual(appState.mailHost, "imap.mail.me.com")
+
+        appState.commitMailEmailEditFromUser()
+        XCTAssertEqual(appState.mailHost, "imap.mail.me.com")
     }
 
     @MainActor
