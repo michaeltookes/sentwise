@@ -539,3 +539,10 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Unhappy path: any wrong build, missing support mail, signature/update failure, or open P1/P2 launch defect blocks announcement while the last known-good release remains available and a TC-linked backlog defect is filed.
     - **Size/order:** M (1 release day plus 0.5–1 QA day). Final slice; depends on 129 and 130.
     - **Verified by:** TC-74-09 and the TC-74-07 update leg in `docs/requirements/launch-readiness.md`.
+
+132. **Preserve a host typed before the email address when a Workspace MX suggestion arrives** — *found 2026-10-26, final Codex review of item 110 (P2), filed as a follow-up under the three-round cap*
+    Item 110 preserves explicit IMAP hosts that are already associated with the current address, but a host typed before the email is completed (`mailHostExplicitlyEditedBeforeEmail` true, `mailHostWasExplicitlyEditedForCurrentAddress` false) still passes the suggestion guard in `AppState+MailProvider.swift` around lines 102-105. A successful MX lookup that lands during typing replaces that host (for example `imap.mail.me.com`) and clears its ownership tracking, bypassing the pending-host preservation that `updateMailEmailFromUser` and `AppStateMailProviderPendingHostTests` cover.
+    *As a user who types my IMAP host before my address, I want an automatic Google Workspace suggestion to leave my host alone, so that nothing I entered on purpose is silently overwritten.*
+    - The MX-suggestion apply path treats a pending explicit host (edited before the email was complete) the same as a host explicitly edited for the current address: it is never replaced and its ownership flags are never cleared.
+    - Unit test: type `imap.mail.me.com` with the email still incomplete, then let a successful Workspace MX lookup resolve; the host and its explicit-edit flags are unchanged.
+    - Existing `AppStateMailProviderPendingHostTests` and the item 110 tests stay green.
