@@ -547,6 +547,7 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - The MX-suggestion apply path treats a pending explicit host (edited before the email was complete) the same as a host explicitly edited for the current address: it is never replaced and its ownership flags are never cleared.
     - Unit test: type `imap.mail.me.com` with the email still incomplete, then let a successful Workspace MX lookup resolve; the host and its explicit-edit flags are unchanged.
     - Existing `AppStateMailProviderPendingHostTests` and the item 110 tests stay green.
+    - **Build note 2026-10-26 (`132-preserve-pending-host`):** the Workspace MX apply guard now treats `mailHostExplicitlyEditedBeforeEmail` as explicit ownership, preserving the typed host and both ownership flags. `AppStateMailProviderPendingHostTests` covers a successful Google-hosted MX result while the host remains pending. SwiftLint strict and `xcodebuild build-for-testing` pass locally; the unit suite runs in CI.
 
 133. **Presentable Google sign-in finish page** — *requested by Michael 2026-10-26 during the item 104 live check*
     After Google consent the loopback listener in `OAuthRedirect.swift` answers with a plain-text line. Replace it with a self-contained HTML page matching the managed sign-in handoff card in sentwise-service `src/callback.ts` (same layout, type, colors, light and dark), with a success and a failure variant.

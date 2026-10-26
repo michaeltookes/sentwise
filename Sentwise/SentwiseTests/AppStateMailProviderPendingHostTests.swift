@@ -75,6 +75,26 @@ final class AppStateMailProviderPendingHostTests: XCTestCase {
         XCTAssertFalse(app.buildSettings().mailHostGuidancePendingEmail)
     }
 
+    func testWorkspaceSuggestionPreservesHostEnteredBeforeEmailCompletion() async {
+        let detector = GoogleWorkspaceMXDetector(resolver: PendingHostMXResolver())
+        let app = AppState(
+            persistence: AppStateMemoryPersistence(),
+            secrets: InMemorySecretStore(),
+            googleWorkspaceMXDetector: detector
+        )
+        app.updateMailHostFromUser("imap.mail.me.com")
+        app.updateMailEmailFromUser("me@company.example")
+
+        XCTAssertNil(app.mailHostExplicitlyEditedEmail)
+        XCTAssertTrue(app.mailHostExplicitlyEditedBeforeEmail)
+
+        await app.detectGoogleWorkspaceHost(for: app.mailEmail)
+
+        XCTAssertEqual(app.mailHost, "imap.mail.me.com")
+        XCTAssertNil(app.mailHostExplicitlyEditedEmail)
+        XCTAssertTrue(app.mailHostExplicitlyEditedBeforeEmail)
+    }
+
     func testCommittingPendingHostPublishesGuidanceRefresh() {
         let app = AppState(
             persistence: AppStateMemoryPersistence(),
@@ -163,5 +183,11 @@ final class AppStateMailProviderPendingHostTests: XCTestCase {
             ).providerName,
             "Gmail"
         )
+    }
+}
+
+private struct PendingHostMXResolver: MXRecordResolving {
+    func records(for _: String) async throws -> [String] {
+        ["aspmx.l.google.com."]
     }
 }
