@@ -119,7 +119,23 @@ struct ManagedSignInControls: View {
 
     private var isHuntMode: Bool { ProwlHuntRuntime.current.isEnabled }
     private var shouldShowGoogleOption: Bool {
-        showsGoogleOption && (AppState.isManagedGoogleSignInEnabled || isHuntMode)
+        Self.shouldShowGoogleOption(
+            showsGoogleOption: showsGoogleOption,
+            isGoogleSignInEnabled: AppState.isManagedGoogleSignInEnabled,
+            isHuntMode: isHuntMode,
+            isHuntFakeActive: isHuntMode
+        )
+    }
+
+    static func shouldShowGoogleOption(
+        showsGoogleOption: Bool,
+        isGoogleSignInEnabled: Bool,
+        isHuntMode: Bool,
+        isHuntFakeActive: Bool
+    ) -> Bool {
+        guard showsGoogleOption else { return false }
+        if isHuntMode { return isHuntFakeActive }
+        return isGoogleSignInEnabled
     }
 
     var body: some View {
