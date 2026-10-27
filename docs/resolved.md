@@ -2,6 +2,18 @@
 
 Completed backlog items, most recent first. Item numbers are the stable IDs from `docs/backlog.md` and are not reused.
 
+### ~~104: Bundled Google OAuth client: passwordless Gmail connect (Testing-stage client; CASA and publishing are separate items)~~
+
+**Resolved**: 2026-10-27 (code on branches `gmail-oauth-connect` PR #112, `gmail-oauth-followups`, `6i-gmail-followups`, loopback finish page `133-loopback-finish-page` PR #123; live check and secrets 2026-10-26/27)
+
+**Description**: One-click "Sign in with Google" on a Sentwise-owned Desktop OAuth client replaces the app-password step for Gmail and Workspace (app password remains the fallback and the only path for other providers). Engine: PKCE loopback flow (`GmailAuthCoordinator`, `OAuthTokenService`, `NWError 22` fixed), XOAUTH2 for IMAP and SMTP in `SentwiseMail`, per-account Keychain tokens, shared refresh, `invalid_grant` mapped to a reauthorization message, disconnect revokes the grant; client ID and secret come from `Sentwise/Config/GoogleOAuth.xcconfig` (committed empty, filled from repo secrets at release) so the feature ships off when unconfigured. Google side (2026-10-26): Cloud project, External consent screen in Testing with one test user, Desktop client with `https://mail.google.com/` plus `openid email`; credentials live only in the owner's private vendors file. Live check (2026-10-26/27, QA Mac): sign-in, inbox read, AI draft, save-as-draft, disconnect with local data preserved, clean permissions page, re-grant, refresh token captured on the QA Mac only, normal quit, zero sends, mailbox fixtures cleaned. The four `SENTWISE_LIVE_GOOGLE_OAUTH_*` repo secrets are set and `live-tests.yml` (workflow_dispatch only) passed on main (run 40540938298). Tier placement: all tiers (no gate built). **Not in this item**: publishing the consent screen, restricted-scope verification, CASA, and the Limited Use policy, each needs its own owner approval; known gap for QA: the onboarding email field is sent as `login_hint`, so Google pre-fills whatever address was typed.
+
+### ~~3: Gmail connection (OAuth), bring-your-own credentials~~
+
+**Resolved**: 2026-10-27 (retired; superseded by item 104)
+
+**Description**: The 2026-07 BYO-client OAuth path (user-supplied client ID and secret in Settings) was parked 2026-07-03 for friction and revived 2026-10-12 as the bundled single-client engine under item 104. Its built pieces (PKCE loopback flow, Keychain token storage, auto-refresh, connected-account indicator and disconnect) live on in item 104; the BYO configuration UI is gone. Retired with 104's close, nothing further to build.
+
 ### ~~110: Auto-detect Google-hosted custom domains (MX lookup) and pre-fill the Gmail IMAP host~~
 
 **Resolved**: 2026-10-26 (branch `110-google-mx-autodetect`)
