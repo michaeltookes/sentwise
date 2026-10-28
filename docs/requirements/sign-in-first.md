@@ -165,3 +165,101 @@ Microsoft Teams, Microsoft Calendar, Graph-based calendar; Google Workspace admi
 | US-sign-in-first-1 to 4 | 135 | to be added by project-planner |
 | US-sign-in-first-5 | 134, 137, landing-page 16 (and genkei-ops 31 for vendor-ops prep) | to be added by project-planner |
 | US-sign-in-first-6 to 10 | 31 (build); 136 (Azure registration, owner/vendor-ops) | to be added by project-planner |
+
+## UX review
+
+Reviewed against the current `OnboardingAccountStep`, `GoogleOrAppPasswordConnect`, `GoogleSignInButtonBlock`, and `EmailAccountSettingsView`. The existing screen has a good native base, but moving the email field outside the app-password form changes the flow: the address must become the first control, provider choice the second, and progress or recovery must stay in place instead of replacing the controls.
+
+### Recommended flow and hierarchy
+
+1. **First run, Google-only launch (US-sign-in-first-1, T135-2 to T135-5):** show the heading, one-line explanation, email field, full-width primary `Continue with Google` button, then the collapsed `Other ways to connect` disclosure. Do not show an app-password field, an `or` divider, or an Outlook claim.
+2. **Provider-two release (US-sign-in-first-6, T31-4, T31-5):** keep the same screen. Show `Continue with Google` and `Continue with Microsoft` as equal native bordered buttons. Put the detected provider first, but never remove the other available provider. Detection may recommend, not decide. `Other ways to connect` remains a disclosure below both buttons, not a third provider tile.
+3. **Other IMAP (US-sign-in-first-2, T135-3, T135-5):** activating `Other ways to connect` reveals the existing app-password, Test Connection, guidance, and Advanced controls. Keep the shared email field above it. This is an exit from the preferred flow, so it is discoverable but visually secondary and never opens automatically.
+4. **Browser handoff (US-sign-in-first-1, US-sign-in-first-6):** leave the connect screen open, disable only provider actions that would start a second authorization, show progress directly below the chosen button, and provide `Cancel`. A return from the browser resumes in the same place.
+5. **Success (US-sign-in-first-1, US-sign-in-first-6):** replace the chooser with the existing connected confirmation, announce it, and enable onboarding `Continue`. Settings retains Disconnect and Add another account. Do not advance onboarding automatically because the confirmation is useful and the next step is a separate Sentwise account sign-in.
+6. **Exit and recovery:** Back preserves a completed mailbox connection. Cancel stops only the active browser attempt and keeps the typed address. Closing onboarding preserves a completed connection but does not mark onboarding complete. Disconnect returns to the collapsed first-run state when no app-password account is being edited.
+
+### Final screen copy
+
+These strings are final for builder use. They use `Continue` for first connection and reserve `Sign in again` for recovery.
+
+**Setup heading and subtitles (US-sign-in-first-1, T135-4)**
+- Heading: `Connect your inbox`
+- Sign-in-first, Google only: `Enter your email, then continue with Google. Your sign-in is saved securely on this Mac.`
+- Google and Microsoft available: `Enter your email, then choose Google or Microsoft. Your sign-in is saved securely on this Mac.`
+- OAuth unavailable fallback: `Connect with your email address and an app password.`
+- Shared email field label: `Email address`
+- Google button: `Continue with Google`
+- Microsoft button: `Continue with Microsoft`
+- Disclosure: `Other ways to connect`
+- Disclosure hint for VoiceOver: collapsed `Connect another email provider with an app password`; expanded `Hide app-password connection options`
+
+**Provider hints (US-sign-in-first-2, T135-5)**
+- iCloud: `Use Other ways to connect for iCloud Mail.`
+- Yahoo: `Use Other ways to connect for Yahoo Mail.`
+- AOL: `Use Other ways to connect for AOL Mail.`
+- AT&T: `Use Other ways to connect for AT&T Mail.`
+- Unknown or custom domain: `If your provider is not listed, use Other ways to connect.`
+- Microsoft before item 31 ships: `Microsoft no longer accepts app passwords for Outlook.com and Hotmail. Microsoft sign-in is coming in a future update.`
+- Do not show a hint for Gmail or a detected Google Workspace domain.
+
+**Google context and consent summary (US-sign-in-first-1, T135-4)**
+- Idle helper: `For Gmail and Google Workspace. Sentwise reads your mailbox on this Mac to find messages and sends only the content needed to draft a reply through its private drafting service.`
+- This replaces the current long helper and removes the inaccurate absolute impression created by `nothing is stored on our servers` beside a drafting-service statement.
+
+**Microsoft consent block (US-sign-in-first-7, US-sign-in-first-10, T31-10)**
+- Heading: `Before you continue`
+- Body: `Sentwise will ask Microsoft for permission to read your mail, save drafts, and send messages you approve. Mail is read on this Mac. Your sign-in tokens are stored in this Mac's Keychain and are never sent to Sentwise servers.`
+- Work-account note: `Your IT administrator may need to approve Sentwise for a work or school account.`
+- The block appears before the Microsoft button opens the browser. It is supporting text, not a confirmation sheet. Do not say Sentwise never reads mail.
+
+### State copy and behavior
+
+| State | User sees | Action and acceptance note |
+|---|---|---|
+| Empty, first run | Subtitle, empty `Email address`, available provider button or buttons, collapsed `Other ways to connect` | Focus starts in Email address. Provider buttons remain usable without an address because the provider can collect one. (US-1, T135-2) |
+| Detecting provider | `Checking your email provider…` below the email field | Small progress indicator, no modal, no focus change, and provider buttons remain enabled. Remove it when detection finishes. (US-1, T135-5) |
+| Opening browser | `Opening Google in your browser…` or `Opening Microsoft in your browser…` | Progress is announced once. If opening fails, use the network-error state. (US-1, US-6, T31-5) |
+| Waiting for callback | `Finish signing in with Google in your browser.` or `Finish signing in with Microsoft in your browser.` | Show `Cancel`. The chosen button is disabled and retains its label. Escape activates Cancel when focus is within this flow. (US-1, US-6, T31-5) |
+| Exchanging code | `Sign-in complete. Connecting your mailbox…` | Keep progress visible. No Cancel after the provider has returned a code. (US-1, US-6, T31-3) |
+| Verifying Microsoft mail access | `Sign-in complete. Checking mail and sending access…` | Covers IMAP and SMTP probes without exposing protocol jargon unless one fails. (US-6, US-7, T31-7) |
+| Success | `Connected as <address> with Google` or `Connected as <address> with Microsoft` | Checkmark, VoiceOver announcement, and onboarding Continue enabled. (US-1, US-6, T31-5) |
+| Cancelled or browser closed | `Google sign-in was cancelled.` or `Microsoft sign-in was cancelled.` | `Try Again`; preserve the email and disclosure state; store nothing. Treat the 300-second timeout as cancellation. (US-1, US-6, T31-3) |
+| Consent denied or required scope missing | `<Provider> did not grant mail access. Try again and allow mail access.` | `Try Again`; do not call this cancellation when the provider returned a scope error. (US-1, US-6, T31-3) |
+| Network unavailable before connection | `You're offline. Connect to the internet, then try again.` | `Try Again`; preserve all input; do not offer app password as an automatic fallback. (US-1, US-6, T31-3) |
+| Provider temporarily unavailable | `<Provider> is not responding. Sentwise will try again.` | No reauthentication prompt. Add `Try Now` after backoff begins. (US-8, T31-3) |
+| Callback could not be verified | `Sign-in could not be verified. Try again.` | `Try Again`; store nothing. Do not expose `state` or raw provider codes. (US-6, T31-3) |
+| Admin approval required | `Your organization requires an administrator to approve Sentwise.` | Primary `Copy a Note for Your IT Admin`; secondary `Choose Another Account`. Announce copy success as `Note copied.` (US-7, T31-3, T136-3) |
+| IMAP disabled | `IMAP access is off for this mailbox.` | `Copy a Note for Your IT Admin`; delete new tokens and do not add the account. (US-7, T31-7) |
+| SMTP AUTH disabled | `Sending is off for this mailbox.` | Supporting text: `Your administrator needs to enable SMTP AUTH before Sentwise can connect.` Same actions and cleanup as IMAP. (US-7, T31-7) |
+| Token expired or revoked on next launch | `Sign in with Google again to keep <address> connected.` or Microsoft equivalent | One persistent, nonmodal banner in Settings and account row action `Sign in with <Provider> Again`. Keep local drafts. Do not repeat alerts. (US-5, US-8, T31-3) |
+| Account already linked and active | `This mailbox is already connected.` | Show `View Account`; do not replace tokens or add a duplicate. In onboarding, show the connected confirmation and enable Continue. (US-3, US-6, T135-6) |
+| Account already linked but saved in background | `<address> is already in your mailboxes.` | Show `Use This Account`; return to the account list after selection. (US-3, T135-6) |
+| Existing app-password account | Existing connected state; when edited, expanded app-password controls | Do not show a migration nudge. Preserve the password and focus. (US-3, T135-6) |
+| Partial failure after OAuth | Provider-specific protocol message above; no connected badge | Never leave a half-added account. Keep typed email, delete the new grant, and retain any local drafts from an older connection. (US-7, T31-7) |
+
+All inline errors use sentence case, sit directly after the progress or provider block, and carry a recovery action. `Try Again` is title case on buttons. Do not use raw OAuth, AADSTS, IMAP, or SMTP terms except the two administrator-facing protocol messages above.
+
+### Accessibility and macOS conventions
+
+- **Focus order (US-1, US-6, T135-3, T31-5):** Email address, recommended provider, other provider when available, Other ways to connect, then its revealed fields and Test Connection, Back, Continue. Reordering providers must not move focus while the user is typing.
+- **Keyboard path:** Tab and Shift-Tab traverse all controls; Space or Return toggles the disclosure; Return activates the focused provider button; Escape cancels only an active browser wait. The onboarding default action remains Continue only after a mailbox connects, so pressing Return in the email field must not skip the step.
+- **VoiceOver:** provider buttons read their visible labels with the hint `Opens your browser to connect this mailbox`. The disclosure exposes button and expanded or collapsed traits. Provider hints and state changes are one polite live region. Errors receive focus only after a user action, not after background detection.
+- **Progress:** every indeterminate indicator has the adjacent state sentence as its accessibility label. Do not announce each animation cycle. Respect Reduce Motion when the connected badge replaces the chooser.
+- **Status item names (US-5, US-8, T31-3):** normal `Sentwise`; onboarding incomplete `Sentwise, setup required`; expired or revoked mailbox grant `Sentwise, mailbox sign-in required`; ready drafts continue to use the existing draft-count name. The status item menu includes `Finish Setup…` or `Sign In to Mailbox…` before draft actions when those states apply.
+- **Text and contrast:** retain semantic system colors and fonts. Do not rely on green or red alone; success has a checkmark and text, errors have text. The 460-point onboarding window must scroll at the largest supported macOS text size without hiding recovery actions.
+- **Privacy:** typed addresses and account names are private VoiceOver content, not help tags or status-item labels. No token, tenant ID, raw provider error, or copied admin note appears in accessibility values.
+
+### Concrete story changes for the BA to fold
+
+1. **Split US-sign-in-first-1 / T135-4:** add a copy acceptance criterion for all three subtitle states and the Google helper above. Replace `Sign in with Google` with `Continue with Google` for first connection; keep `Sign in with Google again` for reauthentication.
+2. **Add to US-sign-in-first-1 / T135-2, T135-3:** Given first-run setup, When the screen opens, Then focus is in Email address and the keyboard order follows the order specified above; Given an authorization is waiting, When the user presses Escape or activates Cancel, Then only that attempt ends and the typed email and disclosure state remain.
+3. **Add to US-sign-in-first-2 / T135-5:** Given provider detection is pending, When MX lookup runs, Then the UI says `Checking your email provider…`, keeps provider actions enabled, and never moves focus; Given a non-OAuth provider is detected, Then the exact provider hint above appears and Other ways to connect does not expand automatically.
+4. **Add to US-sign-in-first-3 / T135-6:** Given the typed address is already connected, When connection is attempted, Then no duplicate or token replacement is created and the screen offers `View Account` or `Use This Account` as appropriate.
+5. **Add to US-sign-in-first-5 / T31-3:** Given Google returns `invalid_grant` on launch, When the account needs attention, Then the user sees the one-time persistent reauthentication copy above, the status item is named `Sentwise, mailbox sign-in required`, and existing drafts remain available.
+6. **Split US-sign-in-first-6 / T31-5 into provider choice and browser handoff:** provider choice owns ordering, recommendation, and both equal buttons; browser handoff owns opening, waiting, cancellation, callback verification, verification progress, and success. This keeps the screen work independently testable.
+7. **Add to US-sign-in-first-7 / T31-3, T31-7:** distinguish cancellation, denied scope, admin approval, IMAP-disabled, SMTP-disabled, and partial verification using the exact copy and cleanup behavior above. A raw AADSTS response never reaches visible or accessibility text.
+8. **Add to US-sign-in-first-8 / T31-3:** Given the Mac is offline or Microsoft is temporarily unavailable, Then no sign-in-again prompt appears; the current account and drafts remain, and the offline or retry copy above is shown once.
+9. **Add to US-sign-in-first-10 / T31-10:** use the final Microsoft consent block above before browser handoff; require owner approval of that copy and a light, dark, keyboard, and VoiceOver check before enabling Microsoft publicly.
+10. **Add to item 136 / T136-2, T136-3, T136-5:** Given the public Microsoft flow is enabled, Then the browser consent page shows the sentwise.ai publisher domain and verified publisher identity, and the return page names Sentwise and tells the user to return to the app. If the random-port redirect fails validation, the feature stays unavailable rather than exposing a broken button.
+11. **Add view-state coverage to T135-8 and T31-5:** empty, detecting, opening browser, waiting, exchanging, verifying, success, cancelled, denied scope, offline, temporary provider failure, callback verification failure, expired token, already linked active, already linked background, admin approval, each protocol-disabled case, and partial cleanup. Cover onboarding and Settings where their exits differ.
