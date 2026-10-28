@@ -27,7 +27,7 @@ Non-goals
 
 ## 4. Part A: hide the app password (backlog item 135)
 
-Gate: item 135 must not ship to the public channel until item 134 is done (client In production AND CASA Letter of Validation accepted by Google, verification approved). Build may land earlier behind a flag; the flag defaults to the old UI until the gate is cleared. The flip is an owner-approved step, not automatic.
+Gate: item 135 must not ship to the public channel until item 134 is done (which itself needs landing-page item 16 and sentwise item 137) (client In production AND CASA Letter of Validation accepted by Google, verification approved). Build may land earlier behind a flag; the flag defaults to the old UI until the gate is cleared. The flip is an owner-approved step, not automatic.
 
 ### Stories
 - **US-sign-in-first-1** As a new Gmail or Workspace user, I want the connect screen to show only "Sign in with Google", so that I never see or need an app password.
@@ -73,6 +73,10 @@ US-sign-in-first-4
   - Given a refresh token issued 8 or more days earlier, When the app refreshes it, Then it succeeds (no 7-day Testing expiry); on `invalid_grant` the app shows "Sign in with Google again" instead of failing silently.
   - Given verification is rejected or pending, When the gate is checked, Then item 135 stays gated and the owner gets an inbox line with Google's reason.
   - Evidence: the Verification Center status and the Letter of Validation reference recorded (no secrets) in `docs/launch-checklist.md`.
+- Further gates for 134 (verification cannot be submitted without them):
+  - landing-page repo item 16 (`sentwise-landing-page` `docs/backlog.md`, branch `req/sign-in-first`): the /privacy page carries the Google "Limited Use" disclosure and local-first facts. Acceptance text is in that item. Gates genkei-ops backlog 31.
+  - sentwise item 137: 120x120 consent-screen logo (ui-designer designs, owner approves).
+  - Dependency chain: 16 + 137 -> genkei-ops 31 (vendor-ops submission) -> 134 -> 135.
 - No Sentwise backlog item for item 41 (IMAP host suggestion) or 43 (credential guidance) is open: both shipped (see `EmailProviderKind.swift`); this brief only depends on them.
 
 ## 6. Part C: Microsoft sign-in (backlog item 31, second provider, release after launch)
@@ -154,5 +158,5 @@ Microsoft Teams, Microsoft Calendar, Graph-based calendar; Google Workspace admi
 | Story | Backlog item | Test case |
 |---|---|---|
 | US-sign-in-first-1 to 4 | 135 | to be added by project-planner |
-| US-sign-in-first-5 | 134 (and genkei-ops 31 for vendor-ops prep) | to be added by project-planner |
+| US-sign-in-first-5 | 134, 137, landing-page 16 (and genkei-ops 31 for vendor-ops prep) | to be added by project-planner |
 | US-sign-in-first-6 to 10 | 31 (build); 136 (Azure registration, owner/vendor-ops) | to be added by project-planner |

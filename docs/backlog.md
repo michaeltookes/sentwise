@@ -541,3 +541,7 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
 136. **Azure / Entra app registration and publisher verification for Microsoft sign-in** — *(Medium; prerequisite for item 31; owner + vendor-ops; filed 2026-10-28; brief section 6, questions A1, A2, A8)*
     Create the Microsoft Entra app registration (public client, loopback redirect, scopes per the architect), publisher domain and publisher verification, and record the client id in the build config. Michael owns the tenant and any verification payments.
     - Done when the architect's A1/A2 answers are implemented in the registration and a personal-account sign-in works against it.
+
+137. **Google consent-screen logo (120x120)** — *(High; gates Google verification and therefore 134/135; filed 2026-10-28; owner ui-designer, Michael approves)*
+    Design the Sentwise app logo for the Google OAuth consent screen: square PNG, exactly 120x120 px (Google accepts up to 1 MB, JPG or PNG, square), the owl mark on a plain background, legible at small size in light and dark consent screens, matching the brand in the landing page and app icon.
+    - Acceptance: Given the file, Then it is 120x120 px PNG under 1 MB, square, with no transparency artifacts on white or dark backgrounds, no Google trademark or misleading text; the owner approves it; vendor-ops uploads it to the consent screen (branding) and the read-back shows it.
