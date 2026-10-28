@@ -238,7 +238,7 @@ struct FollowUpGenerator {
         let labeled = context?.hasSpeakerLabels ?? false
         let identity = participants.promptBlock(transcript: sourceText, hasSpeakerLabels: labeled)
         let recipientName = participants.recipientFirstName(transcript: sourceText, hasSpeakerLabels: labeled)
-        let voice = voiceProfile?.promptBlock(recipientFirstName: recipientName)
+        let voice = voiceProfile?.promptBlock(recipientFirstName: recipientName, omitNameWhenUnknown: true)
             ?? "Write in a natural, concise, and professional tone."
         return base + "\n\n" + identity + "\n\n" + confidence + "\n\n" + voice
     }

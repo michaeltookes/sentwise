@@ -96,6 +96,39 @@ final class FollowUpIdentityPromptTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Greeting: Hi Dana,"))
     }
 
+    func testNameFreeForeignGreetingsAreLeftAlone() {
+        for greeting in ["Bonjour,", "Hola,", "Welcome,", "Greetings,"] {
+            XCTAssertEqual(VoiceProfile.normalizedGreeting(greeting), greeting)
+            XCTAssertEqual(profile(greeting: greeting).withNormalizedGreeting().greeting, greeting)
+        }
+        XCTAssertEqual(VoiceProfile.normalizedGreeting("Dana,", knownNames: ["Dana Reyes"]), "<first name>,")
+    }
+
+    func testUnknownRecipientGetsNameFreeGreetingInstruction() {
+        let text = "We agreed on ten seats."
+        let prompt = systemPrompt(greeting: "Hi <first name>,", text: text, labeled: false)
+        XCTAssertTrue(prompt.contains("no name is known"))
+        XCTAssertTrue(prompt.contains("uses no name"))
+        XCTAssertFalse(prompt.contains("Greet them by first name"))
+        XCTAssertTrue(prompt.contains("write the greeting without a name"))
+    }
+
+    func testExactSignOffMatchBeatsMailboxPrefixMatch() {
+        let participants = FollowUpParticipants(
+            userEmail: "jane@example.com", userNameHints: ["Jane"], recipients: []
+        )
+        XCTAssertEqual(participants.userSpeaker(in: ["Janet", "Jane"]), "Jane")
+    }
+
+    func testAmbiguousUserSpeakerAssertsNoOwnership() {
+        let participants = FollowUpParticipants(userEmail: "jane@example.com", userNameHints: [], recipients: [])
+        // Both labels are only prefix candidates: no exact identity, so no owner is claimed.
+        XCTAssertNil(participants.userSpeaker(in: ["Janet", "Janel"]))
+        let text = "Janet: hello\nJanel: hi"
+        let prompt = systemPrompt(recipients: [], text: text)
+        XCTAssertFalse(prompt.contains("the speaker labeled"))
+    }
+
     func testPlaceholderGreetingIsExplainedWhenRecipientUnknown() {
         let block = profile(greeting: "Hi Michael,").promptBlock()
         XCTAssertTrue(block.contains("Hi <first name>,"))
@@ -115,7 +148,8 @@ final class FollowUpIdentityPromptTests: XCTestCase {
             ("Hello,", "Hello,"),
             ("Hi team,", "Hi team,"),
             ("Hi there,", "Hi there,"),
-            ("Dana,", "<first name>,"),
+            ("Dana,", "Dana,"),
+            ("Bonjour,", "Bonjour,"),
             ("", "")
         ]
         for (input, expected) in cases {

@@ -40,7 +40,7 @@ struct VoiceProfile: Codable, Equatable {
     /// `"Hey <first name> -"`, `"Hi {first name},"` becomes `"Hi <first name>,"`.
     /// Name-free greetings (`"Hello,"`, `"Hi team,"`) and already-normalised ones
     /// are returned unchanged, so applying it twice equals applying it once.
-    static func normalizedGreeting(_ greeting: String) -> String {
+    static func normalizedGreeting(_ greeting: String, knownNames: [String] = []) -> String {
         var text = greeting.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return text }
         for variant in ["{first name}", "{First name}", "{firstname}", "[first name]", "[First Name]",
@@ -56,7 +56,7 @@ struct VoiceProfile: Codable, Equatable {
         let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
         guard !matches.isEmpty else { return text }
 
-        guard let start = nameStartIndex(in: matches, text: nsText) else { return text }
+        guard let start = nameStartIndex(in: matches, text: nsText, knownNames: knownNames) else { return text }
         // The name may span several words ("Ms. Reyes", "Dana Reyes"): replace the whole
         // run of words that are separated only by spaces.
         var end = start
@@ -77,7 +77,11 @@ struct VoiceProfile: Codable, Equatable {
     }
 
     /// Index of the first word of the personal name in a greeting's word matches.
-    private static func nameStartIndex(in matches: [NSTextCheckingResult], text: NSString) -> Int? {
+    private static func nameStartIndex(
+        in matches: [NSTextCheckingResult],
+        text: NSString,
+        knownNames: [String]
+    ) -> Int? {
         let words = matches.map { text.substring(with: $0.range) }
         let first = words[0].lowercased()
         if salutationWords.contains(first) {
@@ -87,8 +91,10 @@ struct VoiceProfile: Codable, Equatable {
             // "Good morning Dana,"
             return salutationWords.contains(words[1].lowercased()) && isPersonalName(words[2]) ? 2 : nil
         }
-        // A bare "Dana," opener.
-        return words.count == 1 && isPersonalName(words[0]) ? 0 : nil
+        // A bare "Dana," opener is a name only with evidence (a known name); a standalone
+        // word such as "Bonjour," or "Welcome," is left alone.
+        let known = Set(knownNames.flatMap { $0.lowercased().split(separator: " ").map(String.init) })
+        return words.count == 1 && known.contains(words[0].lowercased()) && isPersonalName(words[0]) ? 0 : nil
     }
 
     private static func isPersonalName(_ word: String) -> Bool {
@@ -101,21 +107,24 @@ struct VoiceProfile: Codable, Equatable {
 
     /// A copy whose greeting is in placeholder form. Idempotent; used when a
     /// profile is learned and when a stored profile is loaded (item 138).
-    func withNormalizedGreeting() -> VoiceProfile {
+    func withNormalizedGreeting(knownNames: [String] = []) -> VoiceProfile {
         var copy = self
-        copy.greeting = Self.normalizedGreeting(greeting)
+        copy.greeting = Self.normalizedGreeting(greeting, knownNames: knownNames)
         return copy
     }
 
     /// Renders the profile as instructions for injection into a draft prompt.
     /// The greeting is always rendered in placeholder form; when the recipient's
     /// first name is known it is substituted here, at draft time.
-    func promptBlock(recipientFirstName: String? = nil) -> String {
+    func promptBlock(recipientFirstName: String? = nil, omitNameWhenUnknown: Bool = false) -> String {
         var lines = ["The reply must match the sender's writing voice:"]
         let greeting = Self.normalizedGreeting(self.greeting)
         if !greeting.isEmpty {
             if let name = recipientFirstName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
                 lines.append("- Greeting: " + greeting.replacingOccurrences(of: Self.firstNamePlaceholder, with: name))
+            } else if greeting.contains(Self.firstNamePlaceholder), omitNameWhenUnknown {
+                lines.append("- Greeting: \(greeting) (no recipient name is known: drop \(Self.firstNamePlaceholder) "
+                    + "and write the greeting without a name, for example \"Hi,\"; never invent a name)")
             } else if greeting.contains(Self.firstNamePlaceholder) {
                 lines.append("- Greeting: \(greeting) (\(Self.firstNamePlaceholder) stands for the first name "
                     + "of the person the email is addressed to; never use any other name)")

@@ -56,18 +56,28 @@ struct FollowUpParticipants: Equatable {
         return head
     }
 
-    /// The speaker label that is the user, matched against the mailbox local part
-    /// and name hints ("Lucius" matches `luciusfox@...`).
+    /// The speaker label that is the user. Exact identity matches (a name hint or
+    /// the mailbox local part equal to the label's first name or full label) are
+    /// evaluated first; the mailbox-prefix heuristic is used only when no exact
+    /// match exists. If more than one label ties at the deciding level the result
+    /// is `nil`: no ownership is asserted (unlabeled-transcript behaviour).
     func userSpeaker(in labels: [String]) -> String? {
         let local = userEmail?.split(separator: "@").first.map { $0.lowercased() } ?? ""
-        let hints = userNameHints.flatMap { $0.lowercased().split(separator: " ").map(String.init) }
-        for label in labels {
+        let hintNames = userNameHints.map { $0.lowercased() }
+        let hintTokens = Set(hintNames.flatMap { $0.split(separator: " ").map(String.init) })
+        let exact = labels.filter { label in
+            let full = label.lowercased()
             let first = Self.firstName(of: label).lowercased()
-            guard first.count >= 3 else { continue }
-            if hints.contains(first) { return label }
-            if !local.isEmpty, local.hasPrefix(first) || first.hasPrefix(local) { return label }
+            return hintNames.contains(full) || (first.count >= 3 && hintTokens.contains(first))
+                || (!local.isEmpty && (full == local || first == local))
         }
-        return nil
+        if !exact.isEmpty { return exact.count == 1 ? exact[0] : nil }
+        guard !local.isEmpty else { return nil }
+        let prefixed = labels.filter { label in
+            let first = Self.firstName(of: label).lowercased()
+            return first.count >= 3 && (local.hasPrefix(first) || first.hasPrefix(local))
+        }
+        return prefixed.count == 1 ? prefixed[0] : nil
     }
 
     /// The first name to greet: the chosen recipient's display name, else the
@@ -110,9 +120,10 @@ struct FollowUpParticipants: Equatable {
                 + "and refer to \(name) as \"you\". Never greet the user by name, and never use a "
                 + "name taken from the writing-voice notes.")
         } else {
-            lines.append("- The email is addressed to the other participant(s) on the call. Greet them by "
-                + "first name; never greet the user by name, and never use a name taken from the "
-                + "writing-voice notes.")
+            lines.append("- The email is addressed to the other participant(s) on the call, but no name is "
+                + "known for them. Open with a greeting that uses no name (for example \"Hi,\" or "
+                + "\"Hello,\"). Do not invent a name, do not write a placeholder, never greet the user "
+                + "by name, and never use a name taken from the writing-voice notes.")
         }
         lines.append("- Keep every quantity, duration, price and date exactly as stated in the call "
             + "(seat counts, lengths such as \"30-day\", dates such as \"November 2\"). Do not drop "
