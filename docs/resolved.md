@@ -2,6 +2,24 @@
 
 Completed backlog items, most recent first. Item numbers are the stable IDs from `docs/backlog.md` and are not reused.
 
+### ~~138: Transcript follow-up drafts get the greeting, the owners and the numbers wrong~~
+
+**Resolved**: 2026-10-28 (PR 131, merged main@83dfdc2, "follow-up drafts greet the right person, keep owners and facts")
+
+**Description**: Follow-up generation now tells the model which transcript speaker is the user and who the recipient is, so drafts greet the recipient, assign owners correctly and keep the agreed numbers (fixture T1, TC-74-06). Leftovers from Codex review are filed as item 142 (open).
+
+### ~~140: Sentwise > Settings… in the app menu opens a blank window~~
+
+**Resolved**: 2026-10-28 (PR 130, merged main@7b86b2e, "app-menu Settings and Command-comma open the real Settings window")
+
+**Description**: The application menu's Settings… and Command-comma now open the tabbed Settings window (General first) instead of the empty SwiftUI `Settings { EmptyView() }` scene, and reuse the same window when it is already open (TC-74-04).
+
+### ~~121: Re-enable "Continue with Google" for the Sentwise account on production~~
+
+**Resolved**: 2026-10-28 (PR 125, merged main@b8a1655, "Continue with Google re-enabled on production")
+
+**Description**: Managed Google sign-in is back on for production once the Worker callback is allowlisted in production Clerk; the Google option is covered for production and hunt-isolated presentation. Still open: the TC-M4-03 verification on Lucius' Mini (see the slim line in docs/backlog.md).
+
 ### ~~104: Bundled Google OAuth client: passwordless Gmail connect (Testing-stage client; CASA and publishing are separate items)~~
 
 **Resolved**: 2026-10-27 (code on branches `gmail-oauth-connect` PR #112, `gmail-oauth-followups`, `6i-gmail-followups`, loopback finish page `133-loopback-finish-page` PR #123; live check and secrets 2026-10-26/27)
