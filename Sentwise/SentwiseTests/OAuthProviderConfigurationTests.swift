@@ -82,4 +82,33 @@ final class OAuthProviderConfigurationTests: XCTestCase {
         XCTAssertTrue(transport.requests.isEmpty)
         XCTAssertEqual(noRevoke.redirectURI(forPort: 1), "http://localhost:1")
     }
+
+    @MainActor func testLocalhostConfigurationSendsLocalhostInAuthorizationAndExchange() async throws {
+        let google = OAuthProviderConfiguration.google(clientID: "1234-abc.apps.googleusercontent.com")
+        let local = OAuthProviderConfiguration(
+            id: google.id, clientID: google.clientID, authorizationEndpoint: google.authorizationEndpoint,
+            tokenEndpoint: google.tokenEndpoint, revocationEndpoint: google.revocationEndpoint,
+            scopes: google.scopes, requiredGrantedScopes: google.requiredGrantedScopes,
+            redirectHost: "localhost", keychainPrefix: "other", credentialMarker: "other:v1"
+        )
+        let exchange = """
+        {"access_token":"at","refresh_token":"rt","expires_in":3600,"token_type":"Bearer",\
+        "scope":"https://mail.google.com/ openid","id_token":"\(GmailAuthCoordinatorTests.idToken(email: "me@gmail.com"))"}
+        """
+        let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data(exchange.utf8)))
+        let browser = SpyBrowser()
+        let coordinator = GmailAuthCoordinator(
+            client: local,
+            store: GmailAuthStore(secrets: InMemorySecretStore(), keychainPrefix: "other"),
+            tokenService: OAuthTokenService(transport: transport),
+            makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:9999", params: ["code": "c", "state": "S"]) },
+            browser: browser,
+            makeState: { "S" }
+        )
+        _ = try await coordinator.authorize(loginHint: nil)
+        XCTAssertEqual(transport.lastFields["redirect_uri"], "http://localhost:9999")
+        let opened = try XCTUnwrap(browser.openedURL)
+        let items = URLComponents(url: opened, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(items.first { $0.name == "redirect_uri" }?.value, "http://localhost:9999")
+    }
 }

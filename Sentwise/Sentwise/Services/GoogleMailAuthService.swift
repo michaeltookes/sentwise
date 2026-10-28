@@ -359,7 +359,7 @@ struct GoogleOAuthMailProvider: MailProvider {
         let (resolved, grant) = try await resolvedWithGrant(credentials)
         do {
             return try await operation(resolved)
-        } catch MailError.authenticationFailed(let detail) where GoogleMailCredential.isGoogleSignIn(credentials) {
+        } catch MailError.authenticationFailed(let detail) where credentials.appPassword == auth.credentialMarker {
             if let grant, await auth.isGrantSuperseded(grant, for: credentials.email) {
                 throw MailError.connectionFailed("Google sign-in changed during this mail session; will retry.")
             }

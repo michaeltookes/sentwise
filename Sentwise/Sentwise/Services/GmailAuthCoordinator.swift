@@ -185,7 +185,12 @@ final class GmailAuthCoordinator {
         let listener = makeListener()
         defer { listener.stop() }
 
-        let redirectURI = try await listener.start()
+        // The listener binds the loopback interface and reports its port; the
+        // host string in the URI comes from the configuration, and the same
+        // URI goes into the authorization and the token-exchange requests.
+        let boundURI = try await listener.start()
+        let redirectURI = URLComponents(string: boundURI)?.port
+            .map { client.redirectURI(forPort: UInt16(truncatingIfNeeded: $0)) } ?? boundURI
         let hint = loginHint?.trimmingCharacters(in: .whitespacesAndNewlines)
         let authURL = OAuthAuthorizationURL.make(
             configuration: client,
