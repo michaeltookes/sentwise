@@ -1,3 +1,4 @@
+import SentwiseMail
 import XCTest
 @testable import Sentwise
 
@@ -355,5 +356,64 @@ final class ManagedInferenceLiveTests: XCTestCase {
         ))
 
         XCTAssertFalse(response.text.isEmpty, "live draft returned empty text")
+    }
+
+    /// Item 138, fixture T1: a follow-up drafted through the managed model greets
+    /// Dana (or no one), has the user send the questionnaire, and keeps the four
+    /// facts. The voice profile deliberately carries a learned name ("Hi Michael,")
+    /// that must not leak into the draft.
+    func testLiveT1FollowUpGreetsRecipientAndKeepsFacts() async throws {
+        let (token, baseURL) = try await liveConfig(account: .durableDraft)
+        let client = ManagedInferenceClient(
+            sessionProvider: EnvSessionProvider(token: token),
+            transport: URLSessionTransport(),
+            endpoint: baseURL.appendingPathComponent("v1/draft")
+        )
+        let voice = VoiceProfile(
+            greeting: "Hi Michael,", signOff: "Best,\nLucius", formality: "casual but professional",
+            tone: "warm, direct", averageLength: "short", commonPhrases: [], summary: "",
+            sampleCount: 5, generatedAt: Date()
+        ).withNormalizedGreeting()
+
+        let outcome = try await FollowUpGenerator().makeFollowUp(
+            transcript: ParsedTranscript(text: FollowUpIdentityPromptTests.t1, hasSpeakerLabels: true),
+            voiceProfile: voice,
+            model: "claude-sonnet-4-6",
+            participants: FollowUpParticipants(
+                userEmail: "luciusfox@prowlqa.dev",
+                voiceProfile: voice,
+                recipients: [MailAddress(email: "luciusfox@prowlqa.dev")]
+            ),
+            complete: client.complete
+        )
+        guard case .ready(let body) = outcome else {
+            return XCTFail("expected a ready draft, got \(outcome)")
+        }
+
+        let opening = body.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        XCTAssertFalse(opening.contains("Michael"), "greeting leaked the profile name: \(opening)")
+        let greetingName = opening.range(
+            of: #"^(?:hi|hello|hey|dear)\s+([A-Za-z]+)"#, options: [.regularExpression, .caseInsensitive]
+        ).flatMap { range -> String? in
+            opening[range].split(separator: " ").dropFirst().first.map { $0.trimmingCharacters(in: .punctuationCharacters) }
+        }
+        if let name = greetingName, !["there", "all", "team", "everyone"].contains(name.lowercased()) {
+            XCTAssertEqual(name, "Dana", "greeting must name Dana or no one: \(opening)")
+        }
+        let lower = body.lowercased()
+        XCTAssertTrue(lower.contains("10 seats"), body)
+        XCTAssertTrue(lower.contains("30-day") || lower.contains("30 days") || lower.contains("30-days"), body)
+        XCTAssertTrue(body.contains("November 2"), body)
+        XCTAssertTrue(body.contains("November 9"), body)
+        // The user sends the questionnaire: a sentence about sending it is first person,
+        // and no line makes Dana the sender.
+        XCTAssertTrue(
+            lower.contains("i'll send") || lower.contains("i will send") || lower.contains("i'll get")
+                || lower.contains("i'll have") || lower.contains("i'll email") || lower.contains("send you")
+                || lower.contains("send it"),
+            "questionnaire must be sent by the user: \(body)"
+        )
+        XCTAssertFalse(lower.contains("dana will send"), body)
+        XCTAssertFalse(lower.contains("dana to send"), body)
     }
 }

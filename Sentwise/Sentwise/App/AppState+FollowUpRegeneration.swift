@@ -35,7 +35,8 @@ extension AppState {
                 context: context,
                 llmConfiguration: llmConfiguration,
                 userSuppliedFacts: draft.userSuppliedFacts,
-                accountEmail: credentials.email
+                accountEmail: credentials.email,
+                recipients: draft.authoredRecipients ?? []
             )
             guard currentDraftLLMConfiguration == llmConfiguration else {
                 approvalError = "The draft could not be regenerated because account settings changed."
