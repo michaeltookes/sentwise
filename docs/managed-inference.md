@@ -152,10 +152,11 @@ Both dashboard steps are done on the dev instance and the flow is **live-verifie
   rejects the `redirect_url` on the `sign_ins` create call.
 
 Production cutover note: the shared dev Google credentials do not carry over. A
-real Google OAuth client is configured, but the production instance's Worker
-callback redirect allowlist entry is still an item 74 launch step; keep
-`AppState.isManagedGoogleSignInEnabled` false until that checklist item is done
-and the flow has been re-verified against production.
+real Google OAuth client is configured, and the production instance's Worker
+callback redirect was allowlisted on 2026-10-27. Managed Google sign-in is
+therefore enabled; `AppState.isManagedGoogleSignInEnabled` remains as a one-line
+emergency closure gate. Browser hand-back will be verified on Lucius against a
+production build in TC-M4-03.
 
 ## OpenRouter one-click BYO (item 59)
 

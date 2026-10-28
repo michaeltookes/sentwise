@@ -621,3 +621,139 @@ Payment method, in order: (a) a single-use 100%-off live Paddle discount code; (
   3. On `https://sentwise.ai/pricing`, click the CTA on each of the three cards.
 - **Expected:** the redirect target in step 2 is the `.dmg` asset of the tag from step 1, and every pricing-card CTA goes to `/download`.
 - **Asset:** screenshot
+
+## M6 Sign-in first
+
+All M6 cases are **device-bound and run only on Lucius' Mini** (or the architecture's live-test dispatch on that Mini), never on Michael's machines. Use the fixture names in `docs/qa/seed-data.md`; credentials and actual mailbox addresses come from Lucius' secret store and never enter screenshots, videos, reports or this repo. The QA build has `SENTWISE_SIGN_IN_FIRST=YES`, a configured Google client and, for Microsoft cases, the item 136 client. Unless a case says otherwise, start in the reset `sentwise-stranger` macOS user with no Sentwise Application Support, defaults or Keychain entries. **Evidence for every case:** one screenshot after each numbered step (redact email addresses) and one continuous video for the full case.
+
+### TC-M6-01 First run is sign-in-first and hides the app-password field
+- **Executor:** lucius (device-bound)
+- **Verifies:** item 135 (T135-1 to T135-4, T135-8)
+- **Preconditions:** reset stranger user; M6 QA build installed; Google sign-in available; VoiceOver off for this case.
+- **Steps:**
+  1. Launch Sentwise and advance Setup Assistant to **Connect your inbox** without typing.
+  2. Inspect the visible controls and the accessibility hierarchy for the account step.
+  3. Type the Google fixture's redacted address in **Email address** and wait for provider detection to finish without activating any disclosure.
+- **Expected:** all three steps show **Email address**, **Continue with Google** and collapsed **Other ways to connect**; no **App password**, **Test Connection**, `appPasswordFallback` or advanced IMAP control exists in the visible or accessibility hierarchy; detection does not move focus or expand the disclosure.
+- **Asset:** screenshot per step + video for the case (addresses redacted)
+
+### TC-M6-02 App-password connection is reachable only through the documented fallback
+- **Executor:** lucius (device-bound)
+- **Verifies:** item 135 (T135-3, T135-5)
+- **Preconditions:** TC-M6-01 state; use seed fixture **Other IMAP placeholder**, not a real account, with `other-imap@example.com` as the typed non-customer address.
+- **Steps:**
+  1. Replace the email value with `other-imap@example.com` and wait for detection.
+  2. Confirm the provider hint says **If your provider is not listed, use Other ways to connect.** and the disclosure remains collapsed.
+  3. Activate **Other ways to connect** once.
+  4. Inspect the expanded controls, then activate **Other ways to connect** again.
+- **Expected:** only step 3 reveals **App password**, **Test Connection**, provider guidance and **Advanced (IMAP server)** beneath the shared email field; step 4 hides them again; neither provider detection nor an error opens the fallback automatically.
+- **Asset:** screenshot per step + video for the case
+
+### TC-M6-03 Google mailbox sign-in succeeds without an app password
+- **Executor:** lucius (device-bound browser round trip)
+- **Verifies:** item 135 and item 134 release behavior
+- **Preconditions:** reset stranger user; Google fixture mailbox is an allowed test user while the client is in Testing, or item 134 is complete for a non-test-user run; browser signed out of Google; network online.
+- **Steps:**
+  1. On **Connect your inbox**, enter the Google fixture address and click **Continue with Google**.
+  2. Confirm Sentwise shows **Opening Google in your browser…**, then **Finish signing in with Google in your browser.** with **Cancel** while the browser is open.
+  3. In the browser choose the Google fixture, grant the requested mail scope, and return to Sentwise from the branded completion page.
+  4. Wait for mailbox verification to finish.
+- **Expected:** Sentwise shows **Connected as <redacted address> with Google**, announces the success once, enables onboarding **Continue**, and never asks for or reveals an app password. For the public-gate run after item 134, the browser shows neither an unverified-app warning nor a test-user cap error.
+- **Asset:** screenshot per step + video for the case (provider pages and address redacted as needed)
+
+### TC-M6-04 Microsoft personal-account sign-in succeeds over XOAUTH2
+- **Executor:** lucius (device-bound browser and live mailbox)
+- **Verifies:** item 31 (T31-1, T31-2, T31-4 to T31-9) and item 136 live prerequisite
+- **Preconditions:** **Microsoft personal fixture** exists and is listed ready in seed data; item 136 client is configured; random-port redirect was proved; reset stranger user; browser signed out of Microsoft; network online.
+- **Steps:**
+  1. On **Connect your inbox**, enter the personal fixture's redacted Outlook.com address.
+  2. Confirm **Continue with Microsoft** is first but **Continue with Google** remains visible; click **Continue with Microsoft**.
+  3. Read **Before you continue**, including the local-mail and Keychain statements, then complete Microsoft consent in the browser.
+  4. Return to Sentwise and wait through **Sign-in complete. Checking mail and sending access…**.
+  5. In Sentwise refresh the inbox, save a uniquely titled draft, send a uniquely titled message to the same fixture, and inspect Sent Items.
+- **Expected:** the app shows **Connected as <redacted address> with Microsoft** without accepting a password; IMAP refresh succeeds; the draft appears once; the sent message appears once in Sent Items; no raw OAuth, IMAP, SMTP, tenant or token value appears in UI or evidence.
+- **Asset:** screenshot per step + video for the case (addresses and provider account details redacted)
+
+### TC-M6-05 Expired Microsoft access token refreshes once and persists rotation
+- **Executor:** lucius (device-bound live-test dispatch)
+- **Verifies:** item 31 (T31-3, T31-9; R5)
+- **Preconditions:** Microsoft personal fixture connected; its live-test refresh-token secret is provisioned only in Lucius' test environment; the M6 commit's `MicrosoftOAuthLiveTests` can force an expired access-token fixture and record token fingerprints/lengths, never values.
+- **Steps:**
+  1. From Lucius' dispatch workspace run only the Microsoft live test that starts with an expired access token and makes two concurrent valid-token requests.
+  2. Capture the redacted result showing one refresh request, successful IMAP access and a changed persisted refresh-token fingerprint.
+  3. Relaunch the test process and run the persisted-token verification once more.
+- **Expected:** the filtered live test passes; exactly one refresh occurs for concurrent callers; the rotated refresh token replaces the old token; the second process uses the persisted rotation and reaches the mailbox without interactive sign-in.
+- **Asset:** screenshot per step + video for the case (terminal output redacted; no secret values)
+
+### TC-M6-06 Revoked Microsoft consent requires one deliberate sign-in again
+- **Executor:** lucius (device-bound browser/account settings)
+- **Verifies:** item 31 (T31-3; revoked-consent recovery)
+- **Preconditions:** Microsoft personal fixture connected with at least one local draft; access-removal page open at Microsoft's consent-management URL; network online. Record the wall-clock time when the connection succeeds. Microsoft access tokens have a randomized 60–90 minute lifetime, and Sentwise refreshes only within five minutes of expiry. **Do not trigger step 2 until at least 95 minutes after the recorded connection time** so no cached access token can still be valid; confirm the boundary by capturing the recorded connection timestamp and the Mini's current date/time in the run notes (timestamps only, never token data).
+- **Steps:**
+  1. Remove Sentwise access for the fixture in Microsoft's consent-management page, then return to Sentwise. If 95 minutes have not elapsed since connection, leave Sentwise idle until they have.
+  2. Capture the Mini's current date/time to prove the 95-minute boundary, then trigger one mailbox refresh and wait for the token refresh response.
+  3. Open the status menu, then **Settings…** → **Account**.
+  4. Activate **Sign in with Microsoft Again**, complete consent, and return to Sentwise.
+- **Expected:** after step 2, one persistent nonmodal message says **Sign in with Microsoft again to keep <redacted address> connected.**; the status item is **Sentwise, mailbox sign-in required** and offers **Sign In to Mailbox…**; the local draft remains; there are no repeated alerts or automatic retries; step 4 reconnects the same account without a duplicate.
+- **Asset:** screenshot per step + video for the case (provider account details redacted)
+
+### TC-M6-07 Offline launch keeps a cached Microsoft account and drafts intact
+- **Executor:** lucius (device-bound network state)
+- **Verifies:** item 31 (T31-3; transient/offline boundary)
+- **Preconditions:** Microsoft personal fixture connected with a currently cached token and one local draft; Sentwise quit; Lucius records which network service is active so it can be restored immediately after step 3.
+- **Steps:**
+  1. In macOS **System Settings** → **Network**, disable the active network service, then launch Sentwise.
+  2. Open the status menu and **Settings…** → **Account**; open Review Drafts and inspect the existing draft.
+  3. Click the mailbox refresh action once.
+  4. Re-enable the same network service and click **Try Again** once.
+- **Expected:** offline launch retains the connected account and local draft; it shows **You're offline. Connect to the internet, then try again.** once and does not show a sign-in-again prompt or app-password fallback; after step 4, refresh succeeds with the cached/refreshable grant.
+- **Asset:** screenshot per step + video for the case
+
+### TC-M6-08 Existing app-password account migrates without a nudge or credential loss
+- **Executor:** lucius (device-bound upgrade)
+- **Verifies:** item 135 (T135-6, T135-8)
+- **Preconditions:** in a disposable Lucius macOS user, install an immediately preceding **signed QA build produced with the same `Sentwise/Config/QA.xcconfig` storage identity as the M6 QA build**, with sign-in-first off; do not use a production v0.2.x build. Before step 1, inspect both `.app/Contents/Info.plist` files with `/usr/libexec/PlistBuddy -c 'Print :<key>' <path>` and record that all three values match: `CFBundleIdentifier` = `com.tookes.Sentwise.qa` (the defaults domain), `SentwiseAppSupportDirectoryName` = `Sentwise QA`, and `SentwiseKeychainServiceSuffix` = `.qa`. A mismatch blocks the case. In the preceding QA build, connect the **Google fixture mailbox** through its existing app-password path using credentials from Lucius' secret store; quit normally; do not inspect or export Keychain values.
+- **Steps:**
+  1. Install the M6 signed QA build over the preceding same-identity QA build and launch it.
+  2. Open **Settings…** → **Account** and select the existing fixture.
+  3. Inspect the account controls and run **Test Connection** without re-entering credentials.
+  4. Return to Add Account and inspect the fresh-account chooser.
+- **Expected:** the existing account is still connected and its edit view opens with app-password controls expanded; **Test Connection** succeeds using the preserved Keychain item; no Google migration nudge appears; the fresh-account chooser remains collapsed sign-in-first; no duplicate account or credential marker is created.
+- **Asset:** screenshot per step + video for the case (address redacted; no Keychain values)
+
+### TC-M6-09 Sign-in-first is operable with VoiceOver, keyboard and Reduce Motion
+- **Executor:** lucius (device-bound accessibility pass)
+- **Verifies:** item 135 (T135-3, T135-8) and item 31 (T31-5, T31-10)
+- **Preconditions:** reset stranger user; both provider clients configured; macOS **Reduce motion** enabled; VoiceOver enabled; Accessibility Inspector available; no account connected.
+- **Steps:**
+  1. On **Connect your inbox**, traverse forward with Tab from **Email address** through the recommended provider, other provider, **Other ways to connect**, **Back** and disabled **Continue**; traverse backward with Shift-Tab.
+  2. With focus on **Other ways to connect**, press Space, traverse **App password**, **Test Connection** and **Advanced (IMAP server)**, then press Return on the disclosure to collapse it.
+  3. Inspect VoiceOver labels, hints and traits for both provider buttons, the disclosure, provider hint and progress sentence; verify no typed address, token, tenant ID or raw provider error is exposed in help/status values.
+  4. Start Microsoft authorization with Return, press Escape while waiting, and inspect the returned focus and message.
+  5. Complete either fixture's provider sign-in and observe the chooser-to-connected transition with Reduce Motion enabled.
+- **Expected:** focus order exactly matches the UX review and never jumps during detection; buttons announce their visible labels plus **Opens your browser to connect this mailbox**; the disclosure announces button plus expanded/collapsed state and its matching hint; progress has one adjacent spoken label; Escape cancels only the browser wait while preserving email/disclosure state; success is conveyed by checkmark, text and one polite announcement without motion-dependent meaning; the 460-point window keeps every recovery action reachable.
+- **Asset:** screenshot per step + video for the case (VoiceOver caption panel visible; private values redacted)
+
+### TC-M6-10 Microsoft work account explains required administrator approval
+- **Executor:** lucius (device-bound browser and managed test tenant)
+- **Verifies:** item 31 (T31-3, T31-10; architecture sequence 6.2) and item 136 publisher state
+- **Preconditions:** Microsoft work fixture exists; its test tenant has user consent disabled and no admin grant for Sentwise; item 136 client configured; reset stranger user; network online.
+- **Steps:**
+  1. Enter the work fixture's redacted address on **Connect your inbox** and click **Continue with Microsoft**.
+  2. Confirm the pre-browser work-account note says **Your IT administrator may need to approve Sentwise for a work or school account.**, then continue in the browser.
+  3. Attempt consent as the non-admin fixture user and return to Sentwise after Microsoft denies or requires approval.
+  4. Click **Copy a Note for Your IT Admin** and inspect the visible success state without pasting the clipboard into the report.
+- **Expected:** Sentwise says **Your organization requires an administrator to approve Sentwise.**, offers **Copy a Note for Your IT Admin** and **Choose Another Account**, announces **Note copied.**, stores no account/token, and exposes no AADSTS code, tenant ID, client ID or protocol jargon in visible or accessibility text.
+- **Asset:** screenshot per step + video for the case (tenant and account details redacted; clipboard contents never captured)
+
+### TC-M6-11 Microsoft protocol-disabled failures leave no half-added account
+- **Executor:** lucius (device-bound live mailbox; tenant setting changed only by the fixture owner)
+- **Verifies:** item 31 (T31-3, T31-7, T31-9; architecture sequence 6.3)
+- **Preconditions:** Microsoft work fixture exists; fixture owner can toggle IMAP and authenticated SMTP for that mailbox; no account with the fixture address is connected; network online. Restore every setting in teardown.
+- **Steps:**
+  1. With IMAP disabled and SMTP AUTH enabled for the fixture, complete **Continue with Microsoft** and consent.
+  2. Inspect the connection result and account list; restore IMAP.
+  3. With IMAP enabled and SMTP AUTH disabled, repeat Microsoft connection and consent.
+  4. Inspect the connection result and account list; restore SMTP AUTH, then connect once with both enabled.
+- **Expected:** step 1 says **IMAP access is off for this mailbox.**; step 3 says **Sending is off for this mailbox.** with the approved SMTP AUTH explanation; each failure offers the admin-note action, deletes the new grant, adds no account and retains any pre-existing local drafts; step 4 succeeds exactly once after both protocols are enabled.
+- **Asset:** screenshot per step + video for the case (addresses and tenant details redacted)

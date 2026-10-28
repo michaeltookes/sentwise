@@ -16,9 +16,9 @@ enum StatusRefreshRetryStopReason: String {
 /// Kept in its own file so `AppState+ManagedAccount` stays within length limits.
 extension AppState {
 
-    /// Production Clerk Google OAuth stays gated until the production instance
-    /// allowlists the Worker callback URL in `docs/launch-checklist.md`.
-    static let isManagedGoogleSignInEnabled = false
+    /// Production Clerk's Worker callback has been allowlisted since 2026-10-27,
+    /// so managed Google sign-in is open. Keep this one-line gate for emergency closure.
+    static let isManagedGoogleSignInEnabled = true
     static let managedGoogleSignInUnavailableMessage =
         "Google sign-in is temporarily unavailable. Use email sign-in for now."
     static let managedStatusRefreshPendingMessage =

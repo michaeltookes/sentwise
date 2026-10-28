@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Continue with Google is back for Sentwise accounts** — sign in or create
+  your account in one step without waiting for an emailed code.
 - **Clearer privacy wording** — the caption under Sign in with Google now
   reads "Sentwise reads your recent inbox on this Mac to find messages worth a
   reply, and sends mail to the drafting service only to write for you; nothing

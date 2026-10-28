@@ -35,8 +35,60 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 | **M3 Trial to paid verified** | Fresh account: reminders → "Trial ended" → checkout → "You're on Starter" → cancel shows "Cancels on <date>" | 123 (prerequisite), 124, 119, 87, 92, 120 | sentwise-service: 123 (sandbox deployment), 124 (paused-status fix) |
 | **M4 First-run friction cut** | Workspace domain auto-detected; "Continue with Google"; branded verification email | 110, 105, 106, 121, 122 | Clerk dashboard (owner): 74 §1 callback allowlist, 106 templates |
 | **M5 Public link and 30-day push** | Public post → site → download → trial on a clean browser; support drill answered within SLA | 74 (close) | genkei-ops P1-1, P1-4, 6c-3/4/5; launch kit; sentwise-landing-page 9 |
+| **M6 Sign-in first** | First run shows Google without an app-password field; other IMAP remains under the fallback; Outlook.com connects through Microsoft and recovers correctly | 135 first, 31 second; 136 is item 31's owner prerequisite; 134 gates public 135; 137 feeds that gate | landing-page 16 + sentwise 137 → genkei-ops 31 → sentwise 134 → public 135; landing-page publisher-domain/privacy work supports 136/31 |
 
-After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
+### M6 epic — Sign-in first (ranked delivery order)
+
+> This epic groups existing stable IDs without moving or rewriting their canonical items below. Builder order is 135, then 31. Item 136 is owner/vendor enablement in parallel, not a third app-code story. All device cases run on Lucius' Mini; see `docs/qa/test-cases.md` TC-M6-01–TC-M6-11.
+
+1. **Item 135 — Google and other-IMAP sign-in-first** (US-sign-in-first-1 to 4; TC-M6-01, TC-M6-02, TC-M6-03, TC-M6-08, TC-M6-09)
+   - **US-1 — first-run Google path**
+     - T135-1 Flag `SENTWISE_SIGN_IN_FIRST` (new `Sentwise/Config/SignInFirst.xcconfig`, empty) -> Info.plist `SentwiseSignInFirst` -> `BuildConfiguration.signInFirst`; `QA.xcconfig` sets `YES`. Hide applies only when the flag is on and `isGoogleSignInAvailable`.
+     - T135-2 Email field moves outside the disclosure, shared with the app-password form; Google uses it as `login_hint`.
+     - T135-3 Hidden state in `GoogleOrAppPasswordConnect` for onboarding and Settings; disclosure "Other ways to connect", identifier `otherWaysToConnect`; existing identifiers kept.
+     - T135-4 Onboarding subtitle per state (copy from the UX review).
+   - **US-2 — non-Google IMAP fallback**
+     - T135-5 Inline provider hints (no auto-expand), including the Microsoft note until item 31 ships.
+   - **US-3 — existing account compatibility**
+     - T135-6 `SavedMailAccount.authProvider` with launch back-fill; Settings expands the disclosure for app-password accounts.
+   - **US-4 — gated release and regression coverage**
+     - T135-7 Release wiring: repository variable `SENTWISE_SIGN_IN_FIRST`, set only by the owner after 134 is done; release-checklist line.
+     - T135-8 View-state tests: flag off; flag on with Google; flag on without Google; existing app-password account; Microsoft-domain note.
+   - **Done:** QA demonstrates the hidden field, fallback, Google success, existing-account migration and accessibility assets; item 134 is recorded complete before Michael enables the public flag.
+
+2. **Item 31 — Microsoft XOAUTH2, personal accounts first** (US-sign-in-first-5 to 10; TC-M6-04–TC-M6-07, TC-M6-09–TC-M6-11)
+   - **US-6 — provider-neutral foundation and personal-account connection**
+     - T31-1 Provider-neutral OAuth refactor (`OAuthProviderConfiguration`, coordinator, token service, store, mail-provider wrapper); Google Keychain prefix stays `gmail`; no behaviour change, all Google tests green.
+   - **US-9 — mail transport and folder compatibility, before UI**
+     - T31-6 `SentwiseMail` SMTP STARTTLS (`SMTPSecurity.startTLS`, refuse AUTH without STARTTLS) and saved-account fields `smtpHost`/`smtpPort`/`smtpSecurity`/`authProvider` (schema 12, additive).
+     - T31-8 `MailboxNaming.microsoft` plus IMAP SPECIAL-USE discovery for Microsoft accounts.
+   - **US-5 to US-8 — Microsoft configuration, recovery, detection and UI**
+     - T31-2 Microsoft configuration: `Sentwise/Config/MicrosoftOAuth.xcconfig` `SENTWISE_MICROSOFT_CLIENT_ID` -> `SentwiseMicrosoftOAuthClientID`; authority `common`, redirect `http://localhost:<port>`, scopes `IMAP.AccessAsUser.All SMTP.Send offline_access openid email`, no client secret; release secret pass-through.
+     - T31-3 Error mapping (architecture 4.6): `.adminConsentRequired`, `.reauthenticationRequired` (also Google `invalid_grant`), `.mailboxProtocolDisabled`; admin note; refresh-token rotation persisted.
+     - T31-4 Detection: `EmailProviderKind.microsoft` (outlook/hotmail/live/msn and regional domains), Microsoft 365 MX (`*.mail.protection.outlook.com`).
+     - T31-5 "Sign in with Microsoft" UI and adoption (address and `tid` from the ID token; personal vs work SMTP host).
+     - T31-7 SMTP AUTH-only probe at connect; tokens deleted and account not adopted on failure.
+   - **US-9 — live mail proof**
+     - T31-9 `MicrosoftOAuthLiveTests` on Lucius' Mini (personal + M365 test mailboxes): refresh, IMAP, probe, send to self, Sent Items and Drafts checks.
+   - **US-10 — consent and privacy copy**
+     - T31-10 Consent copy block (ui-designer, owner-approved) and the sentwise.ai privacy-policy Microsoft section before the public flag.
+   - **Done:** a Genkei-owned Outlook.com fixture signs in without a password, refresh rotation persists, offline cached-token launch works, revoked consent produces one reauthentication state, and the final accessibility/consent checks pass. Work/school support may remain gated as stated in the owner assumption.
+
+3. **Item 136 — owner/vendor prerequisite for item 31** (TC-M6-04 and TC-M6-10 live preconditions; registration evidence is not app-code QA)
+   - T136-1 Multi-tenant + personal registration (`AzureADandPersonalMicrosoftAccount`), public client flows on, platform "Mobile and desktop applications", redirect `http://localhost`; delegated permissions Office 365 Exchange Online `IMAP.AccessAsUser.All`, `SMTP.Send`, plus `offline_access`, `openid`, `email`; no client secret.
+   - T136-2 Publisher domain sentwise.ai via `/.well-known/microsoft-identity-association.json` on the landing page.
+   - T136-3 Microsoft AI Cloud Partner Program ID for Genkei Labs LLC and publisher verification.
+   - T136-4 Client ID (a GUID, not secret) stored as repository secret `SENTWISE_MICROSOFT_CLIENT_ID`; never committed.
+   - T136-5 Confirm the redirect accepts a random loopback port with `http://localhost`; if not, register `http://127.0.0.1` in the manifest and report to the builder.
+   - **Waiting on Michael:** approve the company Entra tenant/partner enrolment and accept its terms; assumption: yes, vendor-ops prepares it.
+   - **Waiting on Michael:** approve personal-accounts-first if publisher verification lags; assumption: yes.
+   - **Waiting on Michael:** approve one Outlook.com and one Microsoft 365 developer-tenant test mailbox; assumption: yes, no cost, and credentials remain outside the repo.
+
+4. **Public Google gate — existing items 137 → 134; no app build is ranked ahead of item 135**
+   - `sentwise-landing-page#16` and item 137 provide the verification assets to `genkei-ops#31`; completed verification/CASA closes item 134; only then may Michael enable item 135 on the public release channel.
+   - **Waiting on Michael:** accept the CASA lab cost and final public flag flip; assumption: cost accepted by the 2026-10-28 direction, but the flip requires explicit approval after evidence.
+
+After M6 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
 
 ---
 
@@ -449,7 +501,8 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Precondition (owner): the `/auth/callback` redirect is allowlisted in production Clerk; until then this item stays blocked.
     - Flip `AppState.isManagedGoogleSignInEnabled` to true; verify the browser hand-back on a production build; tick the two open §1 boxes in the launch checklist.
     - Unit tests: the option shows when enabled, and stays hidden in Prowl hunt mode unless the fake is active (existing behavior).
-    - **Verified by:** TC-M4-03.
+    - **Build note 2026-10-27 (`121-managed-google-signin`):** production callback allowlisting is confirmed, the app gate is open, the Google option is covered for production and hunt-isolated presentation, and the launch checklist is current.
+    - **Verified by:** TC-M4-03 (Lucius, pending).
 
 122. **Release v0.2.3 (first-run friction)** — *(M4, High)*
     Ship items 110, 105, and 121 in a signed release before the public link goes out.
