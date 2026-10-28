@@ -84,12 +84,24 @@ struct VoiceProfile: Codable, Equatable {
     ) -> Int? {
         let words = matches.map { text.substring(with: $0.range) }
         let first = words[0].lowercased()
+        // A name must follow the salutation directly, separated by a single space.
+        // "Hi,\nHope you're well!" has punctuation and a line break between "Hi" and
+        // "Hope", so "Hope" is the next sentence, not a name.
+        func followsWithSingleSpace(_ index: Int) -> Bool {
+            guard index + 1 < matches.count else { return false }
+            let gap = NSRange(
+                location: NSMaxRange(matches[index].range),
+                length: matches[index + 1].range.location - NSMaxRange(matches[index].range)
+            )
+            return text.substring(with: gap) == " "
+        }
         if salutationWords.contains(first) {
-            return words.count > 1 && isPersonalName(words[1]) ? 1 : nil
+            return followsWithSingleSpace(0) && isPersonalName(words[1]) ? 1 : nil
         }
         if first == "good", words.count > 2 {
             // "Good morning Dana,"
-            return salutationWords.contains(words[1].lowercased()) && isPersonalName(words[2]) ? 2 : nil
+            return followsWithSingleSpace(0) && followsWithSingleSpace(1)
+                && salutationWords.contains(words[1].lowercased()) && isPersonalName(words[2]) ? 2 : nil
         }
         // A bare "Dana," opener is a name only with evidence (a known name); a standalone
         // word such as "Bonjour," or "Welcome," is left alone.

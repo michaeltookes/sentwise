@@ -104,6 +104,16 @@ final class FollowUpIdentityPromptTests: XCTestCase {
         XCTAssertEqual(VoiceProfile.normalizedGreeting("Dana,", knownNames: ["Dana Reyes"]), "<first name>,")
     }
 
+    func testWordAfterPunctuationOrLineBreakIsNotTreatedAsAName() {
+        // The next sentence after "Hi," is not a name (Codex review of item 138).
+        for greeting in ["Hi,\nHope you're well!", "Hi, Hope you're well!", "Hello.\nThanks again,", "Good morning,\nQuick note:"] {
+            XCTAssertEqual(VoiceProfile.normalizedGreeting(greeting), greeting)
+            XCTAssertEqual(profile(greeting: greeting).withNormalizedGreeting().greeting, greeting)
+        }
+        XCTAssertEqual(VoiceProfile.normalizedGreeting("Hi Dana,\nHope you're well!"), "Hi <first name>,\nHope you're well!")
+        XCTAssertEqual(VoiceProfile.normalizedGreeting("Good morning Dana,"), "Good morning <first name>,")
+    }
+
     func testUnknownRecipientGetsNameFreeGreetingInstruction() {
         let text = "We agreed on ten seats."
         let prompt = systemPrompt(greeting: "Hi <first name>,", text: text, labeled: false)
