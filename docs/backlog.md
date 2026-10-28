@@ -35,8 +35,60 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 | **M3 Trial to paid verified** | Fresh account: reminders → "Trial ended" → checkout → "You're on Starter" → cancel shows "Cancels on <date>" | 123 (prerequisite), 124, 119, 87, 92, 120 | sentwise-service: 123 (sandbox deployment), 124 (paused-status fix) |
 | **M4 First-run friction cut** | Workspace domain auto-detected; "Continue with Google"; branded verification email | 110, 105, 106, 121, 122 | Clerk dashboard (owner): 74 §1 callback allowlist, 106 templates |
 | **M5 Public link and 30-day push** | Public post → site → download → trial on a clean browser; support drill answered within SLA | 74 (close) | genkei-ops P1-1, P1-4, 6c-3/4/5; launch kit; sentwise-landing-page 9 |
+| **M6 Sign-in first** | First run shows Google without an app-password field; other IMAP remains under the fallback; Outlook.com connects through Microsoft and recovers correctly | 135 first, 31 second; 136 is item 31's owner prerequisite; 134 gates public 135; 137 feeds that gate | landing-page 16 + sentwise 137 → genkei-ops 31 → sentwise 134 → public 135; landing-page publisher-domain/privacy work supports 136/31 |
 
-After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
+### M6 epic — Sign-in first (ranked delivery order)
+
+> This epic groups existing stable IDs without moving or rewriting their canonical items below. Builder order is 135, then 31. Item 136 is owner/vendor enablement in parallel, not a third app-code story. All device cases run on Lucius' Mini; see `docs/qa/test-cases.md` TC-M6-01–TC-M6-11.
+
+1. **Item 135 — Google and other-IMAP sign-in-first** (US-sign-in-first-1 to 4; TC-M6-01, TC-M6-02, TC-M6-03, TC-M6-08, TC-M6-09)
+   - **US-1 — first-run Google path**
+     - T135-1 Flag `SENTWISE_SIGN_IN_FIRST` (new `Sentwise/Config/SignInFirst.xcconfig`, empty) -> Info.plist `SentwiseSignInFirst` -> `BuildConfiguration.signInFirst`; `QA.xcconfig` sets `YES`. Hide applies only when the flag is on and `isGoogleSignInAvailable`.
+     - T135-2 Email field moves outside the disclosure, shared with the app-password form; Google uses it as `login_hint`.
+     - T135-3 Hidden state in `GoogleOrAppPasswordConnect` for onboarding and Settings; disclosure "Other ways to connect", identifier `otherWaysToConnect`; existing identifiers kept.
+     - T135-4 Onboarding subtitle per state (copy from the UX review).
+   - **US-2 — non-Google IMAP fallback**
+     - T135-5 Inline provider hints (no auto-expand), including the Microsoft note until item 31 ships.
+   - **US-3 — existing account compatibility**
+     - T135-6 `SavedMailAccount.authProvider` with launch back-fill; Settings expands the disclosure for app-password accounts.
+   - **US-4 — gated release and regression coverage**
+     - T135-7 Release wiring: repository variable `SENTWISE_SIGN_IN_FIRST`, set only by the owner after 134 is done; release-checklist line.
+     - T135-8 View-state tests: flag off; flag on with Google; flag on without Google; existing app-password account; Microsoft-domain note.
+   - **Done:** QA demonstrates the hidden field, fallback, Google success, existing-account migration and accessibility assets; item 134 is recorded complete before Michael enables the public flag.
+
+2. **Item 31 — Microsoft XOAUTH2, personal accounts first** (US-sign-in-first-5 to 10; TC-M6-04–TC-M6-07, TC-M6-09–TC-M6-11)
+   - **US-6 — provider-neutral foundation and personal-account connection**
+     - T31-1 Provider-neutral OAuth refactor (`OAuthProviderConfiguration`, coordinator, token service, store, mail-provider wrapper); Google Keychain prefix stays `gmail`; no behaviour change, all Google tests green.
+   - **US-9 — mail transport and folder compatibility, before UI**
+     - T31-6 `SentwiseMail` SMTP STARTTLS (`SMTPSecurity.startTLS`, refuse AUTH without STARTTLS) and saved-account fields `smtpHost`/`smtpPort`/`smtpSecurity`/`authProvider` (schema 12, additive).
+     - T31-8 `MailboxNaming.microsoft` plus IMAP SPECIAL-USE discovery for Microsoft accounts.
+   - **US-5 to US-8 — Microsoft configuration, recovery, detection and UI**
+     - T31-2 Microsoft configuration: `Sentwise/Config/MicrosoftOAuth.xcconfig` `SENTWISE_MICROSOFT_CLIENT_ID` -> `SentwiseMicrosoftOAuthClientID`; authority `common`, redirect `http://localhost:<port>`, scopes `IMAP.AccessAsUser.All SMTP.Send offline_access openid email`, no client secret; release secret pass-through.
+     - T31-3 Error mapping (architecture 4.6): `.adminConsentRequired`, `.reauthenticationRequired` (also Google `invalid_grant`), `.mailboxProtocolDisabled`; admin note; refresh-token rotation persisted.
+     - T31-4 Detection: `EmailProviderKind.microsoft` (outlook/hotmail/live/msn and regional domains), Microsoft 365 MX (`*.mail.protection.outlook.com`).
+     - T31-5 "Sign in with Microsoft" UI and adoption (address and `tid` from the ID token; personal vs work SMTP host).
+     - T31-7 SMTP AUTH-only probe at connect; tokens deleted and account not adopted on failure.
+   - **US-9 — live mail proof**
+     - T31-9 `MicrosoftOAuthLiveTests` on Lucius' Mini (personal + M365 test mailboxes): refresh, IMAP, probe, send to self, Sent Items and Drafts checks.
+   - **US-10 — consent and privacy copy**
+     - T31-10 Consent copy block (ui-designer, owner-approved) and the sentwise.ai privacy-policy Microsoft section before the public flag.
+   - **Done:** a Genkei-owned Outlook.com fixture signs in without a password, refresh rotation persists, offline cached-token launch works, revoked consent produces one reauthentication state, and the final accessibility/consent checks pass. Work/school support may remain gated as stated in the owner assumption.
+
+3. **Item 136 — owner/vendor prerequisite for item 31** (TC-M6-04 and TC-M6-10 live preconditions; registration evidence is not app-code QA)
+   - T136-1 Multi-tenant + personal registration (`AzureADandPersonalMicrosoftAccount`), public client flows on, platform "Mobile and desktop applications", redirect `http://localhost`; delegated permissions Office 365 Exchange Online `IMAP.AccessAsUser.All`, `SMTP.Send`, plus `offline_access`, `openid`, `email`; no client secret.
+   - T136-2 Publisher domain sentwise.ai via `/.well-known/microsoft-identity-association.json` on the landing page.
+   - T136-3 Microsoft AI Cloud Partner Program ID for Genkei Labs LLC and publisher verification.
+   - T136-4 Client ID (a GUID, not secret) stored as repository secret `SENTWISE_MICROSOFT_CLIENT_ID`; never committed.
+   - T136-5 Confirm the redirect accepts a random loopback port with `http://localhost`; if not, register `http://127.0.0.1` in the manifest and report to the builder.
+   - **Waiting on Michael:** approve the company Entra tenant/partner enrolment and accept its terms; assumption: yes, vendor-ops prepares it.
+   - **Waiting on Michael:** approve personal-accounts-first if publisher verification lags; assumption: yes.
+   - **Waiting on Michael:** approve one Outlook.com and one Microsoft 365 developer-tenant test mailbox; assumption: yes, no cost, and credentials remain outside the repo.
+
+4. **Public Google gate — existing items 137 → 134; no app build is ranked ahead of item 135**
+   - `sentwise-landing-page#16` and item 137 provide the verification assets to `genkei-ops#31`; completed verification/CASA closes item 134; only then may Michael enable item 135 on the public release channel.
+   - **Waiting on Michael:** accept the CASA lab cost and final public flag flip; assumption: cost accepted by the 2026-10-28 direction, but the flip requires explicit approval after evidence.
+
+After M6 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
 
 ---
 
@@ -449,7 +501,8 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Precondition (owner): the `/auth/callback` redirect is allowlisted in production Clerk; until then this item stays blocked.
     - Flip `AppState.isManagedGoogleSignInEnabled` to true; verify the browser hand-back on a production build; tick the two open §1 boxes in the launch checklist.
     - Unit tests: the option shows when enabled, and stays hidden in Prowl hunt mode unless the fake is active (existing behavior).
-    - **Verified by:** TC-M4-03.
+    - **Build note 2026-10-27 (`121-managed-google-signin`):** production callback allowlisting is confirmed, the app gate is open, the Google option is covered for production and hunt-isolated presentation, and the launch checklist is current.
+    - **Verified by:** TC-M4-03 (Lucius, pending).
 
 122. **Release v0.2.3 (first-run friction)** — *(M4, High)*
     Ship items 110, 105, and 121 in a signed release before the public link goes out.
@@ -505,6 +558,17 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Evidence uses only the synthetic fixtures in `docs/qa/test-cases.md` and redacts addresses, codes, app passwords, mail/transcript text, and personal paths.
     - **Size/order:** M (1–2 QA days plus finding intake). Starts in parallel with 129 but must pass before release Slice 131.
     - **Verified by:** TC-74-01 through TC-74-07 in `docs/requirements/launch-readiness.md`.
+    - **Run 1 (2026-10-27/28, Lucius, clean Mac): 0 PASS / 3 FAIL / 4 BLOCKED (strict evidence gate); negatives 2 PASS (N2a, N6a) / 0 FAIL / 8 not tested or incomplete.** Signed DMG 0.2.1 on macOS 26.4.1, in a reset existing account (Option B), not a never-used Mac; notification permission could not be reset (`tccutil` refused), so the first-run notification check is not clean. Report and evidence: Lucius' `sentwise-qa/runs/2026-10-27-sentwise-130-clean-mac/report.md`. Zero sends, zero purchases.
+      - TC-74-01 BLOCKED: download, checksum, Gatekeeper, notarization (Developer ID, Genkei Labs LLC, stapled) and first run pass functionally; no video.
+      - TC-74-02 FAIL: the first `brew install` was a no-op on a stale Caskroom receipt; after uninstall the retry installed 0.2.1 and reached first run, but the log shows an untrusted-tap warning for `oven-sh/bun` (unrelated) and the ContainerBar cask deprecation (item 141). The Sentwise cask itself printed nothing. Proposed case amendment in `docs/qa/test-cases.md` (TC-74-02 note).
+      - TC-74-03 FAIL: F2 sign-in and F1 Gmail app-password connection succeed; the Workspace domain was not auto-detected (item 110, which merged 2026-10-26 after 0.2.1 was tagged, so expected on this build); notification first-run and the full negative set incomplete.
+      - TC-74-04 BLOCKED: learning and persistence after relaunch pass functionally; no video; N4 (offline) not run. Found item 140 (app-menu Settings blank).
+      - TC-74-05 BLOCKED: Q1 was never sent, so no inbox reply was drafted; before any draft the account already showed Trial 14 days and 1 of 400 drafts used (item 139).
+      - TC-74-06 FAIL: two T1 drafts; draft 1 denied, draft 2 approved once and saved to Drafts (no send); both have the wrong greeting and owner, draft 2 drops 10 seats and 30 days (item 138). Notification Open path not observed.
+      - TC-74-07 BLOCKED: Sparkle 0.2.0 → 0.2.1 with human notes, install and relaunch, notarized; mailbox, voice, Save as draft and trial persist; missing pre-update assertions, post-update draft comparison and video.
+      - Not product defects: F1 app-password fixture needed normalizing; Peekaboo typing, paste and focus failures; missing videos; a Keychain prompt at reset after Debug activity on the same Mini (noted on item 115 in `docs/resolved.md`).
+    - **Before Run 2:** (1) reinstall from the release under test, because prowl-qa CI ran on that Mini after Run 1 and Debug builds share the production Keychain service; (2) Michael sends Q1 and gives the send time; (3) discard the one saved "Pilot next steps" draft in F1's Gmail Drafts (12:48 PM 2026-10-28) after copying its body into the run evidence for item 138, and trash the run's Q1 if it arrived; (4) continuous video for every case; (5) an F2 with a new RUNID, and a way to type the sign-in code that Peekaboo accepts (Run 1 lost most of a day to code transfer). Run 2 should use the 131 release candidate, which will contain items 110, 138, 139 and 140.
+    - **131 blockers from Run 1:** 138 (wrong facts in the flagship follow-up), 139 (trial and quota start before the first draft; blocks until Michael decides the rule, then fixed or the cases amended), 140 (blank Settings window from the app menu). Not blockers: 141 (P3 tap warning from another app's cask), 110 (fixed on main; re-verify in Run 2), the stale receipt and untrusted-tap warnings (test-case change), and the harness problems above. Item 130 stays open until Run 2 passes.
 
 131. **Item 74 Slice C — launch release hygiene and non-maintainer verification** — *(High; third/final launch slice; US-launch-readiness-3)*
     Cut the owner-approved launch release only after Slices 129/130 pass, then prove every public distribution channel delivers the same trusted artifact and that support/update trust is live.
@@ -515,6 +579,7 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Confirm `feedback@sentwise.ai` remains monitored by sending the redacted QA diagnostic fixture and observing receipt within one hour. Confirm the built app's `SUPublicEDKey` matches the public key derived from the offline private key; evidence contains only a public fingerprint/match result and the private key never moves to the repo or QA machine.
     - Update the existing `docs/launch-checklist.md` with dated artifact/evidence references; do not tick live gates from code review alone. Item 131 closes after release verification; umbrella item 74 closes only when the owner-approved public link goes out.
     - Unhappy path: any wrong build, missing support mail, signature/update failure, or open P1/P2 launch defect blocks announcement while the last known-good release remains available and a TC-linked backlog defect is filed.
+    - **Blocked by (2026-10-28, item 130 Run 1):** 138, 139 (after Michael's decision), 140. Item 141 is not a blocker.
     - **Size/order:** M (1 release day plus 0.5–1 QA day). Final slice; depends on 129 and 130.
     - **Verified by:** TC-74-09 and the TC-74-07 update leg in `docs/requirements/launch-readiness.md`.
 
@@ -571,3 +636,41 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
 137. **Google consent-screen logo (120x120)** — *(High; gates Google verification and therefore 134/135; filed 2026-10-28; owner ui-designer, Michael approves)*
     Design the Sentwise app logo for the Google OAuth consent screen: square PNG, exactly 120x120 px (Google accepts up to 1 MB, JPG or PNG, square), the owl mark on a plain background, legible at small size in light and dark consent screens, matching the brand in the landing page and app icon.
     - Acceptance: Given the file, Then it is 120x120 px PNG under 1 MB, square, with no transparency artifacts on white or dark backgrounds, no Google trademark or misleading text; the owner approves it; vendor-ops uploads it to the consent screen (branding) and the read-back shows it.
+
+138. **Transcript follow-up drafts get the greeting, the owners and the numbers wrong** — *(High, P2; blocks 131; found 2026-10-28 by the item 130 clean-Mac run, TC-74-06; owner builder)*
+    On signed 0.2.1 (macOS 26.4.1, Lucius' Mini) both follow-ups generated from fixture T1 (`docs/qa/test-cases.md`) were wrong in ways a user could miss before approving: draft 2 ("Pilot next steps", approved once, saved to F1 Gmail Drafts at 12:48 PM 2026-10-28, no send) opens "Hi Michael" instead of greeting the call participant Dana, makes Dana responsible for the security questionnaire, and drops the 10 seats and the 30-day pilot; draft 1 (denied, reason Wrong content) had the same greeting and misattribution. T1 says: 10 seats, 30-day pilot starting November 2; Dana needs the security questionnaire back by Friday; Lucius sends it Thursday with the pilot order form; next meeting November 9. Evidence: run report "Exact case accounting" TC-74-06 row; `06-04-review-row.png`, `06-06-saved-status.png` in Lucius' run folder `sentwise-qa/runs/2026-10-27-sentwise-130-clean-mac/`. The report does not keep the draft body verbatim; capture it from F1 Drafts before discarding the draft (see item 130, Run 1).
+    Suspected causes (not confirmed): `FollowUpGenerator.systemPrompt` and `userPrompt` (`Services/Transcript/FollowUpGenerator.swift`) never say which transcript speaker is the user or who the recipient is, so the model has to guess the owner of "I'll send it"; the voice profile's `greeting` is rendered verbatim into the prompt (`Models/VoiceProfile.swift` line 28), so a greeting learned with a name in it (for example "Hi Michael,") is copied into every draft; nothing asks the model to keep quantities and durations stated in the transcript.
+    *As a rep sending a post-call follow-up, I want the draft to greet the person I spoke with, name the right owner for each action, and keep the numbers we agreed, so that I can approve it without rereading the transcript line by line.*
+    - Given fixture T1, recipient `luciusfox@prowlqa.dev` and an F1 voice profile, When the follow-up is generated, Then the greeting names Dana (or uses no name) and never a name that appears only in the voice profile or Sent mail.
+    - Given T1, Then the draft says Lucius (the user, "I") sends the security questionnaire Thursday with the pilot order form, and does not assign the questionnaire to Dana.
+    - Given T1, Then the draft contains "10 seats", "30-day" (or "30 days"), "November 2" and "November 9".
+    - Given a voice profile whose learned greeting contains a person's name, When any draft is generated, Then the name is not copied into the draft; the profile keeps the greeting form only (for example "Hi <first name>,").
+    - Unhappy path: Given a transcript with no speaker labels, Then action items are written without an owner rather than with a guessed one (existing rule), and the T1 facts above are still kept.
+    - Tests: prompt-construction unit tests for the user's speaker identity, recipient name and greeting placeholder; a fixture evaluation of T1 in the live-test lane asserting the three checks above. Verified by a TC-74-06 rerun with the draft body captured as evidence.
+
+139. **Voice learning starts the trial and counts as a draft before the first draft** — *(High, P2; blocks 131 until Michael decides the rule; found 2026-10-28 by the item 130 clean-Mac run, TC-74-05; owner builder with sentwise-service)*
+    After sign-in and voice learning, and before any reply or follow-up was requested, Settings → Subscription read "Trial — 14 days left" and "1 of 400 drafts used this month · resets Nov 1" (`05-02-predraft-entitlement.png`). After two transcript drafts it read "3 of 400", so the extra one is the learning call. TC-74-05 and TC-M1-08 step 8 say the trial starts on the first authenticated draft request, and the pricing copy counts drafts.
+    Cause (from the code, high confidence): `learnVoiceProfile` → `makeProfile` (`App/AppState+Voice.swift` around line 261) sends the profile request through the same `llm.complete` managed path as drafting, which posts to sentwise-service `POST /v1/draft`. That route initializes `trialStartedAt` in Clerk (`src/auth.ts`, `initialize`) and reserves and settles one unit of quota for every request; the request carries no purpose, so the service cannot tell learning from drafting. Re-learn my voice will count again each time.
+    *As a new trial user, I want my trial and my draft count to start with my first draft, so that onboarding does not use up what I am paying for.*
+    - Decision first (Michael, billing): does voice learning start the trial and count against the monthly drafts? Assumption taken: no to both, because the spec and the Subscription copy say drafts.
+    - Given a fresh F2 account, When sign-in and voice learning complete, Then Subscription shows no active trial and "0 of 400 drafts used" (or the pre-trial state TC-M1-08 defines).
+    - Given that account, When the first reply or follow-up draft is requested, Then Subscription shows "Trial — 14 days left" and "1 of 400 drafts used".
+    - Given Re-learn my voice is clicked on a trial account, Then the drafts-used count does not change.
+    - Unhappy path: Given a learning request is rate-limited or the service is offline, Then learning shows its existing retry copy and no quota is reserved or settled.
+    - The non-counting route must still be authenticated, rate-limited and capped (a learning call per account per day, or per request size) so it cannot be used for free inference; the architect picks the mechanism (separate route or a signed purpose field).
+    - If Michael decides learning should count, this item becomes a copy and test-case change instead: Subscription and pricing copy say so, and TC-74-05/TC-M1-08 are amended through the planner.
+
+140. **Sentwise > Settings… in the app menu opens a blank window** — *(High, P2; blocks 131; found 2026-10-28 by the item 130 clean-Mac run, TC-74-04; owner builder)*
+    After quit and relaunch, the application menu's Sentwise > Settings… opened a window titled "Sentwise Settings" with an empty body, twice (after waits of 5 and 10 seconds, and after a second relaunch); the status menu's Settings… opened the working tabbed window. Evidence: `04-settings-after-restart.png`, `04-06-settings-wait5.png`, `04-07-settings-wait10.png`, `04-10-settings-second-restart.png`.
+    Cause (from the code): `SentwiseApp.body` (`App/SentwiseApp.swift`) declares `SwiftUI.Settings { EmptyView() }` only to satisfy SwiftUI, and SwiftUI wires the app menu's Settings… command (and Command-comma while the app is active) to that empty scene; the real window is `SettingsWindowController`, reached only from `MenuBarController.openSettings`.
+    *As a Mac user, I want every Settings… command to open the same Settings window, so that I never land on an empty window.*
+    - Given Sentwise is active with any of its windows in front, When the user chooses Sentwise > Settings… or presses Command-comma, Then the tabbed Settings window (General first, same window as the status menu) opens or comes to front.
+    - Given the Settings window is already open from the status menu, When the app-menu Settings… is chosen, Then the same window comes to front and no second window opens.
+    - Unhappy path: Given onboarding has not finished, When the app-menu Settings… is chosen, Then Settings opens with the same behavior as the status-menu route at that stage, never a blank window.
+    - Unit or UI test: the app-menu Settings command routes to `SettingsWindowController`; the SwiftUI Settings scene can never show `EmptyView` to a user.
+
+141. **ContainerBar cask in the shared tap prints a deprecation warning during `brew install --cask michaeltookes/tap/sentwise`** — *(Low, P3; does not block 131; found 2026-10-27 by the item 130 clean-Mac run, TC-74-02; owner builder, change lands in `michaeltookes/homebrew-tap`)*
+    Homebrew 7.0.11 loads every cask in the tap and prints "Calling string comparison format for `depends_on macos:` is deprecated!" for `Casks/containerbar.rb` line 11 (`depends_on macos: ">= :sonoma"`) to anyone installing Sentwise. The Sentwise cask is already fixed (`depends_on macos: :sonoma`, item 116). Evidence: `02-brew-install.log`, `02-brew-install-retry.log` in the run folder.
+    *As a Sentwise installer, I want the Homebrew install to print no warnings about other apps, so that the install looks trustworthy.*
+    - Given the tap at its current main, When `brew install --cask michaeltookes/tap/sentwise` runs on Homebrew 7.x, Then no `depends_on macos:` deprecation warning is printed for any cask in the tap.
+    - Unhappy path: Given ContainerBar's next release regenerates its cask, Then the release template writes the symbol form, so the warning does not return (check the ContainerBar release script or cask template).
