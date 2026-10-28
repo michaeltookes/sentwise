@@ -681,10 +681,10 @@ All M6 cases are **device-bound and run only on Lucius' Mini** (or the architect
 ### TC-M6-06 Revoked Microsoft consent requires one deliberate sign-in again
 - **Executor:** lucius (device-bound browser/account settings)
 - **Verifies:** item 31 (T31-3; revoked-consent recovery)
-- **Preconditions:** Microsoft personal fixture connected with at least one local draft; access-removal page open at Microsoft's consent-management URL; network online.
+- **Preconditions:** Microsoft personal fixture connected with at least one local draft; access-removal page open at Microsoft's consent-management URL; network online. Record the wall-clock time when the connection succeeds. Microsoft access tokens have a randomized 60–90 minute lifetime, and Sentwise refreshes only within five minutes of expiry. **Do not trigger step 2 until at least 95 minutes after the recorded connection time** so no cached access token can still be valid; confirm the boundary by capturing the recorded connection timestamp and the Mini's current date/time in the run notes (timestamps only, never token data).
 - **Steps:**
-  1. Remove Sentwise access for the fixture in Microsoft's consent-management page, then return to Sentwise.
-  2. Trigger one mailbox refresh and wait for the token refresh response.
+  1. Remove Sentwise access for the fixture in Microsoft's consent-management page, then return to Sentwise. If 95 minutes have not elapsed since connection, leave Sentwise idle until they have.
+  2. Capture the Mini's current date/time to prove the 95-minute boundary, then trigger one mailbox refresh and wait for the token refresh response.
   3. Open the status menu, then **Settings…** → **Account**.
   4. Activate **Sign in with Microsoft Again**, complete consent, and return to Sentwise.
 - **Expected:** after step 2, one persistent nonmodal message says **Sign in with Microsoft again to keep <redacted address> connected.**; the status item is **Sentwise, mailbox sign-in required** and offers **Sign In to Mailbox…**; the local draft remains; there are no repeated alerts or automatic retries; step 4 reconnects the same account without a duplicate.
@@ -705,9 +705,9 @@ All M6 cases are **device-bound and run only on Lucius' Mini** (or the architect
 ### TC-M6-08 Existing app-password account migrates without a nudge or credential loss
 - **Executor:** lucius (device-bound upgrade)
 - **Verifies:** item 135 (T135-6, T135-8)
-- **Preconditions:** in a disposable Lucius macOS user, install the immediately preceding signed build with sign-in-first off; connect the **Google fixture mailbox** through its existing app-password path using credentials from Lucius' secret store; quit normally; do not inspect or export Keychain values.
+- **Preconditions:** in a disposable Lucius macOS user, install an immediately preceding **signed QA build produced with the same `Sentwise/Config/QA.xcconfig` storage identity as the M6 QA build**, with sign-in-first off; do not use a production v0.2.x build. Before step 1, inspect both `.app/Contents/Info.plist` files with `/usr/libexec/PlistBuddy -c 'Print :<key>' <path>` and record that all three values match: `CFBundleIdentifier` = `com.tookes.Sentwise.qa` (the defaults domain), `SentwiseAppSupportDirectoryName` = `Sentwise QA`, and `SentwiseKeychainServiceSuffix` = `.qa`. A mismatch blocks the case. In the preceding QA build, connect the **Google fixture mailbox** through its existing app-password path using credentials from Lucius' secret store; quit normally; do not inspect or export Keychain values.
 - **Steps:**
-  1. Install the M6 signed QA build over the prior build and launch it.
+  1. Install the M6 signed QA build over the preceding same-identity QA build and launch it.
   2. Open **Settings…** → **Account** and select the existing fixture.
   3. Inspect the account controls and run **Test Connection** without re-entering credentials.
   4. Return to Add Account and inspect the fresh-account chooser.
