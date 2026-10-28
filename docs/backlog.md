@@ -314,8 +314,19 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
 31. **Microsoft sign-in (Outlook.com, Hotmail, Microsoft 365)** — *second provider, release after launch; rescoped 2026-10-28 from "Graph API" to IMAP/SMTP with XOAUTH2, same shape as the Gmail path. Brief: `docs/requirements/sign-in-first.md` section 6 (US-sign-in-first-6 to 10); depends on 136; architect questions A1-A9 in that section.*
     Add a Microsoft sign-in provider behind the email-provider abstraction.
     *As an Outlook user, I want to connect my M365 mailbox, so that I can use sentwise without Gmail.*
-    - Graph API + OAuth provider implementing the shared email-provider interface.
+    - ~~Graph API + OAuth provider implementing the shared email-provider interface.~~ Superseded 2026-10-28: IMAP/SMTP XOAUTH2 (Graph rejected, `docs/architecture/sign-in-first.md` section 9).
     - Feature parity with Gmail for read/draft/send.
+    - Technical tasks (architecture `docs/architecture/sign-in-first.md` section 11; build in this order):
+      - T31-1 Provider-neutral OAuth refactor (`OAuthProviderConfiguration`, coordinator, token service, store, mail-provider wrapper); Google Keychain prefix stays `gmail`; no behaviour change, all Google tests green.
+      - T31-6 `SentwiseMail` SMTP STARTTLS (`SMTPSecurity.startTLS`, refuse AUTH without STARTTLS) and saved-account fields `smtpHost`/`smtpPort`/`smtpSecurity`/`authProvider` (schema 12, additive).
+      - T31-8 `MailboxNaming.microsoft` plus IMAP SPECIAL-USE discovery for Microsoft accounts.
+      - T31-2 Microsoft configuration: `Sentwise/Config/MicrosoftOAuth.xcconfig` `SENTWISE_MICROSOFT_CLIENT_ID` -> `SentwiseMicrosoftOAuthClientID`; authority `common`, redirect `http://localhost:<port>`, scopes `IMAP.AccessAsUser.All SMTP.Send offline_access openid email`, no client secret; release secret pass-through.
+      - T31-3 Error mapping (architecture 4.6): `.adminConsentRequired`, `.reauthenticationRequired` (also Google `invalid_grant`), `.mailboxProtocolDisabled`; admin note; refresh-token rotation persisted.
+      - T31-4 Detection: `EmailProviderKind.microsoft` (outlook/hotmail/live/msn and regional domains), Microsoft 365 MX (`*.mail.protection.outlook.com`).
+      - T31-5 "Sign in with Microsoft" UI and adoption (address and `tid` from the ID token; personal vs work SMTP host).
+      - T31-7 SMTP AUTH-only probe at connect; tokens deleted and account not adopted on failure.
+      - T31-9 `MicrosoftOAuthLiveTests` on Lucius' Mini (personal + M365 test mailboxes): refresh, IMAP, probe, send to self, Sent Items and Drafts checks.
+      - T31-10 Consent copy block (ui-designer, owner-approved) and the sentwise.ai privacy-policy Microsoft section before the public flag.
 
 32. **IMAP/SMTP connection (app password)** — *PRIMARY connection path*
     IMAP + Google app password is the primary way users connect (decided 2026-07-03, superseding OAuth item 3). Provider-agnostic, works for Gmail/Outlook/any IMAP host. Built on SwiftNIO (`swift-nio-imap`) in `Packages/SentwiseMail`.
@@ -537,10 +548,25 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Build behind a flag that defaults to the current UI; the flip to the public channel requires 134 done and an owner-approved step. UX review and copy from the ui-designer folded into the brief.
     - Unit tests: view model shows/hides the form per flag and `isGoogleSignInAvailable`; existing-account Settings path; disclosure accessibility label and state.
     - **Verified by:** test cases to be added by project-planner (first-run Gmail, iCloud via disclosure, upgrade with existing app-password account).
+    - Technical tasks (architecture `docs/architecture/sign-in-first.md` sections 4.7, 5.1, 11):
+      - T135-1 Flag `SENTWISE_SIGN_IN_FIRST` (new `Sentwise/Config/SignInFirst.xcconfig`, empty) -> Info.plist `SentwiseSignInFirst` -> `BuildConfiguration.signInFirst`; `QA.xcconfig` sets `YES`. Hide applies only when the flag is on and `isGoogleSignInAvailable`.
+      - T135-2 Email field moves outside the disclosure, shared with the app-password form; Google uses it as `login_hint`.
+      - T135-3 Hidden state in `GoogleOrAppPasswordConnect` for onboarding and Settings; disclosure "Other ways to connect", identifier `otherWaysToConnect`; existing identifiers kept.
+      - T135-4 Onboarding subtitle per state (copy from the UX review).
+      - T135-5 Inline provider hints (no auto-expand), including the Microsoft note until item 31 ships.
+      - T135-6 `SavedMailAccount.authProvider` with launch back-fill; Settings expands the disclosure for app-password accounts.
+      - T135-7 Release wiring: repository variable `SENTWISE_SIGN_IN_FIRST`, set only by the owner after 134 is done; release-checklist line.
+      - T135-8 View-state tests: flag off; flag on with Google; flag on without Google; existing app-password account; Microsoft-domain note.
 
 136. **Azure / Entra app registration and publisher verification for Microsoft sign-in** — *(Medium; prerequisite for item 31; owner + vendor-ops; filed 2026-10-28; brief section 6, questions A1, A2, A8)*
     Create the Microsoft Entra app registration (public client, loopback redirect, scopes per the architect), publisher domain and publisher verification, and record the client id in the build config. Michael owns the tenant and any verification payments.
     - Done when the architect's A1/A2 answers are implemented in the registration and a personal-account sign-in works against it.
+    - Technical tasks (architecture `docs/architecture/sign-in-first.md` sections 5.5, 10 A1, R2):
+      - T136-1 Multi-tenant + personal registration (`AzureADandPersonalMicrosoftAccount`), public client flows on, platform "Mobile and desktop applications", redirect `http://localhost`; delegated permissions Office 365 Exchange Online `IMAP.AccessAsUser.All`, `SMTP.Send`, plus `offline_access`, `openid`, `email`; no client secret.
+      - T136-2 Publisher domain sentwise.ai via `/.well-known/microsoft-identity-association.json` on the landing page.
+      - T136-3 Microsoft AI Cloud Partner Program ID for Genkei Labs LLC and publisher verification.
+      - T136-4 Client ID (a GUID, not secret) stored as repository secret `SENTWISE_MICROSOFT_CLIENT_ID`; never committed.
+      - T136-5 Confirm the redirect accepts a random loopback port with `http://localhost`; if not, register `http://127.0.0.1` in the manifest and report to the builder.
 
 137. **Google consent-screen logo (120x120)** — *(High; gates Google verification and therefore 134/135; filed 2026-10-28; owner ui-designer, Michael approves)*
     Design the Sentwise app logo for the Google OAuth consent screen: square PNG, exactly 120x120 px (Google accepts up to 1 MB, JPG or PNG, square), the owl mark on a plain background, legible at small size in light and dark consent screens, matching the brand in the landing page and app icon.

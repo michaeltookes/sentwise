@@ -1,6 +1,6 @@
 # Sign-in first: Google at launch, app password behind "Other ways to connect", Microsoft next
 
-Slug: `sign-in-first`. Source: owner decision 2026-10-28 ("Sentwise connects with sign-in, not app passwords", genkei-ops `docs/decisions.md`). Status: draft by business-analyst; the solution-architect designs on this branch next (`docs/architecture/sign-in-first.md`).
+Slug: `sign-in-first`. Source: owner decision 2026-10-28 ("Sentwise connects with sign-in, not app passwords", genkei-ops `docs/decisions.md`). Status: draft by business-analyst; design in `docs/architecture/sign-in-first.md` (solution-architect, 2026-10-28), which also edited the stories below (marked "Architect:").
 
 ## 1. Problem
 
@@ -37,26 +37,27 @@ Gate: item 135 must not ship to the public channel until item 134 is done (which
 
 ### Acceptance criteria
 US-sign-in-first-1
-- Given the gate flag is on and no account is connected, When the account step of onboarding opens, Then "Continue with Google" is visible, the SecureField labeled "App password" is not in the view hierarchy, and a collapsed control labeled "Other ways to connect" is visible.
+- Given the gate flag is on and no account is connected, When the account step of onboarding opens, Then an email field, "Continue with Google" and a collapsed control labeled "Other ways to connect" (accessibility identifier `otherWaysToConnect`) are visible, and the SecureField labeled "App password" is not in the view hierarchy. Architect: the email field sits outside the disclosure and is shared with the expanded form; its value is the Google `login_hint` and the input to provider detection. "Gate flag on" means `BuildConfiguration.signInFirst` is true (build setting `SENTWISE_SIGN_IN_FIRST=YES`) and `isGoogleSignInAvailable` is true. Tasks T135-1 to T135-4.
 - Given the same state in Settings > Account (`EmailAccountSettingsView`), Then the same holds.
 - Given the user types a `@gmail.com` or Workspace-MX-detected address, When the screen updates, Then no app-password field appears and Google sign-in stays the only primary action.
 - Given the Google sign-in fails (user cancels, network down, consent denied), When the error shows, Then the message names the cause and offers "Try again"; the app-password form is still not shown by default and "Other ways to connect" remains reachable.
 - Given the subtitle text, Then it no longer says "Other providers connect with an app password"; copy comes from the ui-designer's UX review.
 
 US-sign-in-first-2
-- Given the disclosure is collapsed, When the user activates "Other ways to connect" (click, or Space/Return via keyboard, announced by VoiceOver as expandable), Then it expands to show email, app password, Test Connection, provider guidance and the existing "Advanced (IMAP server)" disclosure, unchanged in behavior.
+- Given the disclosure is collapsed, When the user activates "Other ways to connect" (click, or Space/Return via keyboard, announced by VoiceOver as expandable), Then it expands to show app password, Test Connection, provider guidance and the existing "Advanced (IMAP server)" disclosure, unchanged in behavior, using the email already typed in the shared field.
 - Given the user types `name@icloud.com`, When they expand the disclosure, Then the IMAP host is suggested as today and the iCloud app-password guidance shows (existing tests for `EmailProviderKind` stay green).
-- Given a `@yahoo.com`, `@aol.com`, `@att.net` or custom-domain address (not Workspace-detected), When the user has typed it on the sign-in screen, Then the screen points to "Other ways to connect" (inline hint, no auto-expand) so they are not stuck.
+- Given a `@yahoo.com`, `@aol.com`, `@att.net` or custom-domain address (not Workspace-detected), When the user has typed it on the sign-in screen, Then the screen points to "Other ways to connect" (inline hint, no auto-expand) so they are not stuck. Task T135-5.
+- Architect (A9): Given an `@outlook.com`, `@hotmail.com`, `@live.com`, `@msn.com` address or a Microsoft 365 MX domain in a build without Microsoft sign-in, When typed, Then an inline note says Microsoft no longer accepts app passwords for these accounts and Microsoft sign-in is coming; "Other ways to connect" stays reachable; the copy does not claim Outlook support.
 - Given the user enters a wrong app password in the expanded form, When they press Test Connection, Then the existing error appears and nothing is stored.
 - Given a user types a Gmail address inside the expanded form and a valid app password, Then the connection still succeeds (the engine is unchanged); no feature removal.
 
 US-sign-in-first-3
 - Given an account connected by app password before the update, When the app launches the new build, Then the account remains connected, mail syncs, and Settings shows it with its edit and disconnect controls.
-- Given that account, When the user opens Settings > Account to change the password, Then the app-password field is reachable without first finding the disclosure, or the disclosure is auto-expanded for that account.
+- Given that account, When the user opens Settings > Account to change the password, Then the disclosure is expanded for that account (account has no `authProvider` and a stored app password) and the app-password field is visible without a click. Task T135-6.
 - Given the user disconnects the last app-password account, When the connect screen returns, Then the default (hidden) state applies again.
 
 US-sign-in-first-4
-- Given items 134 is not marked done in `docs/backlog.md`, When a release candidate is cut, Then the gate flag is off and the build shows the current UI (checked in the release checklist, item 74/131 evidence).
+- Given item 134 is not marked done in `docs/backlog.md`, When a release candidate is cut, Then the repository variable `SENTWISE_SIGN_IN_FIRST` is unset, the built Info.plist has an empty `SentwiseSignInFirst`, and the build shows the current UI (checked in the release checklist, item 74/131 evidence). Tasks T135-7, T135-8.
 - Given the flag is on in a production build, When the Google consent screen opens, Then it shows no "Google hasn't verified this app" interstitial and no 100-user cap error (verified by a Lucius live check with an account not on the test-user list).
 - Given the flag is on, Then the Prowl hunt-mode behavior (the Google option hidden unless the fake is active) is unchanged: with Google unavailable, the app-password form is shown, because hiding it would leave no way to connect.
 
@@ -92,30 +93,34 @@ Item 31 today reads "Graph API + OAuth provider". Per the owner decision it beco
 
 ### Acceptance criteria
 US-sign-in-first-6
-- Given a personal `@outlook.com` or `@hotmail.com` account and a build with the Microsoft client configured, When the user chooses "Sign in with Microsoft" and consents in the browser, Then the app shows "Connected as <address> with Microsoft", the inbox and Sent folder are fetched over IMAP with XOAUTH2, and no password was entered in Sentwise.
+- Given a personal `@outlook.com` or `@hotmail.com` account and a build with the Microsoft client configured, When the user chooses "Sign in with Microsoft" and consents in the browser, Then the app shows "Connected as <address> with Microsoft", the inbox and Sent folder are fetched over IMAP with XOAUTH2, and no password was entered in Sentwise. Architect: the address comes from the ID token (`email`, else `preferred_username`), the token request carries no `client_secret`, and connect verification runs IMAP LIST/SELECT plus an SMTP AUTH-only probe before the account is adopted (architecture 6.1).
 - Given the user closes the browser or denies consent, When control returns, Then the app shows "Microsoft sign-in was cancelled" (or the denial reason) with "Try again", and nothing is stored.
 - Given the loopback redirect receives a `state` that does not match, Then the sign-in is rejected and no tokens are stored.
-- Given the connect screen, Then "Sign in with Microsoft" appears alongside Google, ordered by the typed address's domain when recognized (outlook.com, hotmail.com, live.com, msn.com, or an MX pointing to Microsoft 365), otherwise both are offered.
+- Given the connect screen, Then "Sign in with Microsoft" appears alongside Google, ordered by the typed address's domain when recognized (outlook.com, hotmail.com, live.com, msn.com, or an MX pointing to Microsoft 365), otherwise both are offered. Microsoft 365 MX = an MX host ending in `.mail.protection.outlook.com`.
+- Architect: Given the Microsoft client ID is empty in the build or Prowl hunt mode is on without the fake, Then "Sign in with Microsoft" is not shown and no Microsoft-specific copy appears.
+- Delivery note (architect): item 31 is several builder branches, not one; build order and tasks T31-1 to T31-10 are in architecture section 11. T31-1 (provider-neutral refactor, Google tests unchanged and green) lands first.
 
 US-sign-in-first-7
 - Given a work address on a tenant that allows user consent, When the user signs in, Then connection succeeds as in story 6.
 - Given a tenant that requires admin consent, When the user signs in, Then the app shows "Your organization requires an administrator to approve Sentwise" with a "Copy a note for your IT admin" action, not a raw AADSTS code (the raw code is logged field-only).
-- Given a tenant that has disabled IMAP or SMTP AUTH for the mailbox, When Test Connection fails with an authentication error after a valid token, Then the message says IMAP/SMTP access is off for this mailbox and points to the admin note.
+- Given a tenant that has disabled IMAP or SMTP AUTH for the mailbox, When connect verification runs (IMAP AUTHENTICATE with a token minted under 60 s earlier, then the SMTP AUTH-only probe; SMTP reply 5.7.139 or 5.7.3), Then the message names the protocol that is off, offers the admin note (which includes the `Set-CASMailbox` line), the tokens are deleted and the account is not adopted. Tasks T31-3, T31-7.
 - Given scope/consent copy, Then it states plainly that admin approval may be needed for work accounts (honest requires-IT-approval statement, same lesson as the parked BYO-OAuth path).
 
 US-sign-in-first-8
 - Given a connected Microsoft account, When the access token is within its expiry margin, Then the app refreshes it silently before IMAP/SMTP use and the user sees no prompt.
 - Given the refresh token is revoked, expired or the password changed (`invalid_grant`), When the app next syncs, Then it shows "Sign in with Microsoft again" once, stops retrying, and keeps drafts already generated.
 - Given two simultaneous operations need a token, Then only one refresh request is made (mirrors the Google superseded-refresh tests).
-- Given the user chooses Disconnect, Then the Keychain tokens are deleted and the app shows the disconnected state.
+- Architect: Given a refresh succeeds, Then the new refresh token returned by Microsoft replaces the stored one (rotation), verified by a unit test.
+- Architect: Given the Mac is offline or Microsoft returns 429/5xx/`temporarily_unavailable`, Then no "sign in again" prompt appears; the app backs off (30 s, 2 min, 10 min) and retries on the next sync.
+- Given the user chooses Disconnect, Then the Keychain item `microsoft.oauthToken.<address>` is deleted, the app shows the disconnected state and a link to remove Sentwise's access in the Microsoft account (Microsoft has no revocation endpoint).
 
 US-sign-in-first-9
-- Given a connected Microsoft account, When Sentwise learns voice, drafts a reply, the user approves and sends, Then the sent message appears in the account's Sent items, and the draft is appended to Drafts, with the same approval gating as Gmail (nothing is sent without approval).
+- Given a connected Microsoft account, When Sentwise learns voice, drafts a reply, the user approves and sends, Then the draft is appended to Drafts (IMAP APPEND, existing code), the sent message appears in Sent Items (saved server-side by Microsoft on SMTP submission; verified by the live test, T31-9), with the same approval gating as Gmail (nothing is sent without approval). SMTP uses port 587 with STARTTLS (`smtp-mail.outlook.com` personal, `smtp.office365.com` work); the client refuses to authenticate if STARTTLS is not offered. Task T31-6.
 - Given the send fails (SMTP rejected, token expired mid-send), Then the draft is kept, an error names the cause, and nothing is sent twice.
-- Given a Microsoft account, Then Sent-mail folder discovery uses the folder's special-use attribute (not the English name) so localized mailboxes work.
+- Given a Microsoft account, Then Sent, Drafts, Junk, Trash and Archive come from the IMAP SPECIAL-USE attributes when present, falling back to `MailboxNaming.microsoft` (Sent Items, Drafts, Junk Email, Deleted Items, Archive), so localized mailboxes work; other providers keep today's static names. Task T31-8.
 
 US-sign-in-first-10
-- Given the Microsoft connect screen, Then it shows consent copy covering: what is requested (read, draft and send mail on the user's behalf), that mail and tokens stay on the Mac and tokens live in the Keychain this-device-only, and that Sentwise servers never receive mail credentials; copy reviewed by the owner before release.
+- Given the Microsoft connect screen, Then it shows consent copy covering: what is requested (read, draft and send mail on the user's behalf), that mail and tokens stay on the Mac and tokens live in the Keychain this-device-only, and that Sentwise servers never receive mail credentials; copy reviewed by the owner before release. Constraint: no copy before the item 31 release says Outlook is supported, and none says Sentwise does not read mail (it reads it on the Mac). Task T31-10.
 - Given the Microsoft privacy facts, Then the privacy policy page on sentwise.ai names Microsoft data use before the feature is enabled in a public build.
 
 ### Constraints
@@ -139,7 +144,7 @@ Owner (assumption taken)
 3. Does the owner accept CASA cost (about $500-1,000 per year, doc estimate) and a 2-6+ week review clock before public launch? Assumption: yes (decision 2026-10-28 names it).
 4. Should existing app-password users see any nudge to switch to Google sign-in? Assumption: no nudge in this release.
 
-For the solution-architect (item 31 design)
+For the solution-architect (item 31 design). Answered in `docs/architecture/sign-in-first.md` section 10; owner questions raised there: Entra tenant and partner enrolment, personal-first release, test mailboxes.
 - A1. Azure/Entra app registration: multi-tenant vs personal-only vs "personal + organizational" (`common` vs `consumers` vs `organizations` authority); public client for a native macOS app with loopback redirect (`http://127.0.0.1:<port>`) or custom scheme; PKCE; whether a client secret is ever needed; publisher domain and publisher verification (MPN) requirements.
 - A2. Scopes: `https://outlook.office.com/IMAP.AccessAsUser.All`, `https://outlook.office.com/SMTP.Send`, `offline_access`, `openid`, `email`; confirm the minimal set, whether IMAP and SMTP scopes can be requested in one token (different resources), and Graph `Mail.ReadWrite`/`Mail.Send` as a fallback only if XOAUTH2 fails.
 - A3. Token refresh: lifetime of refresh tokens (90 days sliding for public clients), rotation behavior, conditional-access and password-change revocation, error codes mapped to the "sign in again" UX; reuse of the Google single-flight refresh actor.
