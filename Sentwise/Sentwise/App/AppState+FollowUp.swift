@@ -53,7 +53,11 @@ extension AppState {
 
         let generation: FollowUpGeneration
         do {
-            generation = try await makeFollowUpGeneration(parsed: parsed, llmConfiguration: llmConfiguration)
+            generation = try await makeFollowUpGeneration(
+                parsed: parsed,
+                llmConfiguration: llmConfiguration,
+                recipients: recipients
+            )
         } catch {
             await reconcileManagedAccountState(after: error, provider: llmConfiguration.provider)
             throw error
@@ -143,7 +147,8 @@ extension AppState {
     func makeFollowUpGeneration(
         parsed: ParsedTranscript,
         llmConfiguration: DraftLLMConfiguration,
-        userSuppliedFacts: UserSuppliedFacts? = nil
+        userSuppliedFacts: UserSuppliedFacts? = nil,
+        recipients: [MailAddress] = []
     ) async throws -> FollowUpGeneration {
         let profile = voiceProfile
         let runner = retryRunner
@@ -151,7 +156,12 @@ extension AppState {
             transcript: parsed,
             voiceProfile: profile,
             model: llmConfiguration.model,
-            userSuppliedFacts: userSuppliedFacts
+            userSuppliedFacts: userSuppliedFacts,
+            participants: FollowUpParticipants(
+                userEmail: mailEmail,
+                voiceProfile: profile,
+                recipients: recipients
+            )
         ) { [llm] request in
             try await runner.run(classify: ResilienceClassifier.retryDecision(for:)) {
                 try await llm.complete(
@@ -168,7 +178,8 @@ extension AppState {
         context: FollowUpDraftContext,
         llmConfiguration: DraftLLMConfiguration,
         userSuppliedFacts: UserSuppliedFacts? = nil,
-        accountEmail: String? = nil
+        accountEmail: String? = nil,
+        recipients: [MailAddress] = []
     ) async throws -> DraftOutcome {
         let profile = accountEmail.map { voiceProfile(forAccountEmail: $0) } ?? voiceProfile
         let runner = retryRunner
@@ -176,7 +187,12 @@ extension AppState {
             from: context,
             voiceProfile: profile,
             model: llmConfiguration.model,
-            userSuppliedFacts: userSuppliedFacts
+            userSuppliedFacts: userSuppliedFacts,
+            participants: FollowUpParticipants(
+                userEmail: accountEmail ?? mailEmail,
+                voiceProfile: profile,
+                recipients: recipients
+            )
         ) { [llm] request in
             try await runner.run(classify: ResilienceClassifier.retryDecision(for:)) {
                 try await llm.complete(
