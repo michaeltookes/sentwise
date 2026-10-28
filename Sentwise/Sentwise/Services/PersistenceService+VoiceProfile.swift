@@ -27,7 +27,13 @@ extension PersistenceService {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         do {
             let data = try Data(contentsOf: url)
-            return try decoder.decode(VoiceProfile.self, from: data)
+            let stored = try decoder.decode(VoiceProfile.self, from: data)
+            // Item 138: a greeting learned with a personal name is rewritten to
+            // placeholder form on load and saved back. Idempotent; no other field
+            // changes.
+            let migrated = stored.withNormalizedGreeting()
+            if migrated != stored { saveVoiceProfile(migrated, accountKey: accountKey) }
+            return migrated
         } catch {
             logger.error("Failed to load voice profile: \(error.localizedDescription)")
             return nil
