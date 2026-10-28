@@ -13,7 +13,7 @@ What exists (item 104, shipped):
 - UI: `GoogleOrAppPasswordConnect` (`Views/GoogleSignInConnectView.swift`) shows the Google button, then a `DisclosureGroup` "Use an app password instead" / "Connect with an app password" wrapping `appPasswordForm()` (email, app password, Test Connection, guidance, "Advanced (IMAP server)"). `MailConnectMethod.recommended(email:host:isGoogleSignInAvailable:)` picks Google or app password; `GoogleWorkspaceMXDetector` detects Workspace domains by MX (1.5 s timeout, cached). `AppState.isGoogleSignInAvailable` is `googleMailAuth.isAvailable && !ProwlHuntRuntime.current.isEnabled`.
 - Provider table: `EmailProviderKind` (gmail, att, yahoo, aol, icloud) drives host suggestion and credential guidance. `MailboxNaming.forHost` picks static folder names (gmail, yahoo, icloud, generic); there is no SPECIAL-USE discovery yet.
 - SMTP: `SMTPSend.swift` connects with implicit TLS only (default port 465). There is no STARTTLS.
-- Saved accounts: `SavedMailAccount` stores `email`, `host`, `port`; SMTP host is derived (`imap.` -> `smtp.`), SMTP port 465 (`MailAccountCredentials`). Settings schema: saved accounts version 11.
+- Saved accounts: `SavedMailAccount` stores `email`, `host`, `port`; SMTP host is derived (`imap.` -> `smtp.`), SMTP port 465 (`MailAccountCredentials`). Settings schema: `Settings.currentSchemaVersion = 23` (`Models/Settings.swift`); `savedAccountsSchemaVersion = 11` only records the version that introduced saved accounts, there is no separate account schema.
 - Tiers: connected accounts 2 / 1 / 2 / up to 5 (`docs/tier-matrix.md`); no change.
 
 What changes:
@@ -58,7 +58,7 @@ flowchart LR
 ```
 
 Boundaries:
-- Only `OAuthTokenService` talks to identity endpoints; only `SentwiseMail` talks to mail servers. The Worker is never in the mail path.
+- Only `OAuthTokenService` talks to identity endpoints; only `SentwiseMail` talks to mail servers. The Worker is never in the mail transport path (no credentials, no IMAP or SMTP). It is in the drafting path on the managed plan: the selected message content or a derived prompt goes to the Worker for the model call (section 5.3).
 - Provider differences live in one value type, `OAuthProviderConfiguration` (section 4.1). The coordinator, store, wrapper and UI states are shared.
 - The flag and the client IDs are read once from `BuildConfiguration`; no UI code reads Info.plist directly.
 
@@ -75,11 +75,11 @@ Boundaries:
 
 `OAuthToken` gains an optional `tenantID: String?` (decoded with `decodeIfPresent`; Google tokens leave it nil). No other change.
 
-### 3.2 Saved accounts (Settings, schema 11 -> 12 for saved accounts)
+### 3.2 Saved accounts (Settings, schema 23 -> 24)
 `SavedMailAccount` gains optional fields:
 - `smtpHost: String?`, `smtpPort: Int?`, `smtpSecurity: String?` (`"tls"` | `"starttls"`), `authProvider: String?` (`"google"` | `"microsoft"` | nil for app password).
 
-Rules: nil means "derive as today" (`imap.` -> `smtp.`, 465, TLS), so every existing account reads unchanged. Microsoft accounts always write all four. Rollback: `SavedMailAccount` uses synthesized `Codable`, so older builds ignore the unknown keys and new optional fields decode as nil and a Microsoft account opened in an older build fails SMTP with an auth error, which is acceptable because Microsoft never ships in a build that cannot read it; the schema bump is additive and needs no down-migration. Test: decode a version-11 fixture into the version-12 model and back.
+Rules: nil means "derive as today" (`imap.` -> `smtp.`, 465, TLS), so every existing account reads unchanged. Microsoft accounts always write all four. Rollback: `SavedMailAccount` uses synthesized `Codable`, so older builds ignore the unknown keys and new optional fields decode as nil and a Microsoft account opened in an older build fails SMTP with an auth error, which is acceptable because Microsoft never ships in a build that cannot read it; the bump is additive and needs no down-migration. Implementation: set `Settings.currentSchemaVersion = 24` and add `static let accountTransportSchemaVersion = 24` with a doc comment (item 31), following the existing per-feature constants; the migration step for 24 only back-fills `authProvider = "google"` for accounts whose credential slot holds the Google marker and writes nothing else. If another branch takes 24 first, use the next free number; the field rules do not change. Test: decode a version-23 fixture (with saved accounts and no SMTP fields) into the version-24 model and back, and check an older fixture (version 11 or earlier) still migrates through to 24.
 
 `authProvider` replaces sniffing the credential marker in UI code (`activeAccountUsesGoogleSignIn`); the marker stays as the transport switch, the field is set on adoption and back-filled at launch for accounts whose slot holds the Google marker.
 
@@ -114,7 +114,7 @@ struct OAuthProviderConfiguration {
   - code: `client_id, grant_type=authorization_code, code, redirect_uri, code_verifier, scope`
   - refresh: `client_id, grant_type=refresh_token, refresh_token, scope`
   - No `client_secret` ever (public client; sending one returns AADSTS700025).
-- Scopes (one request, one token): `https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid email`. IMAP and SMTP scopes share the `outlook.office.com` resource, so one access token authenticates both. `openid email` give the ID token for the address; `offline_access` gives the refresh token. No Graph scopes.
+- Scopes (one request, one token): `https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid profile email`. IMAP and SMTP scopes share the `outlook.office.com` resource, so one access token authenticates both. `openid` gives the ID token; `email` adds the `email` claim and `profile` adds `preferred_username`, the fallback when `email` is absent (common for work accounts); `offline_access` gives the refresh token. No Graph scopes.
 - Required granted scopes: both `outlook.office.com` scopes; a token response missing either -> `missingRequiredScopes`.
 - Response used: `access_token`, `refresh_token`, `expires_in`, `scope`, `id_token`. ID-token claims read (no signature check, the token came over TLS from the token endpoint, same as Google): `email`, then `preferred_username`, and `tid`.
 - Revocation: no endpoint. Disconnect deletes local tokens and shows a link to remove the app's access: personal `https://account.live.com/consent/Manage`, work `https://myapps.microsoft.com`.
@@ -153,7 +153,7 @@ SASL username for XOAUTH2 is the signed-in address from the ID token, never the 
 
 Logging: the AADSTS code, `error`, `tid` (not the address) and HTTP status are logged with the existing privacy-safe logger; never the code, tokens, or ID token. Raw codes never reach the UI except inside the copied admin note.
 
-The admin note (plain text, copied to the clipboard): app name "Sentwise", the Entra application (client) ID, the permissions requested (IMAP.AccessAsUser.All, SMTP.Send, offline_access, openid, email), the admin-consent URL `https://login.microsoftonline.com/<tid>/adminconsent?client_id=<id>`, and for protocol errors the PowerShell lines to enable IMAP or SMTP AUTH for one mailbox (`Set-CASMailbox -Identity <address> -ImapEnabled $true`, `Set-CASMailbox -Identity <address> -SmtpClientAuthenticationDisabled $false`). The address is the user's own; it is only placed in the clipboard.
+The admin note (plain text, copied to the clipboard): app name "Sentwise", the Entra application (client) ID, the permissions requested (IMAP.AccessAsUser.All, SMTP.Send, offline_access, openid, profile, email), the admin-consent URL `https://login.microsoftonline.com/<tid>/adminconsent?client_id=<id>`, and for protocol errors the PowerShell lines to enable IMAP or SMTP AUTH for one mailbox (`Set-CASMailbox -Identity <address> -ImapEnabled $true`, `Set-CASMailbox -Identity <address> -SmtpClientAuthenticationDisabled $false`). The address is the user's own; it is only placed in the clipboard.
 
 ### 4.7 Build configuration and flags
 | Key | Build setting | Info.plist key | `BuildConfiguration` | Default in repo |
@@ -174,12 +174,12 @@ Let `hide = signInFirst && isGoogleSignInAvailable`.
 - Google failure: error message with "Try again"; the disclosure keeps its state (collapsed unless the user opened it).
 
 ### 5.2 Microsoft consent and copy constraints (item 31)
-- Shown before the browser opens, under "Sign in with Microsoft": what is requested (read, draft and send mail on your behalf), that mail and sign-in tokens stay on this Mac in the Keychain and are never sent to Sentwise servers, and for work addresses that "Your IT administrator may need to approve Sentwise." Final words come from the ui-designer and are owner-approved.
-- Must not say: "Outlook supported" anywhere before the release that ships item 31; "We never read your mail" (Sentwise reads it, locally); any Prowl reference; any promise that admin approval is not needed.
+- Shown before the browser opens, under "Sign in with Microsoft": what is requested (read, draft and send mail on your behalf), that mail is read on this Mac, that sign-in tokens are stored in this Mac's Keychain and are never sent to Sentwise servers, and for work addresses that "Your IT administrator may need to approve Sentwise." Final words come from the ui-designer and are owner-approved.
+- Must not say: that mail content never leaves the Mac or never reaches Sentwise (drafting sends the selected message content to the model, through the Worker on the managed plan); "Outlook supported" anywhere before the release that ships item 31; "We never read your mail" (Sentwise reads it, locally); any Prowl reference; any promise that admin approval is not needed.
 - Microsoft's consent screen shows the publisher name and "verified" badge only after publisher verification (item 136). Without it, users in many tenants cannot consent at all (Microsoft blocks user consent to unverified multi-tenant apps by default since 2020 for new tenants and in tenants with the "verified publishers only" policy). That is why 136 gates the public flag for work accounts.
 
 ### 5.3 Privacy
-Leaves the device: the authorization request through the system browser and the token calls to `login.microsoftonline.com`; IMAP/SMTP traffic to Microsoft. Nothing new reaches the Worker. Stored: tokens in the Keychain this-device-only; `tid` in the token blob and the logs (tenant ID is an organization identifier, not personal data, but it is not sent anywhere). The sentwise.ai privacy policy must add a Microsoft section (data accessed, local storage, revocation link) before the Microsoft flag is on in a public build (US-10; landing-page item to be filed by the BA).
+Leaves the device: the authorization request through the system browser and the token calls to `login.microsoftonline.com`; IMAP/SMTP traffic to Microsoft. Nothing new reaches the Worker: as for Google accounts today, drafting a reply sends the selected message content or a derived prompt to the Worker for the model call on the managed plan (or to the user's own model provider with their key); credentials and tokens never do. Stored: tokens in the Keychain this-device-only; `tid` in the token blob and the logs (tenant ID is an organization identifier, not personal data, but it is not sent anywhere). The sentwise.ai privacy policy must add a Microsoft section (data accessed, local storage, revocation link) before the Microsoft flag is on in a public build (US-10; landing-page item to be filed by the BA).
 
 ### 5.4 Billing
 None. Microsoft accounts count toward the existing connected-accounts limit (`docs/tier-matrix.md`), enforced where it is enforced today.
@@ -226,7 +226,7 @@ Unit (CI and Lucius' Mini; never the MacBook):
 - Coordinator: single flight under two concurrent callers (port of the Google superseded-refresh tests); `needsReauthentication` stops further refreshes.
 - `SentwiseMail`: STARTTLS state machine with a scripted server (220, EHLO, STARTTLS, re-EHLO, AUTH XOAUTH2 334 challenge, 235); refuses AUTH when STARTTLS is not advertised; probe sends no MAIL FROM; SPECIAL-USE parsing including localized names (for example `Elementos enviados` with `\Sent`).
 - Detection: `EmailProviderKind.microsoft` for outlook.com, hotmail.com, live.com, msn.com and regional variants (hotmail.co.uk, outlook.de, live.fr ...); MX `*.mail.protection.outlook.com` -> Microsoft 365.
-- Settings decode: schema 11 fixture loads in 12 with nil SMTP fields; Microsoft account round-trips.
+- Settings decode: schema 23 fixture loads in 24 with nil SMTP fields and `authProvider` back-filled for Google accounts; Microsoft account round-trips; a pre-11 fixture still migrates through to 24.
 - Part A view states (ViewInspector or snapshot): flag off; flag on + Google available; flag on + Google unavailable (form shown directly); existing app-password account (expanded); A9 note for `@outlook.com`.
 Live (Lucius' Mini, dispatch workflow, like `GmailOAuthLiveTests`): `MicrosoftOAuthLiveTests` with secrets `SENTWISE_LIVE_MICROSOFT_OAUTH_REFRESH_TOKEN_PERSONAL`, `..._WORK` and test addresses on `example.com`-style test tenants: refresh, IMAP LIST/SELECT, SMTP probe, send one message to itself and confirm it appears in Sent Items. Seed data: one Outlook.com test account and one M365 developer-tenant mailbox owned by Genkei Labs; one M365 mailbox with SMTP AUTH disabled for the 6.3 case.
 Device/UAT (Lucius): the browser consent round trip for personal and work accounts; admin-consent message on a tenant with user consent disabled; Part A screens in light/dark and with VoiceOver.
@@ -252,7 +252,7 @@ Risks
 
 Answers to A1-A9 (brief section 8)
 - A1. One multi-tenant registration, supported account types "Accounts in any organizational directory and personal Microsoft accounts" (`signInAudience: AzureADandPersonalMicrosoftAccount`), authority `common`; public client ("Allow public client flows" on), platform "Mobile and desktop applications", redirect `http://localhost` (R2); PKCE S256; no client secret, ever. Publisher domain sentwise.ai and publisher verification with the Genkei Labs LLC partner ID (item 136).
-- A2. Minimal scopes: `https://outlook.office.com/IMAP.AccessAsUser.All`, `https://outlook.office.com/SMTP.Send`, `offline_access`, `openid`, `email`. Same resource, so one token for IMAP and SMTP. Graph `Mail.Send` only as the fallback in section 9.
+- A2. Minimal scopes: `https://outlook.office.com/IMAP.AccessAsUser.All`, `https://outlook.office.com/SMTP.Send`, `offline_access`, `openid`, `profile`, `email` (`profile` is needed for the `preferred_username` fallback). Same resource, so one token for IMAP and SMTP. Graph `Mail.Send` only as the fallback in section 9.
 - A3. Refresh tokens: 90 days, sliding, rotated on each use (persist the new one); revoked by password change, consent removal, admin action, conditional-access failure. Error codes mapped in section 4.6 to `.reauthenticationRequired`. Reuse the Google single-flight refresh, generalized.
 - A4. In scope: personal (Outlook.com, Hotmail, Live, MSN) and Microsoft 365 commercial work or school mailboxes. Out: shared and delegated mailboxes, GCC / GCC High / DoD / China and other sovereign clouds, on-prem Exchange, Exchange hybrid on-prem mailboxes. Out-of-scope accounts get the generic sign-in failure plus "This kind of Microsoft account is not supported yet."
 - A5. Admin consent: detected from AADSTS65001 / 90094 / 90095 at authorization. IMAP: enabled per mailbox by default in Exchange Online but admins can turn it off (`ImapEnabled`); SMTP AUTH: per tenant and per mailbox (`SmtpClientAuthenticationDisabled`), often off. Detected at connect by the IMAP login and the SMTP probe; message and admin note in 4.6.
@@ -278,7 +278,7 @@ Questions only the owner can answer (assumption in brackets)
 | US-6 | 4.1-4.4, 6.1 | T31-1 provider-neutral refactor (no behaviour change). T31-2 Microsoft configuration and `MicrosoftOAuth.xcconfig`, release secret pass-through. T31-4 detection (`EmailProviderKind.microsoft`, Microsoft 365 MX). T31-5 Microsoft connect UI and button. |
 | US-7 | 4.6, 6.2, 6.3 | T31-3 error mapping and admin note. T31-7 SMTP probe and protocol-disabled errors. |
 | US-8 | 4.6, 6.4 | T31-3; rotation persistence; `needsReauthentication` state and banner. |
-| US-9 | 4.4, 4.5, 6.5 | T31-6 SMTP STARTTLS + `smtpSecurity`, saved-account schema 12. T31-8 `MailboxNaming.microsoft` + SPECIAL-USE discovery. T31-9 live tests on Lucius (send, Sent Items, Drafts APPEND). |
+| US-9 | 4.4, 4.5, 6.5 | T31-6 SMTP STARTTLS + `smtpSecurity`, Settings schema 24 (additive `SavedMailAccount` fields). T31-8 `MailboxNaming.microsoft` + SPECIAL-USE discovery. T31-9 live tests on Lucius (send, Sent Items, Drafts APPEND). |
 | US-10 | 5.2, 5.3 | T31-10 consent copy block (UX review, owner-approved); landing-page privacy section (BA files the item). |
 | (136) | 5.5, A1, R2 | T136-1 Entra registration per A1; T136-2 publisher domain file on sentwise.ai; T136-3 partner program ID and publisher verification; T136-4 record client ID (not secret) as repository secret `SENTWISE_MICROSOFT_CLIENT_ID`; T136-5 confirm redirect behaviour (R2) and report. |
 

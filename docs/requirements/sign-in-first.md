@@ -120,7 +120,7 @@ US-sign-in-first-9
 - Given a Microsoft account, Then Sent, Drafts, Junk, Trash and Archive come from the IMAP SPECIAL-USE attributes when present, falling back to `MailboxNaming.microsoft` (Sent Items, Drafts, Junk Email, Deleted Items, Archive), so localized mailboxes work; other providers keep today's static names. Task T31-8.
 
 US-sign-in-first-10
-- Given the Microsoft connect screen, Then it shows consent copy covering: what is requested (read, draft and send mail on the user's behalf), that mail and tokens stay on the Mac and tokens live in the Keychain this-device-only, and that Sentwise servers never receive mail credentials; copy reviewed by the owner before release. Constraint: no copy before the item 31 release says Outlook is supported, and none says Sentwise does not read mail (it reads it on the Mac). Task T31-10.
+- Given the Microsoft connect screen, Then it shows consent copy covering: what is requested (read, draft and send mail on the user's behalf), that mail is read on the Mac, that sign-in tokens live in this Mac's Keychain (this-device-only) and are never sent to Sentwise servers, and that Sentwise servers never receive mail credentials; the copy must not say mail content never leaves the Mac, because drafting sends the selected message content to the model (architecture 5.3); copy reviewed by the owner before release. Constraint: no copy before the item 31 release says Outlook is supported, and none says Sentwise does not read mail (it reads it on the Mac). Task T31-10.
 - Given the Microsoft privacy facts, Then the privacy policy page on sentwise.ai names Microsoft data use before the feature is enabled in a public build.
 
 ### Constraints
@@ -130,7 +130,9 @@ US-sign-in-first-10
 
 ## 7. Data and privacy notes
 
-- Leaves the device: only the OAuth exchange with Google or Microsoft through the user's browser and the loopback redirect. Mail content, tokens and passwords never go to a Sentwise server; the managed proxy never receives mail credentials (unchanged).
+- Leaves the device for sign-in: the OAuth authorization through the user's browser and the loopback redirect, and the token exchange and refresh calls to Google or Microsoft. IMAP and SMTP traffic goes directly from the Mac to the mail provider.
+- Stays on the device: passwords, app passwords, OAuth access and refresh tokens (Keychain, this-device-only). Mail is fetched and read locally; no Sentwise server receives mail credentials or connects to the mailbox.
+- Leaves the device for drafting (unchanged by this brief): when Sentwise drafts a reply, the selected message content, or a prompt derived from it, is sent to the model. On the managed plan that request goes to the Sentwise Worker (`sentwise-service`) with the session token, and the Worker makes the model call; with the user's own API key it goes from the Mac directly to that model provider. This brief adds no new data to either path.
 - Stored: refresh and access tokens in the Keychain, this-device-only, per provider; for app-password accounts the existing Keychain item.
 - Google: Limited Use disclosure and scope justification for `https://mail.google.com/` are CASA/verification requirements (item 134).
 - Microsoft: needs equivalent privacy-policy language and, for work accounts, tenant-admin consent disclosure; Microsoft publisher verification is expected to reduce unverified-publisher warnings (architect to confirm).
@@ -146,7 +148,7 @@ Owner (assumption taken)
 
 For the solution-architect (item 31 design). Answered in `docs/architecture/sign-in-first.md` section 10; owner questions raised there: Entra tenant and partner enrolment, personal-first release, test mailboxes.
 - A1. Azure/Entra app registration: multi-tenant vs personal-only vs "personal + organizational" (`common` vs `consumers` vs `organizations` authority); public client for a native macOS app with loopback redirect (`http://127.0.0.1:<port>`) or custom scheme; PKCE; whether a client secret is ever needed; publisher domain and publisher verification (MPN) requirements.
-- A2. Scopes: `https://outlook.office.com/IMAP.AccessAsUser.All`, `https://outlook.office.com/SMTP.Send`, `offline_access`, `openid`, `email`; confirm the minimal set, whether IMAP and SMTP scopes can be requested in one token (different resources), and Graph `Mail.ReadWrite`/`Mail.Send` as a fallback only if XOAUTH2 fails.
+- A2. Scopes: `https://outlook.office.com/IMAP.AccessAsUser.All`, `https://outlook.office.com/SMTP.Send`, `offline_access`, `openid`, `profile`, `email` (`profile` for the `preferred_username` fallback); confirm the minimal set, whether IMAP and SMTP scopes can be requested in one token (different resources), and Graph `Mail.ReadWrite`/`Mail.Send` as a fallback only if XOAUTH2 fails.
 - A3. Token refresh: lifetime of refresh tokens (90 days sliding for public clients), rotation behavior, conditional-access and password-change revocation, error codes mapped to the "sign in again" UX; reuse of the Google single-flight refresh actor.
 - A4. Account types in scope: personal (Outlook.com, Hotmail, Live, MSN), Microsoft 365 work/school, Exchange Online shared mailboxes, GCC/sovereign clouds, on-prem Exchange (assumption: personal and M365 commercial in scope; the rest out).
 - A5. Tenant admin consent and IMAP/SMTP AUTH being disabled by default in some tenants (SMTP AUTH disabled tenant-wide): detection, message, and whether IMAP XOAUTH2 requires per-mailbox enablement.
