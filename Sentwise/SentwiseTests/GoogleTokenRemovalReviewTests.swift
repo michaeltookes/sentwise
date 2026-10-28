@@ -40,7 +40,7 @@ final class GoogleTokenRemovalReviewTests: XCTestCase {
         store: GmailAuthStore, transport: HTTPTransport, browser: SpyBrowser = SpyBrowser()
     ) -> GmailAuthCoordinator {
         GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID), store: store,
+            client: OAuthProviderConfiguration.google(clientID: clientID), store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
             browser: browser, revocationWaitTimeout: 0.05, makeState: { self.state }

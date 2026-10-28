@@ -33,7 +33,7 @@ final class GmailOAuthLiveTests: XCTestCase {
                 "Set SENTWISE_LIVE_GOOGLE_OAUTH_EMAIL, _CLIENT_ID, and _REFRESH_TOKEN to run the Google OAuth live test."
             )
         }
-        let client = GoogleOAuthClientConfiguration(
+        let client = OAuthProviderConfiguration.google(
             clientID: clientID,
             clientSecret: env["SENTWISE_LIVE_GOOGLE_OAUTH_CLIENT_SECRET"].flatMap { $0.isEmpty ? nil : $0 }
         )

@@ -18,8 +18,14 @@ struct SecretKey: RawRepresentable, Hashable {
     /// "Sign in with Google" mailbox (item 104), keyed like
     /// `mailAppPassword(email:)` so it lines up with `SavedMailAccount.id`.
     static func gmailOAuthToken(email: String) -> SecretKey {
+        oauthToken(keychainPrefix: OAuthProviderConfiguration.googleKeychainPrefix, email: email)
+    }
+
+    /// The OAuth token set for one mailbox of the provider whose Keychain prefix
+    /// is `keychainPrefix` (`OAuthProviderConfiguration.keychainPrefix`).
+    static func oauthToken(keychainPrefix: String, email: String) -> SecretKey {
         let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return SecretKey(rawValue: "gmail.oauthToken.\(normalized)")
+        return SecretKey(rawValue: "\(keychainPrefix).oauthToken.\(normalized)")
     }
     /// The legacy single-account mailbox app password slot. Superseded by the
     /// per-account key below (item 48); kept only so the v10→v11 migration can

@@ -4,7 +4,7 @@ import XCTest
 final class OAuthTokenServiceTests: XCTestCase {
 
     private let now = Date(timeIntervalSince1970: 1_000_000)
-    private let client = GoogleOAuthClientConfiguration(clientID: "cid.apps.googleusercontent.com", clientSecret: "secret")
+    private let client = OAuthProviderConfiguration.google(clientID: "cid.apps.googleusercontent.com", clientSecret: "secret")
 
     private func service(_ response: HTTPResponse) -> (OAuthTokenService, FakeTransport) {
         let transport = FakeTransport(response: response)
@@ -50,7 +50,7 @@ final class OAuthTokenServiceTests: XCTestCase {
 
         let token = try await service.exchange(
             code: "c", verifier: "v",
-            client: GoogleOAuthClientConfiguration(clientID: "cid.apps.googleusercontent.com", clientSecret: "  "),
+            client: OAuthProviderConfiguration.google(clientID: "cid.apps.googleusercontent.com", clientSecret: "  "),
             redirectURI: "http://127.0.0.1:9000", requestedScopes: GoogleOAuth.scopes, now: now
         )
 
@@ -77,7 +77,7 @@ final class OAuthTokenServiceTests: XCTestCase {
 
     func testRevokePostsTokenToRevocationEndpoint() async throws {
         let (service, transport) = service(json("", status: 200))
-        try await service.revoke(token: "rt")
+        try await service.revoke(token: "rt", client: client)
         XCTAssertEqual(transport.lastURL, GoogleOAuth.revocationEndpoint)
         XCTAssertEqual(transport.lastFields, ["token": "rt"])
     }

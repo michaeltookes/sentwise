@@ -36,7 +36,7 @@ final class GoogleSignInSupersededMailOperationTests: XCTestCase {
         "scope":"https://mail.google.com/ openid","id_token":"\(GmailAuthCoordinatorTests.idToken(email: email))"}
         """
         let coordinator = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "1234-abc.apps.googleusercontent.com"),
+            client: OAuthProviderConfiguration.google(clientID: "1234-abc.apps.googleusercontent.com"),
             store: store,
             tokenService: OAuthTokenService(transport: FakeTransport(
                 response: HTTPResponse(statusCode: 200, body: Data(exchange.utf8))

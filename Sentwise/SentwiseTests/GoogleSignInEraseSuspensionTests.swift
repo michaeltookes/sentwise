@@ -18,7 +18,7 @@ final class GoogleSignInEraseSuspensionTests: XCTestCase {
         try store.saveToken(expiredToken(), for: "me@gmail.com")
         let transport = GatedRefreshTransport()
         let coordinator = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "1234-abc.apps.googleusercontent.com"),
+            client: OAuthProviderConfiguration.google(clientID: "1234-abc.apps.googleusercontent.com"),
             store: store,
             tokenService: OAuthTokenService(transport: transport)
         )
@@ -61,7 +61,7 @@ final class GoogleSignInEraseSuspensionTests: XCTestCase {
         try secrets.set(GoogleMailCredential.marker, for: .mailAppPassword(email: "me@gmail.com"))
         let transport = GatedRefreshTransport()
         appState.googleMailAuth.install(GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "1234-abc.apps.googleusercontent.com"),
+            client: OAuthProviderConfiguration.google(clientID: "1234-abc.apps.googleusercontent.com"),
             store: store,
             tokenService: OAuthTokenService(transport: transport)
         ))

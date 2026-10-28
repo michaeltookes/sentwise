@@ -26,7 +26,7 @@ final class GmailAuthorizationOverlapTests: XCTestCase {
             gate
         ]
         let coordinator = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "client.apps.googleusercontent.com"),
+            client: OAuthProviderConfiguration.google(clientID: "client.apps.googleusercontent.com"),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { listeners.removeFirst() },

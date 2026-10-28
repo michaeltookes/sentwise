@@ -8,7 +8,7 @@ import XCTest
 @MainActor
 final class GoogleTokenEndpointFailureTests: XCTestCase {
 
-    private let client = GoogleOAuthClientConfiguration(clientID: "1234-abc.apps.googleusercontent.com")
+    private let client = OAuthProviderConfiguration.google(clientID: "1234-abc.apps.googleusercontent.com")
 
     private func refresh(status: Int, body: String) async -> Error? {
         let transport = FakeTransport(response: HTTPResponse(statusCode: status, body: Data(body.utf8)))

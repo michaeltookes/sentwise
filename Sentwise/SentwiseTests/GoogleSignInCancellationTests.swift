@@ -8,7 +8,7 @@ import XCTest
 final class GoogleSignInCancellationTests: XCTestCase {
     private func makeCoordinator(transport: HTTPTransport) -> GmailAuthCoordinator {
         GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "client.apps.googleusercontent.com"),
+            client: OAuthProviderConfiguration.google(clientID: "client.apps.googleusercontent.com"),
             store: GmailAuthStore(secrets: InMemorySecretStore()),
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:9999", params: ["code": "code", "state": "state"]) },

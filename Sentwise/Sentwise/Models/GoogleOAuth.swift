@@ -36,28 +36,19 @@ enum GoogleOAuth {
 /// installed-app guidance; anything in a shipped binary is extractable) — it is
 /// kept out of the repo only so forks and CI builds do not impersonate the
 /// Sentwise client. PKCE is what protects the authorization code.
-struct GoogleOAuthClientConfiguration: Equatable, Sendable {
+enum GoogleOAuthClientConfiguration {
     static let clientIDInfoKey = "SentwiseGoogleOAuthClientID"
     static let clientSecretInfoKey = "SentwiseGoogleOAuthClientSecret"
     static let clientIDSuffix = ".apps.googleusercontent.com"
 
-    let clientID: String
-    let clientSecret: String?
-
-    init(clientID: String, clientSecret: String? = nil) {
-        self.clientID = clientID
-        let secret = clientSecret?.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.clientSecret = (secret?.isEmpty ?? true) ? nil : secret
-    }
-
-    /// The bundled client, or nil when this build has none configured.
-    static func bundled(infoDictionary: [String: Any]? = Bundle.main.infoDictionary) -> Self? {
+    /// The bundled Google configuration, or nil when this build has no client.
+    static func bundled(infoDictionary: [String: Any]? = Bundle.main.infoDictionary) -> OAuthProviderConfiguration? {
         guard let rawID = infoDictionary?[clientIDInfoKey] as? String else { return nil }
         let clientID = rawID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isUsableClientID(clientID) else { return nil }
         let rawSecret = infoDictionary?[clientSecretInfoKey] as? String
         let secret = rawSecret.flatMap { isUnexpandedOrPlaceholder($0) ? nil : $0 }
-        return Self(clientID: clientID, clientSecret: secret)
+        return .google(clientID: clientID, clientSecret: secret)
     }
 
     /// A real Google OAuth client ID: non-empty, not an unexpanded build

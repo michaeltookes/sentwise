@@ -8,7 +8,7 @@ final class GmailAuthCoordinatorTests: XCTestCase {
 
     private let now = Date(timeIntervalSince1970: 1_000_000)
     private let state = "FIXED-STATE"
-    private let client = GoogleOAuthClientConfiguration(clientID: "cid.apps.googleusercontent.com", clientSecret: "secret")
+    private let client = OAuthProviderConfiguration.google(clientID: "cid.apps.googleusercontent.com", clientSecret: "secret")
     private var grantedScopes: String { "\(GoogleOAuth.mailScope) openid https://www.googleapis.com/auth/userinfo.email" }
 
     private struct Harness {

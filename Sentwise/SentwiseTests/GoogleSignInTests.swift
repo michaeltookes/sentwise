@@ -31,7 +31,7 @@ final class GoogleSignInTests: XCTestCase {
         let secretKey = GoogleOAuthClientConfiguration.clientSecretInfoKey
 
         let withSecret = GoogleOAuthClientConfiguration.bundled(infoDictionary: [idKey: " \(clientID) ", secretKey: "GOCSPX-s"])
-        XCTAssertEqual(withSecret, GoogleOAuthClientConfiguration(clientID: clientID, clientSecret: "GOCSPX-s"))
+        XCTAssertEqual(withSecret, OAuthProviderConfiguration.google(clientID: clientID, clientSecret: "GOCSPX-s"))
 
         let unexpandedSecret = GoogleOAuthClientConfiguration.bundled(
             infoDictionary: [idKey: clientID, secretKey: "$(SENTWISE_GOOGLE_CLIENT_SECRET)"]
@@ -113,7 +113,7 @@ final class GoogleSignInTests: XCTestCase {
                 waitError: waitError
             )
             appState.googleMailAuth.install(GmailAuthCoordinator(
-                client: GoogleOAuthClientConfiguration(clientID: clientID),
+                client: OAuthProviderConfiguration.google(clientID: clientID),
                 store: store,
                 tokenService: OAuthTokenService(transport: transport),
                 makeListener: { listener },
@@ -318,7 +318,7 @@ final class GoogleSignInTests: XCTestCase {
     func testConsentDeniedShowsMessageAndFailedPhase() async {
         let harness = makeHarness()
         harness.appState.googleMailAuth.install(GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: harness.store,
             tokenService: OAuthTokenService(transport: harness.transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["error": "access_denied", "state": self.state]) },
@@ -403,7 +403,7 @@ final class GoogleSignInOnboardingTests: XCTestCase {
         XCTAssertEqual(appState.onboardingContinueBlockedReason(for: .connectAccount), "Run Test Connection to continue.")
 
         appState.googleMailAuth.install(GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "1-a.apps.googleusercontent.com"),
+            client: OAuthProviderConfiguration.google(clientID: "1-a.apps.googleusercontent.com"),
             store: GmailAuthStore(secrets: InMemorySecretStore()),
             tokenService: OAuthTokenService(transport: FakeTransport(response: HTTPResponse(statusCode: 200, body: Data())))
         ))

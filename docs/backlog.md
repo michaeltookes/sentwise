@@ -58,7 +58,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
 
 2. **Item 31 — Microsoft XOAUTH2, personal accounts first** (US-sign-in-first-5 to 10; TC-M6-04–TC-M6-07, TC-M6-09–TC-M6-11)
    - **US-6 — provider-neutral foundation and personal-account connection**
-     - T31-1 Provider-neutral OAuth refactor (`OAuthProviderConfiguration`, coordinator, token service, store, mail-provider wrapper); Google Keychain prefix stays `gmail`; no behaviour change, all Google tests green.
+     - T31-1 Provider-neutral OAuth refactor (`OAuthProviderConfiguration`, coordinator, token service, store, mail-provider wrapper); Google Keychain prefix stays `gmail`; no behaviour change, all Google tests green. Built on branch `31-t31-1-oauth-provider-neutral`.
    - **US-9 — mail transport and folder compatibility, before UI**
      - T31-6 `SentwiseMail` SMTP STARTTLS (`SMTPSecurity.startTLS`, refuse AUTH without STARTTLS) and saved-account fields `smtpHost`/`smtpPort`/`smtpSecurity`/`authProvider` (schema 12, additive).
      - T31-8 `MailboxNaming.microsoft` plus IMAP SPECIAL-USE discovery for Microsoft accounts.
@@ -369,7 +369,7 @@ After M6 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - ~~Graph API + OAuth provider implementing the shared email-provider interface.~~ Superseded 2026-10-28: IMAP/SMTP XOAUTH2 (Graph rejected, `docs/architecture/sign-in-first.md` section 9).
     - Feature parity with Gmail for read/draft/send.
     - Technical tasks (architecture `docs/architecture/sign-in-first.md` section 11; build in this order):
-      - T31-1 Provider-neutral OAuth refactor (`OAuthProviderConfiguration`, coordinator, token service, store, mail-provider wrapper); Google Keychain prefix stays `gmail`; no behaviour change, all Google tests green.
+      - T31-1 Provider-neutral OAuth refactor (`OAuthProviderConfiguration`, coordinator, token service, store, mail-provider wrapper); Google Keychain prefix stays `gmail`; no behaviour change, all Google tests green. Built on branch `31-t31-1-oauth-provider-neutral`.
       - T31-6 `SentwiseMail` SMTP STARTTLS (`SMTPSecurity.startTLS`, refuse AUTH without STARTTLS) and saved-account fields `smtpHost`/`smtpPort`/`smtpSecurity`/`authProvider` (schema 12, additive).
       - T31-8 `MailboxNaming.microsoft` plus IMAP SPECIAL-USE discovery for Microsoft accounts.
       - T31-2 Microsoft configuration: `Sentwise/Config/MicrosoftOAuth.xcconfig` `SENTWISE_MICROSOFT_CLIENT_ID` -> `SentwiseMicrosoftOAuthClientID`; authority `common`, redirect `http://localhost:<port>`, scopes `IMAP.AccessAsUser.All SMTP.Send offline_access openid email`, no client secret; release secret pass-through.
