@@ -85,6 +85,30 @@ final class ManagedInferenceClientTests: XCTestCase {
         XCTAssertEqual(response.outputTokens, 12)
     }
 
+    func testDraftRequestEncodesPurposeDraft() async throws {
+        let transport = FakeLLMTransport(response: json(#"{"text":"ok"}"#))
+        let client = ManagedInferenceClient(
+            sessionProvider: StubSessionProvider(token: "tok"),
+            transport: transport
+        )
+        _ = try await client.complete(sampleRequest())
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(transport.lastBody)) as? [String: Any])
+        XCTAssertEqual(object["purpose"] as? String, "draft")
+    }
+
+    func testVoiceLearningRequestEncodesPurposeVoiceLearning() async throws {
+        let transport = FakeLLMTransport(response: json(#"{"text":"ok"}"#))
+        let client = ManagedInferenceClient(
+            sessionProvider: StubSessionProvider(token: "tok"),
+            transport: transport
+        )
+        var request = sampleRequest()
+        request.purpose = .voiceLearning
+        _ = try await client.complete(request)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(transport.lastBody)) as? [String: Any])
+        XCTAssertEqual(object["purpose"] as? String, "voice_learning")
+    }
+
     func testMaps402ToManagedTrialExpiredWithServerMessage() async {
         let transport = FakeLLMTransport(response: json(
             #"{"error":{"type":"trial_expired","message":"Your 14-day free trial has ended."}}"#,

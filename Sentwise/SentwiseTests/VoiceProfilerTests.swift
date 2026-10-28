@@ -37,6 +37,20 @@ final class VoiceProfilerTests: XCTestCase {
         XCTAssertTrue(captured?.messages.first?.content.contains("Sounds good") ?? false)
     }
 
+    func testMakeProfileSendsVoiceLearningPurpose() async throws {
+        var captured: LLMRequest?
+        _ = try await VoiceProfiler().makeProfile(
+            fromSentBodies: ["Hi there,\n\nSounds good.\n\nBest,\nMichael"],
+            model: "claude-sonnet-4-6",
+            now: fixedDate
+        ) { request in
+            captured = request
+            return LLMResponse(text: self.profileJSON())
+        }
+        XCTAssertEqual(captured?.purpose, .voiceLearning)
+        XCTAssertEqual(LLMRequest(messages: [], model: "m").purpose, .draft)
+    }
+
     func testMakeProfileToleratesCodeFencedJSON() async throws {
         let profiler = VoiceProfiler()
         let fenced = "Here you go:\n```json\n\(profileJSON())\n```"
