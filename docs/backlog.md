@@ -495,14 +495,7 @@ After M6 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Item 87's notification copy follows TC-M3-02/03 ("Your Sentwise trial ends in 7 days", "Your Sentwise trial ends tomorrow"); item 92 shows "Cancels on <date>".
     - **Verified by:** TC-M3-05, TC-M3-06 (purchase in the 0.2.2 QA build against the sandbox deployment, item 123).
 
-121. **Re-enable "Continue with Google" for the Sentwise account on production** — *(M4, High)*
-    Turn managed Google sign-in back on once the owner has allowlisted the Worker callback in the production Clerk instance (`docs/launch-checklist.md` §1), removing the email-code round trip for most new users.
-    *As a new user, I want to sign in to Sentwise with my Google account, so that I don't wait for and paste an emailed code.*
-    - Precondition (owner): the `/auth/callback` redirect is allowlisted in production Clerk; until then this item stays blocked.
-    - Flip `AppState.isManagedGoogleSignInEnabled` to true; verify the browser hand-back on a production build; tick the two open §1 boxes in the launch checklist.
-    - Unit tests: the option shows when enabled, and stays hidden in Prowl hunt mode unless the fake is active (existing behavior).
-    - **Build note 2026-10-27 (`121-managed-google-signin`):** production callback allowlisting is confirmed, the app gate is open, the Google option is covered for production and hunt-isolated presentation, and the launch checklist is current.
-    - **Verified by:** TC-M4-03 (Lucius, pending).
+121. **Continue with Google: TC-M4-03 verification on Lucius' Mini** — shipped in PR 125 (see docs/resolved.md); only the TC-M4-03 production check on Lucius' Mini remains.
 
 122. **Release v0.2.3 (first-run friction)** — *(M4, High)*
     Ship items 110, 105, and 121 in a signed release before the public link goes out.
@@ -579,7 +572,7 @@ After M6 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Confirm `feedback@sentwise.ai` remains monitored by sending the redacted QA diagnostic fixture and observing receipt within one hour. Confirm the built app's `SUPublicEDKey` matches the public key derived from the offline private key; evidence contains only a public fingerprint/match result and the private key never moves to the repo or QA machine.
     - Update the existing `docs/launch-checklist.md` with dated artifact/evidence references; do not tick live gates from code review alone. Item 131 closes after release verification; umbrella item 74 closes only when the owner-approved public link goes out.
     - Unhappy path: any wrong build, missing support mail, signature/update failure, or open P1/P2 launch defect blocks announcement while the last known-good release remains available and a TC-linked backlog defect is filed.
-    - **Blocked by (2026-10-28, item 130 Run 1):** 138, 139 (after Michael's decision), 140. Item 141 is not a blocker.
+    - **Blocked by (2026-10-28, item 130 Run 1):** 139 (after Michael's decision). Item 141 is not a blocker.
     - **Size/order:** M (1 release day plus 0.5–1 QA day). Final slice; depends on 129 and 130.
     - **Verified by:** TC-74-09 and the TC-74-07 update leg in `docs/requirements/launch-readiness.md`.
 
@@ -637,17 +630,6 @@ After M6 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     Design the Sentwise app logo for the Google OAuth consent screen: square PNG, exactly 120x120 px (Google accepts up to 1 MB, JPG or PNG, square), the owl mark on a plain background, legible at small size in light and dark consent screens, matching the brand in the landing page and app icon.
     - Acceptance: Given the file, Then it is 120x120 px PNG under 1 MB, square, with no transparency artifacts on white or dark backgrounds, no Google trademark or misleading text; the owner approves it; vendor-ops uploads it to the consent screen (branding) and the read-back shows it.
 
-138. **Transcript follow-up drafts get the greeting, the owners and the numbers wrong** — *(High, P2; blocks 131; found 2026-10-28 by the item 130 clean-Mac run, TC-74-06; owner builder)*
-    On signed 0.2.1 (macOS 26.4.1, Lucius' Mini) both follow-ups generated from fixture T1 (`docs/qa/test-cases.md`) were wrong in ways a user could miss before approving: draft 2 ("Pilot next steps", approved once, saved to F1 Gmail Drafts at 12:48 PM 2026-10-28, no send) opens "Hi Michael" instead of greeting the call participant Dana, makes Dana responsible for the security questionnaire, and drops the 10 seats and the 30-day pilot; draft 1 (denied, reason Wrong content) had the same greeting and misattribution. T1 says: 10 seats, 30-day pilot starting November 2; Dana needs the security questionnaire back by Friday; Lucius sends it Thursday with the pilot order form; next meeting November 9. Evidence: run report "Exact case accounting" TC-74-06 row; `06-04-review-row.png`, `06-06-saved-status.png` in Lucius' run folder `sentwise-qa/runs/2026-10-27-sentwise-130-clean-mac/`. The report does not keep the draft body verbatim; capture it from F1 Drafts before discarding the draft (see item 130, Run 1).
-    Suspected causes (not confirmed): `FollowUpGenerator.systemPrompt` and `userPrompt` (`Services/Transcript/FollowUpGenerator.swift`) never say which transcript speaker is the user or who the recipient is, so the model has to guess the owner of "I'll send it"; the voice profile's `greeting` is rendered verbatim into the prompt (`Models/VoiceProfile.swift` line 28), so a greeting learned with a name in it (for example "Hi Michael,") is copied into every draft; nothing asks the model to keep quantities and durations stated in the transcript.
-    *As a rep sending a post-call follow-up, I want the draft to greet the person I spoke with, name the right owner for each action, and keep the numbers we agreed, so that I can approve it without rereading the transcript line by line.*
-    - Given fixture T1, recipient `luciusfox@prowlqa.dev` and an F1 voice profile, When the follow-up is generated, Then the greeting names Dana (or uses no name) and never a name that appears only in the voice profile or Sent mail.
-    - Given T1, Then the draft says Lucius (the user, "I") sends the security questionnaire Thursday with the pilot order form, and does not assign the questionnaire to Dana.
-    - Given T1, Then the draft contains "10 seats", "30-day" (or "30 days"), "November 2" and "November 9".
-    - Given a voice profile whose learned greeting contains a person's name, When any draft is generated, Then the name is not copied into the draft; the profile keeps the greeting form only (for example "Hi <first name>,").
-    - Unhappy path: Given a transcript with no speaker labels, Then action items are written without an owner rather than with a guessed one (existing rule), and the T1 facts above are still kept.
-    - Tests: prompt-construction unit tests for the user's speaker identity, recipient name and greeting placeholder; a fixture evaluation of T1 in the live-test lane asserting the three checks above. Verified by a TC-74-06 rerun with the draft body captured as evidence.
-
 139. **Voice learning starts the trial and counts as a draft before the first draft** — *(High, P2; blocks 131 until Michael decides the rule; found 2026-10-28 by the item 130 clean-Mac run, TC-74-05; owner builder with sentwise-service)*
     After sign-in and voice learning, and before any reply or follow-up was requested, Settings → Subscription read "Trial — 14 days left" and "1 of 400 drafts used this month · resets Nov 1" (`05-02-predraft-entitlement.png`). After two transcript drafts it read "3 of 400", so the extra one is the learning call. TC-74-05 and TC-M1-08 step 8 say the trial starts on the first authenticated draft request, and the pricing copy counts drafts.
     Cause (from the code, high confidence): `learnVoiceProfile` → `makeProfile` (`App/AppState+Voice.swift` around line 261) sends the profile request through the same `llm.complete` managed path as drafting, which posts to sentwise-service `POST /v1/draft`. That route initializes `trialStartedAt` in Clerk (`src/auth.ts`, `initialize`) and reserves and settles one unit of quota for every request; the request carries no purpose, so the service cannot tell learning from drafting. Re-learn my voice will count again each time.
@@ -659,15 +641,6 @@ After M6 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Unhappy path: Given a learning request is rate-limited or the service is offline, Then learning shows its existing retry copy and no quota is reserved or settled.
     - The non-counting route must still be authenticated, rate-limited and capped (a learning call per account per day, or per request size) so it cannot be used for free inference; the architect picks the mechanism (separate route or a signed purpose field).
     - If Michael decides learning should count, this item becomes a copy and test-case change instead: Subscription and pricing copy say so, and TC-74-05/TC-M1-08 are amended through the planner.
-
-140. **Sentwise > Settings… in the app menu opens a blank window** — *(High, P2; blocks 131; found 2026-10-28 by the item 130 clean-Mac run, TC-74-04; owner builder)*
-    After quit and relaunch, the application menu's Sentwise > Settings… opened a window titled "Sentwise Settings" with an empty body, twice (after waits of 5 and 10 seconds, and after a second relaunch); the status menu's Settings… opened the working tabbed window. Evidence: `04-settings-after-restart.png`, `04-06-settings-wait5.png`, `04-07-settings-wait10.png`, `04-10-settings-second-restart.png`.
-    Cause (from the code): `SentwiseApp.body` (`App/SentwiseApp.swift`) declares `SwiftUI.Settings { EmptyView() }` only to satisfy SwiftUI, and SwiftUI wires the app menu's Settings… command (and Command-comma while the app is active) to that empty scene; the real window is `SettingsWindowController`, reached only from `MenuBarController.openSettings`.
-    *As a Mac user, I want every Settings… command to open the same Settings window, so that I never land on an empty window.*
-    - Given Sentwise is active with any of its windows in front, When the user chooses Sentwise > Settings… or presses Command-comma, Then the tabbed Settings window (General first, same window as the status menu) opens or comes to front.
-    - Given the Settings window is already open from the status menu, When the app-menu Settings… is chosen, Then the same window comes to front and no second window opens.
-    - Unhappy path: Given onboarding has not finished, When the app-menu Settings… is chosen, Then Settings opens with the same behavior as the status-menu route at that stage, never a blank window.
-    - Unit or UI test: the app-menu Settings command routes to `SettingsWindowController`; the SwiftUI Settings scene can never show `EmptyView` to a user.
 
 141. **ContainerBar cask in the shared tap prints a deprecation warning during `brew install --cask michaeltookes/tap/sentwise`** — *(Low, P3; does not block 131; found 2026-10-27 by the item 130 clean-Mac run, TC-74-02; owner builder, change lands in `michaeltookes/homebrew-tap`)*
     Homebrew 7.0.11 loads every cask in the tap and prints "Calling string comparison format for `depends_on macos:` is deprecated!" for `Casks/containerbar.rb` line 11 (`depends_on macos: ">= :sonoma"`) to anyone installing Sentwise. The Sentwise cask is already fixed (`depends_on macos: :sonoma`, item 116). Evidence: `02-brew-install.log`, `02-brew-install-retry.log` in the run folder.
