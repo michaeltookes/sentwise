@@ -129,6 +129,37 @@ final class FollowUpIdentityPromptTests: XCTestCase {
         XCTAssertFalse(prompt.contains("the speaker labeled"))
     }
 
+    func testUniqueMailboxPrefixIsNotEnoughToResolveTheUser() {
+        let participants = FollowUpParticipants(
+            userEmail: "jane@example.com", userNameHints: ["Jane"], recipients: []
+        )
+        // "Me" is a self label; Janet is only a prefix candidate and must not win.
+        XCTAssertEqual(participants.userSpeaker(in: ["Me", "Janet"]), "Me")
+        XCTAssertNil(participants.userSpeaker(in: ["Dana", "Janet"]))
+        let text = "Janet: hi\nDana: hello"
+        let prompt = systemPrompt(recipients: [], text: text)
+        XCTAssertFalse(prompt.contains("the speaker labeled"))
+        XCTAssertNil(participants.recipientFirstName(transcript: "Me: hi\nJanet: hello", hasSpeakerLabels: true)
+            .flatMap { $0 == "Janet" ? nil : $0 })
+    }
+
+    func testAnonymousSpeakerLabelsNeverBecomeTheGreetingName() {
+        let participants = FollowUpParticipants(
+            userEmail: "lf@example.com", userNameHints: ["Lucius"], recipients: []
+        )
+        for text in ["Lucius: hi\nSpeaker A: hello", "Speaker A: hi\nSpeaker B: hello",
+                     "Lucius: hi\nParticipant 2: hello", "Me: hi\nUnknown: hello", "Lucius: hi\nGuest: yo"] {
+            XCTAssertNil(participants.recipientFirstName(transcript: text, hasSpeakerLabels: true), text)
+        }
+        XCTAssertEqual(
+            participants.recipientFirstName(transcript: "Lucius: hi\nSpeaker B: x\nDana: hello", hasSpeakerLabels: true),
+            "Dana"
+        )
+        let prompt = systemPrompt(recipients: [], text: "Speaker A: hi\nSpeaker B: hello")
+        XCTAssertFalse(prompt.contains("Greet Speaker"))
+        XCTAssertTrue(prompt.contains("uses no name"))
+    }
+
     func testPlaceholderGreetingIsExplainedWhenRecipientUnknown() {
         let block = profile(greeting: "Hi Michael,").promptBlock()
         XCTAssertTrue(block.contains("Hi <first name>,"))

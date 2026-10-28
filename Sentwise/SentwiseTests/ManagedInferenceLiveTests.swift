@@ -405,15 +405,30 @@ final class ManagedInferenceLiveTests: XCTestCase {
         XCTAssertTrue(lower.contains("30-day") || lower.contains("30 days") || lower.contains("30-days"), body)
         XCTAssertTrue(body.contains("November 2"), body)
         XCTAssertTrue(body.contains("November 9"), body)
-        // The user sends the questionnaire: a sentence about sending it is first person,
-        // and no line makes Dana the sender.
+        // The model's wording varies, so check only the sentence(s) that mention the
+        // questionnaire (the order-form sentence is excluded). Accepted first-person
+        // forms: "I'll / I will / I'm going to / we'll send ... questionnaire", or
+        // "the questionnaire ... from me" / "I'll get/have/email it". Rejected: second
+        // person or Dana as sender ("you'll send ... questionnaire", "you send",
+        // "Dana will send", "Dana sends", "your questionnaire back").
+        let sentences = lower.replacingOccurrences(of: "\u{2019}", with: "'").components(separatedBy: CharacterSet(charactersIn: ".!?\n"))
+            .filter { $0.contains("questionnaire") }
+        XCTAssertFalse(sentences.isEmpty, "questionnaire not mentioned: \(body)")
+        func matches(_ pattern: String, _ text: String) -> Bool {
+            text.range(of: pattern, options: .regularExpression) != nil
+        }
+        let firstPerson = #"\b(i|we)(\'ll| will|'m going to| am going to)\b[^,;]*\b(send|get|email|share|forward|have)\b"#
+        let fromMe = #"questionnaire[^,;]*\bfrom me\b"#
         XCTAssertTrue(
-            lower.contains("i'll send") || lower.contains("i will send") || lower.contains("i'll get")
-                || lower.contains("i'll have") || lower.contains("i'll email") || lower.contains("send you")
-                || lower.contains("send it"),
-            "questionnaire must be sent by the user: \(body)"
+            sentences.contains { matches(firstPerson, $0) || matches(fromMe, $0) },
+            "questionnaire must be sent by the user in first person: \(body)"
         )
-        XCTAssertFalse(lower.contains("dana will send"), body)
-        XCTAssertFalse(lower.contains("dana to send"), body)
+        let secondPerson = #"\byou(\'ll| will|'re going to| are going to)?\s+(send|get|email|share|forward)\b[^,;]*questionnaire"#
+        let danaSends = #"\bdana(\'s)?\s+(will\s+|to\s+|is going to\s+)?(send|sends|email|share|forward)\b[^,;]*questionnaire"#
+        for sentence in sentences {
+            XCTAssertFalse(matches(secondPerson, sentence), "questionnaire attributed to Dana: \(body)")
+            XCTAssertFalse(matches(danaSends, sentence), "questionnaire attributed to Dana: \(body)")
+            XCTAssertFalse(sentence.contains("your questionnaire back"), "questionnaire attributed to Dana: \(body)")
+        }
     }
 }
