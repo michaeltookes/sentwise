@@ -38,6 +38,13 @@ Predetermined cases for the milestones in `docs/plan.md`, written before the cod
 
 ## Launch readiness — item 74
 
+### TC-74-02 amendment proposal (pending approval, 2026-10-28)
+TC-74-02 is defined in `docs/requirements/launch-readiness.md` and is not edited here. Item 130 Run 1 failed it on things that are not about Sentwise: a stale Caskroom receipt from an earlier install made the first `brew install` a no-op, Homebrew 7 warned that an unrelated tap (`oven-sh/bun`) is untrusted, and another cask in the same tap (ContainerBar, item 141) printed a deprecation warning. The Sentwise cask printed nothing. Proposed wording for the planner to adopt or reject:
+- **Precondition:** `brew list --cask sentwise` reports that Sentwise is not installed. If it reports a receipt, run `brew uninstall --cask sentwise` (no `--zap`), record that in the report, and start the case after it.
+- **Pass:** the install prints no checksum, quarantine, dependency, cask-version or deprecation warning that names the `sentwise` cask or `michaeltookes/tap/sentwise`, and launches to first run at the advertised version.
+- **Record, do not fail:** warnings about other taps or other casks are copied into the report as friction and filed against their owner (item 141 for ContainerBar); they do not fail TC-74-02.
+
+
 ### TC-74-08 Production trial converts to Starter and opens fresh portal sessions
 - **Executor:** lucius (app and Paddle-hosted checkout/portal) and uat (redacted admin/config assertions)
 - **Verifies:** item 129; AC-A1 through AC-A6 in `docs/requirements/launch-readiness.md`
