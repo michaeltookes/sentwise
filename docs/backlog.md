@@ -674,3 +674,8 @@ After M6 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     *As a Sentwise installer, I want the Homebrew install to print no warnings about other apps, so that the install looks trustworthy.*
     - Given the tap at its current main, When `brew install --cask michaeltookes/tap/sentwise` runs on Homebrew 7.x, Then no `depends_on macos:` deprecation warning is printed for any cask in the tap.
     - Unhappy path: Given ContainerBar's next release regenerates its cask, Then the release template writes the symbol form, so the warning does not return (check the ContainerBar release script or cask template).
+
+142. **Follow-up participant matching: token match must not contradict the sender's surname** — *(Medium, P3; found 2026-10-28 by Codex review of item 138; owner builder)*
+    `FollowUpParticipants.userSpeaker` matches a transcript label to the sender by first-name token. With sign-off "Alex Taylor", mailbox alex.taylor@example.com and labels "A. Taylor" and "Alex Chen", the token match picks "Alex Chen", assigning another person's commitments to the sender. Safe fix: require the full name, or reject any token match whose surname conflicts with the sender's, and leave ownership unresolved (the unlabeled-transcript behaviour).
+    - Given sign-off "Alex Taylor", mailbox alex.taylor@example.com and labels "A. Taylor" and "Alex Chen", When the participants are resolved, Then "Alex Chen" is not chosen as the user and ownership is unresolved (or "A. Taylor" is chosen only on a full-name match).
+    - Unhappy path: Given labels "Alex Chen" only, Then ownership stays unresolved and the prompt does not claim a speaker for the user.

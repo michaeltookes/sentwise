@@ -111,7 +111,7 @@ struct FollowUpParticipants: Equatable {
     // MARK: - Prompt
 
     /// The "who is who" block for the follow-up system prompt.
-    func promptBlock(transcript text: String, hasSpeakerLabels: Bool) -> String {
+    func promptBlock(transcript text: String, hasSpeakerLabels: Bool, hasSuppliedFacts: Bool = false) -> String {
         var lines = ["Who is who:"]
         var userLine = "- The user is the sender: every \"I\", \"me\" and \"my\" in the email is the user"
         if let email = userEmail, !email.isEmpty { userLine += " (mailbox \(email))" }
@@ -136,9 +136,16 @@ struct FollowUpParticipants: Equatable {
                 + "\"Hello,\"). Do not invent a name, do not write a placeholder, never greet the user "
                 + "by name, and never use a name taken from the writing-voice notes.")
         }
-        lines.append("- Keep every quantity, duration, price and date exactly as stated in the call "
-            + "(seat counts, lengths such as \"30-day\", dates such as \"November 2\"). Do not drop "
-            + "or round them.")
+        if hasSuppliedFacts {
+            lines.append("- The user-supplied facts below are authoritative corrections: where they differ from "
+                + "the transcript (a date, quantity, duration or price), the user-supplied fact wins and the "
+                + "transcript value is dropped. Apart from those corrected facts, keep every quantity, "
+                + "duration, price and date exactly as stated in the call. Do not drop or round them.")
+        } else {
+            lines.append("- Keep every quantity, duration, price and date exactly as stated in the call "
+                + "(seat counts, lengths such as \"30-day\", dates such as \"November 2\"). Do not drop "
+                + "or round them.")
+        }
         return lines.joined(separator: "\n")
     }
 

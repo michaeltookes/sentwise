@@ -87,7 +87,12 @@ struct FollowUpGenerator {
         guard !context.isEmpty else { throw DraftError.emptyDraft }
 
         let request = LLMRequest(
-            system: Self.systemPrompt(voiceProfile: voiceProfile, context: context, participants: participants),
+            system: Self.systemPrompt(
+                voiceProfile: voiceProfile,
+                context: context,
+                participants: participants,
+                hasSuppliedFacts: !(userSuppliedFacts?.isEmpty ?? true)
+            ),
             messages: [LLMMessage(
                 role: .user,
                 content: Self.userPrompt(
@@ -210,7 +215,8 @@ struct FollowUpGenerator {
     static func systemPrompt(
         voiceProfile: VoiceProfile?,
         context: FollowUpDraftContext? = nil,
-        participants: FollowUpParticipants = FollowUpParticipants()
+        participants: FollowUpParticipants = FollowUpParticipants(),
+        hasSuppliedFacts: Bool = false
     ) -> String {
         let base = """
         You are the user's personal email assistant. You are given the transcript of a call \
@@ -236,7 +242,9 @@ struct FollowUpGenerator {
         """
         let sourceText = context?.text ?? ""
         let labeled = context?.hasSpeakerLabels ?? false
-        let identity = participants.promptBlock(transcript: sourceText, hasSpeakerLabels: labeled)
+        let identity = participants.promptBlock(
+            transcript: sourceText, hasSpeakerLabels: labeled, hasSuppliedFacts: hasSuppliedFacts
+        )
         let recipientName = participants.recipientFirstName(transcript: sourceText, hasSpeakerLabels: labeled)
         let voice = voiceProfile?.promptBlock(recipientFirstName: recipientName, omitNameWhenUnknown: true)
             ?? "Write in a natural, concise, and professional tone."

@@ -160,6 +160,43 @@ final class FollowUpIdentityPromptTests: XCTestCase {
         XCTAssertTrue(prompt.contains("uses no name"))
     }
 
+    func testSuppliedCorrectionOverridesPreservationRule() {
+        let voice = profile(greeting: "Hi <first name>,")
+        let prompt = FollowUpGenerator.systemPrompt(
+            voiceProfile: voice,
+            context: FollowUpDraftContext(text: "Dana: starts November 2", hasSpeakerLabels: true, source: .transcript),
+            participants: FollowUpParticipants(userEmail: "a@b.com", voiceProfile: voice, recipients: []),
+            hasSuppliedFacts: true
+        )
+        XCTAssertTrue(prompt.contains("authoritative corrections"))
+        XCTAssertTrue(prompt.contains("the user-supplied fact wins"))
+        XCTAssertTrue(prompt.contains("Apart from those corrected facts, keep every quantity"))
+        XCTAssertFalse(systemPrompt().contains("authoritative corrections"))
+    }
+
+    func testQuestionnaireOwnershipPredicate() {
+        let valid = [
+            "I'll send the security questionnaire on Thursday.",
+            "I will email you the questionnaire by Thursday.",
+            "I\u{2019}ll complete and return the security questionnaire on Thursday with the pilot order form.",
+            "I'll fill out the security questionnaire and get it back to you Thursday.",
+            "The questionnaire will come from me on Thursday.",
+            "We'll provide the security questionnaire Thursday.",
+            "Dana, the questionnaire from me lands Thursday, and I'll send the order form Monday.",
+            "I'm going to share the questionnaire Thursday."
+        ]
+        for text in valid { XCTAssertTrue(QuestionnaireOwnership.isUserOwned(text), text) }
+        let invalid = [
+            "You'll send me the security questionnaire Thursday, and I'll send you the pilot order form.",
+            "Dana will send the questionnaire Thursday.",
+            "Dana sends the security questionnaire on Thursday.",
+            "Please send your questionnaire back by Thursday. You send the questionnaire first.",
+            "I'll send the pilot order form Monday.",
+            "Please get your questionnaire back to me."
+        ]
+        for text in invalid { XCTAssertFalse(QuestionnaireOwnership.isUserOwned(text), text) }
+    }
+
     func testPlaceholderGreetingIsExplainedWhenRecipientUnknown() {
         let block = profile(greeting: "Hi Michael,").promptBlock()
         XCTAssertTrue(block.contains("Hi <first name>,"))
