@@ -359,7 +359,7 @@ final class AppStateProviderActivationTests: XCTestCase {
         XCTAssertNil(appState.managedError)
     }
 
-    func testGoogleSignInIsGatedUntilProductionRedirectAllowlistIsReady() async throws {
+    func testGoogleSignInCanStillBeClosedWithEmergencyGate() async throws {
         let secrets = InMemorySecretStore()
         let transport = QueueClerkTransport([clerkReply(startResponse, clientToken: "client_A")])
         let clerk = ClerkClient(
@@ -370,7 +370,7 @@ final class AppStateProviderActivationTests: XCTestCase {
         let appState = makeAppState(provider: "managed", secrets: secrets, managedAccount: managed)
         var opened: URL?
 
-        await appState.startManagedGoogleSignIn(openURL: { opened = $0 })
+        await appState.startManagedGoogleSignIn(openURL: { opened = $0 }, isGoogleSignInEnabled: false)
 
         XCTAssertNil(opened)
         XCTAssertEqual(transport.callCount, 0)

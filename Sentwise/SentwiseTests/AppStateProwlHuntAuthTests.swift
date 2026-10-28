@@ -72,6 +72,31 @@ final class AppStateProwlHuntAuthTests: XCTestCase {
         XCTAssertFalse(appState.isManagedSignedIn)
     }
 
+    func testManagedGoogleOptionShowsWhenProductionFlagIsEnabled() {
+        XCTAssertTrue(AppState.isManagedGoogleSignInEnabled)
+        XCTAssertTrue(ManagedSignInControls.shouldShowGoogleOption(
+            showsGoogleOption: true,
+            isGoogleSignInEnabled: AppState.isManagedGoogleSignInEnabled,
+            isHuntMode: false,
+            isHuntFakeActive: false
+        ))
+    }
+
+    func testManagedGoogleOptionStaysHuntIsolatedUnlessFakeIsActive() {
+        XCTAssertFalse(ManagedSignInControls.shouldShowGoogleOption(
+            showsGoogleOption: true,
+            isGoogleSignInEnabled: true,
+            isHuntMode: true,
+            isHuntFakeActive: false
+        ))
+        XCTAssertTrue(ManagedSignInControls.shouldShowGoogleOption(
+            showsGoogleOption: true,
+            isGoogleSignInEnabled: true,
+            isHuntMode: true,
+            isHuntFakeActive: true
+        ))
+    }
+
     func testHuntGoogleSignInShowsWaitingPanelWithoutBrowserThenCompletes() async {
         let appState = makeAppState()
         var openedURLs: [URL] = []

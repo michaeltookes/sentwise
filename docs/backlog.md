@@ -501,7 +501,8 @@ After M6 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Precondition (owner): the `/auth/callback` redirect is allowlisted in production Clerk; until then this item stays blocked.
     - Flip `AppState.isManagedGoogleSignInEnabled` to true; verify the browser hand-back on a production build; tick the two open §1 boxes in the launch checklist.
     - Unit tests: the option shows when enabled, and stays hidden in Prowl hunt mode unless the fake is active (existing behavior).
-    - **Verified by:** TC-M4-03.
+    - **Build note 2026-10-27 (`121-managed-google-signin`):** production callback allowlisting is confirmed, the app gate is open, the Google option is covered for production and hunt-isolated presentation, and the launch checklist is current.
+    - **Verified by:** TC-M4-03 (Lucius, pending).
 
 122. **Release v0.2.3 (first-run friction)** — *(M4, High)*
     Ship items 110, 105, and 121 in a signed release before the public link goes out.

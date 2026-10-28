@@ -39,13 +39,13 @@ secret. Security finding A-M1.
         Google (custom credentials). Paste client id/secret into Clerk.
 - [x] **[owner]** Enable the same sign-in methods as dev (email code +
       Google), and confirm session lifetime settings match dev.
-- [ ] **[owner]** Clerk dashboard → allowlist the worker callback redirect for
+- [x] **[owner]** Clerk dashboard → allowlist the worker callback redirect for
       the managed OAuth flow (item 89):
       `https://sentwise-inference.sentwise-service.workers.dev/auth/callback`.
-- [x] **[agent]** Until the production callback allowlist is complete, keep
-      managed Google sign-in hidden and blocked in the app
-      (`AppState.isManagedGoogleSignInEnabled = false`); re-enable only after
-      the owner step above is checked and production Google sign-in is verified.
+      Completed 2026-10-27; production read-back confirmed.
+- [x] **[agent]** Re-enable managed Google sign-in after the production callback
+      allowlist is confirmed (`AppState.isManagedGoogleSignInEnabled = true`).
+      Completed 2026-10-27; keep the one-line gate for emergency closure.
 - [x] **[agent]** Worker: set `CLERK_PUBLISHABLE_KEY` var to the `pk_live_…`
       key; `wrangler secret put CLERK_SECRET_KEY` with the `sk_live_…` key
       (from a real TTY — see §3 gotcha).
