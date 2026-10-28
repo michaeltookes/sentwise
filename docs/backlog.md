@@ -311,8 +311,8 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Confirm the next release's tap bump produces a warning-free `brew install --cask`.
     - One-off: patch the live tap cask to match so current installs stop warning. *(2026-10-12: pushed as `michaeltookes/homebrew-tap` branch `cask-depends-on-syntax`, awaiting merge. The tap's `containerbar` and `prompter` casks have the same deprecated line.)*
 
-31. **Outlook / Microsoft 365 support**
-    Add an Outlook/M365 provider behind the email-provider abstraction.
+31. **Microsoft sign-in (Outlook.com, Hotmail, Microsoft 365)** — *second provider, release after launch; rescoped 2026-10-28 from "Graph API" to IMAP/SMTP with XOAUTH2, same shape as the Gmail path. Brief: `docs/requirements/sign-in-first.md` section 6 (US-sign-in-first-6 to 10); depends on 136; architect questions A1-A9 in that section.*
+    Add a Microsoft sign-in provider behind the email-provider abstraction.
     *As an Outlook user, I want to connect my M365 mailbox, so that I can use sentwise without Gmail.*
     - Graph API + OAuth provider implementing the shared email-provider interface.
     - Feature parity with Gmail for read/draft/send.
@@ -524,3 +524,20 @@ After M5 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Unit tests on the response: content type, status, success body for a `code` request, failure body for an `error` request, no echo of the `code`, `state` or `error` values; existing `OAuthRedirect` tests stay green.
     - Visual check deferred to the v0.2.3 QA pass on Lucius' Mini.
     - **Build note 2026-10-26 (`133-google-signin-finish-page`):** `OAuthRedirect.swift` now serves stored, self-contained success/failure HTML cards with the managed handoff's light/dark styling, exact UTF-8 response framing, and no reflected query values. `LoopbackRedirectListenerTests` covers both variants and headers. Because the app has no plain open-only deep-link host, **Return to Sentwise** targets the current build's URL-scheme root (`sentwise://` in production; the isolated QA scheme in QA builds). Visual verification remains in the v0.2.3 Lucius QA pass.
+
+134. **Google OAuth client published and CASA-verified** — *(High; gates the public launch and item 135; filed 2026-10-28 from the owner decision "Sentwise connects with sign-in, not app passwords"; US-sign-in-first-5)*
+    Move the Sentwise Google client from Testing (100 users, 7-day token expiry) to In production, pass restricted-scope verification for `https://mail.google.com/`, and obtain the CASA Tier 2 Letter of Validation. Steps in `docs/gmail-oauth.md` sections 4-5. Owner: vendor-ops prepares the submission (genkei-ops backlog 31); Michael publishes the consent screen, submits, and pays the lab. Google review 2-6+ weeks.
+    *As the owner, I want the Google client published and CASA-verified, so that any Gmail user can sign in with no cap or interstitial.*
+    - Acceptance criteria: brief section 5 (non-test-user sign-in shows no unverified-app interstitial; refresh token older than 7 days refreshes; `invalid_grant` shows "Sign in with Google again").
+    - Evidence recorded in `docs/launch-checklist.md` (status and LoV reference, no secrets); annual renewal on the calendar.
+
+135. **Hide the app-password field behind "Other ways to connect"** — *(High; gated on 134 for the public channel; filed 2026-10-28; US-sign-in-first-1 to 4; brief `docs/requirements/sign-in-first.md` section 4)*
+    When Google sign-in is available, the connect UI (onboarding account step and Settings > Account) shows only "Continue with Google" plus a collapsed "Other ways to connect" disclosure holding the existing app-password form and "Advanced (IMAP server)". iCloud, Yahoo, AOL, AT&T and custom hosts stay reachable; the IMAP engine, host suggestion and credential guidance stay unchanged. Existing app-password accounts keep working. If Google sign-in is unavailable (no client id, Prowl hunt mode) the app-password form is shown directly.
+    *As a new Gmail user, I want only "Sign in with Google", so that I never meet an app password.*
+    - Build behind a flag that defaults to the current UI; the flip to the public channel requires 134 done and an owner-approved step. UX review and copy from the ui-designer folded into the brief.
+    - Unit tests: view model shows/hides the form per flag and `isGoogleSignInAvailable`; existing-account Settings path; disclosure accessibility label and state.
+    - **Verified by:** test cases to be added by project-planner (first-run Gmail, iCloud via disclosure, upgrade with existing app-password account).
+
+136. **Azure / Entra app registration and publisher verification for Microsoft sign-in** — *(Medium; prerequisite for item 31; owner + vendor-ops; filed 2026-10-28; brief section 6, questions A1, A2, A8)*
+    Create the Microsoft Entra app registration (public client, loopback redirect, scopes per the architect), publisher domain and publisher verification, and record the client id in the build config. Michael owns the tenant and any verification payments.
+    - Done when the architect's A1/A2 answers are implemented in the registration and a personal-account sign-in works against it.
