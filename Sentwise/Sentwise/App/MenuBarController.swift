@@ -59,6 +59,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         appState.openSettingsHandler = { [weak self] tab in
             self?.settingsWindowController.show(tab: tab)
         }
+        // The app menu's Settings… and Command-comma open the same window.
+        SettingsCommandRouter.shared.handler = { [weak self] in
+            self?.settingsWindowController.show()
+        }
     }
 
     deinit {
