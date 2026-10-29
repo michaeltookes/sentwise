@@ -63,13 +63,14 @@ Prioritized list of planned features, improvements, and technical debt for **sen
      - T31-6 ✅ shipped 2026-10-28 (PR 134), see resolved.md
      - T31-8 ✅ shipped 2026-10-28 (PR 134), see resolved.md
    - **US-5 to US-8 — Microsoft configuration, recovery, detection and UI**
-     - T31-2 Microsoft configuration: `Sentwise/Config/MicrosoftOAuth.xcconfig` `SENTWISE_MICROSOFT_CLIENT_ID` -> `SentwiseMicrosoftOAuthClientID`; authority `common`, redirect `http://localhost:<port>`, scopes `IMAP.AccessAsUser.All SMTP.Send offline_access openid email`, no client secret; release secret pass-through.
-     - T31-3 Error mapping (architecture 4.6): `.adminConsentRequired`, `.reauthenticationRequired` (also Google `invalid_grant`), `.mailboxProtocolDisabled`; admin note; refresh-token rotation persisted.
-     - T31-4 Detection: `EmailProviderKind.microsoft` (outlook/hotmail/live/msn and regional domains), Microsoft 365 MX (`*.mail.protection.outlook.com`).
+     - T31-2 ✅ shipped 2026-10-29 (PR 135), see resolved.md
+     - T31-3 ✅ shipped 2026-10-29 (PR 135), see resolved.md
+     - T31-4 ✅ shipped 2026-10-29 (PR 135), see resolved.md
      - T31-5 "Sign in with Microsoft" UI and adoption (address and `tid` from the ID token; personal vs work SMTP host).
      - T31-7 SMTP AUTH-only probe at connect; tokens deleted and account not adopted on failure.
    - **US-9 — live mail proof**
      - T31-9 `MicrosoftOAuthLiveTests` on Lucius' Mini (personal + M365 test mailboxes): refresh, IMAP, probe, send to self, Sent Items and Drafts checks.
+     - T31-11 Microsoft app registration in Entra (vendor-ops; owner Michael for the tenant sign-in): client id for MicrosoftOAuth.xcconfig, redirect http://localhost, scopes IMAP.AccessAsUser.All SMTP.Send offline_access openid email, personal + M365 test mailboxes; prerequisite for T31-9 live tests and the release secret.
    - **US-10 — consent and privacy copy**
      - T31-10 Consent copy block (ui-designer, owner-approved) and the sentwise.ai privacy-policy Microsoft section before the public flag.
    - **Done:** a Genkei-owned Outlook.com fixture signs in without a password, refresh rotation persists, offline cached-token launch works, revoked consent produces one reauthentication state, and the final accessibility/consent checks pass. Work/school support may remain gated as stated in the owner assumption.
