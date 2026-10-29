@@ -66,8 +66,10 @@ Prioritized list of planned features, improvements, and technical debt for **sen
      - T31-2 ✅ shipped 2026-10-29 (PR 135), see resolved.md
      - T31-3 ✅ shipped 2026-10-29 (PR 135), see resolved.md
      - T31-4 ✅ shipped 2026-10-29 (PR 135), see resolved.md
-     - T31-5 "Sign in with Microsoft" UI and adoption (address and `tid` from the ID token; personal vs work SMTP host).
-     - T31-7 SMTP AUTH-only probe at connect; tokens deleted and account not adopted on failure.
+     - T31-5 ✅ shipped 2026-10-29 (PR 136), see resolved.md
+     - T31-7 ✅ shipped 2026-10-29 (PR 136), see resolved.md
+     - T31-12 Microsoft protocol-disabled recovery when the authorized address differs from the form address: with `requireHintMatch` false the failure is stored under the authorized address B while the view passes form address A, so the request is discarded and the admin-note action never appears (`AppState+MicrosoftSignIn.swift` ~106-110). Associate the failure with the initiating attempt and keep the authorized address for the note. Codex leftover, PR 136.
+     - T31-13 `eraseAllLocalData()` must clear `microsoftMailAuth.adminApproval`: after a consent or protocol-disabled failure the reset blank form still shows the erased mailbox's failure and its admin note exports that address (`AppState+GoogleSignIn.swift` ~183-184). Codex leftover, PR 136.
    - **US-9 — live mail proof**
      - T31-9 `MicrosoftOAuthLiveTests` on Lucius' Mini (personal + M365 test mailboxes): refresh, IMAP, probe, send to self, Sent Items and Drafts checks.
      - T31-11 Microsoft app registration in Entra (vendor-ops; owner Michael for the tenant sign-in): client id for MicrosoftOAuth.xcconfig, redirect http://localhost, scopes IMAP.AccessAsUser.All SMTP.Send offline_access openid email, personal + M365 test mailboxes; prerequisite for T31-9 live tests and the release secret.
