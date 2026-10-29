@@ -92,12 +92,16 @@ struct MicrosoftSignInButtonBlock: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(MicrosoftSignInCopy.consentHeading).font(.caption.weight(.semibold))
             Text(MicrosoftSignInCopy.consentSummary)
+            Text(MicrosoftSignInCopy.consentPrivacy)
             if showsWorkNote { Text(MicrosoftSignInCopy.workAccountNote) }
+            Text(MicrosoftSignInCopy.consentRevoke)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(MicrosoftSignInCopy.consentAccessibilityText(showsWorkAccountNote: showsWorkNote))
+        .accessibilityIdentifier("microsoftConsentBlock")
     }
 
     private func consentRequiredBlock(_ message: String) -> some View {

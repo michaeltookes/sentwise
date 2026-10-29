@@ -55,7 +55,7 @@ enum MicrosoftMailCredential {
     /// Prefix of every Microsoft sign-in failure detail the OAuth path produces.
     static let failurePrefix = "Microsoft sign-in"
     static let reauthorizationDetail =
-        "Microsoft sign-in expired or was revoked — sign in with Microsoft again in Settings → Email Account."
+        "Microsoft sign-in expired or was revoked. Sign in with Microsoft again in Settings → Email Account."
 
     static func isMicrosoftSignInFailureDetail(_ detail: String) -> Bool {
         detail.hasPrefix(failurePrefix)
