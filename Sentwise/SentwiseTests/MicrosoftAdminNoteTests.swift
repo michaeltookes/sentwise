@@ -50,10 +50,18 @@ final class MicrosoftAdminNoteTests: XCTestCase {
 
     func testProtocolNotesCarryTheMatchingPowerShellLine() {
         let imap = MicrosoftAdminNote.text(reason: .protocolDisabled(.imap), clientID: clientID, address: address)
-        XCTAssertTrue(imap.contains("Set-CASMailbox -Identity \(address) -ImapEnabled $true"))
+        XCTAssertTrue(imap.contains("Set-CASMailbox -Identity '\(address)' -ImapEnabled $true"))
         let smtp = MicrosoftAdminNote.text(reason: .protocolDisabled(.smtp), clientID: clientID, address: address)
-        XCTAssertTrue(smtp.contains("Set-CASMailbox -Identity \(address) -SmtpClientAuthenticationDisabled $false"))
+        XCTAssertTrue(smtp.contains("Set-CASMailbox -Identity '\(address)' -SmtpClientAuthenticationDisabled $false"))
         XCTAssertFalse(imap.contains("SmtpClientAuthenticationDisabled"))
+    }
+
+    func testApostropheAddressIsQuotedAsAPowerShellLiteralInBothCommands() {
+        let odd = "o'brien@contoso.com"
+        let imap = MicrosoftAdminNote.text(reason: .protocolDisabled(.imap), clientID: clientID, address: odd)
+        XCTAssertTrue(imap.contains("Set-CASMailbox -Identity 'o''brien@contoso.com' -ImapEnabled $true"))
+        let smtp = MicrosoftAdminNote.text(reason: .protocolDisabled(.smtp), clientID: clientID, address: odd)
+        XCTAssertTrue(smtp.contains("Set-CASMailbox -Identity 'o''brien@contoso.com' -SmtpClientAuthenticationDisabled $false"))
     }
 
     func testNoteIsPlainTextWithoutSecrets() {

@@ -57,15 +57,20 @@ enum MicrosoftAdminNote {
         case .protocolDisabled(.imap):
             lines.append("")
             lines.append("IMAP access is turned off for my mailbox. To turn it on (Exchange Online PowerShell):")
-            lines.append("Set-CASMailbox -Identity \(address) -ImapEnabled $true")
+            lines.append("Set-CASMailbox -Identity \(powerShellLiteral(address)) -ImapEnabled $true")
         case .protocolDisabled(.smtp):
             lines.append("")
             lines.append("SMTP AUTH (sending) is turned off for my mailbox. To turn it on (Exchange Online PowerShell):")
-            lines.append("Set-CASMailbox -Identity \(address) -SmtpClientAuthenticationDisabled $false")
+            lines.append("Set-CASMailbox -Identity \(powerShellLiteral(address)) -SmtpClientAuthenticationDisabled $false")
         }
         lines.append("")
         lines.append("Thank you.")
         return lines.joined(separator: "\n")
+    }
+
+    /// Single-quoted PowerShell literal; embedded apostrophes are doubled.
+    static func powerShellLiteral(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "''") + "'"
     }
 
     /// A GUID tenant id, else the address's domain; anything with characters
