@@ -89,8 +89,8 @@ extension AppState {
         do {
             // One session verifies and resolves the special-folder names (T31-8);
             // a failed LIST only leaves the host defaults in place.
-            credentials.discoveredNaming = try await mailProvider.verifyAndDiscover(credentials)
-                ?? credentials.discoveredNaming
+            credentials.discoveredNaming = try await mailProvider.verifyAndDiscover(credentials) ?? credentials.discoveredNaming
+            try await probeMicrosoftSubmission(credentials) // item 31, T31-7
         } catch {
             guard shouldApplyConnectionResult(
                 credentials,

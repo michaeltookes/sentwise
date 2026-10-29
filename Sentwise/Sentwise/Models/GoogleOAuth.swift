@@ -112,18 +112,32 @@ struct OAuthToken: Codable, Equatable {
 /// need to be re-verified to read claims. It is used only to learn which
 /// mailbox the user authorized — never as an authentication assertion.
 enum GoogleIDToken {
-    static func email(fromIDToken idToken: String) -> String? {
+    private static func claims(_ idToken: String) -> [String: Any]? {
         let segments = idToken.split(separator: ".", omittingEmptySubsequences: false)
         guard segments.count == 3,
-              let payload = Data(base64URLEncoded: String(segments[1])),
-              let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
-              let email = (object["email"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let payload = Data(base64URLEncoded: String(segments[1])) else { return nil }
+        return try? JSONSerialization.jsonObject(with: payload) as? [String: Any]
+    }
+
+    /// The signed-in mailbox address: `email`, or (Microsoft ID tokens) the
+    /// `preferred_username` claim when no `email` claim is present.
+    static func email(fromIDToken idToken: String) -> String? {
+        guard let object = claims(idToken) else { return nil }
+        let raw = (object["email"] as? String) ?? (object["preferred_username"] as? String)
+        guard let email = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
               !email.isEmpty, email.contains("@") else {
             return nil
         }
         if let verified = object["email_verified"] as? Bool, !verified { return nil }
         if let verified = object["email_verified"] as? String, verified.lowercased() != "true" { return nil }
         return email
+    }
+
+    /// The Entra tenant (`tid`) of a Microsoft ID token; nil for Google tokens.
+    static func tenantID(fromIDToken idToken: String) -> String? {
+        guard let tid = (claims(idToken)?["tid"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !tid.isEmpty else { return nil }
+        return tid
     }
 }
 

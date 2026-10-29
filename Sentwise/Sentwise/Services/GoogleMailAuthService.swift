@@ -87,6 +87,8 @@ enum MailConnectMethod: Equatable {
 @MainActor
 final class GoogleMailAuthService: ObservableObject {
     @Published private(set) var phase: GmailAuthPhase = .idle
+    /// Microsoft only: set when sign-in stopped for an administrator's approval (item 31, T31-5).
+    @Published var adminApproval: MicrosoftAdminApprovalRequest?
 
     private(set) var coordinator: GmailAuthCoordinator?
     /// Independent of `coordinator` (and of client availability).
@@ -144,6 +146,9 @@ final class GoogleMailAuthService: ObservableObject {
 
     var isAvailable: Bool { coordinator != nil }
 
+    /// The installed engine's OAuth client id (nil when none is installed).
+    var clientID: String? { coordinator?.clientID }
+
     /// Runs the browser sign-in. Cancellable through `cancelSignIn()`.
     func signIn(loginHint: String? = nil, requireHintMatch: Bool = false) async throws -> GmailAuthorization {
         guard let coordinator else { throw GmailAuthError.notConfigured }
@@ -155,7 +160,18 @@ final class GoogleMailAuthService: ObservableObject {
             signInTask = nil
             pendingLoginHint = nil
         }
-        return try await task.value
+        let authorization = try await task.value
+        signInTimes[SavedMailAccount.normalizedEmail(authorization.email)] = Date()
+        return authorization
+    }
+
+    /// When each mailbox last finished a browser sign-in in this run (not
+    /// persisted): lets a failure right after sign-in be told from an old grant.
+    private var signInTimes: [String: Date] = [:]
+
+    /// Seconds since `email` last signed in during this run; a day when unknown.
+    func signInAge(for email: String) -> TimeInterval {
+        signInTimes[SavedMailAccount.normalizedEmail(email)].map { Date().timeIntervalSince($0) } ?? 86_400
     }
 
     /// Whether a browser sign-in is pending.
@@ -296,6 +312,11 @@ struct GoogleOAuthMailProvider: MailProvider {
     let base: MailProvider
     let auth: GoogleMailAuthService
 
+    /// What the user signed in with, for failure details (the same decorator
+    /// serves the Microsoft stack, item 31).
+    private var isMicrosoft: Bool { auth.credentialMarker == MicrosoftMailCredential.marker }
+    private var providerLabel: String { isMicrosoft ? "Microsoft" : "Google" }
+
     func resolved(_ credentials: MailAccountCredentials) async throws -> MailAccountCredentials {
         try await resolvedWithGrant(credentials).credentials
     }
@@ -317,30 +338,31 @@ struct GoogleOAuthMailProvider: MailProvider {
         } catch GmailAuthError.superseded {
             // The grant changed mid-refresh twice over: retry on the next poll,
             // never pause the mailbox as an auth failure.
-            throw MailError.connectionFailed("Google sign-in changed while refreshing; will retry.")
+            throw MailError.connectionFailed("\(providerLabel) sign-in changed while refreshing; will retry.")
         } catch let error as GmailAuthError {
-            throw MailError.authenticationFailed(Self.detail(for: error))
+            throw MailError.authenticationFailed(Self.detail(for: error, microsoft: isMicrosoft))
         } catch OAuthError.temporarilyUnavailable(let status) {
             // Google outage or throttling: the grant is fine, so retry later
             // instead of pausing the mailbox as an auth failure.
-            throw MailError.connectionFailed("Couldn't refresh Google sign-in right now (HTTP \(status)).")
+            throw MailError.connectionFailed("Couldn't refresh \(providerLabel) sign-in right now (HTTP \(status)).")
         } catch let error as OAuthError {
-            throw MailError.authenticationFailed("\(GoogleMailCredential.failurePrefix) failed: \(error)")
+            throw MailError.authenticationFailed("\(providerLabel) sign-in failed: \(error)")
         } catch {
             // Token endpoint unreachable (offline, DNS, TLS): transient, retry later.
-            throw MailError.connectionFailed("Couldn't refresh Google sign-in. (\(error.localizedDescription))")
+            throw MailError.connectionFailed("Couldn't refresh \(providerLabel) sign-in. (\(error.localizedDescription))")
         }
         var resolved = credentials
         resolved.oauthAccessToken = token
         return (resolved, grant)
     }
 
-    static func detail(for error: GmailAuthError) -> String {
+    static func detail(for error: GmailAuthError, microsoft: Bool = false) -> String {
+        let prefix = microsoft ? MicrosoftMailCredential.failurePrefix : GoogleMailCredential.failurePrefix
         switch error {
         case .notConfigured:
-            return "\(GoogleMailCredential.failurePrefix) isn't available in this build — reconnect with an app password."
+            return "\(prefix) isn't available in this build — reconnect with an app password."
         default:
-            return GoogleMailCredential.reauthorizationDetail
+            return microsoft ? MicrosoftMailCredential.reauthorizationDetail : GoogleMailCredential.reauthorizationDetail
         }
     }
 
@@ -354,6 +376,7 @@ struct GoogleOAuthMailProvider: MailProvider {
     /// instead of pausing a mailbox that was just reauthorized.
     private func run<T>(
         _ credentials: MailAccountCredentials,
+        classifyFreshIMAPFailure: Bool = false,
         _ operation: (MailAccountCredentials) async throws -> T
     ) async throws -> T {
         let (resolved, grant) = try await resolvedWithGrant(credentials)
@@ -361,18 +384,29 @@ struct GoogleOAuthMailProvider: MailProvider {
             return try await operation(resolved)
         } catch MailError.authenticationFailed(let detail) where credentials.appPassword == auth.credentialMarker {
             if let grant, await auth.isGrantSuperseded(grant, for: credentials.email) {
-                throw MailError.connectionFailed("Google sign-in changed during this mail session; will retry.")
+                throw MailError.connectionFailed("\(providerLabel) sign-in changed during this mail session; will retry.")
             }
-            throw MailError.authenticationFailed("\(GoogleMailCredential.failurePrefix) was rejected by Gmail. (\(detail))")
+            let service = isMicrosoft ? "Outlook" : "Gmail"
+            let prefix = isMicrosoft ? MicrosoftMailCredential.failurePrefix : GoogleMailCredential.failurePrefix
+            let rejected = MailError.authenticationFailed("\(prefix) was rejected by \(service). (\(detail))")
+            // IMAP turned off for the mailbox rejects even a brand-new token the
+            // same way an expired grant would (item 31, T31-7).
+            guard isMicrosoft, classifyFreshIMAPFailure else { throw rejected }
+            let age = await auth.signInAge(for: credentials.email)
+            throw MailboxProtocolMapping.classifyIMAPAuthenticationFailure(rejected, tokenAge: age)
         }
     }
 
     func verifyConnection(_ credentials: MailAccountCredentials) async throws {
-        try await run(credentials) { try await base.verifyConnection($0) }
+        try await run(credentials, classifyFreshIMAPFailure: true) { try await base.verifyConnection($0) }
     }
 
     func verifyAndDiscover(_ credentials: MailAccountCredentials) async throws -> MailboxNaming? {
-        try await run(credentials) { try await base.verifyAndDiscover($0) }
+        try await run(credentials, classifyFreshIMAPFailure: true) { try await base.verifyAndDiscover($0) }
+    }
+
+    func probeSMTPAuthentication(_ credentials: MailAccountCredentials) async throws {
+        try await run(credentials) { try await base.probeSMTPAuthentication($0) }
     }
 
     func fetchRecentMessages(_ credentials: MailAccountCredentials, mailbox: Mailbox, limit: Int) async throws -> [MailMessage] {

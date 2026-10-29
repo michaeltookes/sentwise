@@ -37,6 +37,7 @@ extension AppState {
         credentials: MailAccountCredentials,
         messageSurface: TransientMessageSurface = .shared
     ) {
+        notePreservedMicrosoftFailure(error, credentials: credentials) // item 31
         // App-password/admin guidance never applies to a Google sign-in (item 104).
         guard case let MailError.authenticationFailed(serverText) = error,
               !GoogleMailCredential.isGoogleSignIn(credentials) else {

@@ -93,22 +93,11 @@ struct EmailAccountSettingsView: View {
                     Text("Connected").foregroundStyle(.green)
                 }
                 LabeledContent("Account") {
-                    Text(appState.mailEmail + (appState.activeAccountUsesGoogleSignIn ? " · Signed in with Google" : ""))
+                    Text(appState.mailEmail + (appState.activeAccountUsesGoogleSignIn ? " · Signed in with Google"
+                        : appState.activeAccountUsesMicrosoftSignIn ? " · Signed in with Microsoft" : ""))
                         .foregroundStyle(.secondary)
                 }
-                if appState.activeAccountUsesGoogleSignIn && appState.isGoogleSignInAvailable {
-                    GoogleSignInButtonBlock(
-                        auth: appState.googleMailAuth,
-                        loginHint: appState.mailEmail,
-                        requireHintMatch: true,
-                        messageSurface: .settings,
-                        shouldApplyResult: { [email = appState.mailEmail, sessionID = addAccountSession.id] _ in
-                            self.appState.activeAccountUsesGoogleSignIn && self.appState.mailEmail == email
-                                && self.addAccountSession.accepts(sessionID)
-                        },
-                        onConnected: {}
-                    )
-                }
+                ActiveMailboxReauth(sessionID: addAccountSession.id) { self.addAccountSession.accepts($0) }
                 Button("Disconnect", role: .destructive) {
                     showDisconnectConfirmation = true
                 }
@@ -323,6 +312,7 @@ struct EmailAccountSettingsView: View {
         addAccountSession.end()
         // A Google sign-in started from this form is abandoned with it.
         appState.googleMailAuth.cancelSignIn()
+        appState.cancelMicrosoftSignIn()
         appState.setConnectionError(nil, for: .settings)
         appState.clearWorkspaceAuthGuidance(for: .settings)
         newAccountForm.resetForNewAccount()
@@ -483,6 +473,11 @@ extension EmailAccountSettingsView {
             }
             if appState.savedAccountNeedsGoogleReauth(account) {
                 SavedGoogleMailboxReconnect(email: account.email) { [sessionID = addAccountSession.id] _ in
+                    self.addAccountSession.accepts(sessionID)
+                }
+            }
+            if appState.savedAccountNeedsMicrosoftReauth(account) {
+                SavedMicrosoftMailboxReconnect(email: account.email) { [sessionID = addAccountSession.id] _ in
                     self.addAccountSession.accepts(sessionID)
                 }
             }

@@ -261,6 +261,15 @@ final class FakeAppMailProvider: MailProvider, @unchecked Sendable {
     }
 
     var discoveredNaming: MailboxNaming? // reported by "discovery" (item 31, T31-8)
+    /// Scripted SMTP AUTH-only probe outcome (item 31, T31-7).
+    var probeResult: Result<Void, Error> = .success(())
+    private(set) var probeCallCount = 0
+    private(set) var lastProbeCredentials: MailAccountCredentials?
+    func probeSMTPAuthentication(_ credentials: MailAccountCredentials) async throws {
+        probeCallCount += 1
+        lastProbeCredentials = credentials
+        try probeResult.get()
+    }
     func verifyConnection(_ credentials: MailAccountCredentials) async throws {
         lastCredentials = credentials
         try result.get()
@@ -459,42 +468,4 @@ final class SuspendedBodyMailProvider: MailProvider, @unchecked Sendable {
     func appendMessage(
         _ credentials: MailAccountCredentials, mailbox: Mailbox, rfc822: Data, flags: [MailFlag]
     ) async throws {}
-}
-
-final class AppStateFailingSecretStore: SecretStore {
-    var failOnValue: Set<SecretKey> = []
-    var failOnSet: SecretKey?
-    var failOnRemove: SecretKey?
-    private var storage: [String: String]
-
-    init(seed: [SecretKey: String] = [:]) {
-        storage = seed.reduce(into: [:]) { result, item in
-            result[item.key.rawValue] = item.value
-        }
-    }
-
-    func set(_ value: String, for key: SecretKey) throws {
-        if failOnSet == key {
-            throw KeychainError.unexpectedStatus(errSecInteractionNotAllowed)
-        }
-        storage[key.rawValue] = value
-    }
-
-    func value(for key: SecretKey) throws -> String? {
-        if failOnValue.contains(key) {
-            throw KeychainError.unexpectedStatus(errSecInteractionNotAllowed)
-        }
-        return storage[key.rawValue]
-    }
-
-    func remove(_ key: SecretKey) throws {
-        if failOnRemove == key {
-            throw KeychainError.unexpectedStatus(errSecInteractionNotAllowed)
-        }
-        storage[key.rawValue] = nil
-    }
-
-    func removeAll() throws {
-        storage.removeAll()
-    }
 }

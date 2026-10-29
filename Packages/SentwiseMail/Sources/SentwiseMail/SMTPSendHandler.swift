@@ -33,6 +33,9 @@ final class SMTPSendHandler: ChannelInboundHandler {
     /// Builds the TLS handler inserted after a successful `STARTTLS` reply.
     private let makeTLSHandler: (() throws -> ChannelHandler)?
     private let decoder: SMTPResponseDecoder?
+    /// When true the exchange stops after a `235` (AUTH accepted): QUIT, no
+    /// MAIL FROM, no message. Used by the connect-time probe (item 31, T31-7).
+    private let authenticateOnly: Bool
 
     /// True once the transport is encrypted: always for implicit TLS, after the
     /// upgrade for STARTTLS. AUTH is never sent while this is false.
@@ -58,8 +61,10 @@ final class SMTPSendHandler: ChannelInboundHandler {
         security: SMTPSecurity = .implicitTLS,
         makeTLSHandler: (() throws -> ChannelHandler)? = nil,
         decoder: SMTPResponseDecoder? = nil,
+        authenticateOnly: Bool = false,
         complete: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
+        self.authenticateOnly = authenticateOnly
         self.security = security
         self.makeTLSHandler = makeTLSHandler
         self.decoder = decoder
@@ -123,6 +128,13 @@ final class SMTPSendHandler: ChannelInboundHandler {
                 return
             }
             guard expect(response, 235, context: context, auth: true) else { return }
+            if authenticateOnly {
+                settle(.success(()))
+                step = .quit
+                send("QUIT", context: context)
+                context.close(promise: nil)
+                return
+            }
             send("MAIL FROM:<\(envelope.sender)>", context: context)
             step = .mailFrom
         case .authXOAuth2Rejected(let detail):

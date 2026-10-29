@@ -15,6 +15,28 @@ extension IMAPMailProvider {
             throw MailError.commandFailed("The message has no recipients.")
         }
 
+        try await runSMTP(credentials, rfc822: rfc822, envelope: envelope, authenticateOnly: false)
+    }
+
+    /// Connect-time probe (item 31, T31-7): connect, upgrade (STARTTLS) when the
+    /// account asks for it, authenticate (XOAUTH2 or login), QUIT. No mail is sent.
+    /// SMTP AUTH being disabled for the mailbox surfaces as `.mailboxProtocolDisabled`.
+    public func probeSMTPAuthentication(_ credentials: MailAccountCredentials) async throws {
+        guard credentials.isComplete else { throw MailError.incompleteCredentials }
+        try await runSMTP(
+            credentials,
+            rfc822: Data(),
+            envelope: SMTPEnvelope(sender: credentials.email, recipients: []),
+            authenticateOnly: true
+        )
+    }
+
+    private func runSMTP(
+        _ credentials: MailAccountCredentials,
+        rfc822: Data,
+        envelope: SMTPEnvelope,
+        authenticateOnly: Bool
+    ) async throws {
         let attempts = ChannelPromiseTracker<Void>()
         // Settle every tracked promise on exit — including losing Happy Eyeballs
         // candidates that never became active — so none is deallocated
@@ -44,6 +66,7 @@ extension IMAPMailProvider {
                             try NIOSSLClientHandler(context: sslContext, serverHostname: host)
                         },
                         decoder: decoder,
+                        authenticateOnly: authenticateOnly,
                         complete: complete
                     )
                     var handlers: [ChannelHandler] = []

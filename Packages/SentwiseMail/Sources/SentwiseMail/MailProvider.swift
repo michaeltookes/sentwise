@@ -166,6 +166,12 @@ public protocol MailProvider: Sendable {
         rfc822: Data,
         envelope: SMTPEnvelope
     ) async throws
+
+    /// Connect-time check that SMTP submission accepts these credentials
+    /// (connect, STARTTLS when asked, AUTH, QUIT) without sending any mail.
+    /// A mailbox with SMTP AUTH turned off throws `.mailboxProtocolDisabled(.smtp, _)`
+    /// (item 31, T31-7).
+    func probeSMTPAuthentication(_ credentials: MailAccountCredentials) async throws
 }
 
 /// The SMTP-level addressing for a message: the return-path sender and the
@@ -226,6 +232,10 @@ public extension MailProvider {
     ) async throws {
         throw MailError.commandFailed("This provider does not support sending mail.")
     }
+
+    /// Default: nothing to probe. `IMAPMailProvider` overrides this with the
+    /// real SMTP AUTH-only exchange.
+    func probeSMTPAuthentication(_ credentials: MailAccountCredentials) async throws {}
 
     /// Default: searching is unsupported. `IMAPMailProvider` overrides this so
     /// other conformers (test doubles, non-IMAP backends) inherit a clear

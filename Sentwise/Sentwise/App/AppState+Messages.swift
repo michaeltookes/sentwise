@@ -41,9 +41,9 @@ extension AppState {
         case MailError.starttlsFailed(let detail):
             return "Couldn't secure the connection to the mail server. (\(detail))"
         case MailError.mailboxProtocolDisabled(.imap, _):
-            return "IMAP access is off for this mailbox. Ask your IT administrator to turn it on."
+            return MicrosoftSignInCopy.protocolDisabledMessage(.imap)
         case MailError.mailboxProtocolDisabled(.smtp, _):
-            return "Sending (SMTP AUTH) is off for this mailbox. Ask your IT administrator to turn it on."
+            return MicrosoftSignInCopy.protocolDisabledMessage(.smtp)
         default:
             return nil
         }
@@ -52,7 +52,8 @@ extension AppState {
     /// A Google sign-in failure (item 104) already carries its own copy; only
     /// the app-password path gets the "check your app password" hint.
     private static func authenticationFailureMessage(_ detail: String) -> String {
-        if GoogleMailCredential.isGoogleSignInFailureDetail(detail) {
+        if GoogleMailCredential.isGoogleSignInFailureDetail(detail)
+            || MicrosoftMailCredential.isMicrosoftSignInFailureDetail(detail) {
             return detail
         }
         return "Sign-in failed — check your email and app password. (\(detail))"

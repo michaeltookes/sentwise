@@ -18,9 +18,12 @@ extension AppState {
     static func makeMailStack(
         base: MailProvider?,
         secrets: SecretStore
-    ) -> (GoogleMailAuthService, MailProvider) {
-        let auth = GoogleMailAuthService.live(secrets: secrets)
-        return (auth, GoogleOAuthMailProvider(base: base ?? LiveMailProvider.imap(), auth: auth))
+    ) -> (GoogleMailAuthService, GoogleMailAuthService, MailProvider) {
+        let google = GoogleMailAuthService.live(secrets: secrets)
+        let microsoft = GoogleMailAuthService.liveMicrosoft(secrets: secrets)
+        let googleWrapped = GoogleOAuthMailProvider(base: base ?? LiveMailProvider.imap(), auth: google)
+        // The same decorator serves Microsoft: it matches its own credential marker.
+        return (google, microsoft, GoogleOAuthMailProvider(base: googleWrapped, auth: microsoft))
     }
 
     /// Whether this build can offer Google sign-in. Off when no client is
@@ -151,6 +154,7 @@ extension AppState {
     /// Google sign-in is canceled, and the busy flag passes to the new attempt.
     func beginMailConnectionAttempt() -> UInt64 {
         isConnecting = false
+        microsoftMailAuth.cancelSignIn()
         return googleMailAuth.beginConnectionAttempt()
     }
 
@@ -176,27 +180,38 @@ extension AppState {
     func cancelGoogleOperationsForErase() {
         googleMailAuth.cancelSignIn()
         googleMailAuth.invalidateAllTokenOperations()
+        microsoftMailAuth.cancelSignIn()
+        microsoftMailAuth.invalidateAllTokenOperations()
     }
 
     /// Lifts the erase-time suspension once the Keychain has been wiped.
     func resumeGoogleOperationsAfterErase() {
         googleMailAuth.resumeTokenOperations()
+        microsoftMailAuth.resumeTokenOperations()
     }
 
-    /// Deletes a mailbox's Google token as a rollbackable step of removing the
-    /// mailbox: done before the account record goes, so a Keychain failure
-    /// aborts the removal instead of orphaning the refresh token.
-    func removeGoogleTokenForAccountRemoval(_ email: String) throws -> OAuthToken? {
-        try googleMailAuth.removeLocalToken(email)
+    /// Deletes a mailbox's OAuth token (Google or Microsoft, whichever service
+    /// holds one; works without a configured client id) as a rollbackable step
+    /// of removing the mailbox: done before the account record goes, so a
+    /// Keychain failure aborts the removal instead of orphaning a refresh token.
+    func removeGoogleTokenForAccountRemoval(_ email: String) throws -> GoogleTokenRemoval {
+        let google = try googleMailAuth.removeLocalToken(email)
+        do {
+            return GoogleTokenRemoval(email: email, token: google, microsoftToken: try microsoftMailAuth.removeLocalToken(email))
+        } catch {
+            if let google { try? googleMailAuth.restoreLocalToken(google, for: email) }
+            throw error
+        }
     }
 
     /// Rolls back `removeGoogleTokenForAccountRemoval` when a later step fails.
-    func restoreGoogleTokenAfterFailedRemoval(_ token: OAuthToken?, email: String) {
-        guard let token else { return }
+    func restoreGoogleTokenAfterFailedRemoval(_ removal: GoogleTokenRemoval?) {
+        guard let removal else { return }
         do {
-            try googleMailAuth.restoreLocalToken(token, for: email)
+            if let token = removal.token { try googleMailAuth.restoreLocalToken(token, for: removal.email) }
+            if let token = removal.microsoftToken { try microsoftMailAuth.restoreLocalToken(token, for: removal.email) }
         } catch {
-            logger.error("Couldn't restore a Google token after a failed removal: \(error.localizedDescription)")
+            logger.error("Couldn't restore an OAuth token after a failed removal: \(error.localizedDescription)")
         }
     }
 
@@ -208,8 +223,8 @@ extension AppState {
         messageSurface: TransientMessageSurface
     ) -> GoogleTokenRemoval? {
         let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, savedAccountUsesGoogleSignIn(trimmed) else {
-            return GoogleTokenRemoval(email: trimmed, token: nil)
+        guard !trimmed.isEmpty, savedAccountUsesGoogleSignIn(trimmed) || savedAccountUsesMicrosoftSignIn(trimmed) else {
+            return GoogleTokenRemoval(email: trimmed, token: nil, microsoftToken: nil)
         }
         return takeGoogleToken(email: trimmed, messageSurface: messageSurface)
     }
@@ -222,16 +237,48 @@ extension AppState {
         newSecret: String,
         messageSurface: TransientMessageSurface
     ) -> GoogleTokenRemoval? {
-        guard let previousSecret, GoogleMailCredential.isMarker(previousSecret),
-              !GoogleMailCredential.isMarker(newSecret) else {
-            return GoogleTokenRemoval(email: email, token: nil)
+        guard let previousSecret else { return GoogleTokenRemoval(email: email, token: nil, microsoftToken: nil) }
+        let previousIsGoogle = GoogleMailCredential.isMarker(previousSecret)
+        let previousIsMicrosoft = MicrosoftMailCredential.isMarker(previousSecret)
+        let newIsGoogle = GoogleMailCredential.isMarker(newSecret)
+        let newIsMicrosoft = MicrosoftMailCredential.isMarker(newSecret)
+        guard previousIsGoogle || previousIsMicrosoft else {
+            return GoogleTokenRemoval(email: email, token: nil, microsoftToken: nil)
         }
-        return takeGoogleToken(email: email, messageSurface: messageSurface)
+        if !newIsGoogle && !newIsMicrosoft {
+            return takeGoogleToken(email: email, messageSurface: messageSurface)
+        }
+        // OAuth to OAuth: same provider is a reauthentication (keep the fresh
+        // token); a different provider drops only the previous provider's token.
+        if previousIsGoogle && newIsMicrosoft {
+            return takeOneToken(email: email, messageSurface: messageSurface) {
+                GoogleTokenRemoval(email: email, token: try self.googleMailAuth.removeLocalToken(email), microsoftToken: nil)
+            }
+        }
+        if previousIsMicrosoft && newIsGoogle {
+            return takeOneToken(email: email, messageSurface: messageSurface) {
+                GoogleTokenRemoval(email: email, token: nil, microsoftToken: try self.microsoftMailAuth.removeLocalToken(email))
+            }
+        }
+        return GoogleTokenRemoval(email: email, token: nil, microsoftToken: nil)
+    }
+
+    private func takeOneToken(
+        email: String,
+        messageSurface: TransientMessageSurface,
+        remove: () throws -> GoogleTokenRemoval
+    ) -> GoogleTokenRemoval? {
+        do {
+            return try remove()
+        } catch {
+            setConnectionError(Self.keychainMessage(action: "remove", error: error), for: messageSurface)
+            return nil
+        }
     }
 
     private func takeGoogleToken(email: String, messageSurface: TransientMessageSurface) -> GoogleTokenRemoval? {
         do {
-            return GoogleTokenRemoval(email: email, token: try removeGoogleTokenForAccountRemoval(email))
+            return try removeGoogleTokenForAccountRemoval(email)
         } catch {
             setConnectionError(Self.keychainMessage(action: "remove", error: error), for: messageSurface)
             return nil
@@ -240,24 +287,26 @@ extension AppState {
 
     /// Puts a taken token back after a later step of the operation failed.
     func rollBack(_ removal: GoogleTokenRemoval) {
-        restoreGoogleTokenAfterFailedRemoval(removal.token, email: removal.email)
+        restoreGoogleTokenAfterFailedRemoval(removal)
     }
 
     /// Finishes a successful operation: revokes the taken token's grant.
     func complete(_ removal: GoogleTokenRemoval) {
-        revokeRemovedGoogleToken(removal.token)
+        revokeRemovedGoogleToken(removal)
     }
 
     /// Revokes a removed mailbox's grant at Google (best effort, tracked).
-    func revokeRemovedGoogleToken(_ token: OAuthToken?) {
-        guard let token else { return }
-        googleMailAuth.revokeRemovedToken(token)
+    func revokeRemovedGoogleToken(_ removal: GoogleTokenRemoval?) {
+        guard let removal else { return }
+        if let token = removal.token { googleMailAuth.revokeRemovedToken(token) }
+        if let token = removal.microsoftToken { microsoftMailAuth.revokeRemovedToken(token) }
     }
 
     /// A saved mailbox was removed: cancel/invalidate any Google sign-in that
     /// could otherwise restore it when the browser comes back.
     func noteGoogleAccountRemoved(_ email: String) {
         googleMailAuth.noteAccountRemoved(email)
+        microsoftMailAuth.noteAccountRemoved(email)
     }
 }
 
@@ -265,4 +314,5 @@ extension AppState {
 struct GoogleTokenRemoval {
     let email: String
     let token: OAuthToken?
+    let microsoftToken: OAuthToken?
 }

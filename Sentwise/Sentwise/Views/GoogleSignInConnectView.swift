@@ -20,14 +20,42 @@ struct GoogleOrAppPasswordConnect<AppPasswordForm: View>: View {
     @ViewBuilder let appPasswordForm: () -> AppPasswordForm
 
     @State private var showsAppPasswordForm = false
+    /// MX detection says the typed work domain is Microsoft 365 hosted.
+    @State private var detectedMicrosoft365Domain: String?
 
-    private var leadsWithGoogle: Bool {
-        appState.recommendedConnectMethod(email: email, host: host) == .googleSignIn
+    private var layout: MailConnectLayout {
+        let isDetected = detectedMicrosoft365Domain != nil
+            && detectedMicrosoft365Domain == EmailProviderKind.validDomain(of: email)
+        return appState.mailConnectLayout(email: email, host: host, isMicrosoft365Detected: isDetected)
     }
 
     var body: some View {
-        if appState.isGoogleSignInAvailable {
-            if leadsWithGoogle {
+        content.task(id: email) {
+            // A cancelled lookup (the address changed) must never publish.
+            let domain = await appState.microsoft365HostedDomain(email: email)
+            guard !Task.isCancelled else { return }
+            detectedMicrosoft365Domain = domain
+        }
+    }
+
+    @ViewBuilder private func microsoftBlock(_ layout: MailConnectLayout) -> some View {
+        if layout.showsMicrosoft || layout.showsMicrosoftNotConfigured {
+            MicrosoftSignInButtonBlock(
+                auth: appState.microsoftMailAuth,
+                loginHint: email,
+                messageSurface: messageSurface,
+                shouldApplyResult: shouldApplyResult,
+                onConnected: onConnected
+            )
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        let layout = layout
+        if layout.showsGoogle || layout.showsMicrosoft || layout.showsMicrosoftNotConfigured
+            || appState.isGoogleSignInAvailable {
+            if layout.microsoftLeads { microsoftBlock(layout) }
+            if layout.showsGoogle {
                 GoogleSignInButtonBlock(
                     auth: auth,
                     loginHint: email,
@@ -36,10 +64,12 @@ struct GoogleOrAppPasswordConnect<AppPasswordForm: View>: View {
                     onConnected: onConnected
                 )
             }
+            if !layout.microsoftLeads { microsoftBlock(layout) }
+            let leads = layout.showsGoogle || layout.showsMicrosoft
             DisclosureGroup(
-                leadsWithGoogle ? "Use an app password instead" : "Connect with an app password",
+                leads ? "Use an app password instead" : "Connect with an app password",
                 isExpanded: Binding(
-                    get: { showsAppPasswordForm || !leadsWithGoogle },
+                    get: { showsAppPasswordForm || layout.appPasswordExpanded },
                     set: { showsAppPasswordForm = $0 }
                 )
             ) {
