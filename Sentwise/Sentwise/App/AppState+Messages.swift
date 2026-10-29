@@ -21,12 +21,6 @@ extension AppState {
         case MailError.sendInterruptedAfterSubmission(let detail):
             return "The connection dropped while sending — the message may already have gone out. "
                 + "Check your Sent mail before resending. (\(detail))"
-        case MailError.starttlsNotOffered:
-            return "The mail server does not offer a secure connection, so Sentwise did not send your sign-in."
-        case MailError.starttlsFailed(let detail):
-            return "Couldn't secure the connection to the mail server. (\(detail))"
-        case MailError.mailboxProtocolDisabled(let detail):
-            return "Sending mail with this account is turned off by its administrator. (\(detail))"
         case MailError.resultTooLarge:
             return "Too many messages matched to list at once. Narrow your search "
                 + "(a specific sender, keyword, or date) and try again."
@@ -35,7 +29,21 @@ extension AppState {
         case KeychainError.dataEncodingFailed:
             return "Keychain could not encode the app password."
         default:
-            return error.localizedDescription
+            return transportSecurityMessage(for: error) ?? error.localizedDescription
+        }
+    }
+
+    /// Messages for the SMTP STARTTLS and disabled-protocol failures (item 31 T31-6).
+    private static func transportSecurityMessage(for error: Error) -> String? {
+        switch error {
+        case MailError.starttlsNotOffered:
+            return "The mail server does not offer a secure connection, so Sentwise did not send your sign-in."
+        case MailError.starttlsFailed(let detail):
+            return "Couldn't secure the connection to the mail server. (\(detail))"
+        case MailError.mailboxProtocolDisabled(let detail):
+            return "Sending mail with this account is turned off by its administrator. (\(detail))"
+        default:
+            return nil
         }
     }
 

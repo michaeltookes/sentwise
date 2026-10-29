@@ -159,7 +159,8 @@ final class SettingsTests: XCTestCase {
     }
 
     func testCurrentAndRecentSchemaVersions() {
-        XCTAssertEqual(Settings.currentSchemaVersion, 23)
+        XCTAssertEqual(Settings.currentSchemaVersion, 24)
+        XCTAssertEqual(Settings.accountTransportSchemaVersion, 24)
         XCTAssertEqual(Settings.byokParkedSchemaVersion, 20)
         XCTAssertEqual(Settings.voicePerAccountSchemaVersion, 21)
         XCTAssertEqual(Settings.clerkProductionCutoverSchemaVersion, 22)

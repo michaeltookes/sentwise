@@ -473,7 +473,7 @@ final class AppStateInboxDraftingPolicyTests: XCTestCase {
         let persistence = AppStateMemoryPersistence(settings: loaded)
         let migrated = AppState.fullyMigratedSettings(loaded: loaded, secrets: secrets, persistence: persistence)
 
-        XCTAssertEqual(migrated.schemaVersion, Settings.inboxDraftingPolicySchemaVersion)
+        XCTAssertEqual(migrated.schemaVersion, Settings.accountTransportSchemaVersion)
         XCTAssertFalse(migrated.inboxDrafting.autoDraftEnabled, "existing installs default to draft-on-click")
         XCTAssertTrue(migrated.inboxDrafting.autoDraftSenders.isEmpty, "allowlist entries are not promoted to auto-draft")
         XCTAssertEqual(migrated.senderAllowlist.map(\.pattern), ["boss@work.com"], "the allowlist itself is preserved")

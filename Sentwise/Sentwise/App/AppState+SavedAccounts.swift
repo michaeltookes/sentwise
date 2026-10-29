@@ -224,10 +224,17 @@ extension AppState {
 
     /// Inserts or updates the saved-account entry for these connection details.
     func upsertSavedAccount(email: String, host: String, port: Int) {
-        let account = SavedMailAccount(email: email, host: host, port: port)
+        var account = SavedMailAccount(email: email, host: host, port: port)
         guard !account.id.isEmpty else { return }
         if let index = savedAccounts.firstIndex(where: { $0.id == account.id }) {
-            if savedAccounts[index] != account { savedAccounts[index] = account }
+            // Keep the per-account transport fields (item 31 T31-6): this call only
+            // knows the IMAP details and must not erase the SMTP/auth choice.
+            let existing = savedAccounts[index]
+            account.smtpHost = existing.smtpHost
+            account.smtpPort = existing.smtpPort
+            account.smtpSecurity = existing.smtpSecurity
+            account.authProvider = existing.authProvider
+            if existing != account { savedAccounts[index] = account }
         } else {
             savedAccounts.append(account)
         }

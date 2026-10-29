@@ -70,11 +70,74 @@ extension AppState {
         guard clerkMigrated.schemaVersion >= Settings.clerkProductionCutoverSchemaVersion else {
             return clerkMigrated
         }
-        return migratedInboxDraftingPolicySettings(
+        return migratedPostClerkSettings(
             clerkMigrated,
             originalSchemaVersion: loaded.schemaVersion,
+            secrets: secrets,
             persistence: persistence
         )
+    }
+
+    /// The additive steps after the Clerk cutover (inbox-drafting policy, then the
+    /// per-account transport fields); the last one persists.
+    private static func migratedPostClerkSettings(
+        _ settings: Settings,
+        originalSchemaVersion: Int,
+        secrets: SecretStore,
+        persistence: PersistenceProvider
+    ) -> Settings {
+        let draftingMigrated = migratedInboxDraftingPolicySettings(
+            settings,
+            originalSchemaVersion: originalSchemaVersion,
+            persistence: persistence,
+            targetSchemaVersion: Settings.accountTransportSchemaVersion - 1,
+            shouldPersist: false
+        )
+        return migratedAccountTransportSettings(
+            draftingMigrated,
+            originalSchemaVersion: originalSchemaVersion,
+            secrets: secrets,
+            persistence: persistence
+        )
+    }
+
+    /// Terminal launch migration for the per-account transport fields (item 31
+    /// T31-6). Additive: `smtpHost`/`smtpPort`/`smtpSecurity` stay `nil` (meaning
+    /// the Google implicit-TLS default every existing account already uses), and
+    /// `authProvider` is back-filled from the account's Keychain slot so a
+    /// Google sign-in account is recorded as `"google"` and an app-password
+    /// account as `"password"`. An account whose slot cannot be read is left
+    /// `nil` rather than guessed. Google behavior is unchanged either way.
+    static func migratedAccountTransportSettings(
+        _ settings: Settings,
+        originalSchemaVersion: Int,
+        secrets: SecretStore,
+        persistence: PersistenceProvider,
+        targetSchemaVersion: Int = Settings.accountTransportSchemaVersion,
+        shouldPersist: Bool = true
+    ) -> Settings {
+        guard originalSchemaVersion < Settings.accountTransportSchemaVersion else { return settings }
+        var migrated = settings
+        migrated.savedAccounts = settings.savedAccounts.map { account in
+            guard account.authProvider == nil else { return account }
+            var updated = account
+            let slot = (try? secrets.value(for: .mailAppPassword(email: account.email))) ?? nil
+            if let slot, !slot.isEmpty {
+                updated.authProvider = GoogleMailCredential.isMarker(slot)
+                    ? SavedMailAccount.authProviderGoogle
+                    : SavedMailAccount.authProviderPassword
+            }
+            return updated
+        }
+        migrated.schemaVersion = targetSchemaVersion
+        if shouldPersist, migrated != settings {
+            do {
+                try persistence.saveSettingsSync(migrated)
+            } catch {
+                logger.error("Failed to persist account-transport migration: \(error.localizedDescription)")
+            }
+        }
+        return migrated
     }
 
     /// Terminal launch migration for the tier-gated inbox-drafting policy (item

@@ -19,7 +19,7 @@ enum SendBehavior: String, CaseIterable, Equatable {
 struct Settings: Codable, Equatable {
 
     /// The current settings schema version.
-    static let currentSchemaVersion = 23
+    static let currentSchemaVersion = 24
 
     /// Schema version that introduced the persisted onboarding completion flag.
     static let onboardingCompletionSchemaVersion = 6
@@ -107,6 +107,15 @@ struct Settings: Codable, Equatable {
     /// draft-on-click rather than silently continuing the pre-108 auto-generate
     /// behavior, and no allowlist entry is promoted to the auto-draft list.
     static let inboxDraftingPolicySchemaVersion = 23
+
+    /// Schema version that added the per-account transport fields on
+    /// `SavedMailAccount` (`smtpHost`, `smtpPort`, `smtpSecurity`,
+    /// `authProvider`; item 31 T31-6). Purely additive: old records decode the
+    /// new fields as `nil`, which means implicit TLS on the provider default
+    /// host. The launch migration only back-fills `authProvider` = `"google"`
+    /// for accounts whose Keychain slot holds the Google sign-in marker, and
+    /// `"password"` for accounts holding an app password.
+    static let accountTransportSchemaVersion = 24
 
     /// The default auto-send undo window, in seconds (item 23). Zero disables it.
     static let defaultSendDelaySeconds = 10
