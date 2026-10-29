@@ -467,3 +467,9 @@ Completed backlog items, most recent first. Item numbers are the stable IDs from
 **Resolved**: 2026-10-28 (sentwise PR 133, merged main@88a31fd9b2881fe06cb2cd768315c3696780eb08)
 **Description**: `OAuthProviderConfiguration` introduced; the OAuth coordinator, token service, credential store and mail-provider wrapper now take a configuration instead of hard-coded Google values. The Google Keychain prefix stays `gmail`. No behaviour change; Google tests green.
 **Note**: Item 31 stays OPEN. T31-2 through T31-10 remain in `docs/backlog.md`.
+
+### 31 T31-6 and T31-8: SMTP STARTTLS transport and Microsoft mailbox naming (item 31 stays open)
+**Resolved**: 2026-10-28 (sentwise PR 134, squash-merged to main@ceaafc30cf8eedd719c5ed71bc6cc18d6d80c6bb; three Codex rounds)
+**Description**: T31-6: `SMTPSecurity.startTLS` added; AUTH is refused without encryption, with errors `starttlsNotOffered`, `starttlsFailed` and `mailboxProtocolDisabled`. Saved accounts gain `smtpHost`/`smtpPort`/`smtpSecurity`/`authProvider` (accountTransportSchemaVersion 23→24, additive). Overrides are carried through every credential path and cleared on reverify with defaults. Replies are buffered past the STARTTLS 220 rejection, and EHLO is gated on handshake completion. T31-8: `MailboxNaming.microsoft` plus SPECIAL-USE discovery (LIST/XLIST, modified UTF-7, literal names) runs at IMAP verification and is persisted in an optional `mailboxNaming` field used by APPEND, fetch and cleanup. Also: SMTP reply decoder CRLF fix; `SMTPSend.swift` split into three files.
+**Open on device**: TC-M6-04..07 and TC-M6-11 still need a Microsoft 365 mailbox; TC-M6-03/08 Google regression pending.
+**Note**: Item 31 stays OPEN. T31-2, T31-3, T31-4, T31-5, T31-7, T31-9 and T31-10 remain in `docs/backlog.md`.
