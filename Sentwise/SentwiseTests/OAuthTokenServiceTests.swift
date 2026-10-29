@@ -117,8 +117,8 @@ final class OAuthTokenServiceTests: XCTestCase {
 
     func testServerErrorIsSurfaced() async {
         let (service, _) = service(json("""
-        {"error":"invalid_grant","error_description":"Token has been expired or revoked."}
-        """, status: 400))
+        {"error":"invalid_client","error_description":"The OAuth client was not found."}
+        """, status: 401))
 
         do {
             _ = try await service.refresh(refreshToken: "rt", client: client, now: now)
@@ -126,9 +126,71 @@ final class OAuthTokenServiceTests: XCTestCase {
         } catch {
             XCTAssertEqual(
                 error as? OAuthError,
+                .server(code: "invalid_client", description: "The OAuth client was not found.")
+            )
+        }
+    }
+
+    func testInvalidGrantOnRefreshMapsToReauthenticationButNotOnExchange() async {
+        let body = """
+        {"error":"invalid_grant","error_description":"Token has been expired or revoked."}
+        """
+        let (refreshService, _) = service(json(body, status: 400))
+        do {
+            _ = try await refreshService.refresh(refreshToken: "rt", client: client, now: now)
+            XCTFail("expected an error")
+        } catch {
+            XCTAssertEqual(error as? OAuthError, .reauthenticationRequired)
+        }
+
+        // On the code exchange invalid_grant means a bad or reused code, not a lost grant.
+        let (exchangeService, _) = service(json(body, status: 400))
+        do {
+            _ = try await exchangeService.exchange(
+                code: "c", verifier: "v", client: client,
+                redirectURI: "uri", requestedScopes: GoogleOAuth.scopes, now: now
+            )
+            XCTFail("expected an error")
+        } catch {
+            XCTAssertEqual(
+                error as? OAuthError,
                 .server(code: "invalid_grant", description: "Token has been expired or revoked.")
             )
         }
+    }
+
+    func testMicrosoftAdminConsentErrorBodyMapsToAdminConsentRequired() async {
+        let (service, _) = service(json("""
+        {"error":"invalid_grant","error_description":"AADSTS65001: The user or administrator has not consented.",
+         "error_codes":[65001]}
+        """, status: 400))
+        do {
+            _ = try await service.exchange(
+                code: "c", verifier: "v", client: .microsoft(clientID: "client-id"),
+                redirectURI: "uri", requestedScopes: MicrosoftOAuth.scopes, now: now
+            )
+            XCTFail("expected an error")
+        } catch {
+            XCTAssertEqual(error as? OAuthError, .adminConsentRequired(tenantID: nil))
+        }
+    }
+
+    func testRotatedRefreshTokenIsReturnedAndTheNextRefreshUsesIt() async throws {
+        // Microsoft rotates the refresh token on every refresh; the old one must not be reused.
+        let transport = FakeTransport(response: json("{}", status: 400))
+        transport.responses = [
+            json(#"{"access_token":"at1","refresh_token":"rt-2","expires_in":3600,"scope":"s"}"#),
+            json(#"{"access_token":"at2","refresh_token":"rt-3","expires_in":3600,"scope":"s"}"#)
+        ]
+        let service = OAuthTokenService(transport: transport)
+        let microsoft = OAuthProviderConfiguration.microsoft(clientID: "client-id")
+
+        let first = try await service.refresh(refreshToken: "rt-1", client: microsoft, now: now)
+        XCTAssertEqual(first.refreshToken, "rt-2")
+        let second = try await service.refresh(refreshToken: try XCTUnwrap(first.refreshToken), client: microsoft, now: now)
+        XCTAssertEqual(second.refreshToken, "rt-3")
+        XCTAssertEqual(transport.requests.map { $0.fields["refresh_token"] }, ["rt-1", "rt-2"])
+        XCTAssertNil(transport.lastFields["client_secret"], "a public client never sends a secret")
     }
 
     func testMalformedSuccessBodyThrowsInvalidResponse() async {

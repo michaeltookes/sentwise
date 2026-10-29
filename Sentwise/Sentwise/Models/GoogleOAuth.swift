@@ -58,7 +58,7 @@ enum GoogleOAuthClientConfiguration {
         return clientID.hasSuffix(clientIDSuffix) && clientID.count > clientIDSuffix.count
     }
 
-    private static func isUnexpandedOrPlaceholder(_ value: String) -> Bool {
+    static func isUnexpandedOrPlaceholder(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty
             || trimmed.contains("$(")
@@ -147,6 +147,15 @@ enum OAuthError: Error, Equatable {
     /// (HTTP 429). Transient: the grant is still good, so callers retry later
     /// instead of asking the user to sign in again.
     case temporarilyUnavailable(httpStatus: Int)
+    /// The organization requires an administrator to approve the app (Microsoft
+    /// AADSTS65001, 90094, 90095, `consent_required`). `tenantID` is the Entra
+    /// tenant when the response carried one; the admin note falls back to the
+    /// address's domain. Not retryable: an administrator must act (item 31, T31-3).
+    case adminConsentRequired(tenantID: String?)
+    /// The stored grant can no longer be refreshed (`invalid_grant`,
+    /// `interaction_required`, Microsoft AADSTS50173 and friends): the user
+    /// must sign in again. Applies to Google `invalid_grant` too.
+    case reauthenticationRequired
 
     /// Whether an HTTP status from the token endpoint means "retry later"
     /// rather than "this request or grant is bad".

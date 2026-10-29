@@ -1,0 +1,5 @@
+// Copy to MicrosoftOAuth.local.xcconfig (git-ignored) to switch on
+// "Sign in with Microsoft" in local builds. See MicrosoftOAuth.xcconfig.
+// Placeholder only: the app treats this value as "not configured".
+
+SENTWISE_MICROSOFT_CLIENT_ID = YOUR_ENTRA_APPLICATION_CLIENT_ID

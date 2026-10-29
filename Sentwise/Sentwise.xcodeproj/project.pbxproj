@@ -26,6 +26,7 @@
 		AA00000000000000000000A0 /* Sentwise.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sentwise.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB0000000000000000000003 /* SentwiseTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SentwiseTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EE0000000000000000000001 /* GoogleOAuth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = GoogleOAuth.xcconfig; sourceTree = "<group>"; };
+		EE0000000000000000000002 /* MicrosoftOAuth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = MicrosoftOAuth.xcconfig; sourceTree = "<group>"; };
 		9A0000000000000000000001 /* QA.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = QA.xcconfig; sourceTree = "<group>"; };
 		9A0000000000000000000006 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -79,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				EE0000000000000000000001 /* GoogleOAuth.xcconfig */,
+				EE0000000000000000000002 /* MicrosoftOAuth.xcconfig */,
 				9A0000000000000000000001 /* QA.xcconfig */,
 				9A0000000000000000000006 /* Version.xcconfig */,
 			);

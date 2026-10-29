@@ -79,6 +79,7 @@ struct CredentialGuidance: Equatable {
         case .yahoo: return yahooGuidance
         case .aol: return aolGuidance
         case .icloud: return iCloudGuidance
+        case .microsoft: return microsoftGuidance
         }
     }
 
@@ -149,6 +150,24 @@ struct CredentialGuidance: Equatable {
         appPasswordDistinction: "Make sure this is an Apple app-specific password from "
             + "appleid.apple.com — not a Google app password. Both look like a grouped "
             + "16-character code."
+    )
+
+    /// Microsoft no longer supports app passwords for Basic-auth IMAP on
+    /// outlook.com, hotmail, live and msn. Consumer and work accounts both
+    /// connect through Microsoft sign-in (OAuth); until the Microsoft client id
+    /// is configured, say so rather than suggesting an app password
+    /// (docs/architecture/sign-in-first.md, sections 4.6 and 5).
+    static let microsoftGuidance = CredentialGuidance(
+        providerName: "Microsoft",
+        credentialName: "Microsoft sign-in",
+        steps: [
+            "Microsoft accounts connect with Sign in with Microsoft, not a password or app password.",
+            "Microsoft sign-in is not configured in this build yet, so this account cannot be connected here.",
+            "Check back after the next Sentwise update, or connect a Gmail, iCloud, Yahoo or AT&T mailbox meanwhile."
+        ],
+        url: nil,
+        appPasswordDistinction: "Microsoft no longer accepts app passwords for IMAP, so do not "
+            + "paste an Apple or Google app password here."
     )
 
     /// Fallback for unrecognized domains. IMAP password requirements vary, so

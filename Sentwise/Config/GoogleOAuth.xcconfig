@@ -19,3 +19,5 @@ SENTWISE_GOOGLE_CLIENT_ID =
 SENTWISE_GOOGLE_CLIENT_SECRET =
 
 #include? "GoogleOAuth.local.xcconfig"
+
+#include? "MicrosoftOAuth.xcconfig"

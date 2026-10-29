@@ -22,13 +22,16 @@ struct OAuthTokenService {
             "redirect_uri": redirectURI
         ]))
         return try token(
-            from: response, now: now, fallbackRefreshToken: nil,
+            from: response, phase: .exchange, now: now, fallbackRefreshToken: nil,
             fallbackScope: requestedScopes.joined(separator: " ")
         )
     }
 
     /// Refreshes an access token using a refresh token. Google does not return a
-    /// new refresh token on refresh, so the existing one is carried forward.
+    /// new refresh token on refresh, so the existing one is carried forward;
+    /// Microsoft rotates it, and the rotated token in the response replaces the
+    /// old one (the caller persists the returned token as a whole, so the old
+    /// refresh token is never used again).
     /// An omitted scope also carries forward the previously granted scopes.
     func refresh(
         refreshToken: String,
@@ -40,7 +43,10 @@ struct OAuthTokenService {
             "grant_type": "refresh_token",
             "refresh_token": refreshToken
         ]))
-        return try token(from: response, now: now, fallbackRefreshToken: refreshToken, fallbackScope: grantedScope)
+        return try token(
+            from: response, phase: .refresh, now: now,
+            fallbackRefreshToken: refreshToken, fallbackScope: grantedScope
+        )
     }
 
     /// Revokes a token at Google (refresh tokens revoke the whole grant).
@@ -70,6 +76,7 @@ struct OAuthTokenService {
 
     private func token(
         from response: HTTPResponse,
+        phase: OAuthErrorMapping.Phase,
         now: Date,
         fallbackRefreshToken: String?,
         fallbackScope: String = ""
@@ -81,7 +88,12 @@ struct OAuthTokenService {
                 throw OAuthError.temporarilyUnavailable(httpStatus: response.statusCode)
             }
             if let error = try? JSONDecoder().decode(TokenErrorResponse.self, from: response.body) {
-                throw OAuthError.server(code: error.error, description: error.errorDescription)
+                throw OAuthErrorMapping.tokenEndpointError(
+                    code: error.error,
+                    description: error.errorDescription,
+                    errorCodes: error.errorCodes ?? [],
+                    phase: phase
+                )
             }
             throw OAuthError.invalidResponse
         }
@@ -121,10 +133,13 @@ struct OAuthTokenService {
     private struct TokenErrorResponse: Decodable {
         let error: String
         let errorDescription: String?
+        /// Microsoft lists the numeric AADSTS codes here.
+        let errorCodes: [Int]?
 
         enum CodingKeys: String, CodingKey {
             case error
             case errorDescription = "error_description"
+            case errorCodes = "error_codes"
         }
     }
 }

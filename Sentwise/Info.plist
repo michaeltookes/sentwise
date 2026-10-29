@@ -70,6 +70,16 @@
 	<string>$(SENTWISE_GOOGLE_CLIENT_SECRET)</string>
 
 	<!--
+	  "Sign in with Microsoft" OAuth client (item 31). Entra application (client)
+	  ID, public client: there is no secret. Expanded from
+	  Config/MicrosoftOAuth.xcconfig (empty in the repo, so Microsoft sign-in is
+	  off) or its git-ignored local override / xcodebuild command-line settings.
+	  An empty or placeholder value switches the provider off.
+	-->
+	<key>SentwiseMicrosoftOAuthClientID</key>
+	<string>$(SENTWISE_MICROSOFT_CLIENT_ID)</string>
+
+	<!--
 	  Per-build configuration (item 123), read by BuildConfiguration. Expanded
 	  from Config/QA.xcconfig in the QA build configuration only; Debug and
 	  Release leave every value empty, which resolves to the production service,

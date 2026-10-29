@@ -40,8 +40,10 @@ extension AppState {
             return "The mail server does not offer a secure connection, so Sentwise did not send your sign-in."
         case MailError.starttlsFailed(let detail):
             return "Couldn't secure the connection to the mail server. (\(detail))"
-        case MailError.mailboxProtocolDisabled(let detail):
-            return "Sending mail with this account is turned off by its administrator. (\(detail))"
+        case MailError.mailboxProtocolDisabled(.imap, _):
+            return "IMAP access is off for this mailbox. Ask your IT administrator to turn it on."
+        case MailError.mailboxProtocolDisabled(.smtp, _):
+            return "Sending (SMTP AUTH) is off for this mailbox. Ask your IT administrator to turn it on."
         default:
             return nil
         }

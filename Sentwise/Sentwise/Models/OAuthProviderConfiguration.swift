@@ -3,6 +3,7 @@ import Foundation
 /// Which OAuth identity provider a configuration (and its stored tokens) belongs to.
 enum OAuthProviderID: String, Equatable, Sendable {
     case google
+    case microsoft
 }
 
 /// Everything the OAuth coordinator, token service, token store and mail-provider
@@ -62,6 +63,7 @@ struct OAuthProviderConfiguration: Equatable, Sendable {
     }
 
     static let googleKeychainPrefix = "gmail"
+    static let microsoftKeychainPrefix = "microsoft"
 
     /// The loopback redirect URI for `port`.
     func redirectURI(forPort port: UInt16) -> String {
@@ -85,6 +87,28 @@ struct OAuthProviderConfiguration: Equatable, Sendable {
             redirectHost: "127.0.0.1",
             keychainPrefix: googleKeychainPrefix,
             credentialMarker: GoogleMailCredential.marker
+        )
+    }
+
+    /// Sentwise's Microsoft configuration (sign-in-first architecture 4.2): the
+    /// multi-tenant `common` authority, the resource-qualified Outlook IMAP/SMTP
+    /// scopes, and no client secret (a public client: sending one is rejected
+    /// with AADSTS700025). The Keychain prefix is `microsoft`, so Google's
+    /// `gmail` slots are untouched.
+    static func microsoft(clientID: String) -> Self {
+        Self(
+            id: .microsoft,
+            clientID: clientID,
+            clientSecret: nil,
+            authorizationEndpoint: MicrosoftOAuth.authorizationEndpoint,
+            tokenEndpoint: MicrosoftOAuth.tokenEndpoint,
+            revocationEndpoint: nil,
+            scopes: MicrosoftOAuth.scopes,
+            requiredGrantedScopes: MicrosoftOAuth.requiredScopes,
+            extraAuthorizationParameters: [("response_mode", "query"), ("prompt", "select_account")],
+            redirectHost: "localhost",
+            keychainPrefix: microsoftKeychainPrefix,
+            credentialMarker: MicrosoftMailCredential.marker
         )
     }
 

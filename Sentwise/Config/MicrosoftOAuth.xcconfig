@@ -1,0 +1,28 @@
+// Microsoft OAuth client for "Sign in with Microsoft" (backlog item 31, T31-2;
+// docs/architecture/sign-in-first.md 4.2 and 4.7).
+//
+// Committed with an EMPTY value: a build made from the repo as-is (CI, forks,
+// contributors) has Microsoft sign-in switched off and the provider reports
+// "not configured". To switch it on for a build, supply the Sentwise-owned
+// Entra application (client) ID either:
+//
+//   1. locally: copy MicrosoftOAuth.local.xcconfig.example to
+//      MicrosoftOAuth.local.xcconfig (git-ignored) and fill it in, or
+//   2. in CI/release: pass `SENTWISE_MICROSOFT_CLIENT_ID=...` on the xcodebuild
+//      command line (Distribution/scripts/release.sh does this from the
+//      repository secret of the same name; command-line settings win).
+//
+// Info.plist expands it into SentwiseMicrosoftOAuthClientID, read by
+// MicrosoftOAuthClientConfiguration. The app is a public client: there is NO
+// client secret setting and none is ever sent (Microsoft answers a secret
+// from a public client with AADSTS700025). Authority is `common`, the redirect
+// is http://localhost:<port>, and the scopes live in code
+// (OAuthProviderConfiguration.microsoft). The ID is not secret, but a real one
+// is never committed here.
+//
+// This file is pulled in through GoogleOAuth.xcconfig, which is the base
+// configuration of the Debug and Release build configurations.
+
+SENTWISE_MICROSOFT_CLIENT_ID =
+
+#include? "MicrosoftOAuth.local.xcconfig"
