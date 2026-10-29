@@ -76,7 +76,7 @@ template, Sparkle wiring, DMG assets) lives under `Distribution/`.
 - Both values live in one file, `Sentwise/Config/Version.xcconfig`, inherited by
   every configuration (Debug, Release, QA) of every target; never set them in
   `project.pbxproj`.
-- `MARKETING_VERSION` (currently `0.2.1`) is the human version — bump per
+- `MARKETING_VERSION` (currently `0.2.3`) is the human version — bump per
   release. CI release tags and this value must use `X.Y.Z` format, e.g.
   `v0.1.2` / `0.1.2`.
 - `CURRENT_PROJECT_VERSION` is an integer Sparkle compares as `CFBundleVersion`

@@ -11,5 +11,5 @@
 // CURRENT_PROJECT_VERSION: integer build number Sparkle compares
 // (CFBundleVersion); it must increase with every release.
 
-MARKETING_VERSION = 0.2.1
-CURRENT_PROJECT_VERSION = 6
+MARKETING_VERSION = 0.2.3
+CURRENT_PROJECT_VERSION = 7
