@@ -32,6 +32,7 @@ extension IMAPMailProvider {
             .channelInitializer { channel in
                 do {
                     let complete = attempts.register(channel)
+                    let decoder = SMTPResponseDecoder()
                     let handler = SMTPSendHandler(
                         email: email,
                         authentication: authentication,
@@ -42,13 +43,14 @@ extension IMAPMailProvider {
                         makeTLSHandler: {
                             try NIOSSLClientHandler(context: sslContext, serverHostname: host)
                         },
+                        decoder: decoder,
                         complete: complete
                     )
                     var handlers: [ChannelHandler] = []
                     if security == .implicitTLS {
                         handlers.append(try NIOSSLClientHandler(context: sslContext, serverHostname: host))
                     }
-                    handlers.append(ByteToMessageHandler(SMTPResponseDecoder()))
+                    handlers.append(ByteToMessageHandler(decoder))
                     handlers.append(handler)
                     return channel.pipeline.addHandlers(handlers)
                 } catch {

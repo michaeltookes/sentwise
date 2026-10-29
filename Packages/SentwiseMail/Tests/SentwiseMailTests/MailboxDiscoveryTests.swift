@@ -101,4 +101,24 @@ final class MailboxDiscoveryTests: XCTestCase {
         XCTAssertEqual(ModifiedUTF7.decode("R&-D"), "R&D")
         XCTAssertEqual(ModifiedUTF7.decode("Plain"), "Plain")
     }
+
+    func testLiteralMailboxNameIsConsumedByDeclaredLength() {
+        let lines = [
+            "* LIST (\\HasNoChildren \\Sent) \"/\" {10}", "Sent Items",
+            "* LIST (\\Drafts) \"/\" \"Drafts\""
+        ]
+        let entries = MailboxNaming.parseListResponses(lines)
+        XCTAssertEqual(entries.map(\.name), ["Sent Items", "Drafts"])
+        let naming = MailboxNaming.microsoft.discovering(from: entries)
+        XCTAssertEqual(naming.sent, "Sent Items")
+        XCTAssertNotEqual(naming.sent, "{10}")
+    }
+
+    func testLiteralSpanningLineBoundaryAndTruncatedLiteral() {
+        // The literal's own CRLF splits it across two elements: 4 bytes "A\r\nB".
+        let spanning = MailboxNaming.parseListResponses(["* LIST (\\Trash) \"/\" {4}", "A", "B"])
+        XCTAssertEqual(spanning.map(\.name), ["A\r\nB"])
+        // A literal whose data never arrived yields no entry, not a "{n}" name.
+        XCTAssertTrue(MailboxNaming.parseListResponses(["* LIST (\\Sent) \"/\" {10}"]).isEmpty)
+    }
 }

@@ -1,5 +1,7 @@
 import NIOCore
 import NIOEmbedded
+import NIOSSL
+import NIOTLS
 import XCTest
 @testable import SentwiseMail
 
@@ -22,6 +24,7 @@ final class SMTPStartTLSTests: XCTestCase {
     ) throws -> (EmbeddedChannel, EventLoopFuture<Void>) {
         let channel = EmbeddedChannel()
         let promise = channel.eventLoop.makePromise(of: Void.self)
+        let decoder = SMTPResponseDecoder()
         let handler = SMTPSendHandler(
             email: "me@contoso.com",
             authentication: authentication,
@@ -30,10 +33,11 @@ final class SMTPStartTLSTests: XCTestCase {
             message: ByteBuffer(bytes: rfc822),
             security: .startTLS,
             makeTLSHandler: tlsFactory,
+            decoder: decoder,
             complete: { promise.completeWith($0) }
         )
         try channel.pipeline.syncOperations.addHandlers([
-            ByteToMessageHandler(SMTPResponseDecoder()),
+            ByteToMessageHandler(decoder),
             handler
         ])
         return (channel, promise.futureResult)
@@ -42,6 +46,17 @@ final class SMTPStartTLSTests: XCTestCase {
     @discardableResult
     private func feed(_ channel: EmbeddedChannel, _ reply: String) throws -> String {
         try channel.writeInbound(ByteBuffer(string: reply))
+        var out = ""
+        while let buffer = try? channel.readOutbound(as: ByteBuffer.self) {
+            out += String(buffer: buffer)
+        }
+        return out
+    }
+
+    /// Simulates NIOSSL finishing the handshake; returns what the handler wrote.
+    @discardableResult
+    private func completeHandshake(_ channel: EmbeddedChannel) -> String {
+        channel.pipeline.fireUserInboundEventTriggered(TLSUserEvent.handshakeCompleted(negotiatedProtocol: nil))
         var out = ""
         while let buffer = try? channel.readOutbound(as: ByteBuffer.self) {
             out += String(buffer: buffer)
@@ -62,7 +77,9 @@ final class SMTPStartTLSTests: XCTestCase {
         XCTAssertEqual(starttls.trimmingCharacters(in: .whitespacesAndNewlines), "STARTTLS")
 
         XCTAssertNil(try? channel.pipeline.syncOperations.handler(type: FakeTLSHandler.self))
-        let ehlo2 = try feed(channel, "220 2.0.0 SMTP server ready\r\n")
+        let beforeHandshake = try feed(channel, "220 2.0.0 SMTP server ready\r\n")
+        XCTAssertEqual(beforeHandshake, "", "EHLO must wait for the TLS handshake")
+        let ehlo2 = completeHandshake(channel)
         XCTAssertTrue(ehlo2.contains("EHLO contoso.com"), "EHLO must be re-issued after the upgrade: \(ehlo2)")
         XCTAssertNotNil(
             try? channel.pipeline.syncOperations.handler(type: FakeTLSHandler.self),
@@ -114,6 +131,7 @@ final class SMTPStartTLSTests: XCTestCase {
         try feed(channel, "220 ready\r\n")
         try feed(channel, "250 STARTTLS\r\n")
         try feed(channel, "220 go ahead\r\n")
+        completeHandshake(channel)
         channel.pipeline.fireErrorCaught(TLSInsertFailure())
         guard case .starttlsFailed? = mailError(future) else { return XCTFail("expected starttlsFailed") }
         _ = try? channel.finish()
@@ -124,6 +142,7 @@ final class SMTPStartTLSTests: XCTestCase {
         try feed(channel, "220 ready\r\n")
         try feed(channel, "250 STARTTLS\r\n")
         try feed(channel, "220 go\r\n")
+        completeHandshake(channel)
         try feed(channel, "250 AUTH XOAUTH2\r\n")
         try feed(
             channel,
@@ -132,6 +151,30 @@ final class SMTPStartTLSTests: XCTestCase {
         guard case .mailboxProtocolDisabled? = mailError(future) else {
             return XCTFail("expected mailboxProtocolDisabled")
         }
+        _ = try? channel.finish()
+    }
+
+    func testCoalescedForgedRepliesAfterSTARTTLSNeverSucceed() throws {
+        let (channel, future) = try makeChannel()
+        try feed(channel, "220 ready\r\n")
+        try feed(channel, "250 STARTTLS\r\n")
+        _ = try? feed(
+            channel,
+            "220 go\r\n250 OK\r\n235 ok\r\n250 OK\r\n250 OK\r\n354 go\r\n250 queued\r\n"
+        )
+        guard case .starttlsFailed? = mailError(future) else { return XCTFail("expected starttlsFailed") }
+        XCTAssertNil(try? channel.pipeline.syncOperations.handler(type: FakeTLSHandler.self))
+        _ = try? channel.finish()
+    }
+
+    func testRepliesBeforeHandshakeCompletesFailTheSend() throws {
+        let (channel, future) = try makeChannel()
+        try feed(channel, "220 ready\r\n")
+        try feed(channel, "250 STARTTLS\r\n")
+        try feed(channel, "220 go\r\n")
+        let out = try feed(channel, "250 AUTH XOAUTH2\r\n")
+        XCTAssertFalse(out.contains("AUTH"))
+        guard case .starttlsFailed? = mailError(future) else { return XCTFail("expected starttlsFailed") }
         _ = try? channel.finish()
     }
 

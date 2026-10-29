@@ -42,6 +42,11 @@ enum SMTPAuthDisabledDetector {
 final class SMTPResponseDecoder: ByteToMessageDecoder {
     typealias InboundOut = SMTPResponse
 
+    /// Set by the SMTP handler while a `STARTTLS` reply is pending. Any bytes
+    /// buffered beyond that single reply were sent before the TLS handshake, so
+    /// they cannot be trusted (RFC 3207 section 4.2): the decode fails instead.
+    var rejectTrailingData = false
+
     private var pendingCode: Int?
     private var pendingLines: [String] = []
 
@@ -64,6 +69,9 @@ final class SMTPResponseDecoder: ByteToMessageDecoder {
         pendingLines.append(text)
 
         if isFinal {
+            if rejectTrailingData, buffer.readableBytes > 0 {
+                throw MailError.starttlsFailed("The server sent data after the STARTTLS reply, before TLS.")
+            }
             context.fireChannelRead(wrapInboundOut(SMTPResponse(code: code, text: text, lines: pendingLines)))
             pendingCode = nil
             pendingLines = []

@@ -179,7 +179,38 @@ extension MailboxNaming {
     /// Lines that are not mailbox data are skipped. Modified-UTF-7 names are
     /// decoded so a localized folder compares as the user sees it.
     public static func parseListResponses(_ lines: [String]) -> [MailboxListEntry] {
-        lines.compactMap(parseListLine)
+        joiningLiterals(lines).compactMap(parseListLine)
+    }
+
+    /// Folds IMAP literals (`... {10}` followed by 10 bytes on the next line or
+    /// lines) back into one quoted line, consuming exactly the declared length,
+    /// so the `{n}` marker is never mistaken for a mailbox name. Lines a literal
+    /// spans (split at its embedded CRLFs) are re-joined with CRLF.
+    private static func joiningLiterals(_ lines: [String]) -> [String] {
+        var result: [String] = []
+        var index = 0
+        while index < lines.count {
+            let line = lines[index].trimmingCharacters(in: .whitespacesAndNewlines)
+            index += 1
+            guard line.hasSuffix("}"), let open = line.lastIndex(of: "{"),
+                  let length = Int(line[line.index(after: open)..<line.index(before: line.endIndex)]
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "+"))),
+                  length >= 0 else {
+                result.append(lines[index - 1])
+                continue
+            }
+            var data = Data()
+            while data.count < length, index < lines.count {
+                if !data.isEmpty { data.append(contentsOf: Array("\r\n".utf8)) }
+                data.append(contentsOf: Array(lines[index].utf8))
+                index += 1
+            }
+            let literal = String(bytes: data.prefix(length), encoding: .utf8) ?? ""
+            let escaped = literal.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            result.append(String(line[..<open]) + "\"" + escaped + "\"")
+        }
+        return result
     }
 
     private static func parseListLine(_ rawLine: String) -> MailboxListEntry? {

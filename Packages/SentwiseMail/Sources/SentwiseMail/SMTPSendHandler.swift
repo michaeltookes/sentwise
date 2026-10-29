@@ -2,6 +2,7 @@ import Foundation
 import NIOCore
 import NIOPosix
 import NIOSSL
+import NIOTLS
 
 /// Drives the SMTP submission exchange. With implicit TLS the channel is already
 /// encrypted; with `SMTPSecurity.startTLS` the handler first runs greeting → EHLO
@@ -15,7 +16,7 @@ final class SMTPSendHandler: ChannelInboundHandler {
     typealias OutboundOut = ByteBuffer
 
     private enum Step {
-        case greeting, ehlo, startTLS, authUsername, authPassword, authComplete
+        case greeting, ehlo, startTLS, awaitingTLS, authUsername, authPassword, authComplete
         /// `AUTH XOAUTH2` was rejected with a `334` error challenge; the empty
         /// reply was sent and the final `5xx` is pending.
         case authXOAuth2Rejected(String)
@@ -31,6 +32,7 @@ final class SMTPSendHandler: ChannelInboundHandler {
     private let security: SMTPSecurity
     /// Builds the TLS handler inserted after a successful `STARTTLS` reply.
     private let makeTLSHandler: (() throws -> ChannelHandler)?
+    private let decoder: SMTPResponseDecoder?
 
     /// True once the transport is encrypted: always for implicit TLS, after the
     /// upgrade for STARTTLS. AUTH is never sent while this is false.
@@ -55,10 +57,12 @@ final class SMTPSendHandler: ChannelInboundHandler {
         message: ByteBuffer,
         security: SMTPSecurity = .implicitTLS,
         makeTLSHandler: (() throws -> ChannelHandler)? = nil,
+        decoder: SMTPResponseDecoder? = nil,
         complete: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
         self.security = security
         self.makeTLSHandler = makeTLSHandler
+        self.decoder = decoder
         self.isEncrypted = security == .implicitTLS
         self.email = email
         self.authentication = authentication
@@ -70,8 +74,12 @@ final class SMTPSendHandler: ChannelInboundHandler {
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let response = unwrapInboundIn(data)
-        tlsHandshakePending = false
         switch step {
+        case .awaitingTLS:
+            // Nothing may arrive before the handshake completes; a reply here is
+            // forged or out of order, never a real answer.
+            settle(.failure(MailError.starttlsFailed("Unexpected data before the TLS handshake completed.")))
+            context.close(promise: nil)
         case .greeting:
             guard expect(response, 220, context: context) else { return }
             send("EHLO \(senderDomain)", context: context)
@@ -85,6 +93,7 @@ final class SMTPSendHandler: ChannelInboundHandler {
                     context.close(promise: nil)
                     return
                 }
+                decoder?.rejectTrailingData = true
                 send("STARTTLS", context: context)
                 step = .startTLS
                 return
@@ -158,8 +167,23 @@ final class SMTPSendHandler: ChannelInboundHandler {
         }
     }
 
+    /// The handshake-completed event is the only thing that releases the
+    /// post-upgrade EHLO and marks the channel encrypted.
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if case .awaitingTLS = step, event is TLSUserEvent {
+            tlsHandshakePending = false
+            isEncrypted = true
+            send("EHLO \(senderDomain)", context: context)
+            step = .ehlo
+            return
+        }
+        context.fireUserInboundEventTriggered(event)
+    }
+
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        if tlsHandshakePending {
+        if let mailError = error as? MailError, case .starttlsFailed = mailError {
+            settle(.failure(mailError))
+        } else if tlsHandshakePending {
             settle(.failure(MailError.starttlsFailed(String(describing: error))))
         } else {
             settle(.failure(connectionFailure(String(describing: error))))
@@ -204,10 +228,9 @@ extension SMTPSendHandler {
             context.close(promise: nil)
             return
         }
-        isEncrypted = true
+        decoder?.rejectTrailingData = false
         tlsHandshakePending = true
-        send("EHLO \(senderDomain)", context: context)
-        step = .ehlo
+        step = .awaitingTLS
     }
 
     private func sendAuth(context: ChannelHandlerContext) {
