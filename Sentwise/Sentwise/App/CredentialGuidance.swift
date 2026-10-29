@@ -152,20 +152,22 @@ struct CredentialGuidance: Equatable {
             + "16-character code."
     )
 
-    /// Microsoft sign-in is the primary path (OAuth); this is the app-password
-    /// fallback for personal accounts that have two-step verification on.
+    /// Microsoft no longer supports app passwords for Basic-auth IMAP on
+    /// outlook.com, hotmail, live and msn. Consumer and work accounts both
+    /// connect through Microsoft sign-in (OAuth); until the Microsoft client id
+    /// is configured, say so rather than suggesting an app password
+    /// (docs/architecture/sign-in-first.md, sections 4.6 and 5).
     static let microsoftGuidance = CredentialGuidance(
         providerName: "Microsoft",
-        credentialName: "app password",
+        credentialName: "Microsoft sign-in",
         steps: [
-            "Sign in at account.microsoft.com → Security → Advanced security options.",
-            "Turn on two-step verification if needed, then choose Create a new app password.",
-            "Copy the password and paste it here."
+            "Microsoft accounts connect with Sign in with Microsoft, not a password or app password.",
+            "Microsoft sign-in is not configured in this build yet, so this account cannot be connected here.",
+            "Check back after the next Sentwise update, or connect a Gmail, iCloud, Yahoo or AT&T mailbox meanwhile."
         ],
-        url: URL(string: "https://account.microsoft.com/security"),
-        appPasswordDistinction: "Make sure this is a Microsoft app password from your "
-            + "Microsoft account — not an Apple or Google app password. Work or school "
-            + "accounts sign in with Microsoft instead."
+        url: nil,
+        appPasswordDistinction: "Microsoft no longer accepts app passwords for IMAP, so do not "
+            + "paste an Apple or Google app password here."
     )
 
     /// Fallback for unrecognized domains. IMAP password requirements vary, so

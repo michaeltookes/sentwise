@@ -62,7 +62,18 @@ final class CredentialGuidanceTests: XCTestCase {
         XCTAssertEqual(EmailProviderKind.yahoo.imapHost, "imap.mail.yahoo.com")
         XCTAssertEqual(EmailProviderKind.aol.imapHost, "imap.aol.com")
         XCTAssertEqual(EmailProviderKind.icloud.imapHost, "imap.mail.me.com")
-        XCTAssertEqual(EmailProviderKind.allHosts.count, 5)
+        XCTAssertEqual(EmailProviderKind.microsoft.imapHost, "outlook.office365.com")
+        XCTAssertEqual(
+            EmailProviderKind.allHosts,
+            [
+                "imap.gmail.com",
+                "imap.mail.att.net",
+                "imap.mail.yahoo.com",
+                "imap.aol.com",
+                "imap.mail.me.com",
+                "outlook.office365.com"
+            ]
+        )
     }
 
     // MARK: - Guidance content
@@ -88,6 +99,16 @@ final class CredentialGuidanceTests: XCTestCase {
         let guidance = CredentialGuidance.forEmail("me@gmail.com")
         XCTAssertEqual(guidance.credentialName, "app password")
         XCTAssertTrue(guidance.steps.contains { $0.contains("2-Step Verification") })
+    }
+
+    func testMicrosoftGuidanceIsOAuthRequiredNotAppPassword() {
+        let guidance = CredentialGuidance.forKind(.microsoft)
+        XCTAssertEqual(guidance.providerName, "Microsoft")
+        XCTAssertNotEqual(guidance.credentialName, "app password")
+        XCTAssertNil(guidance.url)
+        XCTAssertTrue(guidance.steps.contains { $0.contains("Sign in with Microsoft") })
+        XCTAssertTrue(guidance.steps.contains { $0.contains("not configured") })
+        XCTAssertFalse(guidance.steps.contains { $0.localizedCaseInsensitiveContains("create a new app password") })
     }
 
     func testCustomDomainCanUseConfiguredHostFallbackForGuidance() {
