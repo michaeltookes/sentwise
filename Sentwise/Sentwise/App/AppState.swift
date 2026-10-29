@@ -23,6 +23,9 @@ final class AppState: ObservableObject {
     @Published var isAccountConnected: Bool = false
     /// Whether a connection attempt is in progress.
     @Published var isConnecting: Bool = false
+    /// Set when a Microsoft sign-in needs an administrator's approval; drives the
+    /// consent-required screen (item 31, T31-5). Cleared on the next attempt.
+    @Published var microsoftAdminApproval: MicrosoftAdminApprovalRequest?
 
     /// A user-facing message describing the last connection error, if any.
     @Published var connectionError: String?
@@ -371,6 +374,7 @@ final class AppState: ObservableObject {
     /// Internal (not private) so the `AppState+Voice` extension can reach it.
     let mailProvider: MailProvider
     let googleMailAuth: GoogleMailAuthService // item 104; wraps mailProvider (see AppState+GoogleSignIn)
+    let microsoftMailAuth: GoogleMailAuthService // item 31; same engine, Microsoft provider (see AppState+MicrosoftSignIn)
     let googleWorkspaceMXDetector: GoogleWorkspaceMXDetector
     let llm: LLMProviding
     /// The managed-inference account (item 56a): Clerk sign-in + session-token
@@ -428,7 +432,7 @@ final class AppState: ObservableObject {
     ) {
         (self.persistence, self.googleWorkspaceMXDetector) = (persistence, googleWorkspaceMXDetector)
         self.secrets = secrets
-        (self.googleMailAuth, self.mailProvider) = Self.makeMailStack(base: mailProvider, secrets: secrets)
+        (self.googleMailAuth, self.microsoftMailAuth, self.mailProvider) = Self.makeMailStack(base: mailProvider, secrets: secrets)
         // Run launch migrations before constructing services that cache secret state.
         let loadedSettings = persistence.loadSettings()
         let settings = Self.fullyMigratedSettings(loaded: loadedSettings, secrets: secrets, persistence: persistence)

@@ -91,6 +91,11 @@ extension AppState {
             // a failed LIST only leaves the host defaults in place.
             credentials.discoveredNaming = try await mailProvider.verifyAndDiscover(credentials)
                 ?? credentials.discoveredNaming
+            // Microsoft sign-in only: SMTP AUTH can be off while IMAP works, so
+            // prove submission before the account is adopted (item 31, T31-7).
+            if credentials.appPassword == MicrosoftMailCredential.marker {
+                try await mailProvider.probeSMTPAuthentication(credentials)
+            }
         } catch {
             guard shouldApplyConnectionResult(
                 credentials,

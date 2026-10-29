@@ -261,6 +261,15 @@ final class FakeAppMailProvider: MailProvider, @unchecked Sendable {
     }
 
     var discoveredNaming: MailboxNaming? // reported by "discovery" (item 31, T31-8)
+    /// Scripted SMTP AUTH-only probe outcome (item 31, T31-7).
+    var probeResult: Result<Void, Error> = .success(())
+    private(set) var probeCallCount = 0
+    private(set) var lastProbeCredentials: MailAccountCredentials?
+    func probeSMTPAuthentication(_ credentials: MailAccountCredentials) async throws {
+        probeCallCount += 1
+        lastProbeCredentials = credentials
+        try probeResult.get()
+    }
     func verifyConnection(_ credentials: MailAccountCredentials) async throws {
         lastCredentials = credentials
         try result.get()

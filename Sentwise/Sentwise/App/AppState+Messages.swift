@@ -41,9 +41,9 @@ extension AppState {
         case MailError.starttlsFailed(let detail):
             return "Couldn't secure the connection to the mail server. (\(detail))"
         case MailError.mailboxProtocolDisabled(.imap, _):
-            return "IMAP access is off for this mailbox. Ask your IT administrator to turn it on."
+            return MicrosoftSignInCopy.protocolDisabledMessage(.imap)
         case MailError.mailboxProtocolDisabled(.smtp, _):
-            return "Sending (SMTP AUTH) is off for this mailbox. Ask your IT administrator to turn it on."
+            return MicrosoftSignInCopy.protocolDisabledMessage(.smtp)
         default:
             return nil
         }

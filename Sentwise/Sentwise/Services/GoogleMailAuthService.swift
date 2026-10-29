@@ -296,6 +296,12 @@ struct GoogleOAuthMailProvider: MailProvider {
     let base: MailProvider
     let auth: GoogleMailAuthService
 
+    /// What the user signed in with, for failure details (the same decorator
+    /// serves the Microsoft stack, item 31).
+    private var providerLabel: String {
+        auth.credentialMarker == MicrosoftMailCredential.marker ? "Microsoft" : "Google"
+    }
+
     func resolved(_ credentials: MailAccountCredentials) async throws -> MailAccountCredentials {
         try await resolvedWithGrant(credentials).credentials
     }
@@ -317,18 +323,18 @@ struct GoogleOAuthMailProvider: MailProvider {
         } catch GmailAuthError.superseded {
             // The grant changed mid-refresh twice over: retry on the next poll,
             // never pause the mailbox as an auth failure.
-            throw MailError.connectionFailed("Google sign-in changed while refreshing; will retry.")
+            throw MailError.connectionFailed("\(providerLabel) sign-in changed while refreshing; will retry.")
         } catch let error as GmailAuthError {
             throw MailError.authenticationFailed(Self.detail(for: error))
         } catch OAuthError.temporarilyUnavailable(let status) {
             // Google outage or throttling: the grant is fine, so retry later
             // instead of pausing the mailbox as an auth failure.
-            throw MailError.connectionFailed("Couldn't refresh Google sign-in right now (HTTP \(status)).")
+            throw MailError.connectionFailed("Couldn't refresh \(providerLabel) sign-in right now (HTTP \(status)).")
         } catch let error as OAuthError {
-            throw MailError.authenticationFailed("\(GoogleMailCredential.failurePrefix) failed: \(error)")
+            throw MailError.authenticationFailed("\(providerLabel) sign-in failed: \(error)")
         } catch {
             // Token endpoint unreachable (offline, DNS, TLS): transient, retry later.
-            throw MailError.connectionFailed("Couldn't refresh Google sign-in. (\(error.localizedDescription))")
+            throw MailError.connectionFailed("Couldn't refresh \(providerLabel) sign-in. (\(error.localizedDescription))")
         }
         var resolved = credentials
         resolved.oauthAccessToken = token
@@ -361,7 +367,7 @@ struct GoogleOAuthMailProvider: MailProvider {
             return try await operation(resolved)
         } catch MailError.authenticationFailed(let detail) where credentials.appPassword == auth.credentialMarker {
             if let grant, await auth.isGrantSuperseded(grant, for: credentials.email) {
-                throw MailError.connectionFailed("Google sign-in changed during this mail session; will retry.")
+                throw MailError.connectionFailed("\(providerLabel) sign-in changed during this mail session; will retry.")
             }
             throw MailError.authenticationFailed("\(GoogleMailCredential.failurePrefix) was rejected by Gmail. (\(detail))")
         }
@@ -373,6 +379,10 @@ struct GoogleOAuthMailProvider: MailProvider {
 
     func verifyAndDiscover(_ credentials: MailAccountCredentials) async throws -> MailboxNaming? {
         try await run(credentials) { try await base.verifyAndDiscover($0) }
+    }
+
+    func probeSMTPAuthentication(_ credentials: MailAccountCredentials) async throws {
+        try await run(credentials) { try await base.probeSMTPAuthentication($0) }
     }
 
     func fetchRecentMessages(_ credentials: MailAccountCredentials, mailbox: Mailbox, limit: Int) async throws -> [MailMessage] {

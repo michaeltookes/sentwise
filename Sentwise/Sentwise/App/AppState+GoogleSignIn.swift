@@ -18,9 +18,12 @@ extension AppState {
     static func makeMailStack(
         base: MailProvider?,
         secrets: SecretStore
-    ) -> (GoogleMailAuthService, MailProvider) {
-        let auth = GoogleMailAuthService.live(secrets: secrets)
-        return (auth, GoogleOAuthMailProvider(base: base ?? LiveMailProvider.imap(), auth: auth))
+    ) -> (GoogleMailAuthService, GoogleMailAuthService, MailProvider) {
+        let google = GoogleMailAuthService.live(secrets: secrets)
+        let microsoft = GoogleMailAuthService.liveMicrosoft(secrets: secrets)
+        let googleWrapped = GoogleOAuthMailProvider(base: base ?? LiveMailProvider.imap(), auth: google)
+        // The same decorator serves Microsoft: it matches its own credential marker.
+        return (google, microsoft, GoogleOAuthMailProvider(base: googleWrapped, auth: microsoft))
     }
 
     /// Whether this build can offer Google sign-in. Off when no client is
@@ -151,6 +154,7 @@ extension AppState {
     /// Google sign-in is canceled, and the busy flag passes to the new attempt.
     func beginMailConnectionAttempt() -> UInt64 {
         isConnecting = false
+        microsoftMailAuth.cancelSignIn()
         return googleMailAuth.beginConnectionAttempt()
     }
 
@@ -176,11 +180,14 @@ extension AppState {
     func cancelGoogleOperationsForErase() {
         googleMailAuth.cancelSignIn()
         googleMailAuth.invalidateAllTokenOperations()
+        microsoftMailAuth.cancelSignIn()
+        microsoftMailAuth.invalidateAllTokenOperations()
     }
 
     /// Lifts the erase-time suspension once the Keychain has been wiped.
     func resumeGoogleOperationsAfterErase() {
         googleMailAuth.resumeTokenOperations()
+        microsoftMailAuth.resumeTokenOperations()
     }
 
     /// Deletes a mailbox's Google token as a rollbackable step of removing the

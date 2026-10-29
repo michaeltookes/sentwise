@@ -1,4 +1,5 @@
 import Foundation
+import SentwiseMail
 
 /// Microsoft identity platform constants for "Sign in with Microsoft"
 /// (sign-in-first architecture 4.2). Authority `common` serves personal
@@ -24,6 +25,23 @@ enum MicrosoftOAuth {
     /// through `smtp-mail.outlook.com`; any other tenant is a work account.
     static let consumerTenantID = "9188040d-6c67-4c5b-b112-36a304b66dad"
     static let imapHost = "outlook.office365.com"
+    static let imapPort = 993
+    /// SMTP submission hosts (STARTTLS on 587): personal Outlook.com accounts
+    /// versus work/school (Microsoft 365) tenants.
+    static let personalSMTPHost = "smtp-mail.outlook.com"
+    static let workSMTPHost = "smtp.office365.com"
+    static let smtpPort = 587
+
+    /// The SMTP host for the account's tenant: the consumer tenant sends through
+    /// the personal host, any other tenant (or an unknown one) is a work account.
+    static func smtpHost(forTenant tenantID: String?) -> String {
+        let tenant = tenantID?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return tenant == consumerTenantID ? personalSMTPHost : workSMTPHost
+    }
+
+    static func isPersonalTenant(_ tenantID: String?) -> Bool {
+        smtpHost(forTenant: tenantID) == personalSMTPHost
+    }
 }
 
 /// The non-secret marker stored in a Microsoft-signed-in mailbox's
@@ -31,6 +49,23 @@ enum MicrosoftOAuth {
 /// `GoogleMailCredential.marker`).
 enum MicrosoftMailCredential {
     static let marker = "sentwise-microsoft-oauth:v1"
+
+    static func isMarker(_ value: String) -> Bool { value == marker }
+
+    /// Credentials for a Microsoft-signed-in mailbox: the signed-in address,
+    /// Outlook IMAP, and the personal or work SMTP host picked from `tid`.
+    static func credentials(email: String, tenantID: String?) -> MailAccountCredentials {
+        var credentials = MailAccountCredentials(
+            email: email,
+            appPassword: marker,
+            host: MicrosoftOAuth.imapHost,
+            port: MicrosoftOAuth.imapPort
+        )
+        credentials.smtpHost = MicrosoftOAuth.smtpHost(forTenant: tenantID)
+        credentials.smtpPort = MicrosoftOAuth.smtpPort
+        credentials.smtpSecurity = .startTLS
+        return credentials
+    }
 }
 
 /// Reads this build's Microsoft client id from Info.plist, which the
