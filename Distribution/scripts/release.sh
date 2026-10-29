@@ -357,26 +357,32 @@ step "1/7  Archiving Release"
 # "Sign in with Google" client (item 104, docs/gmail-oauth.md): passed through
 # only when set, so an unset variable never overrides a local
 # Sentwise/Config/GoogleOAuth.local.xcconfig. Neither set => feature off.
-GOOGLE_OAUTH_SETTINGS=()
+OAUTH_SETTINGS=()
 if [[ -n "${SENTWISE_GOOGLE_CLIENT_ID:-}" ]]; then
-  GOOGLE_OAUTH_SETTINGS+=("SENTWISE_GOOGLE_CLIENT_ID=$SENTWISE_GOOGLE_CLIENT_ID")
+  OAUTH_SETTINGS+=("SENTWISE_GOOGLE_CLIENT_ID=$SENTWISE_GOOGLE_CLIENT_ID")
 fi
 if [[ -n "${SENTWISE_GOOGLE_CLIENT_SECRET:-}" ]]; then
-  GOOGLE_OAUTH_SETTINGS+=("SENTWISE_GOOGLE_CLIENT_SECRET=$SENTWISE_GOOGLE_CLIENT_SECRET")
+  OAUTH_SETTINGS+=("SENTWISE_GOOGLE_CLIENT_SECRET=$SENTWISE_GOOGLE_CLIENT_SECRET")
+fi
+# "Sign in with Microsoft" client (item 31, T31-2): the Entra application (client)
+# ID, passed through the same way. Public client, so there is no secret to pass.
+# Unset => Microsoft sign-in off (the provider reports "not configured").
+if [[ -n "${SENTWISE_MICROSOFT_CLIENT_ID:-}" ]]; then
+  OAUTH_SETTINGS+=("SENTWISE_MICROSOFT_CLIENT_ID=$SENTWISE_MICROSOFT_CLIENT_ID")
 fi
 if [[ "$DRY_RUN" -eq 1 ]]; then
   xcodebuild archive \
     -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
     -archivePath "$ARCHIVE" \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
-    ${GOOGLE_OAUTH_SETTINGS[@]+"${GOOGLE_OAUTH_SETTINGS[@]}"} \
+    ${OAUTH_SETTINGS[@]+"${OAUTH_SETTINGS[@]}"} \
     CODE_SIGNING_ALLOWED=NO
 else
   xcodebuild archive \
     -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
     -archivePath "$ARCHIVE" \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
-    ${GOOGLE_OAUTH_SETTINGS[@]+"${GOOGLE_OAUTH_SETTINGS[@]}"} \
+    ${OAUTH_SETTINGS[@]+"${OAUTH_SETTINGS[@]}"} \
     DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
     CODE_SIGN_STYLE=Manual \
     CODE_SIGN_IDENTITY="$SIGNING_IDENTITY"

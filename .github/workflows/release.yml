@@ -243,6 +243,8 @@ jobs:
           # "Sign in with Google" client (item 104). Unset secrets => feature off.
           SENTWISE_GOOGLE_CLIENT_ID: ${{ secrets.SENTWISE_GOOGLE_CLIENT_ID }}
           SENTWISE_GOOGLE_CLIENT_SECRET: ${{ secrets.SENTWISE_GOOGLE_CLIENT_SECRET }}
+          # "Sign in with Microsoft" client (item 31). Public client, no secret. Unset => off.
+          SENTWISE_MICROSOFT_CLIENT_ID: ${{ secrets.SENTWISE_MICROSOFT_CLIENT_ID }}
         run: |
           set -euo pipefail
           if [[ "$DRY_RUN" == "true" ]]; then

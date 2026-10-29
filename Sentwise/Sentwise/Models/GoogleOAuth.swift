@@ -58,7 +58,7 @@ enum GoogleOAuthClientConfiguration {
         return clientID.hasSuffix(clientIDSuffix) && clientID.count > clientIDSuffix.count
     }
 
-    private static func isUnexpandedOrPlaceholder(_ value: String) -> Bool {
+    static func isUnexpandedOrPlaceholder(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty
             || trimmed.contains("$(")
