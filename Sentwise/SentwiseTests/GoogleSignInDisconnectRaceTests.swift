@@ -33,7 +33,7 @@ final class GoogleSignInDisconnectRaceTests: XCTestCase {
         let store = GmailAuthStore(secrets: secrets)
         let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data(exchangeJSON.utf8)))
         let first = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
@@ -44,7 +44,7 @@ final class GoogleSignInDisconnectRaceTests: XCTestCase {
         let connected = await appState.connectWithGoogle()
         XCTAssertTrue(connected)
         let reconnecting = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: store,
             tokenService: OAuthTokenService(transport: reauthorizationTransport ?? transport),
             makeListener: { listener },

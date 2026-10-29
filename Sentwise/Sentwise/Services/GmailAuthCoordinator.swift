@@ -58,7 +58,7 @@ enum GmailAuthPhase: Equatable {
 @MainActor
 final class GmailAuthCoordinator {
 
-    private let client: GoogleOAuthClientConfiguration
+    private let client: OAuthProviderConfiguration
     private let store: GmailAuthStore
     private let tokenService: OAuthTokenService
     private let makeListener: () -> RedirectListener
@@ -115,7 +115,7 @@ final class GmailAuthCoordinator {
     }
 
     init(
-        client: GoogleOAuthClientConfiguration,
+        client: OAuthProviderConfiguration,
         store: GmailAuthStore,
         tokenService: OAuthTokenService,
         makeListener: @escaping () -> RedirectListener = { LoopbackRedirectListener() },
@@ -185,12 +185,16 @@ final class GmailAuthCoordinator {
         let listener = makeListener()
         defer { listener.stop() }
 
-        let redirectURI = try await listener.start()
+        // The listener binds the loopback interface and reports its port; the
+        // host string in the URI comes from the configuration, and the same
+        // URI goes into the authorization and the token-exchange requests.
+        let boundURI = try await listener.start()
+        let redirectURI = URLComponents(string: boundURI)?.port
+            .map { client.redirectURI(forPort: UInt16(truncatingIfNeeded: $0)) } ?? boundURI
         let hint = loginHint?.trimmingCharacters(in: .whitespacesAndNewlines)
         let authURL = OAuthAuthorizationURL.make(
-            clientID: client.clientID,
+            configuration: client,
             redirectURI: redirectURI,
-            scopes: GoogleOAuth.scopes,
             pkce: pkce,
             state: state,
             loginHint: (hint?.isEmpty ?? true) ? nil : hint
@@ -209,7 +213,7 @@ final class GmailAuthCoordinator {
             verifier: pkce.verifier,
             client: client,
             redirectURI: redirectURI,
-            requestedScopes: GoogleOAuth.scopes,
+            requestedScopes: client.scopes,
             now: now()
         )
         do {
@@ -469,9 +473,10 @@ final class GmailAuthCoordinator {
         let revocable = token.refreshToken ?? token.accessToken
         guard !revocable.isEmpty else { return nil }
         let tokenService = tokenService
+        let client = client
         return revocations.start {
             do {
-                try await tokenService.revoke(token: revocable)
+                try await tokenService.revoke(token: revocable, client: client)
             } catch {
                 logger.info("Google token revocation failed (ignored): \(error.localizedDescription)")
             }
@@ -479,7 +484,7 @@ final class GmailAuthCoordinator {
     }
 
     private func requireFullScope(_ token: OAuthToken) throws {
-        let missing = token.missingScopes(from: GoogleOAuth.requiredScopes)
+        let missing = token.missingScopes(from: client.requiredGrantedScopes)
         guard missing.isEmpty else { throw OAuthError.missingRequiredScopes(missing) }
     }
 }

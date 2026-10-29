@@ -14,10 +14,11 @@ final class GoogleSignInSupersededMailOperationTests: XCTestCase {
     private struct Harness {
         let appState: AppState
         let coordinator: GmailAuthCoordinator
+        let provider: MailProvider
         let base: GatedAuthRejectingMailProvider
     }
 
-    private func makeHarness() throws -> Harness {
+    private func makeHarness(marker: String = GoogleMailCredential.marker) throws -> Harness {
         let secrets = InMemorySecretStore()
         let base = GatedAuthRejectingMailProvider()
         let appState = AppState(
@@ -36,7 +37,7 @@ final class GoogleSignInSupersededMailOperationTests: XCTestCase {
         "scope":"https://mail.google.com/ openid","id_token":"\(GmailAuthCoordinatorTests.idToken(email: email))"}
         """
         let coordinator = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "1234-abc.apps.googleusercontent.com"),
+            client: Self.configuration(marker: marker),
             store: store,
             tokenService: OAuthTokenService(transport: FakeTransport(
                 response: HTTPResponse(statusCode: 200, body: Data(exchange.utf8))
@@ -47,15 +48,30 @@ final class GoogleSignInSupersededMailOperationTests: XCTestCase {
         )
         appState.googleMailAuth.install(coordinator)
         appState.watchStatus = .watching
-        return Harness(appState: appState, coordinator: coordinator, base: base)
+        let auth = GoogleMailAuthService(coordinator: coordinator, tokenStore: store, credentialMarker: marker)
+        let provider = GoogleOAuthMailProvider(base: base, auth: auth)
+        return Harness(appState: appState, coordinator: coordinator, provider: provider, base: base)
     }
 
-    private func startPoll(_ harness: Harness) -> Task<Error?, Never> {
-        let credentials = GoogleMailCredential.credentials(email: email)
+    private static func configuration(marker: String) -> OAuthProviderConfiguration {
+        let google = OAuthProviderConfiguration.google(clientID: "1234-abc.apps.googleusercontent.com")
+        return OAuthProviderConfiguration(
+            id: google.id, clientID: google.clientID, authorizationEndpoint: google.authorizationEndpoint,
+            tokenEndpoint: google.tokenEndpoint, revocationEndpoint: google.revocationEndpoint,
+            scopes: google.scopes, requiredGrantedScopes: google.requiredGrantedScopes,
+            extraAuthorizationParameters: google.extraAuthorizationParameters,
+            redirectHost: google.redirectHost, keychainPrefix: google.keychainPrefix, credentialMarker: marker
+        )
+    }
+
+    private func startPoll(_ harness: Harness, marker: String = GoogleMailCredential.marker) -> Task<Error?, Never> {
+        var credentials = GoogleMailCredential.credentials(email: email)
+        credentials.appPassword = marker
+        let provider = harness.provider
         let appState = harness.appState
         return Task { () -> Error? in
             do {
-                _ = try await appState.mailProvider.fetchRecentMessages(credentials, mailbox: .inbox, limit: 10)
+                _ = try await provider.fetchRecentMessages(credentials, mailbox: .inbox, limit: 10)
                 return nil
             } catch {
                 return error
@@ -84,6 +100,22 @@ final class GoogleSignInSupersededMailOperationTests: XCTestCase {
         XCTAssertEqual(ResilienceClassifier.classify(error), .transient)
         harness.appState.handlePollFetchFailure(error)
         XCTAssertEqual(harness.appState.watchStatus, .watching, "the reauthorized mailbox is not paused")
+    }
+
+    func testLateAuthFailureFromSupersededGrantIsTransientWithACustomMarker() async throws {
+        let marker = "sentwise-test-oauth:v1"
+        let harness = try makeHarness(marker: marker)
+        let poll = startPoll(harness, marker: marker)
+        await fulfillment(of: [harness.base.didStartFetch], timeout: 2)
+        _ = try await harness.coordinator.authorize(loginHint: email)
+        harness.base.rejectFetch()
+
+        let pollError = await poll.value
+        let error = try XCTUnwrap(pollError)
+        guard case .connectionFailed = error as? MailError else {
+            return XCTFail("a superseded grant's rejection surfaced as \(error)")
+        }
+        XCTAssertEqual(ResilienceClassifier.classify(error), .transient)
     }
 
     func testAuthFailureOnTheCurrentGrantStillReportsAuthentication() async throws {

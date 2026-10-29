@@ -30,7 +30,7 @@ final class GoogleSignInGrantOwnershipTests: XCTestCase {
         let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data()))
         transport.responses = [exchange(access: "at-A", refresh: "rt-A"), exchange(access: "at-B", refresh: "rt-B")]
         appState.googleMailAuth.install(GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "1234-abc.apps.googleusercontent.com"),
+            client: OAuthProviderConfiguration.google(clientID: "1234-abc.apps.googleusercontent.com"),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },

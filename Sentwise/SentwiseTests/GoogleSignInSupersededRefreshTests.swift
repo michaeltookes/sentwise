@@ -29,7 +29,7 @@ final class GoogleSignInSupersededRefreshTests: XCTestCase {
         """
         let transport = GatedRefreshTransport(otherResponse: HTTPResponse(statusCode: 200, body: Data(exchange.utf8)))
         let coordinator = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "1234-abc.apps.googleusercontent.com"),
+            client: OAuthProviderConfiguration.google(clientID: "1234-abc.apps.googleusercontent.com"),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },

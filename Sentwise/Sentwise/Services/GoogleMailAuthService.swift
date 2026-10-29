@@ -91,6 +91,9 @@ final class GoogleMailAuthService: ObservableObject {
     private(set) var coordinator: GmailAuthCoordinator?
     /// Independent of `coordinator` (and of client availability).
     private let tokenStore: GmailAuthStore?
+    /// The marker (`OAuthProviderConfiguration.credentialMarker`) that stands in
+    /// for the app password of a mailbox signed in through this service's provider.
+    let credentialMarker: String
     private var signInTask: Task<GmailAuthorization, Error>?
     /// The normalized address the pending sign-in was started for, if any.
     private var pendingLoginHint: String?
@@ -99,23 +102,36 @@ final class GoogleMailAuthService: ObservableObject {
     private var accountRemovalSequence: UInt64 = 0
     private var lastAccountRemoval: [String: UInt64] = [:]
 
-    init(coordinator: GmailAuthCoordinator?, tokenStore: GmailAuthStore? = nil) {
+    init(
+        coordinator: GmailAuthCoordinator?,
+        tokenStore: GmailAuthStore? = nil,
+        credentialMarker: String = GoogleMailCredential.marker
+    ) {
         self.tokenStore = tokenStore
+        self.credentialMarker = credentialMarker
         install(coordinator)
     }
 
     /// The production service: the bundled client from Info.plist (if any),
     /// tokens in `secrets`.
     static func live(secrets: SecretStore) -> GoogleMailAuthService {
-        let store = GmailAuthStore(secrets: secrets)
-        let coordinator = GoogleOAuthClientConfiguration.bundled().map { client in
+        let configuration = GoogleOAuthClientConfiguration.bundled()
+        let store = GmailAuthStore(
+            secrets: secrets,
+            keychainPrefix: configuration?.keychainPrefix ?? OAuthProviderConfiguration.googleKeychainPrefix
+        )
+        let coordinator = configuration.map { client in
             GmailAuthCoordinator(
                 client: client,
                 store: store,
                 tokenService: OAuthTokenService(transport: URLSessionTransport())
             )
         }
-        return GoogleMailAuthService(coordinator: coordinator, tokenStore: store)
+        return GoogleMailAuthService(
+            coordinator: coordinator,
+            tokenStore: store,
+            credentialMarker: configuration?.credentialMarker ?? GoogleMailCredential.marker
+        )
     }
 
     /// Swaps the engine (tests inject one wired to fakes).
@@ -290,7 +306,7 @@ struct GoogleOAuthMailProvider: MailProvider {
     private func resolvedWithGrant(
         _ credentials: MailAccountCredentials
     ) async throws -> (credentials: MailAccountCredentials, grant: GmailAuthCoordinator.TokenGeneration?) {
-        guard GoogleMailCredential.isGoogleSignIn(credentials),
+        guard credentials.appPassword == auth.credentialMarker,
               (credentials.oauthAccessToken ?? "").isEmpty else {
             return (credentials, nil)
         }
@@ -343,7 +359,7 @@ struct GoogleOAuthMailProvider: MailProvider {
         let (resolved, grant) = try await resolvedWithGrant(credentials)
         do {
             return try await operation(resolved)
-        } catch MailError.authenticationFailed(let detail) where GoogleMailCredential.isGoogleSignIn(credentials) {
+        } catch MailError.authenticationFailed(let detail) where credentials.appPassword == auth.credentialMarker {
             if let grant, await auth.isGrantSuperseded(grant, for: credentials.email) {
                 throw MailError.connectionFailed("Google sign-in changed during this mail session; will retry.")
             }

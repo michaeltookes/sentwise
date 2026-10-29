@@ -24,7 +24,7 @@ final class GoogleSignInRemovalTests: XCTestCase {
         """
         let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data(exchange.utf8)))
         appState.googleMailAuth.install(GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "1234-abc.apps.googleusercontent.com"),
+            client: OAuthProviderConfiguration.google(clientID: "1234-abc.apps.googleusercontent.com"),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
@@ -130,7 +130,7 @@ final class GoogleSignInDisconnectRollbackTests: XCTestCase {
         """
         let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data(exchange.utf8)))
         appState.googleMailAuth.install(GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "1234-abc.apps.googleusercontent.com"),
+            client: OAuthProviderConfiguration.google(clientID: "1234-abc.apps.googleusercontent.com"),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": "S"]) },

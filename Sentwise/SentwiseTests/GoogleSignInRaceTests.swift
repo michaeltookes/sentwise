@@ -35,7 +35,7 @@ final class GoogleSignInRaceTests: XCTestCase {
         let listener = GatedRedirectListener(redirectURI: "http://127.0.0.1:9999")
         let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data(exchangeJSON.utf8)))
         appState.googleMailAuth.install(GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { listener },
@@ -72,7 +72,7 @@ final class GoogleSignInRaceTests: XCTestCase {
         let store = GmailAuthStore(secrets: secrets)
         let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data(exchangeJSON.utf8)))
         appState.googleMailAuth.install(GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
@@ -105,7 +105,7 @@ final class GoogleSignInRaceTests: XCTestCase {
         let store = GmailAuthStore(secrets: secrets)
         let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data(exchangeJSON.utf8)))
         let first = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
@@ -116,7 +116,7 @@ final class GoogleSignInRaceTests: XCTestCase {
         let connected = await appState.connectWithGoogle()
         XCTAssertTrue(connected)
         let reconnecting = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { listener },
@@ -175,7 +175,7 @@ final class GoogleSignInRaceTests: XCTestCase {
         ), for: "me@gmail.com")
         let transport = GatedRefreshTransport()
         let coordinator = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: store,
             tokenService: OAuthTokenService(transport: transport)
         )
@@ -252,7 +252,7 @@ final class GoogleSignInRaceTests: XCTestCase {
         let exchange = exchangeJSON.replacingOccurrences(of: "fresh-at", with: "new-at")
         let transport = GatedRefreshTransport(otherResponse: HTTPResponse(statusCode: 200, body: Data(exchange.utf8)))
         let coordinator = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
@@ -287,7 +287,7 @@ final class GoogleSignInRaceTests: XCTestCase {
         let transport = GatedRefreshTransport(gatedURL: GoogleOAuth.revocationEndpoint)
         let service = GoogleMailAuthService(
             coordinator: GmailAuthCoordinator(
-                client: GoogleOAuthClientConfiguration(clientID: clientID),
+                client: OAuthProviderConfiguration.google(clientID: clientID),
                 store: store,
                 tokenService: OAuthTokenService(transport: transport)
             ),
@@ -324,7 +324,7 @@ final class GoogleSignInRaceTests: XCTestCase {
         )
         let browser = SpyBrowser()
         let coordinator = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
@@ -400,7 +400,7 @@ final class GoogleSignInRaceTests: XCTestCase {
         let store = GmailAuthStore(secrets: secrets)
         let transport = FakeTransport(response: HTTPResponse(statusCode: 200, body: Data(exchangeJSON.utf8)))
         appState.googleMailAuth.install(GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:1", params: ["code": "c", "state": self.state]) },
@@ -425,7 +425,7 @@ final class GoogleSignInRaceTests: XCTestCase {
         let appState = makeAppState(secrets: secrets)
         let store = GmailAuthStore(secrets: secrets)
         appState.googleMailAuth.install(GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: clientID),
+            client: OAuthProviderConfiguration.google(clientID: clientID),
             store: store,
             tokenService: OAuthTokenService(transport: FakeTransport(
                 response: HTTPResponse(statusCode: 200, body: Data(exchangeJSON.utf8))

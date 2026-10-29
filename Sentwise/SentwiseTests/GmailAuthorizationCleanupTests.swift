@@ -25,7 +25,7 @@ final class GmailAuthorizationCleanupTests: XCTestCase {
         let secrets = AuthorizationSecretStore()
         let store = GmailAuthStore(secrets: secrets)
         let coordinator = GmailAuthCoordinator(
-            client: GoogleOAuthClientConfiguration(clientID: "client.apps.googleusercontent.com"),
+            client: OAuthProviderConfiguration.google(clientID: "client.apps.googleusercontent.com"),
             store: store,
             tokenService: OAuthTokenService(transport: transport),
             makeListener: { FakeRedirectListener(redirectURI: "http://127.0.0.1:9999", params: ["code": "code", "state": "state"]) },

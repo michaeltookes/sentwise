@@ -10,12 +10,12 @@ struct OAuthTokenService {
     func exchange( // swiftlint:disable:this function_parameter_count
         code: String,
         verifier: String,
-        client: GoogleOAuthClientConfiguration,
+        client: OAuthProviderConfiguration,
         redirectURI: String,
         requestedScopes: [String],
         now: Date
     ) async throws -> OAuthToken {
-        let response = try await transport.postForm(GoogleOAuth.tokenEndpoint, fields: Self.withClient(client, [
+        let response = try await transport.postForm(client.tokenEndpoint, fields: Self.withClient(client, [
             "grant_type": "authorization_code",
             "code": code,
             "code_verifier": verifier,
@@ -33,10 +33,10 @@ struct OAuthTokenService {
     func refresh(
         refreshToken: String,
         grantedScope: String = "",
-        client: GoogleOAuthClientConfiguration,
+        client: OAuthProviderConfiguration,
         now: Date
     ) async throws -> OAuthToken {
-        let response = try await transport.postForm(GoogleOAuth.tokenEndpoint, fields: Self.withClient(client, [
+        let response = try await transport.postForm(client.tokenEndpoint, fields: Self.withClient(client, [
             "grant_type": "refresh_token",
             "refresh_token": refreshToken
         ]))
@@ -46,14 +46,16 @@ struct OAuthTokenService {
     /// Revokes a token at Google (refresh tokens revoke the whole grant).
     /// Google answers 200 on success and 400 for an already-invalid token; both
     /// leave nothing to clean up, so only transport errors throw.
-    func revoke(token: String) async throws {
-        _ = try await transport.postForm(GoogleOAuth.revocationEndpoint, fields: ["token": token])
+    /// A provider without a revocation endpoint has nothing to revoke.
+    func revoke(token: String, client: OAuthProviderConfiguration) async throws {
+        guard let endpoint = client.revocationEndpoint else { return }
+        _ = try await transport.postForm(endpoint, fields: ["token": token])
     }
 
     /// Adds the client identity. The secret is sent only when the build has
     /// one (Google "Desktop app" clients require it at the token endpoint).
     static func withClient(
-        _ client: GoogleOAuthClientConfiguration,
+        _ client: OAuthProviderConfiguration,
         _ fields: [String: String]
     ) -> [String: String] {
         var fields = fields
