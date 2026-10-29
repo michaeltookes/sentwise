@@ -60,8 +60,8 @@ Prioritized list of planned features, improvements, and technical debt for **sen
    - **US-6 — provider-neutral foundation and personal-account connection**
      - T31-1 ✅ shipped 2026-10-28 (PR 133), see resolved.md
    - **US-9 — mail transport and folder compatibility, before UI**
-     - T31-6 `SentwiseMail` SMTP STARTTLS (`SMTPSecurity.startTLS`, refuse AUTH without STARTTLS) and saved-account fields `smtpHost`/`smtpPort`/`smtpSecurity`/`authProvider` (schema 12, additive).
-     - T31-8 `MailboxNaming.microsoft` plus IMAP SPECIAL-USE discovery for Microsoft accounts.
+     - T31-6 ✅ shipped 2026-10-28 (PR 134), see resolved.md
+     - T31-8 ✅ shipped 2026-10-28 (PR 134), see resolved.md
    - **US-5 to US-8 — Microsoft configuration, recovery, detection and UI**
      - T31-2 Microsoft configuration: `Sentwise/Config/MicrosoftOAuth.xcconfig` `SENTWISE_MICROSOFT_CLIENT_ID` -> `SentwiseMicrosoftOAuthClientID`; authority `common`, redirect `http://localhost:<port>`, scopes `IMAP.AccessAsUser.All SMTP.Send offline_access openid email`, no client secret; release secret pass-through.
      - T31-3 Error mapping (architecture 4.6): `.adminConsentRequired`, `.reauthenticationRequired` (also Google `invalid_grant`), `.mailboxProtocolDisabled`; admin note; refresh-token rotation persisted.
