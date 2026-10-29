@@ -108,17 +108,17 @@ No experiment report was supplied. Options considered:
 
 | String | Where shown | Approved |
 |---|---|---|
-| `Before you continue` | Microsoft chooser block, heading | |
-| `Microsoft will ask you to let Sentwise read your mail, save drafts, and send messages you approve, and to keep this Mac signed in.` | Chooser block | |
-| `Mail is read on this Mac. Only the content needed to draft a reply, and up to 12 of your sent messages each time you learn your voice, goes to the Sentwise drafting service. Your sign-in is kept in this Mac's Keychain and is never sent to Sentwise servers.` | Chooser block | |
-| `For a work or school account, your IT administrator may need to approve Sentwise first.` | Chooser block | |
-| `You can remove Sentwise's access at any time in your Microsoft account.` | Chooser block | |
-| `Your organization requires an administrator to approve Sentwise.` | Admin approval state | |
-| `IMAP access is off for this mailbox. Your administrator needs to enable IMAP before Sentwise can connect.` | Protocol-disabled recovery | |
-| `Sending is off for this mailbox. Your administrator needs to enable SMTP AUTH before Sentwise can connect.` | Protocol-disabled recovery | |
-| `Sign in with Microsoft again to keep <address> connected.` | Reauthentication, saved mailbox | |
-| `Microsoft sign-in expired or was revoked. Sign in with Microsoft again in Settings → Email Account.` | Mail-error detail on sync | |
-| sentwise.ai/privacy "Outlook and Microsoft user data" section (below) | Landing page | |
+| `Before you continue` | Microsoft chooser block, heading | Approved 2026-10-29 (Michael, via the orchestrator) |
+| `Microsoft will ask you to let Sentwise read your mail, save drafts, and send messages you approve, and to keep this Mac signed in.` | Chooser block | Approved 2026-10-29 (Michael, via the orchestrator) |
+| `Mail is read on this Mac. Only the content needed to draft a reply, and up to 12 of your sent messages each time you learn your voice, goes to the Sentwise drafting service. Your sign-in is kept in this Mac's Keychain and is never sent to Sentwise servers.` | Chooser block | Approved 2026-10-29 (Michael, via the orchestrator) |
+| `For a work or school account, your IT administrator may need to approve Sentwise first.` | Chooser block | Approved 2026-10-29 (Michael, via the orchestrator) |
+| `You can remove Sentwise's access at any time in your Microsoft account.` | Chooser block | Approved 2026-10-29 (Michael, via the orchestrator) |
+| `Your organization requires an administrator to approve Sentwise.` | Admin approval state | Approved 2026-10-29 (Michael, via the orchestrator) |
+| `IMAP access is off for this mailbox. Your administrator needs to enable IMAP before Sentwise can connect.` | Protocol-disabled recovery | Approved 2026-10-29 (Michael, via the orchestrator) |
+| `Sending is off for this mailbox. Your administrator needs to enable SMTP AUTH before Sentwise can connect.` | Protocol-disabled recovery | Approved 2026-10-29 (Michael, via the orchestrator) |
+| `Sign in with Microsoft again to keep <address> connected.` | Reauthentication, saved mailbox | Approved 2026-10-29 (Michael, via the orchestrator) |
+| `Microsoft sign-in expired or was revoked. Sign in with Microsoft again in Settings → Email Account.` | Mail-error detail on sync | Approved 2026-10-29 (Michael, via the orchestrator) |
+| sentwise.ai/privacy "Outlook and Microsoft user data" section (below) | Landing page | Approved 2026-10-29 (Michael, via the orchestrator) |
 
 ## Privacy policy change list (sentwise-landing-page, `src/app/privacy/page.tsx`)
 
