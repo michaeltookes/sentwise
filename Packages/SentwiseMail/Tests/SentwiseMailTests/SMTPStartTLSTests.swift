@@ -131,7 +131,6 @@ final class SMTPStartTLSTests: XCTestCase {
         try feed(channel, "220 ready\r\n")
         try feed(channel, "250 STARTTLS\r\n")
         try feed(channel, "220 go ahead\r\n")
-        completeHandshake(channel)
         channel.pipeline.fireErrorCaught(TLSInsertFailure())
         guard case .starttlsFailed? = mailError(future) else { return XCTFail("expected starttlsFailed") }
         _ = try? channel.finish()
