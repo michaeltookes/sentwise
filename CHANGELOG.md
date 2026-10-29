@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Groundwork for Microsoft mail accounts** — the mail engine can now send
+  through STARTTLS submission servers (never signing in over an unencrypted
+  connection), find a mailbox's Sent, Drafts, Junk, Trash and Archive folders
+  from what the server reports, and remember each account's sending server
+  and sign-in provider. Nothing changes for existing Google accounts.
+
 ### Changed
 
 - **Continue with Google is back for Sentwise accounts** — sign in or create

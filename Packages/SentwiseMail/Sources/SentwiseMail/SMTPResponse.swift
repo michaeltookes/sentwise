@@ -51,7 +51,8 @@ final class SMTPResponseDecoder: ByteToMessageDecoder {
         }
         let lineLength = newlineIndex - buffer.readerIndex + 1
         guard var line = buffer.readString(length: lineLength) else { return .needMoreData }
-        line = String(line.reversed().drop(while: { $0 == "\n" || $0 == "\r" }).reversed())
+        // "\r\n" is a single Character in Swift, so strip by unicode scalars, not Characters.
+        line = line.trimmingCharacters(in: .newlines)
 
         guard line.count >= 3, let code = Int(line.prefix(3)) else {
             throw MailError.commandFailed("Malformed SMTP reply: \(line)")
