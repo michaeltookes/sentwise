@@ -162,7 +162,7 @@ TC-74-02 is defined in `docs/requirements/launch-readiness.md` and is not edited
   5. Quit Sentwise (**Quit Sentwise**) and relaunch it from `/Applications`.
   6. Status menu → **New Follow-up from Transcript…**. In **Recipients** enter `luciusfox@prowlqa.dev`; in **Subject** enter `Pilot next steps`.
   7. Paste T1 into the transcript area and click **Draft follow-up**.
-  8. When the draft-ready notification appears, click it (or click **Open Review Drafts**). In Review Drafts, expand the draft and click **Approve**. This first draft started F2's trial (both branches), so then close the Settings window if it is open, open **Settings…** → **Subscription** (this refreshes status, as in TC-M2-06 step 7), and read the plan line.
+  8. When the draft-ready notification appears, click it (or click **Open Review Drafts**). In Review Drafts, expand the draft and click **Approve**. Voice learning (step 3) never counts as a draft (item 139): the trial may already be active, and before this draft Subscription reads "0 of 400 drafts used". This first draft is the first counted draft (both branches), so then close the Settings window if it is open, open **Settings…** → **Subscription** (this refreshes status, as in TC-M2-06 step 7), and read the plan line and the drafts-used line.
   9. If the status menu shows **Start Watching**, click it; it must then read **Pause Watching**.
   10. From S1, send Q1 to `luciusfox@prowlqa.dev`.
   11. Wait up to 10 minutes for the notification "Reply-worthy: <S1 sender> — draft a reply?", then click it.
@@ -176,7 +176,7 @@ TC-74-02 is defined in `docs/requirements/launch-readiness.md` and is not edited
   - Gmail Drafts holds the follow-up "Pilot next steps", addressed only to `luciusfox@prowlqa.dev`. It mentions the security questionnaire by Friday and the November 9 meeting.
   - Gmail Drafts also holds a reply in the "Pilot kickoff" thread that confirms Thursday at 10am works. A reply that confirms the time without step 13 having supplied A1 is a defect (an invented user decision), not a pass.
   - The report records whether step 13 was needed.
-  - Both branches: step 8's plan line reads "Trial — 14 days left" for F2 (trial entitlement, not Pro and not a comp), and drafting in steps 7 and 12 was never blocked by a subscribe prompt. A Pro, comped, or "Trial ended" plan line fails the case.
+  - Both branches: step 8's plan line reads "Trial — 14 days left" for F2 (trial entitlement, not Pro and not a comp), and drafting in steps 7 and 12 was never blocked by a subscribe prompt. The drafts-used line reads "1 of 400 drafts used" after step 8 (never more, so the voice-learning call was not counted). A Pro, comped, or "Trial ended" plan line fails the case.
   - Nothing was sent.
   - This case passing ticks the §6 onboarding box.
   - Teardown (both branches): **Settings…** → **Subscription** → **Sign out** of F2; the orchestrator deletes F2 from production. In F1's user, then sign back in as F1 and confirm the Subscription tab reads Pro.

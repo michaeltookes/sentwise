@@ -39,7 +39,8 @@ struct VoiceProfiler {
             messages: [LLMMessage(role: .user, content: Self.userPrompt(samples: samples))],
             model: model,
             maxTokens: 1024,
-            temperature: 0.3
+            temperature: 0.3,
+            purpose: .voiceLearning
         )
 
         let response = try await complete(request)
