@@ -84,7 +84,9 @@ final class AppStateDraftTests: XCTestCase {
 
     func testGenerateDraftRejectsSentAndDraftMailboxes() async {
         let (appState, llm) = makeConnectedAppState()
-        let provider = (appState.mailProvider as? GoogleOAuthMailProvider)?.base as? FakeAppMailProvider
+        // Item 31: the stack is Microsoft decorator over Google decorator over the base.
+        let googleLayer = (appState.mailProvider as? GoogleOAuthMailProvider)?.base as? GoogleOAuthMailProvider
+        let provider = googleLayer?.base as? FakeAppMailProvider
 
         let sentDraft = await appState.generateDraft(for: inboxMessage(), mailbox: .sent)
         let sentError = appState.draftError
