@@ -65,7 +65,11 @@ enum ResilienceClassifier {
             return .authentication
         case .smtpCommandFailed(let code, _):
             return (400...499).contains(code) ? .transient : .permanent
-        case .incompleteCredentials, .commandFailed, .resultTooLarge:
+        case .starttlsFailed:
+            // Raised before any credential or message data was sent.
+            return .transient
+        case .incompleteCredentials, .commandFailed, .resultTooLarge,
+             .starttlsNotOffered, .mailboxProtocolDisabled:
             return .permanent
         }
     }

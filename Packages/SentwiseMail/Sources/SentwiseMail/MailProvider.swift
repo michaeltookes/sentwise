@@ -24,6 +24,16 @@ public enum MailError: Error, Equatable, Sendable {
     /// and leave the draft pending for a manual decision. Failures *before* DATA
     /// submission surface as `connectionFailed` instead and are safe to retry.
     case sendInterruptedAfterSubmission(String)
+    /// STARTTLS was required but the server did not advertise it. Authentication
+    /// is refused rather than falling back to plaintext (item 31, T31-6).
+    case starttlsNotOffered
+    /// The server refused `STARTTLS` or the TLS upgrade failed. Raised before any
+    /// credential or message data is sent, so it is safe to retry.
+    case starttlsFailed(String)
+    /// The server rejected authentication because SMTP AUTH (or IMAP) is switched
+    /// off for the mailbox or tenant (Exchange Online `5.7.139`). Not a bad
+    /// password, so the user must not be told to re-enter credentials.
+    case mailboxProtocolDisabled(String)
 }
 
 /// A mailbox backend. Exposes a connection check plus recent-message fetch;

@@ -25,12 +25,12 @@ extension IMAPMailProvider {
         let host = credentials.smtpHost
         let email = credentials.email
         let authentication = credentials.authentication
+        let security = credentials.smtpSecurity
 
         let bootstrap = ClientBootstrap(group: group)
             .connectTimeout(timeout)
             .channelInitializer { channel in
                 do {
-                    let ssl = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
                     let complete = attempts.register(channel)
                     let handler = SMTPSendHandler(
                         email: email,
@@ -38,13 +38,19 @@ extension IMAPMailProvider {
                         senderDomain: SMTPSendHandler.domain(of: email),
                         envelope: envelope,
                         message: ByteBuffer(bytes: rfc822),
+                        security: security,
+                        makeTLSHandler: {
+                            try NIOSSLClientHandler(context: sslContext, serverHostname: host)
+                        },
                         complete: complete
                     )
-                    return channel.pipeline.addHandlers([
-                        ssl,
-                        ByteToMessageHandler(SMTPResponseDecoder()),
-                        handler
-                    ])
+                    var handlers: [ChannelHandler] = []
+                    if security == .implicitTLS {
+                        handlers.append(try NIOSSLClientHandler(context: sslContext, serverHostname: host))
+                    }
+                    handlers.append(ByteToMessageHandler(SMTPResponseDecoder()))
+                    handlers.append(handler)
+                    return channel.pipeline.addHandlers(handlers)
                 } catch {
                     return channel.eventLoop.makeFailedFuture(error)
                 }
@@ -80,7 +86,33 @@ extension IMAPMailProvider {
 /// (possibly multi-line) response lines.
 struct SMTPResponse: Equatable {
     let code: Int
+    /// The text of the final line of the reply.
     let text: String
+    /// The text of every line of the reply, in order (EHLO capability lines).
+    let lines: [String]
+
+    init(code: Int, text: String, lines: [String]? = nil) {
+        self.code = code
+        self.text = text
+        self.lines = lines ?? [text]
+    }
+
+    /// Whether an EHLO reply advertises `keyword` (case-insensitive, first token).
+    func advertises(_ keyword: String) -> Bool {
+        lines.contains { line in
+            line.split(separator: " ").first.map { $0.caseInsensitiveCompare(keyword) == .orderedSame } ?? false
+        }
+    }
+}
+
+/// Connection-level classification of an SMTP AUTH rejection from Exchange
+/// Online / Outlook.com: `5.7.139` / "SmtpClientAuthentication is disabled" means
+/// SMTP AUTH is switched off, which is not a credential failure (item 31, T31-6).
+enum SMTPAuthDisabledDetector {
+    static func isDisabled(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        return lowered.contains("5.7.139") || lowered.contains("smtpclientauthentication is disabled")
+    }
 }
 
 /// Frames the SMTP reply stream into `SMTPResponse` values. SMTP replies are
@@ -90,6 +122,7 @@ final class SMTPResponseDecoder: ByteToMessageDecoder {
     typealias InboundOut = SMTPResponse
 
     private var pendingCode: Int?
+    private var pendingLines: [String] = []
 
     func decode(context: ChannelHandlerContext, buffer: inout ByteBuffer) throws -> DecodingState {
         guard let newlineIndex = buffer.readableBytesView.firstIndex(of: UInt8(ascii: "\n")) else {
@@ -105,13 +138,13 @@ final class SMTPResponseDecoder: ByteToMessageDecoder {
         // A space (or bare 3-char line) ends the reply; a hyphen continues it.
         let isFinal = line.count == 3 || line[line.index(line.startIndex, offsetBy: 3)] != "-"
         pendingCode = code
+        let text = line.count > 4 ? String(line.dropFirst(4)) : ""
+        pendingLines.append(text)
 
         if isFinal {
-            let text = line.count > 4
-                ? String(line.dropFirst(4))
-                : ""
-            context.fireChannelRead(wrapInboundOut(SMTPResponse(code: code, text: text)))
+            context.fireChannelRead(wrapInboundOut(SMTPResponse(code: code, text: text, lines: pendingLines)))
             pendingCode = nil
+            pendingLines = []
         }
         return .continue
     }
@@ -125,8 +158,11 @@ final class SMTPResponseDecoder: ByteToMessageDecoder {
     }
 }
 
-/// Drives the SMTP submission exchange over an already-TLS'd channel:
-/// greeting → EHLO → AUTH LOGIN (app password) or AUTH XOAUTH2 (OAuth access
+/// Drives the SMTP submission exchange. With implicit TLS the channel is already
+/// encrypted; with `SMTPSecurity.startTLS` the handler first runs greeting → EHLO
+/// → STARTTLS → (TLS handler inserted at the head of the pipeline) → EHLO again,
+/// and refuses to authenticate unless that upgrade completed (item 31, T31-6).
+/// The authenticated exchange is: greeting → EHLO → AUTH LOGIN (app password) or AUTH XOAUTH2 (OAuth access
 /// token, item 104) → MAIL FROM → RCPT TO… → DATA → body → QUIT,
 /// settling via `complete` when the server accepts the message (250 after DATA).
 final class SMTPSendHandler: ChannelInboundHandler {
@@ -134,7 +170,7 @@ final class SMTPSendHandler: ChannelInboundHandler {
     typealias OutboundOut = ByteBuffer
 
     private enum Step {
-        case greeting, ehlo, authUsername, authPassword, authComplete
+        case greeting, ehlo, startTLS, authUsername, authPassword, authComplete
         /// `AUTH XOAUTH2` was rejected with a `334` error challenge; the empty
         /// reply was sent and the final `5xx` is pending.
         case authXOAuth2Rejected(String)
@@ -147,6 +183,16 @@ final class SMTPSendHandler: ChannelInboundHandler {
     private let envelope: SMTPEnvelope
     private let message: ByteBuffer
     private let complete: @Sendable (Result<Void, Error>) -> Void
+    private let security: SMTPSecurity
+    /// Builds the TLS handler inserted after a successful `STARTTLS` reply.
+    private let makeTLSHandler: (() throws -> ChannelHandler)?
+
+    /// True once the transport is encrypted: always for implicit TLS, after the
+    /// upgrade for STARTTLS. AUTH is never sent while this is false.
+    private var isEncrypted: Bool
+    /// True between inserting the TLS handler and the first reply over it, so a
+    /// handshake failure surfaces as `starttlsFailed` rather than a generic drop.
+    private var tlsHandshakePending = false
 
     private var step: Step = .greeting
     private var settled = false
@@ -162,8 +208,13 @@ final class SMTPSendHandler: ChannelInboundHandler {
         senderDomain: String,
         envelope: SMTPEnvelope,
         message: ByteBuffer,
+        security: SMTPSecurity = .implicitTLS,
+        makeTLSHandler: (() throws -> ChannelHandler)? = nil,
         complete: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
+        self.security = security
+        self.makeTLSHandler = makeTLSHandler
+        self.isEncrypted = security == .implicitTLS
         self.email = email
         self.authentication = authentication
         self.senderDomain = senderDomain
@@ -174,6 +225,7 @@ final class SMTPSendHandler: ChannelInboundHandler {
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let response = unwrapInboundIn(data)
+        tlsHandshakePending = false
         switch step {
         case .greeting:
             guard expect(response, 220, context: context) else { return }
@@ -181,7 +233,25 @@ final class SMTPSendHandler: ChannelInboundHandler {
             step = .ehlo
         case .ehlo:
             guard expect(response, 250, context: context) else { return }
+            if !isEncrypted {
+                // STARTTLS mode, plaintext phase: the server must offer the upgrade.
+                guard response.advertises("STARTTLS") else {
+                    settle(.failure(MailError.starttlsNotOffered))
+                    context.close(promise: nil)
+                    return
+                }
+                send("STARTTLS", context: context)
+                step = .startTLS
+                return
+            }
             sendAuth(context: context)
+        case .startTLS:
+            guard response.code == 220 else {
+                settle(.failure(MailError.starttlsFailed(replyText(response))))
+                context.close(promise: nil)
+                return
+            }
+            upgradeToTLS(context: context)
         case .authUsername:
             guard expect(response, 334, context: context, auth: true) else { return }
             send(Data(email.utf8).base64EncodedString(), context: context)
@@ -208,7 +278,7 @@ final class SMTPSendHandler: ChannelInboundHandler {
             // one (421, 454, any 4xx) stays a retryable command failure, the same
             // split `expect(_:_:context:auth:)` makes for the other AUTH steps.
             if isPermanentAuthFailure(response.code) {
-                settle(.failure(MailError.authenticationFailed(message)))
+                settle(.failure(authFailure(message)))
             } else {
                 settle(.failure(MailError.smtpCommandFailed(code: response.code, message: message)))
             }
@@ -244,7 +314,11 @@ final class SMTPSendHandler: ChannelInboundHandler {
     }
 
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        settle(.failure(connectionFailure(String(describing: error))))
+        if tlsHandshakePending {
+            settle(.failure(MailError.starttlsFailed(String(describing: error))))
+        } else {
+            settle(.failure(connectionFailure(String(describing: error))))
+        }
         context.close(promise: nil)
     }
 
@@ -268,7 +342,34 @@ final class SMTPSendHandler: ChannelInboundHandler {
         return ""
     }
 
+    /// Inserts the TLS handler ahead of the decoder and, once it is in place,
+    /// re-issues EHLO over the encrypted channel (RFC 3207 requires a fresh EHLO).
+    private func upgradeToTLS(context: ChannelHandlerContext) {
+        guard let makeTLSHandler else {
+            settle(.failure(MailError.starttlsFailed("No TLS handler is available.")))
+            context.close(promise: nil)
+            return
+        }
+        do {
+            try context.pipeline.syncOperations.addHandler(try makeTLSHandler(), position: .first)
+        } catch {
+            settle(.failure(MailError.starttlsFailed(String(describing: error))))
+            context.close(promise: nil)
+            return
+        }
+        isEncrypted = true
+        tlsHandshakePending = true
+        send("EHLO \(senderDomain)", context: context)
+        step = .ehlo
+    }
+
     private func sendAuth(context: ChannelHandlerContext) {
+        // Never authenticate over an unencrypted channel (no plaintext fallback).
+        guard isEncrypted else {
+            settle(.failure(MailError.starttlsNotOffered))
+            context.close(promise: nil)
+            return
+        }
         switch authentication {
         case .password:
             send("AUTH LOGIN", context: context)
@@ -318,7 +419,7 @@ final class SMTPSendHandler: ChannelInboundHandler {
     ) -> Bool {
         guard response.code == code else {
             if auth, isPermanentAuthFailure(response.code) {
-                settle(.failure(MailError.authenticationFailed(replyText(response))))
+                settle(.failure(authFailure(replyText(response))))
                 context.close(promise: nil)
             } else {
                 failCommand(response, context: context)
@@ -331,6 +432,12 @@ final class SMTPSendHandler: ChannelInboundHandler {
     private func failCommand(_ response: SMTPResponse, context: ChannelHandlerContext) {
         settle(.failure(MailError.smtpCommandFailed(code: response.code, message: replyText(response))))
         context.close(promise: nil)
+    }
+
+    private func authFailure(_ message: String) -> MailError {
+        SMTPAuthDisabledDetector.isDisabled(message)
+            ? .mailboxProtocolDisabled(message)
+            : .authenticationFailed(message)
     }
 
     private func replyText(_ response: SMTPResponse) -> String {

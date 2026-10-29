@@ -1,5 +1,14 @@
 import Foundation
 
+/// How the SMTP submission connection is secured (item 31, T31-6).
+public enum SMTPSecurity: String, Equatable, Sendable, Codable {
+    /// TLS from the first byte (SMTPS, port 465). The historical default.
+    case implicitTLS
+    /// Plain TCP on the submission port (587), then `STARTTLS` before any
+    /// authentication. There is never a plaintext fallback.
+    case startTLS
+}
+
 /// Credentials for connecting to a mailbox over IMAP/SMTP.
 ///
 /// Authenticates with `appPassword` by default. When `oauthAccessToken` is set
@@ -20,6 +29,8 @@ public struct MailAccountCredentials: Equatable, Sendable {
     /// A short-lived Google OAuth access token. When non-empty, IMAP and SMTP
     /// authenticate with `XOAUTH2` rather than the app password (item 104).
     public var oauthAccessToken: String?
+    /// How the SMTP connection is secured. Defaults to implicit TLS (port 465).
+    public var smtpSecurity: SMTPSecurity
 
     public init(
         email: String,
@@ -28,7 +39,8 @@ public struct MailAccountCredentials: Equatable, Sendable {
         port: Int = 993,
         smtpHost: String? = nil,
         smtpPort: Int = 465,
-        oauthAccessToken: String? = nil
+        oauthAccessToken: String? = nil,
+        smtpSecurity: SMTPSecurity = .implicitTLS
     ) {
         self.email = email
         self.appPassword = appPassword
@@ -37,6 +49,7 @@ public struct MailAccountCredentials: Equatable, Sendable {
         self.smtpHost = smtpHost ?? Self.derivedSMTPHost(from: host)
         self.smtpPort = smtpPort
         self.oauthAccessToken = oauthAccessToken
+        self.smtpSecurity = smtpSecurity
     }
 
     /// How sessions with these credentials authenticate: `XOAUTH2` when an OAuth
