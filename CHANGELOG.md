@@ -7,13 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-29
+
+Sentwise 0.2.3 makes follow-up drafts more accurate, connects Gmail with one
+click, fixes the Settings window in the app menu, and lays groundwork for
+Microsoft mail accounts. Version 0.2.2 was skipped on purpose.
+
 ### Added
 
+- **Sign in with Google to connect Gmail** — connect a Gmail or Google
+  Workspace mailbox with one click in your browser instead of creating an app
+  password. Sentwise keeps the sign-in on this Mac and revokes it when you
+  disconnect the account. The app password option stays available as a
+  fallback and for other mail providers.
+- **A friendly "you're signed in" page** — when Google sign-in finishes, the
+  browser tab now shows a clear confirmation (or a clear explanation if
+  something went wrong) instead of a bare message.
+- **Google Workspace domains are recognized** — type an address on your own
+  domain and Sentwise now detects when it is hosted by Google Workspace and
+  fills in the Gmail server for you, without overwriting anything you already
+  typed.
 - **Groundwork for Microsoft mail accounts** — the mail engine can now send
   through STARTTLS submission servers (never signing in over an unencrypted
   connection), find a mailbox's Sent, Drafts, Junk, Trash and Archive folders
   from what the server reports, and remember each account's sending server
-  and sign-in provider. Nothing changes for existing Google accounts.
+  and sign-in provider. The Sign in with Microsoft screens, provider detection
+  and clearer error messages for Microsoft accounts are also in this build, but
+  they stay switched off behind a flag until Sentwise's Microsoft sign-in is
+  set up, so nothing changes for your accounts yet.
 
 ### Changed
 
@@ -31,7 +52,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it sends up to 12 of your sent messages. The drafting service keeps none of
   it." The earlier wording said mail was read only on this Mac and mentioned
   API keys you configure, which no longer matched how drafting works.
-  Sign in with Google stays switched off until the Google client is set up.
+
+### Fixed
+
+- **Follow-up drafts greet the right person** — when you draft a follow-up
+  from a pasted or imported transcript, Sentwise now knows which speaker is you
+  and who the recipient is, so the greeting goes to the recipient, action items
+  are assigned to the right owners, and the numbers you agreed on are kept.
+- **Settings in the app menu works** — Sentwise > Settings… and Command-comma
+  now open the real Settings window (instead of a blank one), and reuse it if
+  it is already open.
+- **Learning your voice no longer counts as a draft** — learning or re-learning
+  your voice no longer starts your trial or uses up one of your drafts.
+- **Typing your own mail server no longer gets overwritten** — a mail server
+  you type before Sentwise finishes looking up your domain is now kept.
+- **More reliable sign-in status** — Sentwise now retries and settles your
+  account and plan status after sign-in instead of leaving it stuck when you
+  are briefly offline.
 
 ## [0.2.1] - 2026-10-13
 
