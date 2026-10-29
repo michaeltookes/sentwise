@@ -54,17 +54,17 @@ final class SMTPStartTLSTests: XCTestCase {
     }
 
     func testStartTLSUpgradesThenReissuesEHLOThenAuthenticates() throws {
-        let (channel, future) = try makeChannel()
+        let (channel, _) = try makeChannel()
 
         XCTAssertTrue(try feed(channel, "220 smtp.office365.com ESMTP\r\n").contains("EHLO contoso.com"))
 
         let starttls = try feed(channel, "250-smtp.office365.com\r\n250-SIZE 157286400\r\n250 STARTTLS\r\n")
         XCTAssertEqual(starttls.trimmingCharacters(in: .whitespacesAndNewlines), "STARTTLS")
 
-        XCTAssertNil(try? channel.pipeline.handler(type: FakeTLSHandler.self).wait())
+        XCTAssertNil(try? channel.pipeline.syncOperations.handler(type: FakeTLSHandler.self))
         let ehlo2 = try feed(channel, "220 2.0.0 SMTP server ready\r\n")
         XCTAssertTrue(ehlo2.contains("EHLO contoso.com"), "EHLO must be re-issued after the upgrade: \(ehlo2)")
-        XCTAssertNotNil(try? channel.pipeline.handler(type: FakeTLSHandler.self).wait(), "TLS handler not inserted")
+        XCTAssertNotNil(try? channel.pipeline.syncOperations.handler(type: FakeTLSHandler.self), "TLS handler not inserted")
 
         let auth = try feed(channel, "250-smtp.office365.com\r\n250 AUTH LOGIN XOAUTH2\r\n")
         XCTAssertTrue(auth.hasPrefix("AUTH XOAUTH2 "), "got: \(auth)")
@@ -72,7 +72,6 @@ final class SMTPStartTLSTests: XCTestCase {
         let mailFrom = try feed(channel, "235 2.7.0 Authentication successful\r\n")
         XCTAssertTrue(mailFrom.contains("MAIL FROM:<me@contoso.com>"))
         _ = try? channel.finish()
-        _ = future
     }
 
     func testServerWithoutSTARTTLSRefusesAuthWithTypedError() throws {
