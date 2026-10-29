@@ -39,13 +39,14 @@ struct VoiceProfiler {
             messages: [LLMMessage(role: .user, content: Self.userPrompt(samples: samples))],
             model: model,
             maxTokens: 1024,
-            temperature: 0.3
+            temperature: 0.3,
+            purpose: .voiceLearning
         )
 
         let response = try await complete(request)
         let parsed = try Self.parse(response.text)
         return VoiceProfile(
-            greeting: parsed.greeting,
+            greeting: VoiceProfile.normalizedGreeting(parsed.greeting),
             signOff: parsed.signOff,
             formality: parsed.formality,
             tone: parsed.tone,
@@ -87,7 +88,8 @@ struct VoiceProfiler {
     no code fences — matching exactly these keys: greeting (string), signOff \
     (string), formality (string), tone (string), averageLength (string), \
     commonPhrases (array of strings, up to 6), summary (string, 2-3 sentences). \
-    Base every field only on how the person writes. If a field is unclear, use \
+    For greeting, give only the form, never a person's name: write "Hi <first name>," \
+    rather than "Hi Dana,". Base every field only on how the person writes. If a field is unclear, use \
     an empty string or empty array.
     """
 

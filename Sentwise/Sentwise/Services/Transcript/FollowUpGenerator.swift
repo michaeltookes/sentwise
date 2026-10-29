@@ -35,6 +35,7 @@ struct FollowUpGenerator {
         voiceProfile: VoiceProfile?,
         model: String,
         userSuppliedFacts: UserSuppliedFacts? = nil,
+        participants: FollowUpParticipants = FollowUpParticipants(),
         complete: Complete
     ) async throws -> DraftOutcome {
         try await makeFollowUpGeneration(
@@ -42,6 +43,7 @@ struct FollowUpGenerator {
             voiceProfile: voiceProfile,
             model: model,
             userSuppliedFacts: userSuppliedFacts,
+            participants: participants,
             complete: complete
         ).outcome
     }
@@ -53,6 +55,7 @@ struct FollowUpGenerator {
         voiceProfile: VoiceProfile?,
         model: String,
         userSuppliedFacts: UserSuppliedFacts? = nil,
+        participants: FollowUpParticipants = FollowUpParticipants(),
         complete: Complete
     ) async throws -> FollowUpGeneration {
         guard !transcript.isEmpty else { throw DraftError.emptyDraft }
@@ -63,6 +66,7 @@ struct FollowUpGenerator {
             voiceProfile: voiceProfile,
             model: model,
             userSuppliedFacts: userSuppliedFacts,
+            participants: participants,
             complete: complete
         )
 
@@ -77,12 +81,18 @@ struct FollowUpGenerator {
         voiceProfile: VoiceProfile?,
         model: String,
         userSuppliedFacts: UserSuppliedFacts? = nil,
+        participants: FollowUpParticipants = FollowUpParticipants(),
         complete: Complete
     ) async throws -> DraftOutcome {
         guard !context.isEmpty else { throw DraftError.emptyDraft }
 
         let request = LLMRequest(
-            system: Self.systemPrompt(voiceProfile: voiceProfile),
+            system: Self.systemPrompt(
+                voiceProfile: voiceProfile,
+                context: context,
+                participants: participants,
+                hasSuppliedFacts: !(userSuppliedFacts?.isEmpty ?? true)
+            ),
             messages: [LLMMessage(
                 role: .user,
                 content: Self.userPrompt(
@@ -202,7 +212,12 @@ struct FollowUpGenerator {
 
     // MARK: - Prompts
 
-    static func systemPrompt(voiceProfile: VoiceProfile?) -> String {
+    static func systemPrompt(
+        voiceProfile: VoiceProfile?,
+        context: FollowUpDraftContext? = nil,
+        participants: FollowUpParticipants = FollowUpParticipants(),
+        hasSuppliedFacts: Bool = false
+    ) -> String {
         let base = """
         You are the user's personal email assistant. You are given the transcript of a call \
         the user just had. Write the follow-up email the user would send after that call, as if \
@@ -225,9 +240,15 @@ struct FollowUpGenerator {
         Only use this when the follow-up genuinely depends on missing information; a \
         follow-up that just needs normal judgment or concise wording should still be written.
         """
-        let voice = voiceProfile?.promptBlock()
+        let sourceText = context?.text ?? ""
+        let labeled = context?.hasSpeakerLabels ?? false
+        let identity = participants.promptBlock(
+            transcript: sourceText, hasSpeakerLabels: labeled, hasSuppliedFacts: hasSuppliedFacts
+        )
+        let recipientName = participants.recipientFirstName(transcript: sourceText, hasSpeakerLabels: labeled)
+        let voice = voiceProfile?.promptBlock(recipientFirstName: recipientName, omitNameWhenUnknown: true)
             ?? "Write in a natural, concise, and professional tone."
-        return base + "\n\n" + confidence + "\n\n" + voice
+        return base + "\n\n" + identity + "\n\n" + confidence + "\n\n" + voice
     }
 
     static func userPrompt(

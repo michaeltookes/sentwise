@@ -174,6 +174,13 @@ struct LLMMessage: Equatable, Sendable {
     let content: String
 }
 
+/// Why a request is being made (backlog item 139). Only the managed provider
+/// sends it; the service never counts a `.voiceLearning` request as a draft.
+enum LLMPurpose: String, Equatable, Sendable {
+    case draft
+    case voiceLearning = "voice_learning"
+}
+
 /// A provider-agnostic completion request. Adapters translate this into each
 /// provider's wire format.
 struct LLMRequest: Equatable, Sendable {
@@ -182,19 +189,22 @@ struct LLMRequest: Equatable, Sendable {
     var model: String
     var maxTokens: Int
     var temperature: Double
+    var purpose: LLMPurpose
 
     init(
         system: String? = nil,
         messages: [LLMMessage],
         model: String,
         maxTokens: Int = 1024,
-        temperature: Double = 0.7
+        temperature: Double = 0.7,
+        purpose: LLMPurpose = .draft
     ) {
         self.system = system
         self.messages = messages
         self.model = model
         self.maxTokens = maxTokens
         self.temperature = temperature
+        self.purpose = purpose
     }
 }
 

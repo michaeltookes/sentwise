@@ -234,7 +234,8 @@ struct ManagedInferenceClient: LLMClient {
             system: request.system,
             messages: request.messages.map { RequestBody.Message(role: $0.role.rawValue, content: $0.content) },
             maxTokens: request.maxTokens,
-            temperature: request.temperature
+            temperature: request.temperature,
+            purpose: request.purpose.rawValue
         )
         do {
             return try JSONEncoder().encode(body)
@@ -411,11 +412,14 @@ private struct RequestBody: Encodable {
     let messages: [Message]
     let maxTokens: Int
     let temperature: Double
+    /// 139: "draft" or "voice_learning". Older services ignore the field.
+    let purpose: String
 
     enum CodingKeys: String, CodingKey {
         case model, system, messages
         case maxTokens
         case temperature
+        case purpose
     }
 
     struct Message: Encodable {
