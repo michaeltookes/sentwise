@@ -204,7 +204,9 @@ final class GmailAuthCoordinator {
         let params = try await listener.waitForRedirect(timeout: redirectTimeout)
         try Task.checkCancellation()
         guard params["state"] == state else { throw OAuthError.stateMismatch }
-        if let error = params["error"] { throw OAuthError.authorizationDenied(error) }
+        if let error = params["error"] {
+            throw OAuthErrorMapping.redirectError(code: error, description: params["error_description"])
+        }
         guard let code = params["code"] else { throw OAuthError.invalidResponse }
 
         phase = .exchangingCode
@@ -324,7 +326,7 @@ final class GmailAuthCoordinator {
                 // The old grant's failure (invalid_grant, cancellation) says
                 // nothing about the grant that replaced it.
                 try requireCurrent(startGeneration, for: key)
-                if case OAuthError.server(let code, _) = error, code == "invalid_grant" {
+                if Self.isGrantRejection(error) {
                     // Revoked, expired (7-day Testing-mode grants), or the user
                     // changed their password: only a fresh sign-in fixes it.
                     logger.info("Google grant no longer valid; re-authorization required")
@@ -346,6 +348,15 @@ final class GmailAuthCoordinator {
         let accessToken = try await task.value
         try requireCurrent(startGeneration, for: key)
         return (accessToken, startGeneration)
+    }
+
+    /// A refresh the provider rejected as a dead grant: the typed
+    /// `.reauthenticationRequired` (Google `invalid_grant` and Microsoft's
+    /// AADSTS codes map to it at the token service), or a raw `invalid_grant`.
+    private static func isGrantRejection(_ error: Error) -> Bool {
+        if case OAuthError.reauthenticationRequired = error { return true }
+        if case OAuthError.server(let code, _) = error, code == "invalid_grant" { return true }
+        return false
     }
 
     private func requireCurrent(_ startGeneration: TokenGeneration, for key: String) throws {

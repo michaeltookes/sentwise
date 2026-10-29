@@ -306,7 +306,7 @@ extension SMTPSendHandler {
 
     private func authFailure(_ message: String) -> MailError {
         SMTPAuthDisabledDetector.isDisabled(message)
-            ? .mailboxProtocolDisabled(message)
+            ? .mailboxProtocolDisabled(.smtp, message)
             : .authenticationFailed(message)
     }
 

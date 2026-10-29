@@ -33,7 +33,13 @@ public enum MailError: Error, Equatable, Sendable {
     /// The server rejected authentication because SMTP AUTH (or IMAP) is switched
     /// off for the mailbox or tenant (Exchange Online `5.7.139`). Not a bad
     /// password, so the user must not be told to re-enter credentials.
-    case mailboxProtocolDisabled(String)
+    case mailboxProtocolDisabled(MailProtocol, String)
+}
+
+/// The mail protocol an administrator switched off for a mailbox (item 31, T31-3).
+public enum MailProtocol: String, Sendable, Equatable {
+    case imap
+    case smtp
 }
 
 extension MailProvider {

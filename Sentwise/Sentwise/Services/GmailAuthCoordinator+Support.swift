@@ -70,6 +70,10 @@ extension GmailAuthCoordinator {
             return "Google sign-in returned an unexpected response. Please try again."
         case .temporarilyUnavailable:
             return "Google's sign-in service is temporarily unavailable. Please try again in a few minutes."
+        case .adminConsentRequired:
+            return "Your organization requires an administrator to approve Sentwise."
+        case .reauthenticationRequired:
+            return "Your sign-in has expired or was revoked. Sign in again."
         }
     }
 }

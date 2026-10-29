@@ -29,9 +29,9 @@ final class GoogleTokenEndpointFailureTests: XCTestCase {
         }
     }
 
-    func testRejectedGrantsStayServerErrors() async {
+    func testRejectedGrantsMapToReauthenticationAndOtherErrorsStayServerErrors() async {
         let badRequest = await refresh(status: 400, body: #"{"error":"invalid_grant"}"#)
-        XCTAssertEqual(badRequest as? OAuthError, .server(code: "invalid_grant", description: nil))
+        XCTAssertEqual(badRequest as? OAuthError, .reauthenticationRequired)
         let unauthorized = await refresh(status: 401, body: #"{"error":"invalid_client"}"#)
         XCTAssertEqual(unauthorized as? OAuthError, .server(code: "invalid_client", description: nil))
     }
