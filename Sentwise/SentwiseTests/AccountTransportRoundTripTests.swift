@@ -130,4 +130,40 @@ final class AccountTransportRoundTripTests: XCTestCase {
         let decoded = try JSONDecoder().decode(SavedMailAccount.self, from: Data(json.utf8))
         XCTAssertNil(decoded.mailboxNaming)
     }
+
+    func testAddAccountWithDiscoverySavesNamingAndStaleResultIsRejected() async throws {
+        var naming = MailboxNaming.microsoft
+        naming.sent = "Elementos enviados"
+        let provider = FakeAppMailProvider(result: .success(()))
+        provider.discoveredNaming = naming
+        let app = makeApp(provider: provider)
+        let submitted = MailAccountCredentials(email: "me@outlook.com", appPassword: "pw", host: "outlook.office365.com")
+        let accepted = await app.testConnection(with: submitted, messageSurface: .settings) {
+            var result = $0
+            result.discoveredNaming = submitted.discoveredNaming
+            return result == submitted
+        }
+        XCTAssertTrue(accepted)
+        XCTAssertEqual(app.savedAccounts.first?.mailboxNaming?.sent, "Elementos enviados")
+
+        let other = makeApp(provider: provider)
+        let stale = await other.testConnection(with: submitted, messageSurface: .settings) { _ in false }
+        XCTAssertFalse(stale)
+        XCTAssertTrue(other.savedAccounts.isEmpty)
+    }
+
+    func testReverifyWithDefaultsClearsStoredOverrides() async throws {
+        let provider = FakeAppMailProvider(result: .success(()))
+        let app = makeApp(provider: provider)
+        app.savedAccounts = [starttls]
+        let defaults = MailAccountCredentials(email: starttls.email, appPassword: "pw", host: starttls.host, port: starttls.port)
+        _ = await app.testConnection(with: defaults, messageSurface: .shared) { _ in true }
+        let saved = try XCTUnwrap(app.savedAccounts.first)
+        XCTAssertNil(saved.smtpHost)
+        XCTAssertNil(saved.smtpPort)
+        XCTAssertNil(saved.smtpSecurity)
+        let creds = saved.credentials(appPassword: "pw")
+        XCTAssertEqual(creds.smtpPort, 465)
+        XCTAssertEqual(creds.smtpSecurity, .implicitTLS)
+    }
 }

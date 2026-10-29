@@ -117,11 +117,11 @@ extension SavedMailAccount {
             smtpSecurity = nil
             mailboxNaming = nil
         }
-        if credentials.smtpHost != MailAccountCredentials.derivedSMTPHost(from: credentials.host) {
-            smtpHost = credentials.smtpHost
-        }
-        if credentials.smtpPort != 465 { smtpPort = credentials.smtpPort }
-        if credentials.smtpSecurity == .startTLS { smtpSecurity = Self.smtpSecuritySTARTTLS }
+        // Full credentials replace the transport; defaults are stored as nil.
+        let derivedHost = MailAccountCredentials.derivedSMTPHost(from: credentials.host)
+        smtpHost = credentials.smtpHost == derivedHost ? nil : credentials.smtpHost
+        smtpPort = credentials.smtpPort == 465 ? nil : credentials.smtpPort
+        smtpSecurity = credentials.smtpSecurity == .startTLS ? Self.smtpSecuritySTARTTLS : nil
         if let naming = credentials.discoveredNaming { mailboxNaming = naming }
     }
 }
