@@ -1,4 +1,5 @@
 import Foundation
+import SentwiseMail
 
 /// A remembered email account the user can switch to without re-entering
 /// credentials (item 48). Holds only the non-secret connection details —
@@ -26,6 +27,10 @@ struct SavedMailAccount: Codable, Equatable, Identifiable {
     /// (app password). `nil` only on records that predate schema 24 and could
     /// not be classified at migration time; the Keychain slot decides then.
     var authProvider: String?
+    /// Special-folder names discovered from the server's `LIST` SPECIAL-USE
+    /// attributes at verification (item 31, T31-8, additive: `nil` on older
+    /// records and when discovery found nothing, which keeps the host defaults).
+    var mailboxNaming: MailboxNaming?
 
     /// `smtpSecurity` raw values.
     static let smtpSecurityImplicitTLS = "tls"
@@ -48,7 +53,8 @@ struct SavedMailAccount: Codable, Equatable, Identifiable {
         smtpHost: String? = nil,
         smtpPort: Int? = nil,
         smtpSecurity: String? = nil,
-        authProvider: String? = nil
+        authProvider: String? = nil,
+        mailboxNaming: MailboxNaming? = nil
     ) {
         self.email = email
         self.host = host
@@ -57,10 +63,65 @@ struct SavedMailAccount: Codable, Equatable, Identifiable {
         self.smtpPort = smtpPort
         self.smtpSecurity = smtpSecurity
         self.authProvider = authProvider
+        self.mailboxNaming = mailboxNaming
     }
 
     /// Lower-cased, whitespace-trimmed email — the canonical account identity.
     static func normalizedEmail(_ email: String) -> String {
         email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
+// MARK: - Transport round-trip (item 31, T31-6 / T31-8)
+
+extension SavedMailAccount {
+    /// Full credentials for this saved account: IMAP details plus the stored
+    /// SMTP overrides and discovered folder names. A record without overrides
+    /// (every pre-24 account) derives the historical defaults exactly as before.
+    func credentials(appPassword: String) -> MailAccountCredentials {
+        MailAccountCredentials(
+            email: email,
+            appPassword: appPassword,
+            host: host,
+            port: port,
+            smtpHost: smtpHost,
+            smtpPort: smtpPort ?? 465,
+            smtpSecurity: smtpSecurity == Self.smtpSecuritySTARTTLS ? .startTLS : .implicitTLS,
+            discoveredNaming: mailboxNaming
+        )
+    }
+
+    /// `credentials` with this account's stored transport applied, but only while
+    /// they still target the saved IMAP host (an edited host re-derives defaults).
+    func applyingTransport(to credentials: MailAccountCredentials) -> MailAccountCredentials {
+        guard credentials.host.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare(host) == .orderedSame else { return credentials }
+        var result = credentials
+        if let smtpHost { result.smtpHost = smtpHost }
+        if let smtpPort { result.smtpPort = smtpPort }
+        if smtpSecurity == Self.smtpSecuritySTARTTLS { result.smtpSecurity = .startTLS }
+        if let mailboxNaming { result.discoveredNaming = mailboxNaming }
+        return result
+    }
+
+    /// Records the non-default transport of verified `credentials`. Defaults leave
+    /// the field `nil` (legacy shape); a changed IMAP host drops the old account's
+    /// overrides first.
+    mutating func recordTransport(from credentials: MailAccountCredentials, previousHost: String?) {
+        let hostChanged = previousHost.map {
+            $0.caseInsensitiveCompare(credentials.host) != .orderedSame
+        } ?? false
+        if hostChanged {
+            smtpHost = nil
+            smtpPort = nil
+            smtpSecurity = nil
+            mailboxNaming = nil
+        }
+        if credentials.smtpHost != MailAccountCredentials.derivedSMTPHost(from: credentials.host) {
+            smtpHost = credentials.smtpHost
+        }
+        if credentials.smtpPort != 465 { smtpPort = credentials.smtpPort }
+        if credentials.smtpSecurity == .startTLS { smtpSecurity = Self.smtpSecuritySTARTTLS }
+        if let naming = credentials.discoveredNaming { mailboxNaming = naming }
     }
 }

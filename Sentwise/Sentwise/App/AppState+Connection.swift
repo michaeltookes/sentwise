@@ -13,7 +13,7 @@ extension AppState {
     var mailCredentials: MailAccountCredentials {
         let email = mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let host = mailHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        return MailAccountCredentials(
+        let base = MailAccountCredentials(
             email: email,
             appPassword: MailCredentialPasswordNormalization.normalized(
                 mailAppPassword,
@@ -23,6 +23,10 @@ extension AppState {
             host: host,
             port: mailPort
         )
+        // Carry the saved account's SMTP overrides and discovered folder names.
+        let key = SavedMailAccount.normalizedEmail(email)
+        guard let saved = savedAccounts.first(where: { $0.id == key }) else { return base }
+        return saved.applyingTransport(to: base)
     }
 
     /// Tests the mailbox connection and, on success, saves the credentials.
@@ -65,10 +69,9 @@ extension AppState {
         setConnectionError(nil, for: messageSurface)
         clearWorkspaceAuthGuidance(for: messageSurface)
         let settingsMessageGeneration = settingsTransientMessageGeneration
-        let credentials = normalizedConnectionCredentials(credentials)
+        var credentials = normalizedConnectionCredentials(credentials)
         guard credentials.isComplete else {
-            setConnectionError(Self.incompleteCredentialsMessage(for: credentials), for: messageSurface)
-            return false
+            setConnectionError(Self.incompleteCredentialsMessage(for: credentials), for: messageSurface); return false
         }
         // Load the persisted (actually-connected) account and apply the tier gate
         // in one step; the form's `mailEmail` may already show the account being
@@ -77,15 +80,17 @@ extension AppState {
             newEmail: credentials.email, messageSurface: messageSurface
         ) else { return false }
 
-        isConnecting = true
-        // A superseded attempt leaves the busy flag to the attempt that replaced it.
+        isConnecting = true // a superseded attempt leaves the busy flag to its replacement
         defer { if isCurrentMailConnectionAttempt(attempt) { isConnecting = false } }
         // The previously focused account, so a switch keeps it connected in the
         // background rather than disconnecting it (item 99).
         let previousFocused = previousFocusedSnapshot(from: previousSettings)
 
         do {
-            try await mailProvider.verifyConnection(credentials)
+            // One session verifies and resolves the special-folder names (T31-8);
+            // a failed LIST only leaves the host defaults in place.
+            credentials.discoveredNaming = try await mailProvider.verifyAndDiscover(credentials)
+                ?? credentials.discoveredNaming
         } catch {
             guard shouldApplyConnectionResult(
                 credentials,
@@ -107,8 +112,8 @@ extension AppState {
         let previousEmail = previousSettings.mailEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let accountIdentityChanged = hasAccountIdentityChanged(from: previousEmail, to: credentials.email)
         let requiresTransitionCleanup = !isAccountConnected || accountIdentityChanged
-        let shouldResetBrowser = requiresTransitionCleanup
-            || browserNeedsResetForFocusedEndpointChange(previousSettings: previousSettings, credentials: credentials)
+        let shouldResetBrowser = requiresTransitionCleanup || browserNeedsResetForFocusedEndpointChange(
+            previousSettings: previousSettings, credentials: credentials)
         guard persistVerifiedConnectionTransition(
             credentials,
             previousSettings: previousSettings,
@@ -171,16 +176,20 @@ extension AppState {
     private func normalizedConnectionCredentials(_ credentials: MailAccountCredentials) -> MailAccountCredentials {
         let email = credentials.email.trimmingCharacters(in: .whitespacesAndNewlines)
         let host = credentials.host.trimmingCharacters(in: .whitespacesAndNewlines)
-        return MailAccountCredentials(
+        // Copy so explicit SMTP overrides, OAuth and discovered names survive;
+        // only the trimmed IMAP identity fields change.
+        var result = credentials
+        let smtpWasDerived = credentials.smtpHost
+            == MailAccountCredentials.derivedSMTPHost(from: credentials.host)
+        result.email = email
+        result.host = host
+        result.appPassword = MailCredentialPasswordNormalization.normalized(
+            credentials.appPassword,
             email: email,
-            appPassword: MailCredentialPasswordNormalization.normalized(
-                credentials.appPassword,
-                email: email,
-                host: host
-            ),
-            host: host,
-            port: credentials.port
+            host: host
         )
+        if smtpWasDerived { result.smtpHost = MailAccountCredentials.derivedSMTPHost(from: host) }
+        return result
     }
 
     private func shouldApplyConnectionResult(
