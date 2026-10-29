@@ -2,6 +2,12 @@
 
 Completed backlog items, most recent first. Item numbers are the stable IDs from `docs/backlog.md` and are not reused.
 
+### ~~139: Voice learning starts the trial and counts as a draft before the first draft~~
+
+**Resolved**: 2026-10-28 (sentwise PR 132 merged main@253e7a9, "POST /v1/draft purpose=voice_learning, learning_limit_exceeded handling"; sentwise-service PR 53 merged main@0a4b6ad, server-defined learning prompt, separate learning allowance, learning excluded from draft counts; production deploy of sentwise-service approved by Michael 2026-10-28, run 40791382215)
+
+**Description**: Voice learning (first learn and re-learn) sends `purpose: voice_learning` and no longer counts as a draft. sentwise-service gives learning its own allowance (`LEARNING_MONTHLY_LIMIT=10`, with reservations and an idempotent `/learn-finish`), so the non-counting route stays authenticated, rate-limited and token-capped. Remaining follow-ups are in sentwise-service `docs/backlog.md` item 4.
+
 ### ~~138: Transcript follow-up drafts get the greeting, the owners and the numbers wrong~~
 
 **Resolved**: 2026-10-28 (PR 131, merged main@83dfdc2, "follow-up drafts greet the right person, keep owners and facts")
