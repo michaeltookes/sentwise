@@ -145,11 +145,9 @@ final class IMAPVerifyHandler: ChannelInboundHandler {
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let response = unwrapInboundIn(data)
         switch response {
-        case .untagged:
+        case .untagged where !didSendLogin:
             // First untagged response is the greeting → authenticate.
-            if !didSendLogin {
-                sendLogin(context: context)
-            }
+            sendLogin(context: context)
         case .tagged(let tagged) where tagged.tag == loginTag:
             switch tagged.state {
             case .ok:
