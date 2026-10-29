@@ -42,7 +42,10 @@ final class OAuthErrorMappingTests: XCTestCase {
             .adminConsentRequired(tenantID: nil)
         )
         XCTAssertEqual(Mapping.redirectError(code: "consent_required", description: nil), .adminConsentRequired(tenantID: nil))
-        XCTAssertEqual(Mapping.redirectError(code: "access_denied", description: "The user denied access"), .authorizationDenied("access_denied"))
+        XCTAssertEqual(
+            Mapping.redirectError(code: "access_denied", description: "The user denied access"),
+            .authorizationDenied("access_denied")
+        )
         XCTAssertEqual(Mapping.redirectError(code: "access_denied", description: nil), .authorizationDenied("access_denied"))
     }
 

@@ -350,12 +350,11 @@ final class GmailAuthCoordinator {
         return (accessToken, startGeneration)
     }
 
-    /// A refresh the provider rejected as a dead grant: the typed
-    /// `.reauthenticationRequired` (Google `invalid_grant` and Microsoft's
-    /// AADSTS codes map to it at the token service), or a raw `invalid_grant`.
+    /// A refresh rejected as a dead grant: the token service maps Google
+    /// `invalid_grant` and Microsoft's AADSTS codes to this one typed error.
     private static func isGrantRejection(_ error: Error) -> Bool {
         if case OAuthError.reauthenticationRequired = error { return true }
-        if case OAuthError.server(let code, _) = error, code == "invalid_grant" { return true }
+        if case OAuthError.server(let code, _) = error { return code == "invalid_grant" }
         return false
     }
 
