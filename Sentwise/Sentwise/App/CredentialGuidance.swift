@@ -79,6 +79,7 @@ struct CredentialGuidance: Equatable {
         case .yahoo: return yahooGuidance
         case .aol: return aolGuidance
         case .icloud: return iCloudGuidance
+        case .microsoft: return microsoftGuidance
         }
     }
 
@@ -149,6 +150,22 @@ struct CredentialGuidance: Equatable {
         appPasswordDistinction: "Make sure this is an Apple app-specific password from "
             + "appleid.apple.com — not a Google app password. Both look like a grouped "
             + "16-character code."
+    )
+
+    /// Microsoft sign-in is the primary path (OAuth); this is the app-password
+    /// fallback for personal accounts that have two-step verification on.
+    static let microsoftGuidance = CredentialGuidance(
+        providerName: "Microsoft",
+        credentialName: "app password",
+        steps: [
+            "Sign in at account.microsoft.com → Security → Advanced security options.",
+            "Turn on two-step verification if needed, then choose Create a new app password.",
+            "Copy the password and paste it here."
+        ],
+        url: URL(string: "https://account.microsoft.com/security"),
+        appPasswordDistinction: "Make sure this is a Microsoft app password from your "
+            + "Microsoft account — not an Apple or Google app password. Work or school "
+            + "accounts sign in with Microsoft instead."
     )
 
     /// Fallback for unrecognized domains. IMAP password requirements vary, so

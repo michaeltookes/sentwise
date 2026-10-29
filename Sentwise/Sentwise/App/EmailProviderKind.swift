@@ -10,6 +10,7 @@ enum EmailProviderKind: Equatable, CaseIterable {
     case yahoo
     case aol
     case icloud
+    case microsoft
 
     /// Classifies an email address by domain, or `nil` when unrecognized.
     /// This also keeps host suggestion and credential guidance on one source of
@@ -28,7 +29,7 @@ enum EmailProviderKind: Equatable, CaseIterable {
         case "icloud.com", "me.com", "mac.com":
             return .icloud
         default:
-            return nil
+            return Self.microsoftConsumerDomains.contains(domain) ? .microsoft : nil
         }
     }
 
@@ -51,6 +52,9 @@ enum EmailProviderKind: Equatable, CaseIterable {
         if normalized.hasDNSLabelSuffix(in: icloudHostSuffixes) {
             return .icloud
         }
+        if normalized.hasDNSLabelSuffix(in: microsoftHostSuffixes) {
+            return .microsoft
+        }
         return nil
     }
 
@@ -62,6 +66,7 @@ enum EmailProviderKind: Equatable, CaseIterable {
         case .yahoo: return "imap.mail.yahoo.com"
         case .aol: return "imap.aol.com"
         case .icloud: return "imap.mail.me.com"
+        case .microsoft: return MicrosoftOAuth.imapHost
         }
     }
 
@@ -96,6 +101,27 @@ enum EmailProviderKind: Equatable, CaseIterable {
     private static let yahooHostSuffixes = ["yahoo.com", "ymail.com", "rocketmail.com"]
     private static let aolHostSuffixes = ["aol.com"]
     private static let icloudHostSuffixes = ["mail.me.com", "mail.icloud.com"]
+    private static let microsoftHostSuffixes = ["office365.com", "outlook.office.com", "outlook.com"]
+
+    /// Consumer Microsoft mailboxes: the global domains plus the regional
+    /// outlook/hotmail/live families. Work and school (Microsoft 365) domains
+    /// are custom, so they are found by MX (`Microsoft365MXDetector`), not here.
+    static let microsoftConsumerDomains: Set<String> = {
+        let outlook = ["com", "at", "be", "cl", "cz", "de", "dk", "es", "fr", "hu", "ie", "in", "it", "jp",
+                       "kr", "lv", "my", "ph", "pt", "sa", "sg", "sk", "th", "co.id", "co.il", "co.nz",
+                       "co.th", "com.ar", "com.au", "com.br", "com.gr", "com.tr", "com.vn"]
+        let hotmail = ["com", "co.uk", "fr", "de", "it", "es", "be", "nl", "se", "dk", "no", "fi", "at", "ch",
+                       "gr", "ca", "cl", "cz", "hu", "lv", "my", "ph", "pt", "sg", "sk", "sa", "co.id",
+                       "co.il", "co.jp", "co.nz", "co.th", "com.ar", "com.au", "com.br", "com.tr", "com.vn"]
+        let live = ["com", "co.uk", "fr", "de", "it", "nl", "se", "dk", "no", "at", "be", "ie", "ca", "cl",
+                    "cn", "hk", "in", "jp", "ru", "co.za", "co.jp", "co.kr", "com.ar", "com.au", "com.mx",
+                    "com.pt", "com.ph"]
+        var domains: Set<String> = ["msn.com", "windowslive.com", "passport.com"]
+        domains.formUnion(outlook.map { "outlook." + $0 })
+        domains.formUnion(hotmail.map { "hotmail." + $0 })
+        domains.formUnion(live.map { "live." + $0 })
+        return domains
+    }()
 }
 
 enum MailCredentialPasswordNormalization {
@@ -107,7 +133,10 @@ enum MailCredentialPasswordNormalization {
     }
 
     private static func usesGroupedGeneratedCredential(host: String) -> Bool {
-        EmailProviderKind.forHost(host) != nil
+        // Microsoft app passwords are not grouped 16-character codes, so the
+        // grouped-code normalization (which strips spaces) must not apply.
+        guard let kind = EmailProviderKind.forHost(host) else { return false }
+        return kind != .microsoft
     }
 }
 
