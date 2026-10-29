@@ -98,14 +98,16 @@ extension AppState {
     }
 
     /// The pending admin-approval request when it belongs to `address` (the
-    /// mailbox the form is for). `nil` address = unscoped. A request recorded
-    /// with no address belongs to a form with no address typed.
+    /// mailbox the form is for). `nil` or blank address = unscoped: a sign-in
+    /// started from a blank form records the address the browser authorized.
     func adminApproval(forAddress address: String?) -> MicrosoftAdminApprovalRequest? {
         guard let request = microsoftMailAuth.adminApproval else { return nil }
         guard let address else { return request }
         let want = address.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let have = request.address.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return want == have ? request : nil
+        // A blank form (no address typed yet) started the sign-in, so the
+        // request carries the mailbox the browser authorized; it must not hide.
+        return want.isEmpty || want == have ? request : nil
     }
 
     /// The state the Microsoft block shows right now for the mailbox `address`.
@@ -128,7 +130,7 @@ extension AppState {
     /// The note an administrator can act on (copied by the user), or nil.
     func microsoftAdminNoteText(forAddress address: String? = nil) -> String? {
         guard let request = adminApproval(forAddress: address),
-              let clientID = MicrosoftOAuthClientConfiguration.bundled()?.clientID else { return nil }
+              let clientID = microsoftMailAuth.clientID else { return nil }
         return MicrosoftAdminNote.text(
             reason: request.protocolDisabled.map(MicrosoftAdminNote.Reason.protocolDisabled)
                 ?? .consentRequired(tenantID: request.tenantID),

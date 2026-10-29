@@ -146,6 +146,9 @@ final class GoogleMailAuthService: ObservableObject {
 
     var isAvailable: Bool { coordinator != nil }
 
+    /// The installed engine's OAuth client id (nil when none is installed).
+    var clientID: String? { coordinator?.clientID }
+
     /// Runs the browser sign-in. Cancellable through `cancelSignIn()`.
     func signIn(loginHint: String? = nil, requireHintMatch: Bool = false) async throws -> GmailAuthorization {
         guard let coordinator else { throw GmailAuthError.notConfigured }

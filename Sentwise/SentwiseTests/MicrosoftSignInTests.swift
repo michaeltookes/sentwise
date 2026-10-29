@@ -151,6 +151,19 @@ final class MicrosoftSignInTests: XCTestCase {
         XCTAssertNil(harness.appState.microsoftAdminNoteText(forAddress: "b@contoso.com"))
     }
 
+    func testPreservedFailureFromBlankFormStaysVisibleAndOffersAdminNote() async {
+        let harness = makeHarness()
+        let credentials = MailAccountCredentials(
+            email: "me@contoso.com", appPassword: MicrosoftMailCredential.marker, host: "outlook.office365.com"
+        )
+        harness.appState.notePreservedMicrosoftFailure(
+            MailError.mailboxProtocolDisabled(.imap, "disabled"), credentials: credentials
+        )
+        XCTAssertEqual(harness.appState.microsoftSignInViewState(forAddress: ""), .protocolDisabled(.imap))
+        XCTAssertNotNil(harness.appState.microsoftAdminNoteText(forAddress: ""))
+        XCTAssertNil(harness.appState.microsoftAdminNoteText(forAddress: "other@contoso.com"))
+    }
+
     func testAdminConsentRequiredSetsApprovalStateAndAdminCopy() async {
         let harness = makeHarness(waitParams: ["error": "consent_required", "error_description": "AADSTS65001", "state": state])
         let connected = await harness.appState.connectWithMicrosoft(loginHint: "rep@contoso.com")
@@ -217,12 +230,22 @@ final class MicrosoftSignInViewStateTests: XCTestCase {
         XCTAssertTrue(byHost.showsMicrosoft)
     }
 
-    func testChooserShowsNotConfiguredNoteAndExpandsAppPasswordWhenNoClientID() {
+    func testChooserShowsNotConfiguredNoteAndKeepsGoogleSelectableWhenNoMicrosoftClientID() {
         let layout = MailConnectLayout.make(
             email: "me@hotmail.com", host: "", isGoogleAvailable: true, isMicrosoftConfigured: false
         )
         XCTAssertFalse(layout.showsMicrosoft)
         XCTAssertTrue(layout.showsMicrosoftNotConfigured)
+        XCTAssertTrue(layout.showsGoogle)
+        XCTAssertFalse(layout.appPasswordExpanded)
+    }
+
+    func testChooserExpandsAppPasswordWhenNeitherProviderIsConfigured() {
+        let layout = MailConnectLayout.make(
+            email: "me@hotmail.com", host: "", isGoogleAvailable: false, isMicrosoftConfigured: false
+        )
+        XCTAssertFalse(layout.showsMicrosoft)
+        XCTAssertFalse(layout.showsGoogle)
         XCTAssertTrue(layout.appPasswordExpanded)
     }
 
