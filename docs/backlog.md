@@ -363,22 +363,7 @@ After M6 (ranked, not planned): 53, 52, 104, 70, 30, 54, 55.
     - Confirm the next release's tap bump produces a warning-free `brew install --cask`.
     - One-off: patch the live tap cask to match so current installs stop warning. *(2026-10-12: pushed as `michaeltookes/homebrew-tap` branch `cask-depends-on-syntax`, awaiting merge. The tap's `containerbar` and `prompter` casks have the same deprecated line.)*
 
-31. **Microsoft sign-in (Outlook.com, Hotmail, Microsoft 365)** — *second provider, release after launch; rescoped 2026-10-28 from "Graph API" to IMAP/SMTP with XOAUTH2, same shape as the Gmail path. Brief: `docs/requirements/sign-in-first.md` section 6 (US-sign-in-first-6 to 10); depends on 136; architect questions A1-A9 in that section.*
-    Add a Microsoft sign-in provider behind the email-provider abstraction.
-    *As an Outlook user, I want to connect my M365 mailbox, so that I can use sentwise without Gmail.*
-    - ~~Graph API + OAuth provider implementing the shared email-provider interface.~~ Superseded 2026-10-28: IMAP/SMTP XOAUTH2 (Graph rejected, `docs/architecture/sign-in-first.md` section 9).
-    - Feature parity with Gmail for read/draft/send.
-    - Technical tasks (architecture `docs/architecture/sign-in-first.md` section 11; build in this order):
-      - T31-1 Provider-neutral OAuth refactor (`OAuthProviderConfiguration`, coordinator, token service, store, mail-provider wrapper); Google Keychain prefix stays `gmail`; no behaviour change, all Google tests green. Built on branch `31-t31-1-oauth-provider-neutral`.
-      - T31-6 `SentwiseMail` SMTP STARTTLS (`SMTPSecurity.startTLS`, refuse AUTH without STARTTLS) and saved-account fields `smtpHost`/`smtpPort`/`smtpSecurity`/`authProvider` (schema 12, additive).
-      - T31-8 `MailboxNaming.microsoft` plus IMAP SPECIAL-USE discovery for Microsoft accounts.
-      - T31-2 Microsoft configuration: `Sentwise/Config/MicrosoftOAuth.xcconfig` `SENTWISE_MICROSOFT_CLIENT_ID` -> `SentwiseMicrosoftOAuthClientID`; authority `common`, redirect `http://localhost:<port>`, scopes `IMAP.AccessAsUser.All SMTP.Send offline_access openid email`, no client secret; release secret pass-through.
-      - T31-3 Error mapping (architecture 4.6): `.adminConsentRequired`, `.reauthenticationRequired` (also Google `invalid_grant`), `.mailboxProtocolDisabled`; admin note; refresh-token rotation persisted.
-      - T31-4 Detection: `EmailProviderKind.microsoft` (outlook/hotmail/live/msn and regional domains), Microsoft 365 MX (`*.mail.protection.outlook.com`).
-      - T31-5 "Sign in with Microsoft" UI and adoption (address and `tid` from the ID token; personal vs work SMTP host).
-      - T31-7 SMTP AUTH-only probe at connect; tokens deleted and account not adopted on failure.
-      - T31-9 `MicrosoftOAuthLiveTests` on Lucius' Mini (personal + M365 test mailboxes): refresh, IMAP, probe, send to self, Sent Items and Drafts checks.
-      - T31-10 Consent copy block (ui-designer, owner-approved) and the sentwise.ai privacy-policy Microsoft section before the public flag.
+31. ~~Microsoft sign-in (Low Priority duplicate)~~ — superseded 2026-10-28; live item 31 is the open M6 epic entry above (T31 tasks and breadcrumbs live there).
 
 32. **IMAP/SMTP connection (app password)** — *PRIMARY connection path*
     IMAP + Google app password is the primary way users connect (decided 2026-07-03, superseding OAuth item 3). Provider-agnostic, works for Gmail/Outlook/any IMAP host. Built on SwiftNIO (`swift-nio-imap`) in `Packages/SentwiseMail`.
