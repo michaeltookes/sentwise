@@ -33,9 +33,7 @@ struct GmailAuthorization: Equatable {
     /// The `authorize` call that produced it; cleanup uses it to tell whether
     /// a newer sign-in is still in flight (see `discard(_:)`).
     var attempt: UInt64 = 0
-    /// The Entra tenant (`tid`) read from a Microsoft ID token, which picks the
-    /// personal or work SMTP host (item 31, T31-5); nil for Google.
-    var tenantID: String?
+    var tenantID: String? // Microsoft ID-token tid (item 31); nil for Google
 }
 
 /// The "Sign in with Google" phases, published for the UI (item 104).
@@ -235,16 +233,14 @@ final class GmailAuthCoordinator {
         try requireFullScope(token)
         guard token.refreshToken != nil else { throw OAuthError.missingRefreshToken }
         // Only the access/refresh material is kept; the ID token was read once.
-        let tenantID = token.idToken.flatMap(GoogleIDToken.tenantID(fromIDToken:))
-        var stored = token
-        stored.idToken = nil
+        var stored = token; stored.idToken = nil
         // A refresh still out for this mailbox belongs to the old grant: retire
         // it so its late result (success or invalid_grant) can't overwrite or
         // reject the new one, and so verification doesn't join it.
         invalidate(SavedMailAccount.normalizedEmail(email))
         guard !tokenOperationsSuspended else { throw CancellationError() }
         try store.saveToken(stored, for: email)
-        return GmailAuthorization(email: email, token: stored, tenantID: tenantID)
+        return GmailAuthorization(email: email, token: stored, tenantID: token.idToken.flatMap(GoogleIDToken.tenantID(fromIDToken:)))
     }
 
     /// A rejected exchange must not leave a new mailbox authorized remotely.

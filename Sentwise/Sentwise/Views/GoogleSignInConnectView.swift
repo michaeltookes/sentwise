@@ -21,13 +21,15 @@ struct GoogleOrAppPasswordConnect<AppPasswordForm: View>: View {
 
     @State private var showsAppPasswordForm = false
 
-    private var leadsWithGoogle: Bool {
-        appState.recommendedConnectMethod(email: email, host: host) == .googleSignIn
+    private var layout: MailConnectLayout {
+        appState.mailConnectLayout(email: email, host: host)
     }
 
     var body: some View {
-        if appState.isGoogleSignInAvailable {
-            if leadsWithGoogle {
+        let layout = layout
+        if layout.showsGoogle || layout.showsMicrosoft || layout.showsMicrosoftNotConfigured
+            || appState.isGoogleSignInAvailable {
+            if layout.showsGoogle {
                 GoogleSignInButtonBlock(
                     auth: auth,
                     loginHint: email,
@@ -36,10 +38,20 @@ struct GoogleOrAppPasswordConnect<AppPasswordForm: View>: View {
                     onConnected: onConnected
                 )
             }
+            if layout.showsMicrosoft || layout.showsMicrosoftNotConfigured {
+                MicrosoftSignInButtonBlock(
+                    auth: appState.microsoftMailAuth,
+                    loginHint: email,
+                    messageSurface: messageSurface,
+                    shouldApplyResult: shouldApplyResult,
+                    onConnected: onConnected
+                )
+            }
+            let leads = layout.showsGoogle || layout.showsMicrosoft
             DisclosureGroup(
-                leadsWithGoogle ? "Use an app password instead" : "Connect with an app password",
+                leads ? "Use an app password instead" : "Connect with an app password",
                 isExpanded: Binding(
-                    get: { showsAppPasswordForm || !leadsWithGoogle },
+                    get: { showsAppPasswordForm || layout.appPasswordExpanded },
                     set: { showsAppPasswordForm = $0 }
                 )
             ) {

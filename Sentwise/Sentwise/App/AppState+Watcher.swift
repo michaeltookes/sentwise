@@ -262,6 +262,7 @@ extension AppState {
             pauseWatching(
                 account: account,
                 resumeAfterGoogleReauthentication: GoogleMailCredential.isMarker(credentials.appPassword)
+                    || MicrosoftMailCredential.isMarker(credentials.appPassword)
             )
         }
         logger.error("Inbox poll fetch failed: \(error.localizedDescription)")

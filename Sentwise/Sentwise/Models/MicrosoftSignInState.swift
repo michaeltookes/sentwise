@@ -50,39 +50,42 @@ enum MicrosoftSignInCopy {
 
     /// User-facing text for a failed Microsoft sign-in or connect step.
     static func message(for error: Error) -> String {
-        if let error = error as? OAuthError {
-            switch error {
-            case .authorizationDenied(let reason):
-                return reason == "access_denied" ? cancelled : notVerified
-            case .missingRequiredScopes:
-                return noMailAccess
-            case .adminConsentRequired:
-                return adminApproval
-            case .reauthenticationRequired:
-                return "Your Microsoft sign-in has expired. Sign in with Microsoft again."
-            case .temporarilyUnavailable:
-                return notResponding
-            case .redirectTimedOut:
-                return "Microsoft sign-in timed out. Try again and finish in your browser."
-            default:
-                return notVerified
-            }
-        }
-        if let error = error as? GmailAuthError {
-            switch error {
-            case .notConfigured: return notConfigured
-            case .accountMismatch(let expected, _):
-                return "Choose \(expected) on Microsoft's screen to keep this mailbox connected."
-            case .alreadyInProgress: return waitingForBrowser
-            case .missingAccountEmail: return notVerified
-            default: return notVerified
-            }
-        }
+        if let error = error as? OAuthError { return message(forOAuth: error) }
+        if let error = error as? GmailAuthError { return message(forAuth: error) }
         if let error = error as? MailError, case .mailboxProtocolDisabled(let proto, _) = error {
             return protocolDisabledMessage(proto)
         }
         if (error as? URLError)?.code == .notConnectedToInternet { return offline }
         return notVerified
+    }
+
+    private static func message(forOAuth error: OAuthError) -> String {
+        switch error {
+        case .authorizationDenied(let reason):
+            return reason == "access_denied" ? cancelled : notVerified
+        case .missingRequiredScopes:
+            return noMailAccess
+        case .adminConsentRequired:
+            return adminApproval
+        case .reauthenticationRequired:
+            return "Your Microsoft sign-in has expired. Sign in with Microsoft again."
+        case .temporarilyUnavailable:
+            return notResponding
+        case .redirectTimedOut:
+            return "Microsoft sign-in timed out. Try again and finish in your browser."
+        default:
+            return notVerified
+        }
+    }
+
+    private static func message(forAuth error: GmailAuthError) -> String {
+        switch error {
+        case .notConfigured: return notConfigured
+        case .accountMismatch(let expected, _):
+            return "Choose \(expected) on Microsoft's screen to keep this mailbox connected."
+        case .alreadyInProgress: return waitingForBrowser
+        default: return notVerified
+        }
     }
 
     /// Whether `error` is the "an administrator must approve Sentwise" state.

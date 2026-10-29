@@ -89,13 +89,8 @@ extension AppState {
         do {
             // One session verifies and resolves the special-folder names (T31-8);
             // a failed LIST only leaves the host defaults in place.
-            credentials.discoveredNaming = try await mailProvider.verifyAndDiscover(credentials)
-                ?? credentials.discoveredNaming
-            // Microsoft sign-in only: SMTP AUTH can be off while IMAP works, so
-            // prove submission before the account is adopted (item 31, T31-7).
-            if credentials.appPassword == MicrosoftMailCredential.marker {
-                try await mailProvider.probeSMTPAuthentication(credentials)
-            }
+            credentials.discoveredNaming = try await mailProvider.verifyAndDiscover(credentials) ?? credentials.discoveredNaming
+            try await probeMicrosoftSubmission(credentials) // item 31, T31-7
         } catch {
             guard shouldApplyConnectionResult(
                 credentials,

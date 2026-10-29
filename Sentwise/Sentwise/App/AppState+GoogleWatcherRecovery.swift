@@ -7,7 +7,8 @@ extension AppState {
     /// "Sign in with Google again" fixes. AI-provider auth failures (managed
     /// sign-in, API key) are not: they recover through their own flow.
     static func isGoogleMailboxAuthFailure(_ error: Error, credentials: MailAccountCredentials) -> Bool {
-        guard GoogleMailCredential.isGoogleSignIn(credentials),
+        guard GoogleMailCredential.isGoogleSignIn(credentials)
+                || MicrosoftMailCredential.isMarker(credentials.appPassword),
               case MailError.authenticationFailed = error else { return false }
         return true
     }
@@ -15,7 +16,7 @@ extension AppState {
     /// Successful mailbox verification has adopted this account as the focused
     /// mailbox. Resume only an auth-induced pause, never a manual pause or stop.
     func resumeInboxWatchingAfterGoogleReauth(email: String) {
-        guard activeAccountUsesGoogleSignIn,
+        guard activeAccountUsesGoogleSignIn || activeAccountUsesMicrosoftSignIn,
               SavedMailAccount.normalizedEmail(mailEmail) == SavedMailAccount.normalizedEmail(email),
               resumeWatchingAfterGoogleReauth,
               watchStatus == .paused else { return }
@@ -44,6 +45,15 @@ extension AppState {
         guard isGoogleSignInAvailable, !isActiveAccount(account),
               let connected = backgroundConnectedAccount(email: account.email),
               GoogleMailCredential.isGoogleSignIn(connected.credentials) else { return false }
+        return connected.resumeWatchingAfterGoogleReauth
+    }
+
+    /// A saved background Microsoft mailbox whose watcher paused on a sign-in
+    /// failure and can be resumed by signing in again.
+    func savedAccountNeedsMicrosoftReauth(_ account: SavedMailAccount) -> Bool {
+        guard isMicrosoftSignInAvailable, !isActiveAccount(account),
+              let connected = backgroundConnectedAccount(email: account.email),
+              MicrosoftMailCredential.isMarker(connected.credentials.appPassword) else { return false }
         return connected.resumeWatchingAfterGoogleReauth
     }
 }

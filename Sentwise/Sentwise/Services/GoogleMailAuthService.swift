@@ -87,6 +87,8 @@ enum MailConnectMethod: Equatable {
 @MainActor
 final class GoogleMailAuthService: ObservableObject {
     @Published private(set) var phase: GmailAuthPhase = .idle
+    /// Microsoft only: set when sign-in stopped for an administrator's approval (item 31, T31-5).
+    @Published var adminApproval: MicrosoftAdminApprovalRequest?
 
     private(set) var coordinator: GmailAuthCoordinator?
     /// Independent of `coordinator` (and of client availability).

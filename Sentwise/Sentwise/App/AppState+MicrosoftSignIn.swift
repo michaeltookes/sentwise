@@ -50,10 +50,22 @@ extension AppState {
         microsoftMailAuth.isAvailable && !ProwlHuntRuntime.current.isEnabled
     }
 
+    /// Whether the focused, connected mailbox signed in with Microsoft.
+    var activeAccountUsesMicrosoftSignIn: Bool {
+        isAccountConnected && MicrosoftMailCredential.isMarker(mailAppPassword)
+    }
+
     /// Whether the saved mailbox `email` signed in with Microsoft.
     func savedAccountUsesMicrosoftSignIn(_ email: String) -> Bool {
         let stored = (try? secrets.value(for: .mailAppPassword(email: email))) ?? nil
         return stored.map(MicrosoftMailCredential.isMarker) ?? false
+    }
+
+    /// Microsoft sign-in only: SMTP AUTH can be off while IMAP works, so prove
+    /// submission before the account is adopted (item 31, T31-7).
+    func probeMicrosoftSubmission(_ credentials: MailAccountCredentials) async throws {
+        guard MicrosoftMailCredential.isMarker(credentials.appPassword) else { return }
+        try await mailProvider.probeSMTPAuthentication(credentials)
     }
 
     /// The connect-chooser layout for what has been typed.
@@ -68,7 +80,7 @@ extension AppState {
 
     /// The state the Microsoft block shows right now.
     func microsoftSignInViewState(reauthenticateAddress: String? = nil) -> MicrosoftSignInViewState {
-        if microsoftAdminApproval != nil, isMicrosoftSignInAvailable, !microsoftMailAuth.phase.isInProgress {
+        if microsoftMailAuth.adminApproval != nil, isMicrosoftSignInAvailable, !microsoftMailAuth.phase.isInProgress {
             return .consentRequired
         }
         return MicrosoftSignInViewState.make(
@@ -82,7 +94,7 @@ extension AppState {
 
     /// The note an administrator can act on (copied by the user), or nil.
     func microsoftAdminNoteText() -> String? {
-        guard let request = microsoftAdminApproval,
+        guard let request = microsoftMailAuth.adminApproval,
               let clientID = MicrosoftOAuthClientConfiguration.bundled()?.clientID else { return nil }
         return MicrosoftAdminNote.text(
             reason: .consentRequired(tenantID: request.tenantID),
@@ -93,7 +105,7 @@ extension AppState {
 
     /// Leaves the admin-approval screen so the user can pick another account.
     func chooseAnotherMicrosoftAccount() {
-        microsoftAdminApproval = nil
+        microsoftMailAuth.adminApproval = nil
         setConnectionError(nil, for: .shared)
     }
 
@@ -111,7 +123,7 @@ extension AppState {
         shouldApplyResult: @escaping @MainActor (MailAccountCredentials) -> Bool = { _ in true }
     ) async -> Bool {
         setConnectionError(nil, for: messageSurface)
-        microsoftAdminApproval = nil
+        microsoftMailAuth.adminApproval = nil
         guard isMicrosoftSignInAvailable else {
             setConnectionError(MicrosoftSignInCopy.notConfigured, for: messageSurface)
             return false
@@ -138,7 +150,7 @@ extension AppState {
             guard isCurrentLocalDataGeneration(localDataGeneration),
                   isCurrentMailConnectionAttempt(attempt), isCurrentSurface() else { return false }
             if case OAuthError.adminConsentRequired(let tenantID) = error {
-                microsoftAdminApproval = MicrosoftAdminApprovalRequest(
+                microsoftMailAuth.adminApproval = MicrosoftAdminApprovalRequest(
                     tenantID: tenantID,
                     address: loginHint ?? ""
                 )
