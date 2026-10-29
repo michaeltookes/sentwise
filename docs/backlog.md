@@ -46,7 +46,7 @@ Prioritized list of planned features, improvements, and technical debt for **sen
      - T135-1 Flag `SENTWISE_SIGN_IN_FIRST` (new `Sentwise/Config/SignInFirst.xcconfig`, empty) -> Info.plist `SentwiseSignInFirst` -> `BuildConfiguration.signInFirst`; `QA.xcconfig` sets `YES`. Hide applies only when the flag is on and `isGoogleSignInAvailable`.
      - T135-2 Email field moves outside the disclosure, shared with the app-password form; Google uses it as `login_hint`.
      - T135-3 Hidden state in `GoogleOrAppPasswordConnect` for onboarding and Settings; disclosure "Other ways to connect", identifier `otherWaysToConnect`; existing identifiers kept.
-     - T135-4 Onboarding subtitle per state (copy from the UX review).
+     - T135-4 Onboarding subtitle per state (copy from the UX review). Per-state subtitle copy for the Microsoft chooser is proposed in docs/design/t31-10-microsoft-consent-copy.md (2026-10-29).
    - **US-2 — non-Google IMAP fallback**
      - T135-5 Inline provider hints (no auto-expand), including the Microsoft note until item 31 ships.
    - **US-3 — existing account compatibility**
@@ -70,11 +70,12 @@ Prioritized list of planned features, improvements, and technical debt for **sen
      - T31-7 ✅ shipped 2026-10-29 (PR 136), see resolved.md
      - T31-12 Microsoft protocol-disabled recovery when the authorized address differs from the form address: with `requireHintMatch` false the failure is stored under the authorized address B while the view passes form address A, so the request is discarded and the admin-note action never appears (`AppState+MicrosoftSignIn.swift` ~106-110). Associate the failure with the initiating attempt and keep the authorized address for the note. Codex leftover, PR 136.
      - T31-13 `eraseAllLocalData()` must clear `microsoftMailAuth.adminApproval`: after a consent or protocol-disabled failure the reset blank form still shows the erased mailbox's failure and its admin note exports that address (`AppState+GoogleSignIn.swift` ~183-184). Codex leftover, PR 136.
+     - T31-14 Post-disconnect "remove Sentwise's access" link: after Disconnect/Remove of a Microsoft mailbox, offer the account.live.com/consent/Manage (personal) or myapps.microsoft.com (work/school) link so users can revoke the grant on Microsoft's side; copy drafted in docs/design/t31-10-microsoft-consent-copy.md (filed 2026-10-29 from the T31-10 Codex pass).
    - **US-9 — live mail proof**
      - T31-9 `MicrosoftOAuthLiveTests` on Lucius' Mini (personal + M365 test mailboxes): refresh, IMAP, probe, send to self, Sent Items and Drafts checks.
      - T31-11 Microsoft app registration in Entra (vendor-ops; owner Michael for the tenant sign-in): client id for MicrosoftOAuth.xcconfig, redirect http://localhost, scopes IMAP.AccessAsUser.All SMTP.Send offline_access openid email, personal + M365 test mailboxes; prerequisite for T31-9 live tests and the release secret.
    - **US-10 — consent and privacy copy**
-     - T31-10 Consent copy block (ui-designer, owner-approved) and the sentwise.ai privacy-policy Microsoft section before the public flag.
+     - T31-10 Consent copy block ✅ shipped 2026-10-29 (PR 138), see resolved.md; the sentwise.ai privacy-policy Microsoft section is filed in sentwise-landing-page (draft in docs/design/t31-10-microsoft-consent-copy.md), needed before the public flag.
    - **Done:** a Genkei-owned Outlook.com fixture signs in without a password, refresh rotation persists, offline cached-token launch works, revoked consent produces one reauthentication state, and the final accessibility/consent checks pass. Work/school support may remain gated as stated in the owner assumption.
 
 3. **Item 136 — owner/vendor prerequisite for item 31** (TC-M6-04 and TC-M6-10 live preconditions; registration evidence is not app-code QA)
