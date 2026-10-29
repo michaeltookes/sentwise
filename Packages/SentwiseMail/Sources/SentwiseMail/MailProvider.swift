@@ -36,11 +36,25 @@ public enum MailError: Error, Equatable, Sendable {
     case mailboxProtocolDisabled(String)
 }
 
+extension MailProvider {
+    public func verifyAndDiscover(_ credentials: MailAccountCredentials) async throws -> MailboxNaming? {
+        try await verifyConnection(credentials)
+        return nil
+    }
+}
+
 /// A mailbox backend. Exposes a connection check plus recent-message fetch;
 /// send is layered on next.
 public protocol MailProvider: Sendable {
     /// Connects, authenticates, and disconnects. Throws `MailError` on failure.
     func verifyConnection(_ credentials: MailAccountCredentials) async throws
+
+    /// Verifies like `verifyConnection`, then (IMAP) issues one `LIST` and
+    /// returns the account's special-folder names resolved from SPECIAL-USE
+    /// attributes over the host defaults. Discovery never blocks verification:
+    /// a failed or unsupported `LIST` yields `nil`. Throws only when
+    /// verification itself fails.
+    func verifyAndDiscover(_ credentials: MailAccountCredentials) async throws -> MailboxNaming?
 
     /// Fetches up to `limit` of the most recent messages from `mailbox`
     /// (newest first). Envelope-level for now.

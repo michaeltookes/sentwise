@@ -9,7 +9,7 @@ import Foundation
 /// folder at all. So the correct folder is resolved per account (from the IMAP
 /// host) rather than hardcoded to Gmail. A future enhancement can discover these
 /// from the server via IMAP `LIST` SPECIAL-USE attributes (RFC 6154).
-public struct MailboxNaming: Equatable, Sendable {
+public struct MailboxNaming: Equatable, Sendable, Codable {
     public var sent: String
     public var drafts: String
     /// The "all mail" / archive-of-everything folder, or `nil` when the provider
@@ -155,8 +155,9 @@ extension MailboxNaming {
     /// replaced by whatever the server marked with `\Sent`, `\Drafts`, `\Junk`
     /// (or XLIST's `\Spam`), `\Trash` and `\Archive`. A role the server did not
     /// mark keeps this layout's value, so the documented defaults are the last
-    /// fallback. `allMail` is never changed. Only Microsoft accounts call this at
-    /// connect; shipped providers keep their static names.
+    /// fallback. `allMail` is never changed. Account verification runs this once for
+    /// IMAP accounts (`IMAPMailProvider.verifyAndDiscover`) and the result is
+    /// carried on `MailAccountCredentials.discoveredNaming`.
     public func discovering(from entries: [MailboxListEntry]) -> MailboxNaming {
         var result = self
         func name(for attributes: [String]) -> String? {

@@ -31,6 +31,10 @@ public struct MailAccountCredentials: Equatable, Sendable {
     public var oauthAccessToken: String?
     /// How the SMTP connection is secured. Defaults to implicit TLS (port 465).
     public var smtpSecurity: SMTPSecurity
+    /// Special-folder names resolved from the server's `LIST` SPECIAL-USE
+    /// attributes at verification (item 31, T31-8). When set they win over the
+    /// static per-host defaults. `nil` for accounts never discovered.
+    public var discoveredNaming: MailboxNaming?
 
     public init(
         email: String,
@@ -40,7 +44,8 @@ public struct MailAccountCredentials: Equatable, Sendable {
         smtpHost: String? = nil,
         smtpPort: Int = 465,
         oauthAccessToken: String? = nil,
-        smtpSecurity: SMTPSecurity = .implicitTLS
+        smtpSecurity: SMTPSecurity = .implicitTLS,
+        discoveredNaming: MailboxNaming? = nil
     ) {
         self.email = email
         self.appPassword = appPassword
@@ -50,6 +55,7 @@ public struct MailAccountCredentials: Equatable, Sendable {
         self.smtpPort = smtpPort
         self.oauthAccessToken = oauthAccessToken
         self.smtpSecurity = smtpSecurity
+        self.discoveredNaming = discoveredNaming
     }
 
     /// How sessions with these credentials authenticate: `XOAUTH2` when an OAuth
@@ -69,11 +75,12 @@ public struct MailAccountCredentials: Equatable, Sendable {
 
     /// The special-folder layout (Sent/Drafts/All-Mail/Junk) for this account's
     /// IMAP host, so operations target the right folder on non-Gmail providers.
-    public var mailboxNaming: MailboxNaming { MailboxNaming.forHost(host) }
+    /// Names discovered from the server win over the static host defaults.
+    public var mailboxNaming: MailboxNaming { discoveredNaming ?? MailboxNaming.forHost(host) }
 
     /// Derives an SMTP submission host from an IMAP host by swapping a leading
     /// `imap.` for `smtp.`; other hosts are returned unchanged.
-    static func derivedSMTPHost(from host: String) -> String {
+    public static func derivedSMTPHost(from host: String) -> String {
         host.hasPrefix("imap.") ? "smtp." + host.dropFirst("imap.".count) : host
     }
 
