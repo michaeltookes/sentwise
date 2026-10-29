@@ -14,7 +14,7 @@ private struct TLSInsertFailure: Error {}
 
 final class SMTPStartTLSTests: XCTestCase {
 
-    private let rfc822 = "Subject: Hi\r\n\r\nHello.\r\n".data(using: .utf8)!
+    private let rfc822 = Data("Subject: Hi\r\n\r\nHello.\r\n".utf8)
 
     private func makeChannel(
         authentication: MailAuthentication = .xoauth2(accessToken: "tok"),
@@ -64,7 +64,10 @@ final class SMTPStartTLSTests: XCTestCase {
         XCTAssertNil(try? channel.pipeline.syncOperations.handler(type: FakeTLSHandler.self))
         let ehlo2 = try feed(channel, "220 2.0.0 SMTP server ready\r\n")
         XCTAssertTrue(ehlo2.contains("EHLO contoso.com"), "EHLO must be re-issued after the upgrade: \(ehlo2)")
-        XCTAssertNotNil(try? channel.pipeline.syncOperations.handler(type: FakeTLSHandler.self), "TLS handler not inserted")
+        XCTAssertNotNil(
+            try? channel.pipeline.syncOperations.handler(type: FakeTLSHandler.self),
+            "TLS handler not inserted"
+        )
 
         let auth = try feed(channel, "250-smtp.office365.com\r\n250 AUTH LOGIN XOAUTH2\r\n")
         XCTAssertTrue(auth.hasPrefix("AUTH XOAUTH2 "), "got: \(auth)")
@@ -122,7 +125,10 @@ final class SMTPStartTLSTests: XCTestCase {
         try feed(channel, "250 STARTTLS\r\n")
         try feed(channel, "220 go\r\n")
         try feed(channel, "250 AUTH XOAUTH2\r\n")
-        try feed(channel, "535 5.7.139 Authentication unsuccessful, SmtpClientAuthentication is disabled for the Tenant.\r\n")
+        try feed(
+            channel,
+            "535 5.7.139 Authentication unsuccessful, SmtpClientAuthentication is disabled for the Tenant.\r\n"
+        )
         guard case .mailboxProtocolDisabled? = mailError(future) else {
             return XCTFail("expected mailboxProtocolDisabled")
         }
