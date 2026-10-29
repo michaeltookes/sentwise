@@ -40,7 +40,7 @@ enum GoogleMailCredential {
     /// generic "check your app password" copy is never shown for it.
     static let failurePrefix = "Google sign-in"
     static let reauthorizationDetail =
-        "Google sign-in expired or was revoked — sign in with Google again in Settings → Email Account."
+        "Google sign-in expired or was revoked. Sign in with Google again in Settings → Email Account."
 
     static func isGoogleSignInFailureDetail(_ detail: String) -> Bool {
         detail.hasPrefix(failurePrefix)

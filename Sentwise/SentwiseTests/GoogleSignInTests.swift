@@ -184,7 +184,7 @@ final class GoogleSignInTests: XCTestCase {
             XCTAssertEqual(ResilienceClassifier.classify(error), .authentication)
             let message = AppState.message(for: error)
             XCTAssertFalse(message.contains("app password"), message)
-            XCTAssertTrue(message.contains("sign in with Google again"), message)
+            XCTAssertTrue(message.contains("Sign in with Google again"), message)
         }
         XCTAssertNil(harness.provider.lastCredentials, "no IMAP session without a usable token")
     }

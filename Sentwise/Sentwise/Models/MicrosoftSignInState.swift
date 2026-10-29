@@ -26,13 +26,30 @@ enum MicrosoftSignInCopy {
     static let adminNoteCopied = "Note copied."
     static let notConfigured = "Sign in with Microsoft isn't available in this build. Use an app password instead."
 
-    // TODO(T31-10): placeholder consent copy; the ui-designer and owner approve the final wording.
+    // Consent block shown under "Continue with Microsoft" before the browser
+    // opens (T31-10; docs/design/t31-10-microsoft-consent-copy.md). Claims stay
+    // inside the requested scopes: IMAP.AccessAsUser.All (read mail, save
+    // drafts), SMTP.Send (send what the user approves), offline_access (stay
+    // signed in), openid/profile/email (the address). Never say mail does not
+    // leave the Mac: drafting sends the needed content to the drafting service,
+    // and learning the voice sends up to 12 sent messages (AppState.privacyStatement).
     static let consentHeading = "Before you continue"
-    // TODO(T31-10): placeholder consent copy; final wording pending owner approval.
-    static let workAccountNote = "Your IT administrator may need to approve Sentwise for a work or school account."
-    // TODO(T31-10): placeholder consent copy; final wording pending owner approval.
-    static let consentSummary = "Sentwise will read your inbox on this Mac and send mail you approve. "
-        + "Microsoft will ask you to allow mail access."
+    static let consentSummary = "Microsoft will ask you to let Sentwise read your mail, save drafts, "
+        + "and send messages you approve, and to keep this Mac signed in."
+    static let consentPrivacy = "Mail is read on this Mac. Only the content needed to draft a reply, and up to "
+        + "12 of your sent messages each time you learn your voice, goes to the Sentwise drafting service. "
+        + "Your sign-in is kept in this Mac's Keychain and is never sent to Sentwise servers."
+    static let consentRevoke = "You can remove Sentwise's access at any time in your Microsoft account."
+    static let workAccountNote = "For a work or school account, your IT administrator may need to approve "
+        + "Sentwise first."
+
+    /// The consent block as VoiceOver reads it: one element, sentences in order.
+    static func consentAccessibilityText(showsWorkAccountNote: Bool) -> String {
+        var parts = [consentHeading + ".", consentSummary, consentPrivacy]
+        if showsWorkAccountNote { parts.append(workAccountNote) }
+        parts.append(consentRevoke)
+        return parts.joined(separator: " ")
+    }
 
     static func connected(_ address: String) -> String { "Connected as \(address) with Microsoft" }
     static func reauthenticate(_ address: String) -> String {
