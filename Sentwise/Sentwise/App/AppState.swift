@@ -371,7 +371,7 @@ final class AppState: ObservableObject {
     /// Internal (not private) so the `AppState+Voice` extension can reach it.
     let mailProvider: MailProvider
     let googleMailAuth: GoogleMailAuthService, microsoftMailAuth: GoogleMailAuthService // items 104, 31; wrap mailProvider
-    let googleWorkspaceMXDetector: GoogleWorkspaceMXDetector
+    let googleWorkspaceMXDetector: GoogleWorkspaceMXDetector; var microsoft365MXDetector = Microsoft365MXDetector() // item 31
     let llm: LLMProviding
     /// The managed-inference account (item 56a): Clerk sign-in + session-token
     /// minting. Also the `ManagedSessionProviding` behind the production LLM

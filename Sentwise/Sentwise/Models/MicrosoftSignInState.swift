@@ -107,6 +107,8 @@ enum MicrosoftSignInViewState: Equatable {
     case checking
     /// An administrator must approve Sentwise before this organization can sign in.
     case consentRequired
+    /// IMAP or SMTP AUTH is switched off for the mailbox; the admin note applies.
+    case protocolDisabled(MailProtocol)
     case failed(String)
 
     var isInProgress: Bool { self == .waitingForBrowser || self == .checking }
@@ -148,12 +150,13 @@ struct MailConnectLayout: Equatable {
         email: String,
         host: String,
         isGoogleAvailable: Bool,
-        isMicrosoftConfigured: Bool
+        isMicrosoftConfigured: Bool,
+        isMicrosoft365Detected: Bool = false
     ) -> MailConnectLayout {
         let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
         let emailKind = EmailProviderKind.forEmail(email)
         let hostKind = trimmedHost.isEmpty ? nil : EmailProviderKind.forHost(trimmedHost)
-        let isMicrosoft = emailKind == .microsoft || hostKind == .microsoft
+        let isMicrosoft = emailKind == .microsoft || hostKind == .microsoft || isMicrosoft365Detected
         let google = MailConnectMethod.recommended(
             email: email, host: host, isGoogleSignInAvailable: isGoogleAvailable
         ) == .googleSignIn

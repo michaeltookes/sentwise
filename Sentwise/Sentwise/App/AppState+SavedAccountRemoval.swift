@@ -47,7 +47,7 @@ extension AppState {
         ) else { return }
         // The Google token goes first and is rolled back with the rest, so a
         // Keychain failure never leaves a refresh token with no account behind.
-        let removedGoogleToken: OAuthToken?
+        let removedGoogleToken: GoogleTokenRemoval?
         do {
             removedGoogleToken = try removeGoogleTokenForAccountRemoval(account.email)
         } catch {
@@ -57,7 +57,7 @@ extension AppState {
         }
         guard removeSavedAccountSecrets(account, context: context, messageSurface: messageSurface),
               persistRemovedSavedAccountSettings(account, context: context, messageSurface: messageSurface) else {
-            restoreGoogleTokenAfterFailedRemoval(removedGoogleToken, email: account.email)
+            restoreGoogleTokenAfterFailedRemoval(removedGoogleToken)
             restoreWatchingAfterPreservedSavedAccountRemovalIfNeeded(shouldRestoreWatching)
             return
         }

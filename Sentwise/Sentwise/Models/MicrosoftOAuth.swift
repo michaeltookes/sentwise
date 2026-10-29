@@ -52,6 +52,15 @@ enum MicrosoftMailCredential {
 
     static func isMarker(_ value: String) -> Bool { value == marker }
 
+    /// Prefix of every Microsoft sign-in failure detail the OAuth path produces.
+    static let failurePrefix = "Microsoft sign-in"
+    static let reauthorizationDetail =
+        "Microsoft sign-in expired or was revoked — sign in with Microsoft again in Settings → Email Account."
+
+    static func isMicrosoftSignInFailureDetail(_ detail: String) -> Bool {
+        detail.hasPrefix(failurePrefix)
+    }
+
     /// Credentials for a Microsoft-signed-in mailbox: the signed-in address,
     /// Outlook IMAP, and the personal or work SMTP host picked from `tid`.
     static func credentials(email: String, tenantID: String?) -> MailAccountCredentials {

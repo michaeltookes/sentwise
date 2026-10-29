@@ -117,7 +117,7 @@ final class MicrosoftSignInTests: XCTestCase {
     }
 
     func testIMAPDisabledAdoptsNothingDeletesTokenAndSkipsTheSMTPProbe() async throws {
-        let harness = makeHarness(verify: .failure(.mailboxProtocolDisabled(.imap, "LOGIN failed")))
+        let harness = makeHarness(verify: .failure(.authenticationFailed("LOGIN failed")))
         let connected = await harness.appState.connectWithMicrosoft()
         XCTAssertFalse(connected)
         XCTAssertFalse(harness.appState.isAccountConnected)

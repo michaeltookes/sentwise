@@ -54,7 +54,9 @@ struct MicrosoftSignInButtonBlock: View {
                     Text(MicrosoftSignInCopy.checking).font(.caption).foregroundStyle(.secondary)
                 }
             case .consentRequired:
-                consentRequiredBlock
+                consentRequiredBlock(MicrosoftSignInCopy.adminApproval)
+            case .protocolDisabled(let proto):
+                consentRequiredBlock(MicrosoftSignInCopy.protocolDisabledMessage(proto))
             case .failed(let message):
                 signInButton(title: MicrosoftSignInCopy.signInTitle)
                 Text(message).font(.caption).foregroundStyle(.red)
@@ -96,9 +98,9 @@ struct MicrosoftSignInButtonBlock: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var consentRequiredBlock: some View {
+    private func consentRequiredBlock(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(MicrosoftSignInCopy.adminApproval)
+            Text(message)
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {

@@ -20,12 +20,20 @@ struct GoogleOrAppPasswordConnect<AppPasswordForm: View>: View {
     @ViewBuilder let appPasswordForm: () -> AppPasswordForm
 
     @State private var showsAppPasswordForm = false
+    /// MX detection says the typed work domain is Microsoft 365 hosted.
+    @State private var detectedMicrosoft365 = false
 
     private var layout: MailConnectLayout {
-        appState.mailConnectLayout(email: email, host: host)
+        appState.mailConnectLayout(email: email, host: host, isMicrosoft365Detected: detectedMicrosoft365)
     }
 
     var body: some View {
+        content.task(id: email) {
+            detectedMicrosoft365 = await appState.isMicrosoft365Hosted(email: email)
+        }
+    }
+
+    @ViewBuilder private var content: some View {
         let layout = layout
         if layout.showsGoogle || layout.showsMicrosoft || layout.showsMicrosoftNotConfigured
             || appState.isGoogleSignInAvailable {

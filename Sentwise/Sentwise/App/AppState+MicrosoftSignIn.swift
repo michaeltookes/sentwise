@@ -10,6 +10,8 @@ private let logger = Logger(subsystem: "com.tookes.Sentwise", category: "Microso
 struct MicrosoftAdminApprovalRequest: Equatable {
     let tenantID: String?
     let address: String
+    /// Set when IMAP or SMTP AUTH is off for the mailbox rather than consent missing.
+    var protocolDisabled: MailProtocol?
 }
 
 extension GoogleMailAuthService {
@@ -69,19 +71,29 @@ extension AppState {
     }
 
     /// The connect-chooser layout for what has been typed.
-    func mailConnectLayout(email: String, host: String) -> MailConnectLayout {
+    func mailConnectLayout(email: String, host: String, isMicrosoft365Detected: Bool = false) -> MailConnectLayout {
         MailConnectLayout.make(
             email: email,
             host: host,
             isGoogleAvailable: isGoogleSignInAvailable,
-            isMicrosoftConfigured: isMicrosoftSignInAvailable
+            isMicrosoftConfigured: isMicrosoftSignInAvailable,
+            isMicrosoft365Detected: isMicrosoft365Detected
         )
+    }
+
+    /// Whether a custom work domain's MX records say Microsoft 365 hosts it.
+    /// Known providers (static table) never trigger a DNS lookup.
+    func isMicrosoft365Hosted(email: String) async -> Bool {
+        guard isMicrosoftSignInAvailable, EmailProviderKind.forEmail(email) == nil,
+              let domain = EmailProviderKind.validDomain(of: email) else { return false }
+        return await microsoft365MXDetector.isMicrosoft365Hosted(domain: domain)
     }
 
     /// The state the Microsoft block shows right now.
     func microsoftSignInViewState(reauthenticateAddress: String? = nil) -> MicrosoftSignInViewState {
-        if microsoftMailAuth.adminApproval != nil, isMicrosoftSignInAvailable, !microsoftMailAuth.phase.isInProgress {
-            return .consentRequired
+        if let request = microsoftMailAuth.adminApproval, isMicrosoftSignInAvailable,
+           !microsoftMailAuth.phase.isInProgress {
+            return request.protocolDisabled.map(MicrosoftSignInViewState.protocolDisabled) ?? .consentRequired
         }
         return MicrosoftSignInViewState.make(
             isConfigured: isMicrosoftSignInAvailable,
@@ -97,9 +109,20 @@ extension AppState {
         guard let request = microsoftMailAuth.adminApproval,
               let clientID = MicrosoftOAuthClientConfiguration.bundled()?.clientID else { return nil }
         return MicrosoftAdminNote.text(
-            reason: .consentRequired(tenantID: request.tenantID),
+            reason: request.protocolDisabled.map(MicrosoftAdminNote.Reason.protocolDisabled)
+                ?? .consentRequired(tenantID: request.tenantID),
             clientID: clientID,
             address: request.address
+        )
+    }
+
+    /// Keeps a Microsoft mailbox's IMAP/SMTP-disabled failure and its address so
+    /// the block can offer the admin note instead of returning to ready.
+    func notePreservedMicrosoftFailure(_ error: Error, credentials: MailAccountCredentials) {
+        guard MicrosoftMailCredential.isMarker(credentials.appPassword),
+              case MailError.mailboxProtocolDisabled(let proto, _) = error else { return }
+        microsoftMailAuth.adminApproval = MicrosoftAdminApprovalRequest(
+            tenantID: nil, address: credentials.email, protocolDisabled: proto
         )
     }
 
@@ -200,7 +223,10 @@ extension AppState {
         if !connected && !wasMicrosoftConnected {
             await dropThisGrant()
         }
-        if connected { logger.info("Mailbox connected with Microsoft sign-in") }
+        if connected {
+            resumeInboxWatchingAfterGoogleReauth(email: email)
+            logger.info("Mailbox connected with Microsoft sign-in")
+        }
         return connected
     }
 }
