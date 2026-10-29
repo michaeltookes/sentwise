@@ -237,11 +237,43 @@ extension AppState {
         newSecret: String,
         messageSurface: TransientMessageSurface
     ) -> GoogleTokenRemoval? {
-        guard let previousSecret, GoogleMailCredential.isMarker(previousSecret) || MicrosoftMailCredential.isMarker(previousSecret),
-              !GoogleMailCredential.isMarker(newSecret), !MicrosoftMailCredential.isMarker(newSecret) else {
+        guard let previousSecret else { return GoogleTokenRemoval(email: email, token: nil, microsoftToken: nil) }
+        let previousIsGoogle = GoogleMailCredential.isMarker(previousSecret)
+        let previousIsMicrosoft = MicrosoftMailCredential.isMarker(previousSecret)
+        let newIsGoogle = GoogleMailCredential.isMarker(newSecret)
+        let newIsMicrosoft = MicrosoftMailCredential.isMarker(newSecret)
+        guard previousIsGoogle || previousIsMicrosoft else {
             return GoogleTokenRemoval(email: email, token: nil, microsoftToken: nil)
         }
-        return takeGoogleToken(email: email, messageSurface: messageSurface)
+        if !newIsGoogle && !newIsMicrosoft {
+            return takeGoogleToken(email: email, messageSurface: messageSurface)
+        }
+        // OAuth to OAuth: same provider is a reauthentication (keep the fresh
+        // token); a different provider drops only the previous provider's token.
+        if previousIsGoogle && newIsMicrosoft {
+            return takeOneToken(email: email, messageSurface: messageSurface) {
+                GoogleTokenRemoval(email: email, token: try self.googleMailAuth.removeLocalToken(email), microsoftToken: nil)
+            }
+        }
+        if previousIsMicrosoft && newIsGoogle {
+            return takeOneToken(email: email, messageSurface: messageSurface) {
+                GoogleTokenRemoval(email: email, token: nil, microsoftToken: try self.microsoftMailAuth.removeLocalToken(email))
+            }
+        }
+        return GoogleTokenRemoval(email: email, token: nil, microsoftToken: nil)
+    }
+
+    private func takeOneToken(
+        email: String,
+        messageSurface: TransientMessageSurface,
+        remove: () throws -> GoogleTokenRemoval
+    ) -> GoogleTokenRemoval? {
+        do {
+            return try remove()
+        } catch {
+            setConnectionError(Self.keychainMessage(action: "remove", error: error), for: messageSurface)
+            return nil
+        }
     }
 
     private func takeGoogleToken(email: String, messageSurface: TransientMessageSurface) -> GoogleTokenRemoval? {

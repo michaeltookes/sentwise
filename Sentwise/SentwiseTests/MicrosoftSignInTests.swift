@@ -139,6 +139,18 @@ final class MicrosoftSignInTests: XCTestCase {
 
     // MARK: - Consent required and not configured
 
+    func testAdminApprovalIsScopedToTheMailboxItFailedFor() async {
+        let harness = makeHarness(waitParams: ["error": "consent_required", "error_description": "AADSTS65001", "state": state])
+        _ = await harness.appState.connectWithMicrosoft(loginHint: "a@contoso.com")
+        XCTAssertEqual(harness.appState.microsoftSignInViewState(forAddress: " A@Contoso.com "), .consentRequired)
+        XCTAssertNotNil(harness.appState.microsoftAdminNoteText(forAddress: "a@contoso.com"))
+        XCTAssertEqual(
+            harness.appState.microsoftSignInViewState(reauthenticateAddress: "b@contoso.com", forAddress: "b@contoso.com"),
+            .reauthenticate(address: "b@contoso.com")
+        )
+        XCTAssertNil(harness.appState.microsoftAdminNoteText(forAddress: "b@contoso.com"))
+    }
+
     func testAdminConsentRequiredSetsApprovalStateAndAdminCopy() async {
         let harness = makeHarness(waitParams: ["error": "consent_required", "error_description": "AADSTS65001", "state": state])
         let connected = await harness.appState.connectWithMicrosoft(loginHint: "rep@contoso.com")
@@ -196,7 +208,8 @@ final class MicrosoftSignInViewStateTests: XCTestCase {
             email: "me@outlook.com", host: "", isGoogleAvailable: true, isMicrosoftConfigured: true
         )
         XCTAssertTrue(layout.showsMicrosoft)
-        XCTAssertFalse(layout.showsGoogle)
+        XCTAssertTrue(layout.microsoftLeads)
+        XCTAssertTrue(layout.showsGoogle)
         XCTAssertFalse(layout.appPasswordExpanded)
         let byHost = MailConnectLayout.make(
             email: "rep@acme-corp.com", host: "outlook.office365.com", isGoogleAvailable: true, isMicrosoftConfigured: true
@@ -218,7 +231,26 @@ final class MicrosoftSignInViewStateTests: XCTestCase {
             email: "me@gmail.com", host: "", isGoogleAvailable: true, isMicrosoftConfigured: true
         )
         XCTAssertTrue(layout.showsGoogle)
-        XCTAssertFalse(layout.showsMicrosoft)
+        XCTAssertTrue(layout.showsMicrosoft)
+        XCTAssertFalse(layout.microsoftLeads)
         XCTAssertFalse(layout.showsMicrosoftNotConfigured)
+    }
+
+    func testBothConfiguredProvidersAreOfferedForEmptyAndUnrecognizedAddresses() {
+        for email in ["", "pat@acme.io"] {
+            let layout = MailConnectLayout.make(
+                email: email, host: "", isGoogleAvailable: true, isMicrosoftConfigured: true
+            )
+            XCTAssertTrue(layout.showsGoogle, email)
+            XCTAssertTrue(layout.showsMicrosoft, email)
+            XCTAssertFalse(layout.microsoftLeads, email)
+            XCTAssertFalse(layout.appPasswordExpanded, email)
+        }
+        let yahoo = MailConnectLayout.make(
+            email: "me@yahoo.com", host: "", isGoogleAvailable: true, isMicrosoftConfigured: true
+        )
+        XCTAssertFalse(yahoo.showsGoogle)
+        XCTAssertFalse(yahoo.showsMicrosoft)
+        XCTAssertTrue(yahoo.appPasswordExpanded)
     }
 }

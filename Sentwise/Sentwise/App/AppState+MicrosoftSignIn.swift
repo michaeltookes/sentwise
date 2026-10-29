@@ -89,9 +89,30 @@ extension AppState {
         return await microsoft365MXDetector.isMicrosoft365Hosted(domain: domain)
     }
 
-    /// The state the Microsoft block shows right now.
-    func microsoftSignInViewState(reauthenticateAddress: String? = nil) -> MicrosoftSignInViewState {
-        if let request = microsoftMailAuth.adminApproval, isMicrosoftSignInAvailable,
+    /// The domain when its MX records say Microsoft 365 hosts it, else nil. A
+    /// cancelled lookup returns nil, so a superseded task never publishes.
+    func microsoft365HostedDomain(email: String) async -> String? {
+        let hosted = await isMicrosoft365Hosted(email: email)
+        guard hosted, !Task.isCancelled else { return nil }
+        return EmailProviderKind.validDomain(of: email)
+    }
+
+    /// The pending admin-approval request when it belongs to `address` (the
+    /// mailbox the form is for). `nil` address = unscoped. A request recorded
+    /// with no address belongs to a form with no address typed.
+    func adminApproval(forAddress address: String?) -> MicrosoftAdminApprovalRequest? {
+        guard let request = microsoftMailAuth.adminApproval else { return nil }
+        guard let address else { return request }
+        let want = address.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let have = request.address.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return want == have ? request : nil
+    }
+
+    /// The state the Microsoft block shows right now for the mailbox `address`.
+    func microsoftSignInViewState(
+        reauthenticateAddress: String? = nil, forAddress address: String? = nil
+    ) -> MicrosoftSignInViewState {
+        if let request = adminApproval(forAddress: address), isMicrosoftSignInAvailable,
            !microsoftMailAuth.phase.isInProgress {
             return request.protocolDisabled.map(MicrosoftSignInViewState.protocolDisabled) ?? .consentRequired
         }
@@ -105,8 +126,8 @@ extension AppState {
     }
 
     /// The note an administrator can act on (copied by the user), or nil.
-    func microsoftAdminNoteText() -> String? {
-        guard let request = microsoftMailAuth.adminApproval,
+    func microsoftAdminNoteText(forAddress address: String? = nil) -> String? {
+        guard let request = adminApproval(forAddress: address),
               let clientID = MicrosoftOAuthClientConfiguration.bundled()?.clientID else { return nil }
         return MicrosoftAdminNote.text(
             reason: request.protocolDisabled.map(MicrosoftAdminNote.Reason.protocolDisabled)

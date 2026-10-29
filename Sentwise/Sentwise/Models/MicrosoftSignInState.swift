@@ -143,9 +143,14 @@ struct MailConnectLayout: Equatable {
     var showsMicrosoft: Bool
     /// Microsoft mailbox typed but this build has no Microsoft client id.
     var showsMicrosoftNotConfigured: Bool
-    /// The app-password form is expanded (it is the only path, or no provider leads).
+    /// The Microsoft option is listed before Google (detection only orders).
+    var microsoftLeads: Bool
+    /// The app-password form is expanded (it is the only path).
     var appPasswordExpanded: Bool
 
+    /// Both configured providers stay selectable; the typed address or host
+    /// only decides which leads. A recognized non-OAuth provider (Yahoo,
+    /// iCloud, ...) keeps the app-password path alone.
     static func make(
         email: String,
         host: String,
@@ -157,15 +162,16 @@ struct MailConnectLayout: Equatable {
         let emailKind = EmailProviderKind.forEmail(email)
         let hostKind = trimmedHost.isEmpty ? nil : EmailProviderKind.forHost(trimmedHost)
         let isMicrosoft = emailKind == .microsoft || hostKind == .microsoft || isMicrosoft365Detected
-        let google = MailConnectMethod.recommended(
-            email: email, host: host, isGoogleSignInAvailable: isGoogleAvailable
-        ) == .googleSignIn
-        let microsoft = isMicrosoft && isMicrosoftConfigured
+        let isOtherKnownProvider = [emailKind, hostKind].contains { $0 != nil && $0 != .gmail && $0 != .microsoft }
+        let eligible = !isOtherKnownProvider
+        let google = isGoogleAvailable && eligible
+        let microsoft = isMicrosoftConfigured && eligible
         return MailConnectLayout(
-            showsGoogle: google && !isMicrosoft,
+            showsGoogle: google,
             showsMicrosoft: microsoft,
             showsMicrosoftNotConfigured: isMicrosoft && !isMicrosoftConfigured,
-            appPasswordExpanded: !(google && !isMicrosoft) && !microsoft
+            microsoftLeads: isMicrosoft && microsoft,
+            appPasswordExpanded: !google && !microsoft
         )
     }
 }

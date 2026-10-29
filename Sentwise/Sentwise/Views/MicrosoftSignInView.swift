@@ -17,7 +17,9 @@ struct MicrosoftSignInButtonBlock: View {
     @State private var noteCopied = false
 
     private var state: MicrosoftSignInViewState {
-        appState.microsoftSignInViewState(reauthenticateAddress: requireHintMatch ? loginHint : nil)
+        appState.microsoftSignInViewState(
+            reauthenticateAddress: requireHintMatch ? loginHint : nil, forAddress: loginHint
+        )
     }
 
     var body: some View {
@@ -105,7 +107,7 @@ struct MicrosoftSignInButtonBlock: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button(MicrosoftSignInCopy.copyAdminNote) {
-                    if let note = appState.microsoftAdminNoteText() {
+                    if let note = appState.microsoftAdminNoteText(forAddress: loginHint) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(note, forType: .string)
                         noteCopied = true

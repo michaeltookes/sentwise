@@ -142,16 +142,72 @@ final class MicrosoftSignInRoundTwoTests: XCTestCase {
         XCTAssertTrue(hosted)
         XCTAssertFalse(other)
 
-        let hidden = MailConnectLayout.make(email: "pat@contoso.com", host: "", isGoogleAvailable: true, isMicrosoftConfigured: true)
-        XCTAssertFalse(hidden.showsMicrosoft)
+        let undetected = MailConnectLayout.make(email: "pat@contoso.com", host: "", isGoogleAvailable: true, isMicrosoftConfigured: true)
+        XCTAssertTrue(undetected.showsMicrosoft, "detection only orders; both configured providers stay selectable")
+        XCTAssertFalse(undetected.microsoftLeads)
         let shown = MailConnectLayout.make(
             email: "pat@contoso.com", host: "", isGoogleAvailable: true, isMicrosoftConfigured: true, isMicrosoft365Detected: true
         )
         XCTAssertTrue(shown.showsMicrosoft)
+        XCTAssertTrue(shown.microsoftLeads)
         let unconfigured = MailConnectLayout.make(
             email: "pat@contoso.com", host: "", isGoogleAvailable: true, isMicrosoftConfigured: false, isMicrosoft365Detected: true
         )
         XCTAssertFalse(unconfigured.showsMicrosoft)
+    }
+
+    // MARK: - Provider switch drops only the previous provider's token
+
+    func testSwitchingFromGoogleToMicrosoftRemovesOnlyTheGoogleToken() throws {
+        let secrets = InMemorySecretStore()
+        let (app, _, microsoftStore) = makeApp(secrets: secrets)
+        let googleStore = GmailAuthStore(secrets: secrets)
+        try googleStore.saveToken(staleToken(), for: address)
+        try microsoftStore.saveToken(staleToken(), for: address)
+
+        let removal = app.takeGoogleTokenForSwitch(
+            email: address, previousSecret: GoogleMailCredential.marker,
+            newSecret: MicrosoftMailCredential.marker, messageSurface: .shared
+        )
+
+        XCTAssertNotNil(removal?.token, "the old Google grant is taken for revocation")
+        XCTAssertNil(removal?.microsoftToken)
+        XCTAssertFalse(googleStore.hasToken(for: address))
+        XCTAssertTrue(microsoftStore.hasToken(for: address), "the new Microsoft token survives")
+
+        app.rollBack(try XCTUnwrap(removal))
+        XCTAssertTrue(googleStore.hasToken(for: address), "rollback restores the old token")
+    }
+
+    func testReauthenticatingWithTheSameProviderRemovesNothing() throws {
+        let secrets = InMemorySecretStore()
+        let (app, _, microsoftStore) = makeApp(secrets: secrets)
+        try microsoftStore.saveToken(staleToken(), for: address)
+        let removal = app.takeGoogleTokenForSwitch(
+            email: address, previousSecret: MicrosoftMailCredential.marker,
+            newSecret: MicrosoftMailCredential.marker, messageSurface: .shared
+        )
+        XCTAssertNil(removal?.token)
+        XCTAssertNil(removal?.microsoftToken)
+        XCTAssertTrue(microsoftStore.hasToken(for: address))
+    }
+
+    // MARK: - Cancelled MX lookups never publish
+
+    func testCancelledMXLookupDoesNotPublishItsResult() async {
+        let (app, _, _, _) = await connectedApp()
+        app.microsoft365MXDetector = Microsoft365MXDetector(
+            resolver: TableMXResolver(table: ["contoso.com": ["contoso-com.mail.protection.outlook.com."]])
+        )
+        let live = await app.microsoft365HostedDomain(email: "pat@contoso.com")
+        XCTAssertEqual(live, "contoso.com")
+        let cancelled = Task { @MainActor in
+            while !Task.isCancelled { await Task.yield() }
+            return await app.microsoft365HostedDomain(email: "pat@contoso.com")
+        }
+        cancelled.cancel()
+        let result = await cancelled.value
+        XCTAssertNil(result)
     }
 
     // MARK: - 4: watcher resumes after Microsoft reauthentication
