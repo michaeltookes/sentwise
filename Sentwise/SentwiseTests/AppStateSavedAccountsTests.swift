@@ -46,9 +46,15 @@ final class AppStateSavedAccountsTests: XCTestCase {
         ))
         let (app, store, _) = makeAppState(secrets: secrets, persistence: persistence)
 
-        // The existing account becomes the first saved account.
+        // The existing account becomes the first saved account, and the v24
+        // transport migration tags it as a password account.
         XCTAssertEqual(app.savedAccounts, [
-            SavedMailAccount(email: "me@gmail.com", host: "imap.gmail.com", port: 993)
+            SavedMailAccount(
+                email: "me@gmail.com",
+                host: "imap.gmail.com",
+                port: 993,
+                authProvider: SavedMailAccount.authProviderPassword
+            )
         ])
         // The secret moved to the per-account key and the legacy slot is gone.
         XCTAssertEqual(try? secrets.value(for: .mailAppPassword(email: "me@gmail.com")), "legacy-pw")

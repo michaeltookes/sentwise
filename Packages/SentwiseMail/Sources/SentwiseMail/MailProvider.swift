@@ -24,6 +24,23 @@ public enum MailError: Error, Equatable, Sendable {
     /// and leave the draft pending for a manual decision. Failures *before* DATA
     /// submission surface as `connectionFailed` instead and are safe to retry.
     case sendInterruptedAfterSubmission(String)
+    /// STARTTLS was required but the server did not advertise it. Authentication
+    /// is refused rather than falling back to plaintext (item 31, T31-6).
+    case starttlsNotOffered
+    /// The server refused `STARTTLS` or the TLS upgrade failed. Raised before any
+    /// credential or message data is sent, so it is safe to retry.
+    case starttlsFailed(String)
+    /// The server rejected authentication because SMTP AUTH (or IMAP) is switched
+    /// off for the mailbox or tenant (Exchange Online `5.7.139`). Not a bad
+    /// password, so the user must not be told to re-enter credentials.
+    case mailboxProtocolDisabled(String)
+}
+
+extension MailProvider {
+    public func verifyAndDiscover(_ credentials: MailAccountCredentials) async throws -> MailboxNaming? {
+        try await verifyConnection(credentials)
+        return nil
+    }
 }
 
 /// A mailbox backend. Exposes a connection check plus recent-message fetch;
@@ -31,6 +48,13 @@ public enum MailError: Error, Equatable, Sendable {
 public protocol MailProvider: Sendable {
     /// Connects, authenticates, and disconnects. Throws `MailError` on failure.
     func verifyConnection(_ credentials: MailAccountCredentials) async throws
+
+    /// Verifies like `verifyConnection`, then (IMAP) issues one `LIST` and
+    /// returns the account's special-folder names resolved from SPECIAL-USE
+    /// attributes over the host defaults. Discovery never blocks verification:
+    /// a failed or unsupported `LIST` yields `nil`. Throws only when
+    /// verification itself fails.
+    func verifyAndDiscover(_ credentials: MailAccountCredentials) async throws -> MailboxNaming?
 
     /// Fetches up to `limit` of the most recent messages from `mailbox`
     /// (newest first). Envelope-level for now.

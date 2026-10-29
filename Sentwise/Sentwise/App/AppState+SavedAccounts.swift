@@ -223,12 +223,24 @@ extension AppState {
     // MARK: - Saved-account list mutation
 
     /// Inserts or updates the saved-account entry for these connection details.
-    func upsertSavedAccount(email: String, host: String, port: Int) {
-        let account = SavedMailAccount(email: email, host: host, port: port)
+    func upsertSavedAccount(email: String, host: String, port: Int, credentials: MailAccountCredentials? = nil) {
+        var account = SavedMailAccount(email: email, host: host, port: port)
         guard !account.id.isEmpty else { return }
         if let index = savedAccounts.firstIndex(where: { $0.id == account.id }) {
-            if savedAccounts[index] != account { savedAccounts[index] = account }
+            // Keep the per-account transport fields (item 31 T31-6): this call only
+            // knows the IMAP details and must not erase the SMTP/auth choice.
+            let existing = savedAccounts[index]
+            account.smtpHost = existing.smtpHost
+            account.smtpPort = existing.smtpPort
+            account.smtpSecurity = existing.smtpSecurity
+            account.authProvider = existing.authProvider
+            account.mailboxNaming = existing.mailboxNaming
+            if let credentials {
+                account.recordTransport(from: credentials, previousHost: existing.host)
+            }
+            if existing != account { savedAccounts[index] = account }
         } else {
+            if let credentials { account.recordTransport(from: credentials, previousHost: nil) }
             savedAccounts.append(account)
         }
     }
@@ -261,12 +273,7 @@ extension AppState {
         let wasWatching = watchStatus == .watching
         stopWatching(cancelCountdowns: false)
 
-        let credentials = MailAccountCredentials(
-            email: account.email,
-            appPassword: password,
-            host: account.host,
-            port: account.port
-        )
+        let credentials = account.credentials(appPassword: password)
         let localDataGeneration = localDataEraseGeneration
         let didConnect = await testConnection(with: credentials, messageSurface: messageSurface) { _ in
             self.isCurrentLocalDataGeneration(localDataGeneration)
@@ -299,7 +306,9 @@ extension AppState {
         reloadPublishedVoiceProfileForFocusedAccount()
         markMailHostVerifiedForGuidance()
         // Remember this account so it can be switched back to without re-entry.
-        upsertSavedAccount(email: credentials.email, host: credentials.host, port: credentials.port)
+        upsertSavedAccount(
+            email: credentials.email, host: credentials.host, port: credentials.port, credentials: credentials
+        )
 
         let nextSettings = buildSettings(
             mailEmail: credentials.email,

@@ -260,9 +260,14 @@ final class FakeAppMailProvider: MailProvider, @unchecked Sendable {
         self.sendResult = sendResult
     }
 
+    var discoveredNaming: MailboxNaming? // reported by "discovery" (item 31, T31-8)
     func verifyConnection(_ credentials: MailAccountCredentials) async throws {
         lastCredentials = credentials
         try result.get()
+    }
+    func verifyAndDiscover(_ credentials: MailAccountCredentials) async throws -> MailboxNaming? {
+        try await verifyConnection(credentials)
+        return discoveredNaming
     }
 
     func fetchRecentMessages(

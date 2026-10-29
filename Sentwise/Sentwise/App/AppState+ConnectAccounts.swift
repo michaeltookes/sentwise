@@ -113,7 +113,8 @@ extension AppState {
             email: previousFocused.email,
             host: previousFocused.host,
             port: previousFocused.port,
-            appPassword: previousFocused.password
+            appPassword: previousFocused.password,
+            savedAccount: savedAccounts.first { $0.id == previousKey }
         )
         apply(previousFocused.watcherState, to: account)
         backgroundConnectedAccounts.append(account)
@@ -165,7 +166,8 @@ extension AppState {
             guard restored.count < availableBackgroundSlots else { break }
             guard let password = storedMailPassword(forEmail: saved.email), !password.isEmpty else { continue }
             restored.append(ConnectedMailAccount(
-                email: saved.email, host: saved.host, port: saved.port, appPassword: password
+                email: saved.email, host: saved.host, port: saved.port, appPassword: password,
+                savedAccount: saved
             ))
         }
         backgroundConnectedAccounts = restored

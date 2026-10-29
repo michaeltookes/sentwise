@@ -23,6 +23,14 @@ public struct IMAPMailProvider: MailProvider {
     }
 
     public func verifyConnection(_ credentials: MailAccountCredentials) async throws {
+        _ = try await verify(credentials, discover: false)
+    }
+
+    public func verifyAndDiscover(_ credentials: MailAccountCredentials) async throws -> MailboxNaming? {
+        try await verify(credentials, discover: true)
+    }
+
+    private func verify(_ credentials: MailAccountCredentials, discover: Bool) async throws -> MailboxNaming? {
         guard credentials.isComplete else { throw MailError.incompleteCredentials }
 
         let attempts = ChannelPromiseTracker<Void>()
@@ -35,6 +43,7 @@ public struct IMAPMailProvider: MailProvider {
         let host = credentials.host
         let email = credentials.email
         let authentication = credentials.authentication
+        let discovery = DiscoveryBox()
 
         let bootstrap = ClientBootstrap(group: group)
             .connectTimeout(timeout)
@@ -42,7 +51,10 @@ public struct IMAPMailProvider: MailProvider {
                 do {
                     let ssl = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
                     let complete = attempts.register(channel)
-                    let verify = IMAPVerifyHandler(email: email, authentication: authentication, complete: complete)
+                    let verify = IMAPVerifyHandler(
+                        email: email, authentication: authentication,
+                        discovery: discover ? discovery : nil, complete: complete
+                    )
                     return channel.pipeline.addHandlers([ssl, IMAPClientHandler(), verify])
                 } catch {
                     return channel.eventLoop.makeFailedFuture(error)
@@ -74,7 +86,16 @@ public struct IMAPMailProvider: MailProvider {
             throw error
         }
         try? await channel.close().get()
+        guard discover, let entries = discovery.entries else { return nil }
+        return MailboxNaming.forHost(credentials.host).discovering(from: entries)
     }
+}
+
+/// Carries the raw `LIST` entries from the channel's event loop back to the
+/// caller. Written once before the verification future completes and read only
+/// after it, so the future provides the ordering.
+final class DiscoveryBox: @unchecked Sendable {
+    var entries: [MailboxListEntry]?
 }
 
 public enum LiveMailProvider {
@@ -99,38 +120,62 @@ final class IMAPVerifyHandler: ChannelInboundHandler {
     private let complete: @Sendable (Result<Void, Error>) -> Void
     private let loginTag = "A1"
     private let logoutTag = "A2"
+    private let listTag = "A3"
+    private let discovery: DiscoveryBox?
+    private var collected: [MailboxListEntry] = []
     private var didSendLogin = false
+    private var loggedIn = false
     private var settled = false
 
-    init(email: String, authentication: MailAuthentication, complete: @escaping @Sendable (Result<Void, Error>) -> Void) {
+    /// `discovery` non-nil asks for one `LIST "" "*"` after login (item 31,
+    /// T31-8); verification then settles only once the LIST finishes, but a
+    /// failed LIST still settles as success.
+    init(
+        email: String,
+        authentication: MailAuthentication,
+        discovery: DiscoveryBox? = nil,
+        complete: @escaping @Sendable (Result<Void, Error>) -> Void
+    ) {
         self.email = email
         self.authentication = authentication
+        self.discovery = discovery
         self.complete = complete
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let response = unwrapInboundIn(data)
         switch response {
-        case .untagged:
+        case .untagged where !didSendLogin:
             // First untagged response is the greeting → authenticate.
-            if !didSendLogin {
-                sendLogin(context: context)
-            }
+            sendLogin(context: context)
         case .tagged(let tagged) where tagged.tag == loginTag:
             switch tagged.state {
             case .ok:
-                settle(.success(()))
-                sendLogout(context: context)
+                loggedIn = true
+                if discovery != nil {
+                    sendList(context: context)
+                } else {
+                    settle(.success(()))
+                    sendLogout(context: context)
+                }
             case .no(let text), .bad(let text):
                 settle(.failure(MailError.authenticationFailed(text.text)))
                 context.close(promise: nil)
             }
+        case .tagged(let tagged) where tagged.tag == listTag:
+            if case .ok = tagged.state { discovery?.entries = collected }
+            settle(.success(()))
+            sendLogout(context: context)
+        case .untagged(.mailboxData(.list(let info))) where loggedIn:
+            // Raw wire names (not display-decoded) so SELECT/APPEND reuse them.
+            let name = String(bytes: info.path.name.bytes, encoding: .utf8) ?? ""
+            collected.append(MailboxListEntry(attributes: info.attributes.map { String($0) }, name: name))
         case .authenticationChallenge:
             if case .xoauth2 = authentication {
                 IMAPAuthentication.answerChallenge(context: context)
             }
         case .fatal(let text):
-            settle(.failure(MailError.connectionFailed(text.text)))
+            settle(loggedIn ? .success(()) : .failure(MailError.connectionFailed(text.text)))
             context.close(promise: nil)
         default:
             break
@@ -138,18 +183,28 @@ final class IMAPVerifyHandler: ChannelInboundHandler {
     }
 
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        settle(.failure(MailError.connectionFailed(String(describing: error))))
+        settle(loggedIn ? .success(()) : .failure(MailError.connectionFailed(String(describing: error))))
         context.close(promise: nil)
     }
 
     func channelInactive(context: ChannelHandlerContext) {
-        settle(.failure(MailError.connectionFailed("The connection closed before authentication completed.")))
+        // After a successful login a dropped connection only costs discovery.
+        settle(loggedIn
+            ? .success(())
+            : .failure(MailError.connectionFailed("The connection closed before authentication completed.")))
         context.fireChannelInactive()
     }
 
     private func sendLogin(context: ChannelHandlerContext) {
         didSendLogin = true
         let command = TaggedCommand(tag: loginTag, command: IMAPAuthentication.command(email: email, authentication: authentication))
+        context.writeAndFlush(NIOAny(IMAPClientHandler.Message.part(.tagged(command))), promise: nil)
+    }
+
+    private func sendList(context: ChannelHandlerContext) {
+        let command = TaggedCommand(tag: listTag, command: .list(
+            nil, reference: MailboxName(ByteBuffer(string: "")), .mailbox(ByteBuffer(string: "*"))
+        ))
         context.writeAndFlush(NIOAny(IMAPClientHandler.Message.part(.tagged(command))), promise: nil)
     }
 

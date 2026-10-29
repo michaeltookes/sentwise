@@ -290,7 +290,8 @@ struct EmailAccountSettingsView: View {
             newAccountForm.commitEmailEditFromUser()
             let credentials = newAccountForm.credentials
             didConnect = await appState.testConnection(with: credentials, messageSurface: .settings) {
-                isAddingAccount && newAccountForm.credentials == $0
+                var result = $0; result.discoveredNaming = credentials.discoveredNaming // ignore discovery
+                return isAddingAccount && newAccountForm.credentials == result
             }
         } else {
             didConnect = await appState.testConnection(messageSurface: .settings)

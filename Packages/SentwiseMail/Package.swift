@@ -21,6 +21,7 @@ let package = Package(
             dependencies: [
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOTLS", package: "swift-nio"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "NIOIMAP", package: "swift-nio-imap"),
                 .product(name: "OrderedCollections", package: "swift-collections")
@@ -30,7 +31,8 @@ let package = Package(
             name: "SentwiseMailTests",
             dependencies: [
                 "SentwiseMail",
-                .product(name: "NIOEmbedded", package: "swift-nio")
+                .product(name: "NIOEmbedded", package: "swift-nio"),
+                .product(name: "NIOTLS", package: "swift-nio")
             ]
         )
     ]

@@ -28,17 +28,23 @@ final class ConnectedMailAccount: Identifiable {
     /// This account's own poll loop. Nil until watching starts.
     var watcher: InboxWatcher?
 
-    init(email: String, host: String, port: Int, appPassword: String) {
+    /// The saved record whose SMTP transport and discovered folder names this
+    /// runtime's credentials carry (item 31); `nil` uses the host defaults.
+    var savedAccount: SavedMailAccount?
+
+    init(email: String, host: String, port: Int, appPassword: String, savedAccount: SavedMailAccount? = nil) {
         self.email = email
         self.host = host
         self.port = port
         self.appPassword = appPassword
+        self.savedAccount = savedAccount
     }
 
     /// The stable account identity (normalized email), matching `SavedMailAccount.id`.
     var id: String { SavedMailAccount.normalizedEmail(email) }
 
     var credentials: MailAccountCredentials {
-        MailAccountCredentials(email: email, appPassword: appPassword, host: host, port: port)
+        let base = MailAccountCredentials(email: email, appPassword: appPassword, host: host, port: port)
+        return savedAccount?.applyingTransport(to: base) ?? base
     }
 }
