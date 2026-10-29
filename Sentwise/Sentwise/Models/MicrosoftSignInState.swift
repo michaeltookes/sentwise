@@ -31,13 +31,14 @@ enum MicrosoftSignInCopy {
     // inside the requested scopes: IMAP.AccessAsUser.All (read mail, save
     // drafts), SMTP.Send (send what the user approves), offline_access (stay
     // signed in), openid/profile/email (the address). Never say mail does not
-    // leave the Mac: drafting sends the needed content to the drafting service.
+    // leave the Mac: drafting sends the needed content to the drafting service,
+    // and learning the voice sends up to 12 sent messages (AppState.privacyStatement).
     static let consentHeading = "Before you continue"
     static let consentSummary = "Microsoft will ask you to let Sentwise read your mail, save drafts, "
         + "and send messages you approve, and to keep this Mac signed in."
-    static let consentPrivacy = "Mail is read on this Mac. Only the content needed to draft a reply goes to "
-        + "the Sentwise drafting service. Your sign-in is kept in this Mac's Keychain and is never sent to "
-        + "Sentwise servers."
+    static let consentPrivacy = "Mail is read on this Mac. Only the content needed to draft a reply, and up to "
+        + "12 of your sent messages each time you learn your voice, goes to the Sentwise drafting service. "
+        + "Your sign-in is kept in this Mac's Keychain and is never sent to Sentwise servers."
     static let consentRevoke = "You can remove Sentwise's access at any time in your Microsoft account."
     static let workAccountNote = "For a work or school account, your IT administrator may need to approve "
         + "Sentwise first."

@@ -24,8 +24,9 @@ final class MicrosoftConsentCopyTests: XCTestCase {
         )
         XCTAssertEqual(
             MicrosoftSignInCopy.consentPrivacy,
-            "Mail is read on this Mac. Only the content needed to draft a reply goes to the Sentwise "
-                + "drafting service. Your sign-in is kept in this Mac's Keychain and is never sent to Sentwise servers."
+            "Mail is read on this Mac. Only the content needed to draft a reply, and up to 12 of your sent "
+                + "messages each time you learn your voice, goes to the Sentwise drafting service. "
+                + "Your sign-in is kept in this Mac's Keychain and is never sent to Sentwise servers."
         )
         XCTAssertEqual(
             MicrosoftSignInCopy.consentRevoke,

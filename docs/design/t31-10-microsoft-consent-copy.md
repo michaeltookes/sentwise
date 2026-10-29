@@ -23,7 +23,7 @@ The copy claims only what the requested scopes grant (`IMAP.AccessAsUser.All`, `
 | `offline_access` | keep this Mac signed in |
 | `openid`, `profile`, `email` | not named in the block (Microsoft's own screen lists them); named in the privacy section |
 
-It must not say mail never leaves the Mac or that Sentwise does not read mail: Sentwise reads mail on the Mac, and drafting sends the content needed for a draft to the Sentwise drafting service (architecture 5.3). It must not mention delete, contacts, calendar or files. No copy before the item 31 release says Outlook is supported. The drafting sentence reuses the wording the UX review set for the Google helper ("only the content needed to draft a reply"), so both providers say it the same way.
+It must not say mail never leaves the Mac or that Sentwise does not read mail: Sentwise reads mail on the Mac, and drafting sends the content needed for a draft to the Sentwise drafting service (architecture 5.3), and Learn My Voice or Re-learn My Voice sends up to 12 recent sent messages there too, worded as `AppState.privacyStatement` words it. It must not mention delete, contacts, calendar or files. No copy before the item 31 release says Outlook is supported. The drafting sentence reuses the wording the UX review set for the Google helper ("only the content needed to draft a reply"), so both providers say it the same way.
 
 ## Where the copy appears
 
@@ -55,7 +55,7 @@ Strings are in `Sentwise/Sentwise/Models/MicrosoftSignInState.swift` (`Microsoft
 |---|---|
 | Ready, heading | `Before you continue` |
 | Ready, scopes (**changed**) | `Microsoft will ask you to let Sentwise read your mail, save drafts, and send messages you approve, and to keep this Mac signed in.` |
-| Ready, privacy (**new**) | `Mail is read on this Mac. Only the content needed to draft a reply goes to the Sentwise drafting service. Your sign-in is kept in this Mac's Keychain and is never sent to Sentwise servers.` |
+| Ready, privacy (**new**) | `Mail is read on this Mac. Only the content needed to draft a reply, and up to 12 of your sent messages each time you learn your voice, goes to the Sentwise drafting service. Your sign-in is kept in this Mac's Keychain and is never sent to Sentwise servers.` |
 | Ready, work note (**changed**) | `For a work or school account, your IT administrator may need to approve Sentwise first.` |
 | Ready, revoke (**new**) | `You can remove Sentwise's access at any time in your Microsoft account.` |
 | Button | `Continue with Microsoft` (hint `Opens your browser to connect this mailbox`) |
@@ -110,7 +110,7 @@ No experiment report was supplied. Options considered:
 |---|---|---|
 | `Before you continue` | Microsoft chooser block, heading | |
 | `Microsoft will ask you to let Sentwise read your mail, save drafts, and send messages you approve, and to keep this Mac signed in.` | Chooser block | |
-| `Mail is read on this Mac. Only the content needed to draft a reply goes to the Sentwise drafting service. Your sign-in is kept in this Mac's Keychain and is never sent to Sentwise servers.` | Chooser block | |
+| `Mail is read on this Mac. Only the content needed to draft a reply, and up to 12 of your sent messages each time you learn your voice, goes to the Sentwise drafting service. Your sign-in is kept in this Mac's Keychain and is never sent to Sentwise servers.` | Chooser block | |
 | `For a work or school account, your IT administrator may need to approve Sentwise first.` | Chooser block | |
 | `You can remove Sentwise's access at any time in your Microsoft account.` | Chooser block | |
 | `Your organization requires an administrator to approve Sentwise.` | Admin approval state | |
@@ -156,7 +156,10 @@ For the landing-page repo; this branch does not edit it. Ship it before the Micr
         happens only for the messages you act on (or, if you turn on automatic
         drafting, the messages your own rules select): the text needed for that
         draft goes through our stateless inference relay to our model provider,
-        as described above, and Sentwise does not retain it. We do not sell
+        as described above, and Sentwise does not retain it. Each time you
+        learn or re-learn your voice, the App sends up to 12 of your recent
+        sent messages the same way, and those are not retained either. We do
+        not sell
         Microsoft user data, use it for advertising, or use it to train AI
         models.
       </p>
@@ -169,8 +172,13 @@ For the landing-page repo; this branch does not edit it. Ship it before the Micr
       <p>
         You can revoke Sentwise&rsquo;s access at any time. In the App, choose{" "}
         <strong>Disconnect</strong> or remove the mailbox in Settings &rarr;
-        Email Account: Sentwise deletes the Microsoft token from your Keychain
-        and deletes the mail-related data it kept for that mailbox on your Mac.
+        Email Account. Either way Sentwise deletes the Microsoft token from your
+        Keychain, so the App can no longer reach that mailbox. Mail-related data
+        the App kept on your Mac for that mailbox is erased only if you choose{" "}
+        <strong>Disconnect &amp; Erase Local Data</strong> or{" "}
+        <strong>Remove &amp; Erase Local Data</strong>;{" "}
+        <strong>Disconnect Only</strong> and <strong>Remove Only</strong> keep
+        it on your Mac.
         To remove Sentwise&rsquo;s permission on Microsoft&rsquo;s side, use{" "}
         <a href="https://account.live.com/consent/Manage">
           account.live.com/consent/Manage
@@ -186,7 +194,7 @@ For the landing-page repo; this branch does not edit it. Ship it before the Micr
 3. Bump the page's last-updated date, if it carries one, to the day the section ships.
 4. Note for the landing-page builder: the em-dash in "What leaves your Mac, and when" ("draft —") is outside this change; leave it unless the owner asks.
 
-Facts to verify against the shipped app before the landing-page PR merges: that Disconnect on a Microsoft mailbox deletes the same local mail-related data as for Google (provider-neutral path), and whether the app shows the two Microsoft removal links after Disconnect (architecture 4.2 says it should; not built yet, see follow-ups).
+Facts to verify against the shipped app before the landing-page PR merges: that both Disconnect choices and both Remove choices delete the Microsoft token (checked in code: `takeGoogleTokenForDisconnect` and `removeGoogleTokenForAccountRemoval` both remove the Microsoft token whatever `purgeLocalData` is), that only the "& Erase Local Data" choices erase local mail-related data (`purgeLocalData: true` in `EmailAccountSettingsView`), and that the button titles still match the bold names in the paragraph, and whether the app shows the two Microsoft removal links after Disconnect (architecture 4.2 says it should; not built yet, see follow-ups).
 
 ## Follow-ups (not in this branch)
 
