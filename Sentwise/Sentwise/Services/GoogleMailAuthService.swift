@@ -371,6 +371,10 @@ struct GoogleOAuthMailProvider: MailProvider {
         try await run(credentials) { try await base.verifyConnection($0) }
     }
 
+    func verifyAndDiscover(_ credentials: MailAccountCredentials) async throws -> MailboxNaming? {
+        try await run(credentials) { try await base.verifyAndDiscover($0) }
+    }
+
     func fetchRecentMessages(_ credentials: MailAccountCredentials, mailbox: Mailbox, limit: Int) async throws -> [MailMessage] {
         try await run(credentials) { try await base.fetchRecentMessages($0, mailbox: mailbox, limit: limit) }
     }
