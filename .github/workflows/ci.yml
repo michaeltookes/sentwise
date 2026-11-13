@@ -32,6 +32,10 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Guard swift-nio-imap pin (must stay below 0.5.0)
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/check-nio-imap-pin.py
+
       - name: SwiftLint
         run: |
           if ! command -v swiftlint >/dev/null 2>&1; then

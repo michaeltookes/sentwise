@@ -66,6 +66,10 @@ jobs:
           swift --version
           echo "DRY_RUN=$DRY_RUN"
 
+      - name: Guard swift-nio-imap pin (must stay below 0.5.0)
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/check-nio-imap-pin.py
+
       - name: Resolve version
         id: version
         run: |
