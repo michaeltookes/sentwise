@@ -68,6 +68,10 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: bash Distribution/scripts/tests/test-cask-template.sh
 
+      - name: Test release notes (footer, fail-closed)
+        working-directory: ${{ github.workspace }}
+        run: bash Distribution/scripts/tests/test-release-notes.sh
+
       - name: Build & Test
         run: |
           set -o pipefail
