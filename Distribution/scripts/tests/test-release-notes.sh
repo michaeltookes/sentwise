@@ -19,6 +19,7 @@ set -euo pipefail
 SCRIPTS="$(cd "$(dirname "$0")/.." && pwd)"
 TO_HTML="$SCRIPTS/changelog-to-html.sh"
 WRITE_APPCAST="$SCRIPTS/write-appcast.sh"
+RELEASE_NOTES="$SCRIPTS/release-notes.sh"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/sentwise-notes-test.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -135,6 +136,34 @@ while IFS= read -r v; do
     bad "repo CHANGELOG $v renders"
   fi
 done < <(sed -n 's/^## \[\([0-9][0-9.]*\)\].*/\1/p' "$repo_cl")
+
+# ---- release-notes.sh (GitHub release body, item 144) ----------------------
+echo "release-notes.sh"
+QS_URL="https://github.com/michaeltookes/sentwise#quickstart"
+notes_out="$WORK/gh-notes.md"
+if log="$("$RELEASE_NOTES" 9.9.9 "$CL" "$notes_out" 2>&1)"; then
+  body="$(cat "$notes_out")"
+  has "$body" '<li>A fix.</li>' || has "$body" 'A fix.' \
+    && ok "notes carry the 9.9.9 section" || bad "notes carry the 9.9.9 section" "$body"
+  [[ "$(grep -cF "$QS_URL" "$notes_out")" -eq 1 ]] \
+    && ok "Quickstart URL present exactly once" || bad "Quickstart URL present exactly once" "$body"
+  [[ "$(tail -n 1 "$notes_out")" == "Quickstart: $QS_URL" ]] \
+    && ok "Quickstart footer is the last line" || bad "Quickstart footer is the last line" "$body"
+  ! has "$body" 'Older release only' \
+    && ok "notes exclude other versions" || bad "notes exclude other versions"
+else
+  bad "release-notes succeeds on a non-empty section" "$log"
+fi
+for v in 1.2.3 9.9.7; do  # absent section, empty section
+  rm -f "$notes_out"
+  if log="$("$RELEASE_NOTES" "$v" "$CL" "$notes_out" 2>&1)"; then
+    bad "release-notes fails closed for $v" "$log"
+  else
+    has "$log" "$v" && [[ ! -e "$notes_out" ]] \
+      && ok "release-notes fails closed for $v, names the version, writes no placeholder" \
+      || bad "release-notes fails closed for $v, names the version, writes no placeholder" "$log"
+  fi
+done
 
 # ---- write-appcast.sh against a fixture dist dir ---------------------------
 echo "write-appcast.sh"

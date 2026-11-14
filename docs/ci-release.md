@@ -2,7 +2,7 @@
 
 Push a version tag and GitHub Actions cuts the whole release: it runs the
 release gate (SwiftLint strict + full test suite), signs and notarizes the app,
-builds and notarizes the DMG, runs the launch smoke test, publishes a GitHub
+signs the DMG (before notarization), notarizes and staples it, gates on the DMG's own signature and Gatekeeper assessment, runs the launch smoke test, publishes a GitHub
 release with the CHANGELOG section as notes, updates the Sparkle appcast, and
 bumps the Homebrew tap cask.
 
@@ -135,6 +135,29 @@ sets them:
 
 Locally you instead set `NOTARY_PROFILE` and let `generate_appcast` read the key
 from your Keychain — the script supports both paths.
+
+---
+
+## Release notes and the Quickstart footer
+
+The **Extract CHANGELOG section** step runs `Distribution/scripts/release-notes.sh`.
+It copies the `## [X.Y.Z]` CHANGELOG section and appends the fixed footer line
+`Quickstart: https://github.com/michaeltookes/sentwise#quickstart`. The job
+fails before **Publish GitHub release** if the section is missing or empty (the
+log names the version; there is no placeholder fallback), and fails if the notes
+file does not contain the Quickstart URL exactly once. The step carries the
+same guard as the publish step (`DRY_RUN != 'true'` and a tag ref), so a dry
+run or an untagged `workflow_dispatch` run still completes when the version's
+CHANGELOG section does not exist yet; only a tag run fails closed.
+
+The footer anchor depends on the README heading **`## Quickstart`**. If that
+heading is renamed, update the URL in `release-notes.sh` and the test in
+`Distribution/scripts/tests/test-release-notes.sh` in the same change.
+
+Release step order in `release.sh`: build the DMG, sign the DMG (Developer ID
+Application, secure timestamp), notarize and staple it, run the DMG container
+gate (`codesign --verify --strict`, authority and team, `spctl -t open
+--context context:primary-signature`), launch smoke test, appcast.
 
 ---
 

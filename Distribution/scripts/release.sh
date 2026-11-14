@@ -352,6 +352,51 @@ smoke_test() {
   return $rc
 }
 
+# ---- DMG container gate (item 143) -----------------------------------------
+# The app inside the DMG is assessed by smoke_test; this checks the disk image
+# itself. Signed mode only, and only after stapling: the spctl result for a
+# disk image depends on the ticket. Uses the disk-image policy
+# (-t open --context context:primary-signature); -t install is the
+# installer-package policy and can reject a valid DMG. Each failing check is
+# named in the log and exits non-zero before the release, appcast or cask bump.
+verify_dmg_signature() {
+  local dmg="$1" out
+  local want_authority="Authority=Developer ID Application: Genkei Labs LLC"
+  local want_team="TeamIdentifier=DHBYJV7BC3"
+
+  if ! codesign --verify --strict --verbose=2 "$dmg"; then
+    echo "release: DMG GATE FAILED [codesign --verify --strict]: $dmg is not validly signed" >&2
+    return 1
+  fi
+  log "DMG gate: codesign --verify --strict passed"
+
+  out="$(codesign -dv --verbose=2 "$dmg" 2>&1)" || {
+    echo "release: DMG GATE FAILED [codesign -dv]: could not read the DMG signature" >&2
+    return 1
+  }
+  if [[ "$out" != *"$want_authority"* ]]; then
+    echo "release: DMG GATE FAILED [codesign -dv authority]: expected '$want_authority'" >&2
+    return 1
+  fi
+  if [[ "$out" != *"$want_team"* ]]; then
+    echo "release: DMG GATE FAILED [codesign -dv team]: expected '$want_team'" >&2
+    return 1
+  fi
+  log "DMG gate: Developer ID Application: Genkei Labs LLC (DHBYJV7BC3)"
+
+  out="$(spctl -a -vv -t open --context context:primary-signature "$dmg" 2>&1)" || {
+    echo "release: DMG GATE FAILED [spctl -t open]: Gatekeeper rejected the DMG" >&2
+    printf '%s\n' "$out" >&2
+    return 1
+  }
+  if [[ "$out" != *"accepted"* || "$out" != *"source=Notarized Developer ID"* ]]; then
+    echo "release: DMG GATE FAILED [spctl -t open]: expected 'accepted' with 'source=Notarized Developer ID'" >&2
+    printf '%s\n' "$out" >&2
+    return 1
+  fi
+  log "DMG gate: spctl (disk-image policy) accepted, Notarized Developer ID"
+}
+
 # ---- 1. archive ------------------------------------------------------------
 step "1/7  Archiving Release"
 # "Sign in with Google" client (item 104, docs/gmail-oauth.md): passed through
@@ -462,6 +507,15 @@ fi
 step "5/7  Building DMG"
 "$SCRIPT_DIR/make-dmg.sh" "$STAGE_DIR/$APP_DISPLAY_NAME.app" "$DMG"
 
+# ---- 5a. sign the DMG container (signed only; item 143) ---------------------
+# Must precede notarization so the ticket covers the signed image.
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  log "Sign DMG — SKIPPED (dry-run signs nothing)"
+else
+  step "5a/7  Signing the DMG (Developer ID Application, secure timestamp)"
+  codesign --sign "$SIGNING_IDENTITY" --timestamp "$DMG"
+fi
+
 # ---- 5b. notarize + staple the DMG (signed only) ---------------------------
 if [[ "$DRY_RUN" -eq 1 ]]; then
   log "Notarize + staple DMG — SKIPPED (dry-run)"
@@ -470,6 +524,8 @@ else
   notarize_submit "$DMG"
   log "Stapling ticket to the DMG"
   staple_and_validate "$DMG"
+  step "5c/7  DMG container gate (signature, authority, Gatekeeper)"
+  verify_dmg_signature "$DMG"
 fi
 
 # ---- 6. launch smoke test (both modes) -------------------------------------

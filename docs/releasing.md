@@ -142,7 +142,15 @@ What `release.sh` does, step by step:
    staples onto the bundle), so the app is independently notarized, not only the
    DMG.
 5. **Build the DMG** with the branded background (`make-dmg.sh`, fixed geometry),
-   then **notarize + staple the DMG** (`notarytool submit --wait`).
+   then **sign the DMG** (`codesign --sign "$SIGNING_IDENTITY" --timestamp`;
+   skipped and logged in dry-run), then **notarize + staple the DMG**
+   (`notarytool submit --wait`) so the ticket covers the signed image. After
+   stapling, the **DMG container gate** checks `codesign --verify --strict`,
+   the `Authority=Developer ID Application: Genkei Labs LLC` / TeamIdentifier
+   `DHBYJV7BC3`, and `spctl -a -vv -t open --context context:primary-signature`
+   (accepted, `source=Notarized Developer ID`; never `-t install`). A failing
+   check names itself in the log and exits non-zero before the release, appcast
+   or cask bump.
 6. **Launch smoke test** — mount the final DMG, `spctl`-assess the app, launch
    it, confirm the process is still alive after ~5s, then kill and detach. This
    hard-fails the release on a dyld/startup crash; it is the only gate that
