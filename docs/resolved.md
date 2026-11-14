@@ -2,6 +2,12 @@
 
 Completed backlog items, most recent first. Item numbers are the stable IDs from `docs/backlog.md` and are not reused.
 
+### ~~146: Pin swift-nio-imap below 0.5.0 so fresh CI resolutions keep building for macOS 14~~
+
+**Resolved**: 2026-11-13 (sentwise PR 140 merged main@6c1baa3, "Pin swift-nio-imap below 0.5.0 and guard the pin in CI"). Found the same day in PR 139's prowl-qa check: the hunt-mode build on the self-hosted runner resolved swift-nio-imap 0.5.0, the first tag with a macOS 15 floor, against the 14.0 target; the hosted CI build had silently resolved 0.4.0 while the package suite tested 0.2.0, because the Xcode project's `Package.resolved` was gitignored.
+
+**Description**: `Packages/SentwiseMail/Package.swift` constrains swift-nio-imap to `"0.2.0"..<"0.5.0"`; the Xcode project's `Package.resolved` is committed (gitignore pattern removed) pinned at 0.2.0, so clean checkouts, the hosted CI, the hunt-mode build and the release archive resolve the same version; `scripts/check-nio-imap-pin.py` fails the job if either resolved file is missing or resolves 0.5.0 or later, and runs before the build in ci.yml, release.yml and prowl-qa.yml. Deployment target unchanged at macOS 14; moving to 0.5.0 (macOS 15 minimum) is a separate decision for Michael. Codex r1 clean; CI, prowl-qa green on PR 140.
+
 ### ~~139: Voice learning starts the trial and counts as a draft before the first draft~~
 
 **Resolved**: 2026-10-28 (sentwise PR 132 merged main@253e7a9, "POST /v1/draft purpose=voice_learning, learning_limit_exceeded handling"; sentwise-service PR 53 merged main@0a4b6ad, server-defined learning prompt, separate learning allowance, learning excluded from draft counts; production deploy of sentwise-service approved by Michael 2026-10-28, run 40791382215)
