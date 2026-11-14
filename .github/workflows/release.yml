@@ -267,19 +267,9 @@ jobs:
           set -euo pipefail
           v="${{ steps.version.outputs.version }}"
           notes_file="$RUNNER_TEMP/release-notes.md"
-          # Same section-slice the manual flow used: everything between the
-          # '## [X.Y.Z]' heading and the next '## [' heading.
-          notes="$(awk -v ver="$v" '
-            $0 ~ ("^## \\[" ver "\\]") { grab=1; next }
-            grab && /^## \[/ { exit }
-            grab { print }
-          ' CHANGELOG.md)"
-          # Strip leading/trailing blank lines.
-          notes="$(printf '%s\n' "$notes" | sed -e '/./,$!d' | tail -r | sed -e '/./,$!d' | tail -r)"
-          if [[ -z "$notes" ]]; then
-            notes="Release v$v"
-          fi
-          printf '%s\n' "$notes" > "$notes_file"
+          # Fails closed (no placeholder notes) when the CHANGELOG section is
+          # missing or empty; appends the Quickstart footer and checks it.
+          Distribution/scripts/release-notes.sh "$v" CHANGELOG.md "$notes_file"
           echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub release
