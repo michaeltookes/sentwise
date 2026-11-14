@@ -2,6 +2,18 @@
 
 Completed backlog items, most recent first. Item numbers are the stable IDs from `docs/backlog.md` and are not reused.
 
+### ~~145: QA environment: Sparkle signing tools on the Agent Mini, so appcast signature validity can be verified~~
+
+**Resolved**: 2026-11-14 (homelab-it on the Agent Mini; no product change). Sparkle 2.9.5 CLI tools installed at `~/tools/sparkle-2.9.5` (`sign_update` symlinked in `~/.local/bin`), no private key on the Mini. Finding: `sign_update` 2.9.5 `--verify` needs the private key, so TC-74-09 C5.3 verifies the Ed25519 signature with Homebrew openssl and the shipped `SUPublicEDKey` only (public key only). Verified on v0.2.3: "Signature Verified Successfully" (key prefix juNano3E, signature prefix qcugx1nH); a one-byte-modified DMG fails. The local tap was refreshed to 0.2.3 with `brew update` (`brew developer off`), clearing the C4/C6 stale-tap note. The acceptance line that names `sign_update` is met by the equivalent-verifier clause. The offline-key match stays with Michael.
+
+### ~~144: GitHub release notes must link README Quickstart, and the release must fail closed without notes~~
+
+**Resolved**: 2026-11-14 (sentwise PR 141, merge commit main@5aadf2d, shared with 143). `release-notes.sh` fails closed on a missing or empty CHANGELOG section and requires the Quickstart URL exactly once; `release.yml` calls it on tag runs only (dry runs and untagged dispatch runs skip it); its test script runs in `ci.yml`. The fix reaches customers with the next tagged release (0.2.4). The live v0.2.3 release notes were edited 2026-11-14 by the orchestrator to add the footer "Quickstart: https://github.com/michaeltookes/sentwise#quickstart" (approved by Michael).
+
+### ~~143: Sign the release DMG with the Developer ID Application identity before notarization~~
+
+**Resolved**: 2026-11-14 (sentwise PR 141, merge commit main@5aadf2d, shared with 144). `release.sh` signs the DMG (step 5a) before `notarize_submit` and gates the container after stapling (`verify_dmg_signature`: `codesign --verify --strict`, Authority and TeamIdentifier, `spctl -a -vv -t open --context context:primary-signature`); `DMG GATE FAILED` exits before publish. The fix reaches customers with the next tagged release (0.2.4); v0.2.3 stays unsigned at the container level. TC-74-09 C3 reruns against the 0.2.4 DMG.
+
 ### ~~146: Pin swift-nio-imap below 0.5.0 so fresh CI resolutions keep building for macOS 14~~
 
 **Resolved**: 2026-11-13 (sentwise PR 140 merged main@6c1baa3, "Pin swift-nio-imap below 0.5.0 and guard the pin in CI"). Found the same day in PR 139's prowl-qa check: the hunt-mode build on the self-hosted runner resolved swift-nio-imap 0.5.0, the first tag with a macOS 15 floor, against the 14.0 target; the hosted CI build had silently resolved 0.4.0 while the package suite tested 0.2.0, because the Xcode project's `Package.resolved` was gitignored.
