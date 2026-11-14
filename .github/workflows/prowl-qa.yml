@@ -41,6 +41,10 @@ jobs:
       - name: Checkout Sentwise
         uses: actions/checkout@v4
 
+      - name: Guard swift-nio-imap pin (must stay below 0.5.0)
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/check-nio-imap-pin.py
+
       - name: Checkout Prowl (CLI/helper source tag)
         uses: actions/checkout@v4
         with:

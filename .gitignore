@@ -8,7 +8,6 @@ DerivedData/
 *.dSYM
 xcuserdata/
 **/*.xcodeproj/project.xcworkspace/xcuserdata/
-**/*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 *.xcworkspace/xcuserdata/
 
 # Swift Package Manager
