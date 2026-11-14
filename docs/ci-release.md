@@ -145,7 +145,10 @@ It copies the `## [X.Y.Z]` CHANGELOG section and appends the fixed footer line
 `Quickstart: https://github.com/michaeltookes/sentwise#quickstart`. The job
 fails before **Publish GitHub release** if the section is missing or empty (the
 log names the version; there is no placeholder fallback), and fails if the notes
-file does not contain the Quickstart URL exactly once.
+file does not contain the Quickstart URL exactly once. The step carries the
+same guard as the publish step (`DRY_RUN != 'true'` and a tag ref), so a dry
+run or an untagged `workflow_dispatch` run still completes when the version's
+CHANGELOG section does not exist yet; only a tag run fails closed.
 
 The footer anchor depends on the README heading **`## Quickstart`**. If that
 heading is renamed, update the URL in `release-notes.sh` and the test in

@@ -263,6 +263,7 @@ jobs:
       # ---- publish (skipped on dry run and on non-tag runs) -------------------
       - name: Extract CHANGELOG section
         id: changelog
+        if: env.DRY_RUN != 'true' && github.ref_type == 'tag'
         run: |
           set -euo pipefail
           v="${{ steps.version.outputs.version }}"
