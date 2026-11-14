@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-14
+
+Sentwise 0.2.4 is a trust-and-distribution release: the download itself now
+carries Genkei Labs' Developer ID signature, release notes link the Quickstart,
+and the build keeps supporting macOS 14.
+
+### Changed
+
+- **Release notes link the Quickstart** — every GitHub release now ends with a
+  link to the README Quickstart, so a first-time reader knows how to install
+  and get a first draft without hunting through the repo.
+- **Clearer wording on the Sign in with Microsoft screen** — the consent block
+  names exactly what Sentwise asks for (read your mailbox, send mail, stay
+  signed in) and VoiceOver reads it as one element. Sign in with Microsoft
+  stays switched off in this build.
+- **Expired sign-in messages read alike** — the "your sign-in expired" message
+  is worded the same for Google and Microsoft accounts.
+
+### Fixed
+
+- **The disk image is signed, not only the app inside it** — the Sentwise DMG
+  is now signed with the Developer ID Application identity before it is
+  notarized and stapled, and the release pipeline refuses to publish a DMG that
+  Gatekeeper does not accept. Earlier downloads opened fine thanks to the
+  notarization ticket, but the container itself carried no signature.
+- **Builds keep supporting macOS 14** — the mail library is pinned below the
+  version that requires macOS 15, and a release check guards the pin, so a
+  fresh build cannot silently raise the minimum macOS version.
+
 ## [0.2.3] - 2026-10-29
 
 Sentwise 0.2.3 makes follow-up drafts more accurate, fixes the Settings window
@@ -222,6 +251,8 @@ Initial release.
 - **Private by design** — local-first storage keeps settings, history, and secrets on your Mac. When you use a remote AI provider, Sentwise sends the relevant mail content, transcript text, and voice profile only to the provider you configure.
 - **Signed, notarized, auto-updating** — Developer ID–signed DMG with Sparkle auto-update and a Homebrew cask (`brew install --cask michaeltookes/tap/sentwise`).
 
+[0.2.4]: https://github.com/michaeltookes/sentwise/compare/v0.2.3...v0.2.4
+[0.2.3]: https://github.com/michaeltookes/sentwise/compare/v0.2.1...v0.2.3
 [0.2.1]: https://github.com/michaeltookes/sentwise/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/michaeltookes/sentwise/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/michaeltookes/sentwise/compare/v0.1.1...v0.1.2
