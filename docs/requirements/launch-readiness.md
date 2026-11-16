@@ -144,6 +144,14 @@ Given any unexpected warning, extra unexplained step, inaccessible control, dead
 
 *As a prospective customer, I want the public download, Homebrew cask, and automatic update to deliver the same trustworthy release with understandable notes and a reachable feedback address, so that I can install and get help confidently.*
 
+#### Predetermined test cases
+
+Added 2026-11-16 (item 131 test-case gap; C5.4 corrected by item 148). Runs on Lucius' Agent Mini against the published release; public keys only, the Sparkle private key never leaves the offline store.
+
+| ID | Case and concrete expected result | Unhappy path | Evidence | Michael/TCC action |
+|---|---|---|---|---|
+| **TC-74-09** | Channel agreement for release V build B. **C0** `sentwise.ai/download` redirects (302) to the V DMG on the GitHub release. **C1** the downloaded DMG's sha256 equals the release `.sha256` asset. **C2** the GitHub release notes summarize user-visible changes and link README **Quickstart**. **C3** the DMG container passes `spctl -a -vv -t open` (Notarized Developer ID) and `codesign --verify`, and the app inside is notarized and stapled. **C4** after `brew update` (mandatory tap refresh first), `brew info --cask michaeltookes/tap/sentwise` shows V with the same sha256 as C1. **C5** the live appcast's newest item is V build B with the DMG URL and length from the release; **C5.3** its `edSignature` verifies with openssl against the shipped `SUPublicEDKey`; **C5.4** the item description carries exactly the headings present in the CHANGELOG section for V (any subset of Added, Changed, Fixed, Removed, Security, Deprecated), so 0.2.4 with only Changed and Fixed passes. **C6** download, release, cask and appcast all name V build B. | Any channel on another version or build, a checksum mismatch, an unsigned or rejected container, a signature that does not verify, notes without the Quickstart link, or a heading present on one side of C5.4 and missing on the other (named in the report) fails the case and blocks the public-link step; an empty appcast description or a missing CHANGELOG section for V also fails C5.4. A stale local tap is refreshed, not failed. | Run report with each C-check's command output summary, the sha256 values, the `spctl`/`codesign` lines, the public-key fingerprint and the heading sets compared in C5.4. | None. |
+
 #### Acceptance criteria
 
 **AC-C1 — release gate and version are explicit**
@@ -220,6 +228,6 @@ Required consent/copy remains the existing product promise: Sentwise reads local
 |---|---:|---|---|
 | US-launch-readiness-1 | 129 | TC-74-08 | 56 checkout/licensing; 91 portal sessions; 94 trial enforcement; 123 recurring sandbox lane; `docs/launch-checklist.md` §§2–3 |
 | US-launch-readiness-2 | 130 | TC-74-01 through TC-74-07 | 71 quickstart; 95 checkout hardening; 96 purge/erase; existing TC-M1-01/02/07/08; item 74 §6 |
-| US-launch-readiness-3 | 131 | TC-74-09 plus TC-74-07 update leg | 71 quickstart; item 114 release notes; `docs/releasing.md`; `docs/launch-checklist.md` §§4–7 |
+| US-launch-readiness-3 | 131; 148 (TC-74-09 C5.4 case text) | TC-74-09 plus TC-74-07 update leg | 71 quickstart; item 114 release notes; `docs/releasing.md`; `docs/launch-checklist.md` §§4–7 |
 
 The project planner may mirror these cases into `docs/qa/test-cases.md` without changing their IDs or outcomes. If a TC-74 case discovers friction, the resulting backlog item's trace must point back to that exact case.
