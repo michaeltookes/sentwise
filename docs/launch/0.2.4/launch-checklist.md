@@ -1,6 +1,8 @@
 # Launch checklist, Sentwise 0.2.4
 
-Owner of every publish step: Michael. Copy lives in `docs/launch/0.2.4/`. Public link approved 2026-11-16 (backlog item 74, milestone M5 "Public link and 30-day push"). Download link: https://sentwise.ai/download. Tracked links: placeholders `{UTM_X_1}`, `{UTM_X_2}`, `{UTM_X_3}`, `{UTM_LINKEDIN}`, `{UTM_EMAIL}`, `{UTM_RELEASE}` stay until the campaign-producer supplies them; until then use the plain link.
+> **Not for publishing until the 0.2.4 rollout plan item is done** (campaign-producer UTM links, TC-74-07 pass, dated publish checklist). Do not post the plain link in the meantime.
+
+Owner of every publish step: Michael. Copy lives in `docs/launch/0.2.4/`. Public link approved 2026-11-16 (backlog item 74, milestone M5 "Public link and 30-day push"). Download link: https://sentwise.ai/download. Tracked links: placeholders `{UTM_X_1}`, `{UTM_X_2}`, `{UTM_X_3}`, `{UTM_EMAIL}`, `{UTM_RELEASE}` stay until the campaign-producer supplies them. No plain-link publish: the kit waits for the rollout plan.
 
 ## Known at launch (open items, approved to go anyway)
 
@@ -12,16 +14,17 @@ Owner of every publish step: Michael. Copy lives in `docs/launch/0.2.4/`. Public
 
 ## 0. Release exists (verify only)
 
+- [ ] **GATE 1, TC-74-07 must pass before anything is published:** the Sparkle update dialog on a real 0.2.1 or 0.2.3 install updates to 0.2.4. The release announcement and email say installs update through the in-app updater, so that wording stands only once this passes.
+
 - [ ] GitHub release `v0.2.4` published, DMG attached (verified by the item 131 rerun).
 - [ ] Appcast shows build 8; Homebrew cask is 0.2.4 (verified by the rerun).
-- [ ] **Not yet verified, TC-74-07:** a real 0.2.1 or 0.2.3 install shows the Sparkle update dialog and updates to 0.2.4. The existing-user email and the release announcement say installs update through the in-app updater. Until this passes, soften both to "download the DMG or run `brew upgrade --cask sentwise`" or hold the email.
 - [ ] **Not yet verified:** a message to feedback@sentwise.ai arrives in the inbox that is monitored. Report a Problem and the support page rely on it.
 - [ ] **Not yet verified:** offline key match (the Ed25519 public key in the app matches the one that signed the appcast, checked offline). The rerun verified the appcast signature but did not run this check.
 - [ ] Open https://sentwise.ai/download in a private window; it redirects to `Sentwise-0.2.4.dmg`, which opens without a Gatekeeper warning on a clean Mac.
 
 ## 1. Site copy
 
-- [ ] Decide the privacy-page item in `site-changes.md` (Sign in with Google wording) before pointing traffic at the site.
+- [ ] Apply the approved privacy-page lead-in in `site-changes.md` (Sign in with Google wording) before pointing traffic at the site.
 - [ ] Apply the FAQ additions and README version lines from `site-changes.md` (branch `site/0.2.4`); open https://sentwise.ai in a private window and check hero, pricing, FAQ.
 
 ## 2. Release announcement
@@ -35,12 +38,12 @@ Owner of every publish step: Michael. Copy lives in `docs/launch/0.2.4/`. Public
 
 ## 4. Email to account holders
 
-- [ ] Send `email.md` from support@sentwise.ai. Open question: which tool holds the list and sends (nothing is wired to send to Clerk's account emails).
+- [ ] Send `email.md` from support@sentwise.ai. This is the one-time release-announcement email to existing users, not a Sparkle notice. Still open with Michael: which tool sends it, and whether a customer list exists at all (nothing is wired to send to Clerk's account emails).
 
 ## 5. Social
 
-- [ ] X: post `social.md` posts 1 to 3 over three days. Open question: which account (and whether it is Michael's, which changes the voice, see question 1).
-- [ ] LinkedIn: post the LinkedIn text. Open question: company page or personal profile. Voice guide says LinkedIn is deferred (decisions 2026-10-14), so confirm before posting.
+- [ ] X: post `social.md` posts 1 to 3 over three days from the Sentwise account (@<sentwise handle>; fill in the handle).
+- LinkedIn deferred: no LinkedIn posts in this kit and no company-page question for now.
 
 ## 6. Verify after publishing
 
