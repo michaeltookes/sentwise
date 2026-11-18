@@ -203,6 +203,18 @@ TC-74-02 is defined in `docs/requirements/launch-readiness.md` and is not edited
 - **Expected:** the release has a `.dmg` asset and notes linking the README quickstart; CHANGELOG has a `## [0.2.1]` section dated on the release day; `/download` ends at the v0.2.1 DMG.
 - **Asset:** screenshot
 
+### TC-M1-11 Managed sign-in survives a relaunch from a LaunchAgent and a cron job
+- **Executor:** lucius
+- **Verifies:** item 152 (resolved 2026-11-17, not a defect; regression guard), item 154 (e)
+- **Preconditions:** Sentwise 0.2.4 or later in `/Applications`, signed in as F1 with Settings > AI showing Active; Settings closed. Open Settings only through the status-menu route in the Preamble, never by an app-window Peekaboo call.
+- **Steps:**
+  1. Open Settings > AI and Subscription; record the AI pill and the Plan and Usage lines.
+  2. Quit Sentwise with `osascript -e 'quit app "Sentwise"'`; relaunch it from a one-shot user LaunchAgent (`launchctl bootstrap gui/<uid>` of a plist that runs `open -a Sentwise`, then `bootout`); record the launch time.
+  3. Read Settings > AI and Subscription; record each observation with its offset in seconds from the launch time.
+  4. Quit Sentwise again and relaunch it with `open -a Sentwise` from an OpenClaw cron job; repeat step 3.
+- **Expected:** after both relaunches, within 30 s of launch, AI shows the green "Active" pill (accessibility label "Active provider"), Subscription shows a Plan line and a Usage line, and no "Sign in or create your account" text appears. If the case runs by agent loop and the observations land after 30 s, the persistence result stands and the report marks the timing step not met. If either relaunch ends signed out, the report attaches the `com.tookes.Sentwise` log lines for categories `ManagedAccountService` and `Keychain` from launch to the first Settings render, read in Lucius' GUI session.
+- **Asset:** screenshot
+
 ## M2 Funnel is measurable
 
 ### TC-M2-01 Changelog page lists releases
